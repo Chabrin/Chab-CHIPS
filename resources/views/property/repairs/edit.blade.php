@@ -21,7 +21,7 @@
                     </div>
                     <div class="card-body">
                     <form action="{{ route('property.repairs.update', Crypt::encrypt($repairRequest->id)) }}" 
-                          method="POST" id="repairRequestForm">
+                          method="POST" id="repairRequestForm" enctype="multipart/form-data">
                         @csrf
                         @method('PUT')
                         
@@ -85,8 +85,18 @@
                                         </button>
                                     </div>
                                     <div class="row">
-                                        <!-- Unit -->
+                                        <!-- Repair Scope -->
                                         <div class="col-md-3 mb-3">
+                                            <label class="form-label">Repair Scope <span class="text-danger">*</span></label>
+                                            <select name="items[{{ $index }}][repair_scope]" class="form-select scope-select" required>
+                                                <option value="">Select Scope</option>
+                                                <option value="general" {{ ($item->repair_scope ?? ($item->unit_id ? 'unit_specific' : 'general')) === 'general' ? 'selected' : '' }}>General (Entire Property)</option>
+                                                <option value="unit_specific" {{ ($item->repair_scope ?? ($item->unit_id ? 'unit_specific' : 'general')) === 'unit_specific' ? 'selected' : '' }}>Unit Specific</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Unit (shown only when Unit Specific) -->
+                                        <div class="col-md-3 mb-3 unit-field" style="{{ ($item->repair_scope ?? ($item->unit_id ? 'unit_specific' : 'general')) === 'unit_specific' ? '' : 'display:none;' }}">
                                             <label class="form-label">Unit</label>
                                             <select name="items[{{ $index }}][unit_id]" class="form-select unit-select" data-selected="{{ $item->unit_id }}">
                                                 <option value="">Select Unit</option>
@@ -99,7 +109,7 @@
                                             <select name="items[{{ $index }}][element_id]" class="form-select element-select" required>
                                                 <option value="">Select Element</option>
                                                 @foreach($elements as $element)
-                                                    <option value="{{ $element->id }}" 
+                                                    <option value="{{ $element->id }}"
                                                         {{ $item->property_element_id == $element->id ? 'selected' : '' }}>
                                                         {{ $element->element_name }}
                                                     </option>
@@ -110,8 +120,8 @@
                                         <!-- Repair Type -->
                                         <div class="col-md-3 mb-3">
                                             <label class="form-label">Repair Type <span class="text-danger">*</span></label>
-                                            <select name="items[{{ $index }}][repair_type_id]" 
-                                                    class="form-select repair-type-select" 
+                                            <select name="items[{{ $index }}][repair_type_id]"
+                                                    class="form-select repair-type-select"
                                                     required
                                                     data-selected="{{ $item->repair_type_id }}">
                                                 <option value="">Select Repair Type</option>
@@ -120,16 +130,40 @@
 
                                         <!-- Amount -->
                                         <div class="col-md-3 mb-3">
-                                            <label class="form-label">Amount <span class="text-danger">*</span></label>
-                                            <input type="number" name="items[{{ $index }}][amount]" 
-                                                   class="form-control" min="0" step="0.01" 
-                                                   value="{{ $item->amount }}" required>
+                                            <label class="form-label">Amount</label>
+                                            <input type="number" name="items[{{ $index }}][amount]"
+                                                   class="form-control" min="0" step="0.01"
+                                                   placeholder="0.00"
+                                                   value="{{ $item->amount }}">
                                         </div>
 
                                         <!-- Remarks -->
-                                        <div class="col-12 mb-3">
+                                        <div class="col-md-9 mb-3">
                                             <label class="form-label">Remarks</label>
                                             <textarea name="items[{{ $index }}][remarks]" class="form-control" rows="2">{{ $item->remarks }}</textarea>
+                                        </div>
+
+                                        <!-- Existing images -->
+                                        @if(!empty($item->photos_documents))
+                                        <div class="col-12 mb-2">
+                                            <label class="form-label small text-muted">Current Images</label>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                @foreach($item->photos_documents as $photo)
+                                                <a href="{{ Storage::disk('public')->url($photo) }}" target="_blank">
+                                                    <img src="{{ Storage::disk('public')->url($photo) }}" alt="repair image"
+                                                         style="height:80px;width:80px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
+                                                </a>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                        @endif
+
+                                        <!-- New images -->
+                                        <div class="col-12 mb-1">
+                                            <label class="form-label">{{ !empty($item->photos_documents) ? 'Replace / Add Images' : 'Images' }} <span class="text-muted small">(optional, max 5 MB each)</span></label>
+                                            <input type="file" name="items[{{ $index }}][images][]" class="form-control image-upload"
+                                                   accept="image/*" multiple>
+                                            <div class="form-text text-muted">Uploading new images will replace existing ones for this item.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -155,8 +189,18 @@
                 </button>
             </div>
             <div class="row">
-                <!-- Unit -->
+                <!-- Repair Scope -->
                 <div class="col-md-3 mb-3">
+                    <label class="form-label">Repair Scope <span class="text-danger">*</span></label>
+                    <select name="items[INDEX][repair_scope]" class="form-select scope-select" required>
+                        <option value="">Select Scope</option>
+                        <option value="general">General (Entire Property)</option>
+                        <option value="unit_specific">Unit Specific</option>
+                    </select>
+                </div>
+
+                <!-- Unit (shown only when Unit Specific) -->
+                <div class="col-md-3 mb-3 unit-field" style="display:none;">
                     <label class="form-label">Unit</label>
                     <select name="items[INDEX][unit_id]" class="form-select unit-select">
                         <option value="">Select Unit</option>
@@ -184,15 +228,23 @@
 
                 <!-- Amount -->
                 <div class="col-md-3 mb-3">
-                    <label class="form-label">Amount <span class="text-danger">*</span></label>
-                    <input type="number" name="items[INDEX][amount]" class="form-control" 
-                           min="0" step="0.01" required>
+                    <label class="form-label">Amount</label>
+                    <input type="number" name="items[INDEX][amount]" class="form-control"
+                           min="0" step="0.01" placeholder="0.00">
                 </div>
 
                 <!-- Remarks -->
-                <div class="col-12 mb-3">
+                <div class="col-md-9 mb-3">
                     <label class="form-label">Remarks</label>
                     <textarea name="items[INDEX][remarks]" class="form-control" rows="2"></textarea>
+                </div>
+
+                <!-- Images -->
+                <div class="col-12 mb-1">
+                    <label class="form-label">Images <span class="text-muted small">(optional, max 5 MB each)</span></label>
+                    <input type="file" name="items[INDEX][images][]" class="form-control image-upload"
+                           accept="image/*" multiple>
+                    <div class="form-text text-muted">Attach photos of the repair area.</div>
                 </div>
             </div>
         </div>
@@ -242,6 +294,10 @@ $(document).ready(function() {
     });
 
     // Initialize Select2 for existing items
+    $('.scope-select').select2({
+        placeholder: 'Select Scope',
+        allowClear: false
+    });
     $('.unit-select').select2({
         placeholder: 'Select Unit',
         allowClear: true
@@ -417,6 +473,10 @@ $(document).ready(function() {
         
         // Initialize Select2 for the new item's selects
         const $newItem = $('#repairItemsContainer .repair-item').last();
+        $newItem.find('.scope-select').select2({
+            placeholder: 'Select Scope',
+            allowClear: false
+        });
         $newItem.find('.unit-select').select2({
             placeholder: 'Select Unit',
             allowClear: true
@@ -447,6 +507,17 @@ $(document).ready(function() {
             updateItemNumbers();
         } else {
             toastr.warning('At least one repair item is required');
+        }
+    });
+
+    // Scope change — toggle unit field
+    $(document).on('change', '.scope-select', function() {
+        const $item = $(this).closest('.repair-item');
+        if ($(this).val() === 'unit_specific') {
+            $item.find('.unit-field').show();
+        } else {
+            $item.find('.unit-field').hide();
+            $item.find('.unit-select').val(null).trigger('change');
         }
     });
 

@@ -12,6 +12,7 @@ class RepairRequestItem extends Model
 
     protected $fillable = [
         'parent_id',
+        'repair_scope',
         'unit_id',
         'property_element_id',
         'repair_type_id',
@@ -23,7 +24,8 @@ class RepairRequestItem extends Model
     ];
 
     protected $casts = [
-        'date_time' => 'datetime',
+        'date_time'        => 'datetime',
+        'photos_documents' => 'array',
     ];
 
     public function repairRequest()
