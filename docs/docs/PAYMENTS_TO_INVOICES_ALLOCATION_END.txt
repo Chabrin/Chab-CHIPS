@@ -1,0 +1,1292 @@
+# PAYMENTS TO INVOICES ALLOCATION - END-TO-END PROCESS
+
+## 📋 Overview
+
+This document provides a complete end-to-end explanation of how tenant payments are automatically allocated to invoices, how invoice balances are updated, how return thresholds are calculated, and how payability is determined in the CHIPS Property Management System.
+
+---
+
+## 🎯 High-Level Process Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    PAYMENT TO INVOICE ALLOCATION                     │
+│                         (Fully Automatic)                            │
+└─────────────────────────────────────────────────────────────────────┘
+
+STEP 1: Payment Received
+│  - Tenant makes payment (Bank/Mpesa/Cash)
+│  - Payment recorded in sys_pm_tenants_payments
+│  - Status: Unallocated (11)
+│  - Linked to lease_id
+│
+▼
+
+STEP 2: Automatic Allocation Triggered
+│  - TenantPaymentService::processPayments() runs
+│  - Finds all unallocated payments
+│  - For each payment → Find unsettled invoices by lease_id
+│
+▼
+
+STEP 3: Invoice Matching & Sorting
+│  - Get all invoices for payment->lease_id
+│  - Include old lease invoices (if tenant moved)
+│  - Include linked lease invoices (if multi-unit tenant)
+│  - Sort by: Oldest first → Payment Priority → Date
+│
+▼
+
+STEP 4: Allocation Loop
+│  For each invoice (in sorted order):
+│  ┌──────────────────────────────────────────────────────┐
+│  │ a) Calculate remaining payment amount                │
+│  │ b) Calculate invoice balance                         │
+│  │ c) Determine allocation amount:                      │
+│  │    - If payment = invoice balance → Full clear       │
+│  │    - If payment < invoice balance → Partial clear    │
+│  │    - If payment > invoice balance → Clear & continue │
+│  │ d) Create allocation record                          │
+│  │ e) Update invoice current_balance                    │
+│  │ f) Update payment status                             │
+│  └──────────────────────────────────────────────────────┘
+│
+▼
+
+STEP 5: Return Threshold Update (PER ALLOCATION)
+│  - ClientReturnService::updateReturnOnInvoicePayment() triggered
+│  - Calculate threshold: (paid_so_far / total) × 100
+│  - Check previous month threshold
+│  - Determine payable_status_id:
+│    * 0 = Unpayable (< 85% and prev month < 85%)
+│    * 1 = Payable (= 100% or ≥ 85%)
+│    * 2 = No Past Invoice
+│    * 3 = Past Passed Threshold (prev ≥ 85%)
+│  - Update sys_pm_clients_returns
+│
+▼
+
+STEP 6: Final Status Update
+│  - Invoice marked as Cleared (9) or Partially Cleared (8)
+│  - Payment marked as Fully Allocated (13) or Partially Allocated (12)
+│  - Return marked as Payable (1) or remains Unpayable (0)
+│
+▼
+
+RESULT: Invoice Balance Reduced, Return Threshold Updated, Payability Determined
+```
+
+---
+
+## 📊 Database Tables Involved
+
+### Core Tables
+
+#### 1. **`sys_pm_tenants_payments`** - Payment Records
+
+**Purpose:** Stores all tenant payments received
+
+| Column            | Type    | Description                                                |
+| ----------------- | ------- | ---------------------------------------------------------- |
+| id                | INT     | Primary key                                                |
+| payment_date      | DATE    | Date payment received                                      |
+| reference         | VARCHAR | Payment reference (bank ref, mpesa code)                   |
+| receipt_number    | VARCHAR | System-generated receipt                                   |
+| amount            | DECIMAL | Total payment amount                                       |
+| lease_id          | INT     | Link to tenant's lease                                     |
+| tenant_id         | INT     | Link to tenant                                             |
+| unit_id           | INT     | Link to unit                                               |
+| property_id       | INT     | Link to property                                           |
+| client_id         | INT     | Link to landlord                                           |
+| current_status_id | INT     | 11=Unallocated, 12=Partially Allocated, 13=Fully Allocated |
+| channel_id        | INT     | Payment method (1=Equity, 2=Mpesa, 3=Coop)                 |
+| narration         | TEXT    | Payment description                                        |
+
+**Key Statuses:**
+
+- `11` = Unallocated (has money available)
+- `12` = Partially Allocated (some money left)
+- `13` = Fully Allocated (all money used)
+
+---
+
+#### 2. **`sys_pm_tenants_payments_invoices`** - Allocation Junction Table
+
+**Purpose:** Tracks which payments were allocated to which invoices (many-to-many)
+
+| Column                   | Type     | Description                              |
+| ------------------------ | -------- | ---------------------------------------- |
+| id                       | INT      | Primary key                              |
+| date_time                | DATETIME | When allocation happened                 |
+| payment_id               | INT      | Foreign key → sys_pm_tenants_payments    |
+| invoice_id               | INT      | Foreign key → sys_pm_debtors_invoices    |
+| amount_allocated         | DECIMAL  | How much of payment went to this invoice |
+| prev_unallocated_balance | DECIMAL  | Payment balance before allocation        |
+| new_unallocated_balance  | DECIMAL  | Payment balance after allocation         |
+| invoice_amount           | DECIMAL  | Invoice balance before allocation        |
+| new_invoice_balance      | DECIMAL  | Invoice balance after allocation         |
+| trans_date_time          | DATE     | Transaction date                         |
+| lease_id                 | INT      | Lease reference                          |
+| tenant_id                | INT      | Tenant reference                         |
+
+**Example Data:**
+
+```
+payment_id=123, invoice_id=456, amount_allocated=40000
+→ "Payment #123 allocated 40,000 to Invoice #456"
+```
+
+---
+
+#### 3. **`sys_pm_debtors_invoices`** - Invoice Records
+
+**Purpose:** Stores all tenant invoices
+
+| Column            | Type    | Description                                                     |
+| ----------------- | ------- | --------------------------------------------------------------- |
+| id                | INT     | Primary key                                                     |
+| reference_number  | VARCHAR | Invoice reference                                               |
+| date_due          | DATE    | Due date (determines return period)                             |
+| total_amount      | DECIMAL | **Original invoice amount**                                     |
+| current_balance   | DECIMAL | **Remaining unpaid balance** (LIVE FIELD)                       |
+| current_status_id | INT     | 1=Pending, 5=Approved, 8=Partial, 9=Cleared, 62=Returns Cleared |
+| lease_id          | INT     | Link to lease                                                   |
+| tenant_id         | INT     | Link to tenant                                                  |
+| unit_id           | INT     | Link to unit                                                    |
+| item_type_id      | INT     | Transaction type (8=Rent, 4=Water, etc)                         |
+| debtor_type_id    | INT     | 2=Tenant (vs 1=Other)                                           |
+| payment_priority  | INT     | Priority order (1=highest)                                      |
+
+**Key Formula:**
+
+```
+paid_so_far = total_amount - current_balance
+threshold = (paid_so_far / total_amount) × 100
+```
+
+---
+
+#### 4. **`sys_pm_clients_returns`** - Return Records
+
+**Purpose:** Stores return records linked to invoices (what landlord receives)
+
+| Column                   | Type    | Description                                                     |
+| ------------------------ | ------- | --------------------------------------------------------------- |
+| id                       | INT     | Primary key                                                     |
+| invoice_id               | INT     | Foreign key → sys_pm_debtors_invoices                           |
+| return_date              | DATE    | Return period (YYYY-MM-01)                                      |
+| trans_amount             | DECIMAL | Invoice total amount                                            |
+| comm_amount              | DECIMAL | Commission amount                                               |
+| comm_vat                 | DECIMAL | VAT on commission                                               |
+| payable_amount           | DECIMAL | Amount payable to landlord                                      |
+| **threshold_percentage** | DECIMAL | **Payment threshold % (LIVE FIELD)**                            |
+| **payable_status_id**    | INT     | **0=Unpayable, 1=Payable, 2=No Past, 3=Past≥85%, 17=Processed** |
+| current_status_id        | INT     | Workflow status                                                 |
+| lease_id                 | INT     | Link to lease                                                   |
+| trans_type_id            | INT     | Item type (same as invoice item_type_id)                        |
+
+**Payable Status Logic:**
+
+- `0` = Unpayable: Threshold < 85% and previous month < 85%
+- `1` = Payable: Fully paid (100%) OR current threshold ≥ 85%
+- `2` = No Past Invoice: First invoice for this tenant+item
+- `3` = Past Passed Threshold: Current < 85% but previous month ≥ 85% (STILL PAYABLE!)
+- `17` = Processed: Payment made to landlord
+
+---
+
+### Supporting Tables
+
+#### 5. **`sys_set_invoiceable_items`** - Item Configuration
+
+**Purpose:** Defines transaction types and their properties
+
+| Column           | Type    | Description                         |
+| ---------------- | ------- | ----------------------------------- |
+| id               | INT     | Primary key                         |
+| item_name        | VARCHAR | Monthly Rent, Water Bill, etc       |
+| commissionable   | VARCHAR | Yes/No - charge commission?         |
+| advance_payable  | VARCHAR | Yes/No - allow 85% advance payment? |
+| payment_priority | INT     | Priority in allocation (1=highest)  |
+
+---
+
+#### 6. **`sys_pm_movement_requests`** - Tenant Movement Tracking
+
+**Purpose:** Tracks when tenants move between units
+
+| Column       | Type | Description  |
+| ------------ | ---- | ------------ |
+| id           | INT  | Primary key  |
+| lease_id     | INT  | Old lease ID |
+| new_lease_id | INT  | New lease ID |
+| unit_id      | INT  | Old unit     |
+| new_unit_id  | INT  | New unit     |
+
+**Usage:** When tenant moves, system clears old unit invoices first before new unit invoices.
+
+---
+
+## 🔄 Detailed Process Breakdown
+
+### Phase 1: Payment Reception & Storage
+
+**Function:** `TenantPaymentService::recordPayment()`
+
+```php
+public static function recordPayment($log_data, $tenant_posted_id = 1, $is_recovery = false, $is_suspense = false)
+{
+    $tenant_payment_dao = new TenantPaymentDao();
+
+    // Check for duplicate reference
+    if($tenant_payment_dao->getByRef($log_data->reference)) return false;
+
+    // Build payment record
+    $data = new stdClass();
+    $data->date_time = date('Y-m-d H:i:s');
+    $data->payment_date = $log_data->payment_date;
+    $data->reference = $log_data->reference;  // Bank ref, Mpesa code
+    $data->receipt_number = UtilityReferencesService::createTenantPaymentRef($log_data->channel_id);
+    $data->amount = $log_data->amount;
+    $data->lease_id = $log_data->lease_id;  // ← KEY MATCHING FIELD
+    $data->tenant_id = $log_data->tenant_id;
+    $data->unit_id = $log_data->unit_id;
+    $data->property_id = $log_data->property_id;
+    $data->client_id = $log_data->client_id;
+    $data->current_status_id = 11;  // Unallocated
+    $data->channel_id = $log_data->channel_id;
+    $data->narration = $log_data->narration;
+
+    // Save payment
+    if($data->id = $tenant_payment_dao->persist($data)){
+        // Create tenant ledger entry (credit tenant account)
+        TenantTransService::createFromPayment($data, $tenant_posted_id);
+        return $data->id;
+    }
+}
+```
+
+**Result:**
+
+- Payment saved with `current_status_id = 11` (Unallocated)
+- Tenant account credited in ledger
+- Ready for automatic allocation
+
+---
+
+### Phase 2: Invoice Matching & Sorting
+
+**Function:** `TenantPaymentService::processPayments()`
+
+```php
+public static function processPayments($unit_id = null, $client_id = null)
+{
+    // Get all unallocated/partially allocated payments
+    $unallocated = true;
+    $unallocated_payments = (new TenantPaymentDao())->getAll($unallocated, null, null, $unit_id, $client_id);
+
+    $invoice_dao = new InvoiceDao();
+    $generic_dao = new GenericDao();
+
+    foreach($unallocated_payments as $payment){
+        $unsettled = true;
+        $debtor_type_id = 2;  // Tenants
+        $lease_id = $payment->lease_id;
+
+        // STEP 1: Check if tenant moved from another unit
+        // Clear old lease invoices FIRST
+        if($previous_lease = $generic_dao->getByColumn('sys_pm_movement_requests', 'new_lease_id', $lease_id)){
+            $old_lease_id = $previous_lease->lease_id;
+            if($invoices = $invoice_dao->getInvoicesByLease($old_lease_id, null, $debtor_type_id, $unsettled)){
+                usort($invoices, 'self::sortInvoices');
+                foreach($invoices as $invoice){
+                    self::allocateInvoice($invoice, $payment);
+                }
+            }
+        }
+
+        // STEP 2: Get current lease invoices
+        if($invoices = $invoice_dao->getInvoicesByLease($lease_id, null, $debtor_type_id, $unsettled)){
+            usort($invoices, 'self::sortInvoices');
+            foreach($invoices as $invoice){
+                self::allocateInvoice($invoice, $payment);
+            }
+        }
+
+        // STEP 3: Check linked leases (multi-unit tenants)
+        $active = true;
+        if($linked_leases = (new LeaseDao())->getAll('id', 'ASC', null, null, $active, null, null, null, null, $lease_id)){
+            foreach($linked_leases as $linked_lease){
+                if($invoices = $invoice_dao->getInvoicesByLease($linked_lease->id, null, $debtor_type_id, $unsettled)){
+                    usort($invoices, 'self::sortInvoices');
+                    foreach($invoices as $invoice){
+                        self::allocateInvoice($invoice, $payment);
+                    }
+                }
+            }
+        }
+    }
+
+    return true;
+}
+```
+
+**Invoice Sorting Priority:**
+
+```php
+public static function sortInvoices($invoice_a, $invoice_b)
+{
+    // Get month start dates
+    $date1 = date('Y-m-1', strtotime($invoice_a->date_due));
+    $date2 = date('Y-m-1', strtotime($invoice_b->date_due));
+
+    // Priority Order:
+    // 1. OLDEST MONTH FIRST (Jan before Feb)
+    // 2. SAME MONTH → LOWER payment_priority FIRST (1 before 2)
+    // 3. SAME PRIORITY → EARLIER DATE FIRST
+
+    if(($date1 == $date2) && ($invoice_a->payment_priority == $invoice_b->payment_priority)){
+        return strtotime($invoice_a->date_due) - strtotime($invoice_b->date_due);
+    } else if($date1 == $date2){
+        return $invoice_a->payment_priority - $invoice_b->payment_priority;
+    } else {
+        return strtotime($invoice_a->date_due) - strtotime($invoice_b->date_due);
+    }
+}
+```
+
+**Example Sort Result:**
+
+```
+Input Invoices:
+- Feb 2026 Rent (priority=1)
+- Jan 2026 Water (priority=2)
+- Jan 2026 Rent (priority=1)
+- Feb 2026 Water (priority=2)
+
+After Sorting:
+1. Jan 2026 Rent (priority=1) ← OLDEST + HIGHEST PRIORITY
+2. Jan 2026 Water (priority=2)
+3. Feb 2026 Rent (priority=1)
+4. Feb 2026 Water (priority=2)
+```
+
+---
+
+### Phase 3: Payment Allocation to Invoice
+
+**Function:** `TenantPaymentService::allocateInvoice()`
+
+```php
+public static function allocateInvoice($invoice, $payment)
+{
+    $tenant_payment_invoice_dao = new TenantPaymentInvoiceDao();
+    $invoice_dao = new InvoiceDao();
+    $tenant_payment_dao = new TenantPaymentDao();
+
+    // CALCULATE PAYMENT REMAINING BALANCE
+    // Get sum of all previous allocations from this payment
+    $payment_sum_allocations = $tenant_payment_invoice_dao->getElementSum($payment->id);
+    $unallocated_amount = floatval($payment->amount - $payment_sum_allocations);
+
+    // If no money left in payment, mark as fully allocated and exit
+    $fully_allocated_id = 13;
+    if(!($unallocated_amount > 0)){
+        $params = array('id' => $payment->id);
+        $values = array('current_status_id' => $fully_allocated_id);
+        $tenant_payment_dao->updateVals($values, $params);
+        return;
+    }
+
+    // CALCULATE INVOICE REMAINING BALANCE
+    // Get sum of all allocations to this invoice
+    $invoice_sum_allocations = $tenant_payment_invoice_dao->getElementSum(null, $invoice->id);
+    $invoice_balance = floatval($invoice->total_amount - $invoice_sum_allocations);
+
+    // DETERMINE ALLOCATION SCENARIO
+    $invoice_cleared_id = 9;
+    $allocate_amount = false;
+
+    // SCENARIO 1: Payment EXACTLY matches invoice balance
+    if($unallocated_amount == $invoice_balance){
+        $allocate_amount = $invoice_balance;
+        $invoice_status_id = $invoice_cleared_id;  // 9 = Cleared
+        $payment_status_id = 13;  // Fully allocated
+        $new_invoice_balance = 0;
+        $new_unallocated_balance = 0;
+    }
+
+    // SCENARIO 2: Payment LESS THAN invoice balance (partial payment)
+    else if($unallocated_amount < $invoice_balance){
+        $allocate_amount = $unallocated_amount;  // Use ALL remaining payment
+        $invoice_status_id = 8;  // Partially cleared
+        $payment_status_id = 13;  // Fully allocated (payment exhausted)
+        $new_invoice_balance = $invoice_balance - $unallocated_amount;
+        $new_unallocated_balance = 0;  // Payment used up
+    }
+
+    // SCENARIO 3: Payment GREATER THAN invoice balance (excess payment)
+    else if($unallocated_amount > $invoice_balance){
+        $allocate_amount = $invoice_balance;  // Use only what's needed
+
+        if($payment->recovery_type_id){
+            $invoice_status_id = $payment->recovery_type_id;
+        } else {
+            $invoice_status_id = $invoice_cleared_id;  // 9 = Cleared
+        }
+
+        $payment_status_id = 12;  // Partially allocated (money left over)
+        $new_invoice_balance = 0;
+        $new_unallocated_balance = $unallocated_amount - $invoice_balance;  // Leftover money
+    }
+
+    // CREATE ALLOCATION RECORD
+    if($allocate_amount > 0){
+        $data = new stdClass();
+        $data->date_time = date('Y-m-d H:i:s');
+        $data->invoice_id = $invoice->id;
+        $data->payment_id = $payment->id;
+        $data->prev_unallocated_balance = $unallocated_amount;
+        $data->invoice_amount = $invoice_balance;
+        $data->amount_allocated = $allocate_amount;
+        $data->new_unallocated_balance = $new_unallocated_balance;
+        $data->new_invoice_balance = $new_invoice_balance;
+        $data->trans_date_time = $payment->payment_date;
+        $data->lease_id = $payment->lease_id;
+        $data->tenant_id = $payment->tenant_id;
+        $data->client_id = $payment->client_id;
+        $data->property_id = $payment->property_id;
+        $data->unit_id = $payment->unit_id;
+
+        // Save allocation record
+        if($data->id = $tenant_payment_invoice_dao->persist($data)){
+
+            // UPDATE INVOICE BALANCE (CRITICAL!)
+            $params = array('id' => $invoice->id);
+            $values = array('current_balance' => $new_invoice_balance);
+            $invoice_dao->updateVals($values, $params);
+
+            // Special check: If invoice fully paid and client conditions met
+            if(ValidateInvoiceService::checkIfPayableClient($invoice->id)){
+                $values = array('current_status_id' => 62);  // Returns Cleared
+                $invoice_dao->updateVals($values, $params);
+            }
+
+            // UPDATE PAYMENT STATUS
+            $params = array('id' => $payment->id);
+            $values = array('current_status_id' => $payment_status_id);
+            $tenant_payment_dao->updateVals($values, $params);
+
+            // UPDATE BILLING RECORDS (if any)
+            $billing_dao = new BillingDao();
+            $collected_amount = $invoice->total_amount - $new_invoice_balance;
+            $params = array('invoice_id' => $invoice->id);
+            $values = array(
+                'current_status_id' => $invoice_status_id,
+                'current_balance' => $new_invoice_balance,
+                'collected_amount' => $collected_amount
+            );
+            $billing_dao->updateVals($values, $params);
+
+            // ★★★ TRIGGER RETURN THRESHOLD UPDATE ★★★
+            ClientReturnService::updateReturnOnInvoicePayment($invoice->id, $payment->id);
+
+            // Handle deposits (if applicable)
+            $item_type_id = $invoice->item_type_id ?? $invoice->item_id ?? null;
+            if(in_array($item_type_id, ToolsService::getGlobalSettings()['deposit_items'])){
+                $active_status_id = ToolsService::getGlobalSettings()['workflow_statuses']['active'];
+                DepositService::createFromInvoice($invoice->id, $active_status_id);
+            }
+
+            // Update arrears table
+            $defaulters_dao = new DefaulterDao();
+            $params = array('invoice_id' => $invoice->id);
+            $values = array('current_status_id' => $invoice_status_id);
+            $defaulters_dao->updateVals($values, $params);
+        }
+    }
+}
+```
+
+**Allocation Scenarios Summary:**
+
+| Scenario        | Payment | Invoice | Allocated | Invoice After | Payment After | Invoice Status | Payment Status         |
+| --------------- | ------- | ------- | --------- | ------------- | ------------- | -------------- | ---------------------- |
+| Exact Match     | 50,000  | 50,000  | 50,000    | 0             | 0             | Cleared (9)    | Fully Allocated (13)   |
+| Partial Payment | 30,000  | 50,000  | 30,000    | 20,000        | 0             | Partial (8)    | Fully Allocated (13)   |
+| Excess Payment  | 70,000  | 50,000  | 50,000    | 0             | 20,000        | Cleared (9)    | Partial Allocated (12) |
+
+---
+
+### Phase 4: Return Threshold Update & Payability Determination
+
+**Function:** `ClientReturnService::updateReturnOnInvoicePayment()`
+
+```php
+public static function updateReturnOnInvoicePayment($invoice_id, $allocated_payment_id)
+{
+    $client_return_dao = new ClientReturnDao();
+    $invoice_dao = new InvoiceDao();
+    $item_dao = new ItemDao();
+
+    // Get invoice details
+    if(!$invoice = $invoice_dao->getById($invoice_id)) return false;
+
+    // Get return record for this invoice
+    $params = array('invoice_id' => $invoice_id);
+    if(!$return = $client_return_dao->getByParams($params)[0] ?? null) return false;
+
+    // Get item configuration
+    $item_details = $item_dao->getById($invoice->item_type_id);
+
+    // ═══════════════════════════════════════════════════════════
+    // CALCULATE THRESHOLD PERCENTAGE
+    // ═══════════════════════════════════════════════════════════
+    $invoice_amount = $invoice->total_amount;
+    $threshold = 0;
+    $payable_status_id = 0;  // Default: Unpayable
+
+    // Calculate how much has been paid
+    if($paid_so_far = ($invoice_amount - $invoice->current_balance)){
+        $threshold = round(($paid_so_far * 100) / $invoice_amount, 2);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RULE 1: INVOICE FULLY PAID → ALWAYS PAYABLE
+    // ═══════════════════════════════════════════════════════════
+    if($invoice->current_status_id == 9){  // Cleared
+        $threshold = 100;
+        $payable_status_id = 1;  // Fully Paid - Payable
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RULE 2: ADVANCE PAYMENT LOGIC (85% THRESHOLD)
+    // ═══════════════════════════════════════════════════════════
+    else if($item_details->advance_payable == 'Yes' && $payable_status_id == 0){
+        $allowed_thresh = 85;  // Configurable
+
+        // Check current month threshold
+        if($threshold >= $allowed_thresh){
+            $payable_status_id = 1;  // Current month passed threshold
+        }
+        // Check previous month threshold
+        else {
+            $pending_id = 1;
+            $past_month = date('Y-m', strtotime('last month', strtotime($invoice->date_due)));
+
+            // Get previous month return for SAME lease + SAME item
+            if($past = $client_return_dao->getAll(
+                $past_month,
+                null,
+                $invoice->lease_id,      // Same lease
+                $item_details->id,       // Same item type
+                $pending_id
+            )){
+                if($past[0]->threshold_percentage >= $allowed_thresh){
+                    $payable_status_id = 3;  // Past Passed Threshold - PAYABLE!
+                } else {
+                    $payable_status_id = 0;  // Unpayable
+                }
+            } else {
+                $payable_status_id = 2;  // No Past Invoice
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RULE 3: RECOVERY INVOICES → UNPAYABLE
+    // ═══════════════════════════════════════════════════════════
+    $recovery_statuses = array(37, 35, 36, 34);  // Paid Owner, Sat Deposit, Absconded, Paid Vacant
+    if(in_array($invoice->current_status_id, $recovery_statuses)){
+        $payable_status_id = 0;  // Unpayable
+        $threshold = 100;
+
+        // Create recovery record if return was already paid
+        if($return->paid_status_id == 2){
+            $recovery_data = new stdClass();
+            $recovery_data->type_id = $invoice->current_status_id;
+            $recovery_data->amount = $return->trans_amount;
+            $recovery_data->offset_invoice_id = $invoice->id;
+            $recovery_data->narration = 'Recovery for invoice ref ' . $invoice->reference_number;
+            // ... save recovery
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // UPDATE RETURN RECORD
+    // ═══════════════════════════════════════════════════════════
+    $values = array(
+        'threshold_percentage' => $threshold,
+        'payable_status_id' => $payable_status_id
+    );
+    $params = array('invoice_id' => $invoice_id);
+    $client_return_dao->updateVals($values, $params);
+
+    return true;
+}
+```
+
+**Payable Status Decision Tree:**
+
+```
+Invoice Cleared (status=9)?
+├─ YES → payable_status_id = 1 (Fully Paid)
+└─ NO → Check Item Configuration
+         │
+         Item allows advance_payable?
+         ├─ NO → payable_status_id = 0 (Unpayable - must be 100%)
+         └─ YES → Check Current Threshold
+                  │
+                  Current threshold ≥ 85%?
+                  ├─ YES → payable_status_id = 1 (Payable)
+                  └─ NO → Check Previous Month
+                          │
+                          Previous month return exists?
+                          ├─ NO → payable_status_id = 2 (No Past Invoice)
+                          └─ YES → Previous threshold ≥ 85%?
+                                   ├─ YES → payable_status_id = 3 (Past Passed - PAYABLE!)
+                                   └─ NO → payable_status_id = 0 (Unpayable)
+```
+
+---
+
+## 📖 Real-World Complete Example
+
+### Scenario Setup
+
+**Tenant:** John Doe  
+**Lease ID:** 123  
+**Unit:** A-01, Sunshine Apartments  
+**Landlord:** Jane Smith Properties
+
+**Outstanding Invoices:**
+
+1. Jan 2026 Rent: KSh 50,000 (Item: Monthly Rent, Priority: 1, advance_payable: Yes)
+2. Jan 2026 Water: KSh 5,000 (Item: Water Bill, Priority: 2, advance_payable: Yes)
+3. Feb 2026 Rent: KSh 50,000 (Item: Monthly Rent, Priority: 1, advance_payable: Yes)
+
+**Payment Received:** KSh 80,000 (Mpesa reference: ABC123XYZ)
+
+---
+
+### Step-by-Step Execution
+
+#### STEP 1: Payment Recorded
+
+```sql
+INSERT INTO sys_pm_tenants_payments (
+    payment_date, reference, receipt_number, amount,
+    lease_id, tenant_id, unit_id, client_id,
+    current_status_id, channel_id
+) VALUES (
+    '2026-02-15', 'ABC123XYZ', 'RCT-2026-0001', 80000,
+    123, 456, 789, 14,
+    11, 2  -- Status: Unallocated, Channel: Mpesa
+);
+-- payment_id = 5001
+```
+
+**Payment State:**
+
+- Amount: 80,000
+- Unallocated: 80,000
+- Status: Unallocated (11)
+
+---
+
+#### STEP 2: Invoice Sorting
+
+```
+Invoices Retrieved:
+- Invoice 1001: Jan 2026 Rent (50,000) - Priority 1
+- Invoice 1002: Jan 2026 Water (5,000) - Priority 2
+- Invoice 1003: Feb 2026 Rent (50,000) - Priority 1
+
+After Sorting:
+1. Invoice 1001 (Jan Rent - oldest + highest priority)
+2. Invoice 1002 (Jan Water - oldest + lower priority)
+3. Invoice 1003 (Feb Rent - newer month)
+```
+
+---
+
+#### STEP 3: Allocation #1 - January Rent
+
+**Before:**
+
+- Invoice 1001: total=50,000, current_balance=50,000
+- Payment 5001: amount=80,000, allocated=0, remaining=80,000
+
+**Calculation:**
+
+```
+unallocated_amount = 80,000 - 0 = 80,000
+invoice_balance = 50,000 - 0 = 50,000
+80,000 > 50,000 → SCENARIO 3: Excess Payment
+
+allocate_amount = 50,000
+new_invoice_balance = 0
+new_unallocated_balance = 80,000 - 50,000 = 30,000
+invoice_status = 9 (Cleared)
+payment_status = 12 (Partially Allocated)
+```
+
+**Database Updates:**
+
+```sql
+-- Create allocation record
+INSERT INTO sys_pm_tenants_payments_invoices (
+    payment_id, invoice_id, amount_allocated,
+    prev_unallocated_balance, new_unallocated_balance,
+    invoice_amount, new_invoice_balance
+) VALUES (
+    5001, 1001, 50000,
+    80000, 30000,
+    50000, 0
+);
+
+-- Update invoice balance
+UPDATE sys_pm_debtors_invoices
+SET current_balance = 0, current_status_id = 9
+WHERE id = 1001;
+
+-- Update payment status
+UPDATE sys_pm_tenants_payments
+SET current_status_id = 12  -- Partially Allocated
+WHERE id = 5001;
+```
+
+**Return Threshold Update:**
+
+```sql
+-- Calculate threshold for Jan Rent return
+paid_so_far = 50,000 - 0 = 50,000
+threshold = (50,000 / 50,000) × 100 = 100%
+
+-- Invoice cleared → Always payable
+UPDATE sys_pm_clients_returns
+SET threshold_percentage = 100, payable_status_id = 1
+WHERE invoice_id = 1001;
+```
+
+**After:**
+
+- Invoice 1001: current_balance=0, status=Cleared (9)
+- Payment 5001: remaining=30,000, status=Partially Allocated (12)
+- Return (Jan Rent): threshold=100%, payable_status_id=1 ✅
+
+---
+
+#### STEP 4: Allocation #2 - January Water
+
+**Before:**
+
+- Invoice 1002: total=5,000, current_balance=5,000
+- Payment 5001: amount=80,000, allocated=50,000, remaining=30,000
+
+**Calculation:**
+
+```
+unallocated_amount = 80,000 - 50,000 = 30,000
+invoice_balance = 5,000 - 0 = 5,000
+30,000 > 5,000 → SCENARIO 3: Excess Payment
+
+allocate_amount = 5,000
+new_invoice_balance = 0
+new_unallocated_balance = 30,000 - 5,000 = 25,000
+invoice_status = 9 (Cleared)
+payment_status = 12 (Partially Allocated - still has money)
+```
+
+**Database Updates:**
+
+```sql
+-- Create allocation record
+INSERT INTO sys_pm_tenants_payments_invoices (
+    payment_id, invoice_id, amount_allocated,
+    prev_unallocated_balance, new_unallocated_balance,
+    invoice_amount, new_invoice_balance
+) VALUES (
+    5001, 1002, 5000,
+    30000, 25000,
+    5000, 0
+);
+
+-- Update invoice
+UPDATE sys_pm_debtors_invoices
+SET current_balance = 0, current_status_id = 9
+WHERE id = 1002;
+
+-- Payment still partially allocated
+UPDATE sys_pm_tenants_payments
+SET current_status_id = 12
+WHERE id = 5001;
+```
+
+**Return Threshold Update:**
+
+```sql
+-- Jan Water return: 100% paid → Always payable
+UPDATE sys_pm_clients_returns
+SET threshold_percentage = 100, payable_status_id = 1
+WHERE invoice_id = 1002;
+```
+
+**After:**
+
+- Invoice 1002: current_balance=0, status=Cleared (9)
+- Payment 5001: remaining=25,000, status=Partially Allocated (12)
+- Return (Jan Water): threshold=100%, payable_status_id=1 ✅
+
+---
+
+#### STEP 5: Allocation #3 - February Rent
+
+**Before:**
+
+- Invoice 1003: total=50,000, current_balance=50,000
+- Payment 5001: amount=80,000, allocated=55,000, remaining=25,000
+
+**Calculation:**
+
+```
+unallocated_amount = 80,000 - 55,000 = 25,000
+invoice_balance = 50,000 - 0 = 50,000
+25,000 < 50,000 → SCENARIO 2: Partial Payment
+
+allocate_amount = 25,000  (use ALL remaining)
+new_invoice_balance = 50,000 - 25,000 = 25,000
+new_unallocated_balance = 0  (payment exhausted!)
+invoice_status = 8 (Partially Cleared)
+payment_status = 13 (Fully Allocated)
+```
+
+**Database Updates:**
+
+```sql
+-- Create allocation record
+INSERT INTO sys_pm_tenants_payments_invoices (
+    payment_id, invoice_id, amount_allocated,
+    prev_unallocated_balance, new_unallocated_balance,
+    invoice_amount, new_invoice_balance
+) VALUES (
+    5001, 1003, 25000,
+    25000, 0,
+    50000, 25000
+);
+
+-- Update invoice
+UPDATE sys_pm_debtors_invoices
+SET current_balance = 25000, current_status_id = 8
+WHERE id = 1003;
+
+-- Payment fully allocated
+UPDATE sys_pm_tenants_payments
+SET current_status_id = 13  -- Fully Allocated
+WHERE id = 5001;
+```
+
+**Return Threshold Update:**
+
+```sql
+-- Calculate threshold for Feb Rent
+paid_so_far = 50,000 - 25,000 = 25,000
+threshold = (25,000 / 50,000) × 100 = 50%
+
+-- Current threshold = 50% (< 85%)
+-- Check previous month (Jan Rent)
+SELECT threshold_percentage
+FROM sys_pm_clients_returns
+WHERE return_date = '2026-01-01'
+  AND lease_id = 123
+  AND trans_type_id = 8  -- Monthly Rent
+LIMIT 1;
+-- Result: 100%
+
+-- Jan threshold = 100% (≥ 85%) → Feb is PAYABLE!
+UPDATE sys_pm_clients_returns
+SET threshold_percentage = 50, payable_status_id = 3  -- Past Passed Threshold
+WHERE invoice_id = 1003;
+```
+
+**After:**
+
+- Invoice 1003: current_balance=25,000, status=Partially Cleared (8)
+- Payment 5001: remaining=0, status=Fully Allocated (13)
+- Return (Feb Rent): threshold=50%, payable_status_id=3 ✅ (STILL PAYABLE!)
+
+---
+
+### Final State Summary
+
+**Payment Allocation Results:**
+
+| Invoice | Period   | Type  | Amount | Allocated | Balance | Status  | Threshold | Payable?   |
+| ------- | -------- | ----- | ------ | --------- | ------- | ------- | --------- | ---------- |
+| 1001    | Jan 2026 | Rent  | 50,000 | 50,000    | 0       | Cleared | 100%      | ✅ Yes (1) |
+| 1002    | Jan 2026 | Water | 5,000  | 5,000     | 0       | Cleared | 100%      | ✅ Yes (1) |
+| 1003    | Feb 2026 | Rent  | 50,000 | 25,000    | 25,000  | Partial | 50%       | ✅ Yes (3) |
+
+**Payment Usage:**
+
+```
+Payment Total: 80,000
+├─ Jan Rent: 50,000
+├─ Jan Water: 5,000
+└─ Feb Rent: 25,000
+Total Allocated: 80,000 ✅
+```
+
+**Returns Payability:**
+
+- ✅ Jan Rent Return: PAYABLE (100% paid)
+- ✅ Jan Water Return: PAYABLE (100% paid)
+- ✅ Feb Rent Return: PAYABLE (Previous month ≥ 85%)
+
+**Landlord Receives:**
+
+- January Returns: Rent + Water = Full Amount
+- February Returns: Rent = Full Amount (despite only 50% paid!)
+
+---
+
+## 🔑 Key Functions Reference
+
+### Payment Processing Functions
+
+```php
+// Main payment processing entry point
+TenantPaymentService::processPayments($unit_id, $client_id)
+
+// Record new payment
+TenantPaymentService::recordPayment($log_data, $tenant_posted_id, $is_recovery, $is_suspense)
+
+// Allocate payment to specific invoice
+TenantPaymentService::allocateInvoice($invoice, $payment)
+
+// Sort invoices by priority
+TenantPaymentService::sortInvoices($invoice_a, $invoice_b)
+```
+
+### Return Management Functions
+
+```php
+// Update return after invoice payment
+ClientReturnService::updateReturnOnInvoicePayment($invoice_id, $allocated_payment_id)
+
+// Monthly cron to update all returns
+ClientReturnService::updateReturnsCron()
+
+// Generate return from invoice
+ClientReturnService::generateReturnFromInvoice($invoice_id)
+```
+
+### Data Access Functions
+
+```php
+// Get payment allocation sum
+TenantPaymentInvoiceDao::getElementSum($payment_id, $invoice_id)
+
+// Get invoices by lease
+InvoiceDao::getInvoicesByLease($lease_id, $property_id, $debtor_type_id, $unsettled, $payment_id)
+
+// Get previous month return
+ClientReturnDao::getAll($past_month, $property_id, $lease_id, $item_id, $status_id)
+
+// Check if payment already exists
+TenantPaymentDao::getByRef($reference)
+```
+
+---
+
+## 📚 SQL Queries for Implementation
+
+### Get Invoice Current Balance
+
+```sql
+SELECT
+    i.id,
+    i.reference_number,
+    i.total_amount,
+    i.current_balance,
+    (i.total_amount - i.current_balance) as paid_so_far,
+    ROUND(((i.total_amount - i.current_balance) / i.total_amount) * 100, 2) as threshold_percentage
+FROM sys_pm_debtors_invoices i
+WHERE i.id = ?;
+```
+
+### Get Payment Allocations
+
+```sql
+SELECT
+    api.id,
+    api.payment_id,
+    api.invoice_id,
+    api.amount_allocated,
+    api.date_time,
+    p.reference as payment_ref,
+    i.reference_number as invoice_ref
+FROM sys_pm_tenants_payments_invoices api
+JOIN sys_pm_tenants_payments p ON api.payment_id = p.id
+JOIN sys_pm_debtors_invoices i ON api.invoice_id = i.id
+WHERE api.payment_id = ?
+ORDER BY api.date_time;
+```
+
+### Get Unallocated Payments
+
+```sql
+SELECT
+    p.*,
+    (p.amount - COALESCE(SUM(api.amount_allocated), 0)) as unallocated_amount
+FROM sys_pm_tenants_payments p
+LEFT JOIN sys_pm_tenants_payments_invoices api ON p.id = api.payment_id
+WHERE p.current_status_id IN (11, 12)  -- Unallocated or Partially Allocated
+  AND p.lease_id = ?
+GROUP BY p.id
+HAVING unallocated_amount > 0;
+```
+
+### Get Unsettled Invoices by Lease
+
+```sql
+SELECT
+    i.*,
+    (i.total_amount - COALESCE(SUM(api.amount_allocated), 0)) as current_balance_calc
+FROM sys_pm_debtors_invoices i
+LEFT JOIN sys_pm_tenants_payments_invoices api ON i.id = api.invoice_id
+WHERE i.lease_id = ?
+  AND i.debtor_type_id = 2  -- Tenants
+  AND i.current_balance > 0  -- Not fully paid
+GROUP BY i.id
+ORDER BY
+    DATE_FORMAT(i.date_due, '%Y-%m-01'),  -- Month
+    i.payment_priority,                    -- Priority
+    i.date_due;                            -- Date
+```
+
+### Get Previous Month Return
+
+```sql
+SELECT
+    cr.threshold_percentage,
+    cr.payable_status_id
+FROM sys_pm_clients_returns cr
+WHERE cr.return_date = ?  -- Format: 'YYYY-MM-01'
+  AND cr.lease_id = ?
+  AND cr.trans_type_id = ?  -- Item type ID
+  AND cr.current_status_id = 1  -- Pending
+LIMIT 1;
+```
+
+### Calculate Return Threshold
+
+```sql
+UPDATE sys_pm_clients_returns cr
+JOIN sys_pm_debtors_invoices i ON cr.invoice_id = i.id
+SET
+    cr.threshold_percentage = ROUND(
+        ((i.total_amount - i.current_balance) / i.total_amount) * 100,
+        2
+    ),
+    cr.payable_status_id = CASE
+        WHEN i.current_balance = 0 THEN 1  -- Fully paid
+        WHEN ((i.total_amount - i.current_balance) / i.total_amount) * 100 >= 85 THEN 1  -- ≥85%
+        ELSE 0  -- Unpayable (check prev month separately)
+    END
+WHERE cr.invoice_id = ?;
+```
+
+---
+
+## 🎯 Implementation Checklist
+
+When implementing this system in another platform:
+
+### Database Setup
+
+- [ ] Create `sys_pm_tenants_payments` table
+- [ ] Create `sys_pm_tenants_payments_invoices` junction table
+- [ ] Create `sys_pm_debtors_invoices` table with `current_balance` field
+- [ ] Create `sys_pm_clients_returns` table with `threshold_percentage` and `payable_status_id`
+- [ ] Create `sys_set_invoiceable_items` configuration table
+- [ ] Create indexes on: lease_id, payment_id, invoice_id, return_date
+- [ ] Set up foreign key constraints
+
+### Core Functions
+
+- [ ] Implement `recordPayment()` - Save payment with unallocated status
+- [ ] Implement `processPayments()` - Main allocation orchestrator
+- [ ] Implement `sortInvoices()` - Priority-based invoice sorting
+- [ ] Implement `allocateInvoice()` - Core allocation logic with 3 scenarios
+- [ ] Implement `updateReturnOnInvoicePayment()` - Threshold calculation
+- [ ] Implement `getElementSum()` - Calculate allocation totals
+
+### Business Rules
+
+- [ ] Configure 85% threshold (make it a system setting)
+- [ ] Define payment_priority for each invoice type
+- [ ] Set advance_payable flag for each item type
+- [ ] Define recovery invoice statuses (37, 35, 36, 34)
+- [ ] Configure payment status IDs (11=Unallocated, 12=Partial, 13=Full)
+- [ ] Configure invoice status IDs (8=Partial, 9=Cleared)
+- [ ] Configure return payable status IDs (0/1/2/3/17)
+
+### Integration Points
+
+- [ ] Trigger `processPayments()` after payment save
+- [ ] Trigger `processPayments()` via cron job (backup)
+- [ ] Handle payment channels (Bank, Mpesa, Cash)
+- [ ] Generate receipt numbers
+- [ ] Update tenant ledger on payment
+- [ ] Update billing records (if separate table)
+- [ ] Update defaulters/arrears records
+- [ ] Handle deposits separately
+- [ ] Create recovery records for special statuses
+
+### Testing Scenarios
+
+- [ ] Test exact match allocation (payment = invoice)
+- [ ] Test partial payment (payment < invoice)
+- [ ] Test excess payment (payment > invoice)
+- [ ] Test multiple invoice allocation from one payment
+- [ ] Test 85% threshold logic
+- [ ] Test previous month dependency
+- [ ] Test tenant moved between units
+- [ ] Test multi-unit tenant (linked leases)
+- [ ] Test recovery invoice handling
+- [ ] Test payment priority sorting
+- [ ] Test duplicate payment reference rejection
+
+---
+
+## 🚨 Critical Considerations
+
+### 1. **current_balance is LIVE**
+
+- Never recalculate from scratch
+- Always update incrementally on allocation
+- Trust this field as source of truth
+
+### 2. **Allocation is ATOMIC**
+
+- One allocation record per payment-invoice pair
+- Each allocation updates both payment and invoice
+- Never skip the junction table record
+
+### 3. **Threshold Updates are REAL-TIME**
+
+- Every allocation triggers return update
+- Threshold changes immediately affect payability
+- Previous month check is separate query
+
+### 4. **Payment Can Split Across Multiple Invoices**
+
+- Loop continues until payment exhausted
+- Each loop creates new allocation record
+- Status changes per allocation
+
+### 5. **Invoice Sorting is CRITICAL**
+
+- Wrong order = wrong allocations
+- Oldest invoices must clear first
+- Priority affects same-month ordering
+
+### 6. **Previous Month Logic is SEPARATE**
+
+- Current threshold = this month payment %
+- Payable status = depends on last month
+- Each lease+item tracked independently
+
+### 7. **Recovery Invoices Break the Rules**
+
+- Always unpayable (status = 0)
+- Even if 100% paid
+- Create recovery record for landlord
+
+---
+
+## 📄 Class Structure Template (For AI Agent)
+
+```php
+// Example class structure for implementation
+
+class PaymentAllocationService {
+
+    private $paymentDao;
+    private $invoiceDao;
+    private $allocationDao;
+    private $returnDao;
+
+    /**
+     * Main entry point - process all unallocated payments
+     */
+    public function processPayments($unit_id = null, $client_id = null) {
+        // 1. Get unallocated payments
+        // 2. For each payment, get unsettled invoices by lease_id
+        // 3. Sort invoices (oldest first, then priority)
+        // 4. Loop through invoices and allocate
+    }
+
+    /**
+     * Core allocation logic - handles 3 scenarios
+     */
+    public function allocateInvoice($invoice, $payment) {
+        // 1. Calculate payment remaining balance
+        // 2. Calculate invoice remaining balance
+        // 3. Determine scenario: equal/partial/excess
+        // 4. Create allocation record
+        // 5. Update invoice current_balance
+        // 6. Update payment status
+        // 7. Trigger return threshold update
+    }
+
+    /**
+     * Sort invoices by month, priority, date
+     */
+    public function sortInvoices($invoices) {
+        // 1. Extract month from date_due
+        // 2. Sort by: month ASC, payment_priority ASC, date_due ASC
+    }
+
+    /**
+     * Update return threshold after allocation
+     */
+    public function updateReturnThreshold($invoice_id, $payment_id) {
+        // 1. Get invoice and return
+        // 2. Calculate threshold: (paid / total) × 100
+        // 3. Check if fully paid → payable
+        // 4. Check if current ≥ 85% → payable
+        // 5. Check previous month threshold
+        // 6. Update return record
+    }
+
+    /**
+     * Get sum of allocations for payment or invoice
+     */
+    public function getAllocationSum($payment_id = null, $invoice_id = null) {
+        // SUM(amount_allocated) WHERE payment_id = X OR invoice_id = Y
+    }
+}
+```
+
+---
+
+## 📝 Conclusion
+
+This end-to-end process ensures:
+
+✅ **Automatic allocation** - No manual intervention needed  
+✅ **Fair distribution** - Oldest debts cleared first  
+✅ **Partial payments** - One payment can clear multiple invoices  
+✅ **Real-time tracking** - Balances and thresholds updated immediately  
+✅ **Advance payment protection** - 85% threshold prevents bad debt  
+✅ **Historical accuracy** - Previous month tracking for payability  
+✅ **Multi-tenant support** - Handles moved and multi-unit tenants  
+✅ **Recovery handling** - Special cases for refunds and deductions
+
+The system is designed to be completely **transparent, auditable, and fair** to both tenants and landlords.
+
+---
+
+**End of Document**

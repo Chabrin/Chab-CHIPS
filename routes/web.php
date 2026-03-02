@@ -478,6 +478,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         Route::post('/property/escalations/store', [App\Http\Controllers\LeaseEscalationController::class, 'store'])->name('property.escalations.store');
         Route::post('/property/escalations/{id}/approve', [App\Http\Controllers\LeaseEscalationController::class, 'approve'])->name('property.escalations.approve');
         Route::post('/property/escalations/{id}/reject', [App\Http\Controllers\LeaseEscalationController::class, 'reject'])->name('property.escalations.reject');
+        Route::post('/property/escalations/{id}/cancel', [App\Http\Controllers\LeaseEscalationController::class, 'cancel'])->name('property.escalations.cancel');
+        Route::get('/property/escalations/notification-settings', [App\Http\Controllers\LeaseEscalationController::class, 'getNotificationSettings'])->name('property.escalations.notification-settings.get');
+        Route::post('/property/escalations/notification-settings', [App\Http\Controllers\LeaseEscalationController::class, 'saveNotificationSettings'])->name('property.escalations.notification-settings.save');
 
         // Tenant Movements
         Route::get('/property/movements', [App\Http\Controllers\TenantMovementController::class, 'index'])->name('property.movements.index');
@@ -738,7 +741,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     ###### PROPERTY MANAGEMENT SECTION END ########
 
-    Route::get('/test/tenant/balance', [App\Http\Controllers\TenantsController::class, 'testTenantBalance'])->name('test.tenant.balance');
+    Route::get('/get/tenant/balance', [App\Http\Controllers\TenantsController::class, 'getTenantBalance'])->name('get.tenant.balance');
 
     
 });

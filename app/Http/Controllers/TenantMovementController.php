@@ -171,7 +171,11 @@ class TenantMovementController extends Controller
                 'createdBy:id,name'
             ])->findOrFail($id);
 
-            return view('property.properties.movement.details', compact('movement'));
+            $tenantBalance = $movement->tenant_id
+                ? \App\Services\TenantBalanceService::getBalance((int) $movement->tenant_id)
+                : null;
+
+            return view('property.properties.movement.details', compact('movement', 'tenantBalance'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading movement details: ' . $e->getMessage());

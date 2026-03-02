@@ -23,12 +23,14 @@ use Illuminate\Support\Facades\Storage;
 class TenantsController extends Controller
 {
 
-    public function testTenantBalance()
+    public function getTenantBalance(Request $request, $tenantId = null)
     {
-        $tenantId = 92431;
-        $balance = TenantBalanceService::getBalance($tenantId);
-
-        dd($balance);
+        $id = $tenantId ?? $request->get('tenant_id');
+        if (!$id) {
+            return response()->json(['error' => 'tenant_id is required'], 422);
+        }
+        $balance = TenantBalanceService::getBalance((int) $id);
+        return response()->json(['balance' => $balance]);
     }
 
 

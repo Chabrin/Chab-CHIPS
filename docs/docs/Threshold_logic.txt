@@ -1,0 +1,1118 @@
+# THRESHOLD & PAYABLE STATUS UPDATE DOCUMENTATION
+
+## Overview
+
+This document explains the dual-threshold system for tracking both **actual** and **estimated** payment thresholds for returns, using historical data to predict payability and real-time invoice payments to track actual performance.
+
+---
+
+## 🎯 NEW APPROACH: DUAL THRESHOLD SYSTEM
+
+### Two Threshold Columns
+
+**1. `threshold_percentage` (REAL THRESHOLD)**
+
+- Reflects **actual tenant payments** on the invoice
+- Updated when tenant makes payment
+- Calculated from: `(invoice.total_amount - invoice.current_balance) / invoice.total_amount × 100`
+- Used for: Final payability determination
+
+**2. `abstract_threshold` (ESTIMATED/HISTORICAL THRESHOLD)**
+
+- Reflects **predicted payment** based on historical lease performance
+- Updated at return generation time
+- Calculated from: Historical payment patterns for this lease + item
+- Used for: Initial payability estimation before tenant pays
+
+### Why Two Columns?
+
+**Problem:** At return generation (e.g., February 1st), the invoice for February hasn't been paid yet.
+
+- `threshold_percentage = 0` (no payments yet)
+- But we need to estimate if landlord should expect payment this month
+
+**Solution:** Use `abstract_threshold` based on historical data
+
+- If tenant historically pays 90% every month → `abstract_threshold = 90`
+- Landlord knows to expect payment even before tenant actually pays
+- When tenant pays, `threshold_percentage` updates with real data
+
+### The Rule
+
+**If an item is marked as "advance_payable = Yes":**
+
+- Current month's return payability depends on **historical payment threshold**
+- If previous month was 100% paid → Use 100% as abstract threshold
+- If previous month < 100% → Check entire historical data for this lease
+- When tenant actually pays → Update real threshold and recalculate payability
+
+### Why This Matters
+
+This prevents landlords from getting paid for current month if tenant has a history of not paying. It's a **risk management** feature that ensures landlords only get paid when tenants demonstrate consistent payment behavior.
+
+---
+
+## 🔄 NEW IMPLEMENTATION FLOW
+
+### Flow 1: Bulk Update After Return Generation (ABSTRACT THRESHOLD)
+
+**When:** Right after returns are generated for a new month  
+**Purpose:** Set estimated threshold based on historical data  
+**Column Updated:** `abstract_threshold`  
+**Timing:** Once per month, after return generation cron
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│         RETURN GENERATION & ABSTRACT THRESHOLD UPDATE           │
+└────────────────────────────────────────────────────────────────┘
+
+Step 1: Returns Generated for Current Month (e.g., February 2026)
+│
+├─> For each return created:
+│   ├─> invoice_id linked
+│   ├─> payable_status_id = 0 (Unpayable by default)
+│   ├─> threshold_percentage = 0 (No payment yet)
+│   ├─> abstract_threshold = 0 (To be calculated)
+│   └─> Landlord ledger entry created with payable_status = 0
+│
+▼
+
+Step 2: Run Bulk Update Query (NEW APPROACH)
+│
+├─> For each return in current month:
+│   │
+│   ├─> Check previous month's threshold
+│   │   Query: SELECT threshold_percentage FROM sys_pm_clients_returns
+│   │          WHERE return_date = 'YYYY-MM' (previous month)
+│   │          AND lease_id = :lease_id
+│   │          AND trans_type_id = :item_id
+│   │
+│   ├─> IF previous month threshold = 100%
+│   │   └─> abstract_threshold = 100
+│   │       payable_status_id = 1 (Payable)
+│   │
+│   └─> ELSE (previous month < 100% OR no previous month)
+│       │
+│       ├─> Get historical data for this lease+item
+│       │   Query: SELECT AVG(threshold_percentage) as avg_threshold
+│       │          FROM sys_pm_clients_returns
+│       │          WHERE lease_id = :lease_id
+│       │          AND trans_type_id = :item_id
+│       │          AND return_date < :current_month
+│       │          AND threshold_percentage > 0
+│       │
+│       ├─> abstract_threshold = avg_threshold (historical average)
+│       │
+│       └─> payable_status_id = CASE
+│               WHEN avg_threshold >= 85 THEN 1 (Payable)
+│               ELSE 0 (Unpayable)
+│           END
+│
+▼
+
+Step 3: Update Return & Landlord Ledger
+│
+└─> UPDATE sys_pm_clients_returns
+    SET abstract_threshold = calculated_value,
+        payable_status_id = determined_status
+    WHERE id = :return_id
+
+└─> IF payable_status_id = 1
+    └─> UPDATE sys_pm_landlord_accounts_transaction
+        SET payable_status = 1
+        WHERE invoice_id = :invoice_id
+```
+
+---
+
+### Flow 2: Individual Invoice Payment (REAL THRESHOLD)
+
+**When:** Tenant makes payment on any invoice  
+**Purpose:** Update actual threshold based on real payment  
+**Columns Updated:** `threshold_percentage` (always), `abstract_threshold` (only if return exists)  
+**Timing:** Real-time, on every payment allocation
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│           PAYMENT TRIGGERS REAL THRESHOLD UPDATE                │
+└────────────────────────────────────────────────────────────────┘
+
+Step 1: Tenant Payment Allocated to Invoice
+│
+├─> Invoice balance updated
+└─> current_status_id updated (Partially Cleared or Cleared)
+
+▼
+
+Step 2: Calculate Real Threshold
+│
+├─> paid_so_far = total_amount - current_balance
+├─> threshold = (paid_so_far / total_amount) × 100
+│
+└─> Example: (43,000 / 50,000) × 100 = 86%
+
+▼
+
+Step 3: Check if Return Exists
+│
+├─> Query: SELECT * FROM sys_pm_clients_returns
+│          WHERE invoice_id = :invoice_id
+│
+├─> IF return EXISTS (invoice has associated return)
+│   │
+│   ├─> Update BOTH thresholds:
+│   │   UPDATE sys_pm_clients_returns
+│   │   SET threshold_percentage = calculated_threshold,
+│   │       abstract_threshold = calculated_threshold,
+│   │       payable_status_id = determined_status
+│   │   WHERE invoice_id = :invoice_id
+│   │
+│   └─> Reason: Return exists, actual payment reflects reality
+│
+└─> ELSE (no return yet - future invoice)
+    │
+    └─> Invoice payment recorded, but no return to update
+        (Return will be generated later with abstract threshold)
+
+▼
+
+Step 4: Determine Payable Status (if return exists)
+│
+├─> IF invoice fully cleared (status = 9)
+│   └─> payable_status_id = 1, threshold = 100%
+│
+├─> ELSE IF recovery invoice (status IN 37,35,36,34)
+│   └─> payable_status_id = 0, CREATE recovery
+│
+├─> ELSE IF threshold_percentage >= 85
+│   └─> payable_status_id = 1 (Payable)
+│
+└─> ELSE
+    └─> payable_status_id = 0 (Unpayable)
+
+▼
+
+Step 5: Update Landlord Ledger (ONLY if payable_status_id = 1)
+│
+└─> IF payable_status_id = 1
+    └─> UPDATE sys_pm_landlord_accounts_transaction
+        SET payable_status = 1
+        WHERE invoice_id = :invoice_id
+        AND amount_type = 'Credit'
+```
+
+---
+
+## 🗃️ TABLES & COLUMNS INVOLVED
+
+### 1. sys_pm_clients_returns
+
+**Key Columns:**
+
+| Column                 | Type          | Purpose                                       | Updated When      |
+| ---------------------- | ------------- | --------------------------------------------- | ----------------- |
+| `threshold_percentage` | DECIMAL(10,2) | **REAL** threshold from actual tenant payment | Invoice payment   |
+| `abstract_threshold`   | DECIMAL(10,2) | **ESTIMATED** threshold from historical data  | Return generation |
+| `payable_status_id`    | INT           | Eligibility status (0, 1, 2, 3, 17)           | Both              |
+| `invoice_id`           | INT           | Linked invoice                                | Return creation   |
+| `lease_id`             | INT           | Lease identifier (for historical lookup)      | Return creation   |
+| `trans_type_id`        | INT           | Item/transaction type (for historical lookup) | Return creation   |
+| `return_date`          | DATE          | Return period date (for historical lookup)    | Return creation   |
+
+**Query Patterns:**
+
+```sql
+-- Update abstract threshold (bulk, after generation)
+UPDATE sys_pm_clients_returns
+SET abstract_threshold = :calculated_historical_avg,
+    payable_status_id = :determined_status
+WHERE return_date LIKE '2026-02%';
+
+-- Update real threshold (individual, on payment)
+UPDATE sys_pm_clients_returns
+SET threshold_percentage = :calculated_threshold,
+    abstract_threshold = :calculated_threshold,  -- Only if return exists
+    payable_status_id = :determined_status
+WHERE invoice_id = :invoice_id;
+```
+
+### 2. sys_pm_landlord_accounts_transaction
+
+**Field Updated:**
+
+- `payable_status` - Balance inclusion flag (0, 1, 17)
+
+**Query Pattern:**
+
+```sql
+UPDATE sys_pm_landlord_accounts_transaction
+SET payable_status = 1
+WHERE invoice_id = :invoice_id
+  AND amount_type = 'Credit'
+  AND payable_status_id = 1;  -- Only if return became payable
+```
+
+### 3. sys_pm_debtors_invoices
+
+**Fields Read (not updated by return system):**
+
+- `total_amount` - Invoice total
+- `current_balance` - Remaining unpaid
+- `current_status_id` - Payment status (1, 8, 9, 34-37)
+- `lease_id` - Links to return lease
+
+### 4. sys_set_invoiceable_items
+
+**Field Read:**
+
+- `advance_payable` - Whether item uses historical check ('Yes'/'No')
+- Joins to `sys_pm_debtors_invoices.item_type_id`
+
+---
+
+## 📊 SINGLE BULK UPDATE QUERY (NEW APPROACH)
+
+### Complete Query: Update Abstract Threshold After Return Generation
+
+Run this **immediately after** returns are generated for a new month.
+
+```sql
+-- ============================================================================
+-- BULK UPDATE: Abstract Threshold Based on Historical Data
+-- Run after generating returns for new month
+-- Example: Generated February 2026 returns
+-- ============================================================================
+
+-- VARIABLES
+SET @current_month = '2026-02%';
+SET @previous_month = '2026-01';
+SET @allowed_threshold = 85;
+
+-- ============================================================================
+-- SINGLE COMPREHENSIVE UPDATE QUERY
+-- ============================================================================
+
+UPDATE sys_pm_clients_returns AS curr
+JOIN sys_pm_debtors_invoices AS inv
+    ON curr.invoice_id = inv.id
+JOIN sys_set_invoiceable_items AS items
+    ON inv.item_type_id = items.id
+
+-- Get previous month's threshold
+LEFT JOIN sys_pm_clients_returns AS prev
+    ON curr.lease_id = prev.lease_id
+    AND inv.item_type_id = prev.trans_type_id
+    AND prev.return_date LIKE CONCAT(@previous_month, '%')
+    AND prev.current_status_id = 1
+
+-- Get historical average threshold for this lease+item
+LEFT JOIN (
+    SELECT
+        lease_id,
+        trans_type_id,
+        ROUND(AVG(threshold_percentage), 2) as avg_historical_threshold,
+        COUNT(*) as historical_count
+    FROM sys_pm_clients_returns
+    WHERE return_date < @current_month
+      AND threshold_percentage > 0
+      AND current_status_id = 1
+    GROUP BY lease_id, trans_type_id
+) AS hist
+    ON curr.lease_id = hist.lease_id
+    AND inv.item_type_id = hist.trans_type_id
+
+SET
+    -- Set abstract threshold based on logic
+    curr.abstract_threshold = CASE
+        -- Previous month was 100% - use 100%
+        WHEN prev.threshold_percentage = 100 THEN 100.00
+
+        -- No previous month - use historical average (or 0 if no history)
+        WHEN prev.id IS NULL THEN COALESCE(hist.avg_historical_threshold, 0.00)
+
+        -- Previous month < 100% - use historical average
+        ELSE COALESCE(hist.avg_historical_threshold, 0.00)
+    END,
+
+    -- Set payable status based on abstract threshold
+    curr.payable_status_id = CASE
+        -- Previous month was 100%
+        WHEN prev.threshold_percentage = 100 THEN 1  -- Payable
+
+        -- No history at all (first invoice)
+        WHEN prev.id IS NULL AND hist.historical_count IS NULL THEN 2  -- No Past Invoice
+
+        -- Historical average >= 85%
+        WHEN COALESCE(hist.avg_historical_threshold, 0) >= @allowed_threshold THEN 1  -- Payable
+
+        -- Historical average < 85%
+        ELSE 0  -- Unpayable
+    END
+
+WHERE curr.return_date LIKE @current_month
+  AND items.advance_payable = 'Yes'
+  AND curr.current_status_id = 1;
+
+-- ============================================================================
+-- STEP 2: Update Landlord Ledger for Payable Returns
+-- ============================================================================
+
+UPDATE sys_pm_landlord_accounts_transaction AS l
+JOIN sys_pm_clients_returns AS r
+    ON l.invoice_id = r.invoice_id
+SET l.payable_status = r.payable_status_id
+WHERE r.return_date LIKE @current_month
+  AND r.payable_status_id IN (1, 2)  -- Only payable statuses
+  AND l.amount_type = 'Credit'
+  AND l.transaction_type_id = 13;  -- Client Return
+
+-- ============================================================================
+-- VERIFICATION QUERY
+-- ============================================================================
+
+SELECT
+    r.ref_number,
+    r.return_date,
+    r.lease_id,
+    r.trans_type_id,
+    r.threshold_percentage as real_threshold,
+    r.abstract_threshold,
+    r.payable_status_id,
+    prev.threshold_percentage as prev_month_threshold,
+    hist.avg_historical_threshold,
+    hist.historical_count,
+    CASE
+        WHEN r.payable_status_id = 0 THEN '❌ Unpayable'
+        WHEN r.payable_status_id = 1 THEN '✅ Payable'
+        WHEN r.payable_status_id = 2 THEN '✅ No Past Invoice'
+    END as status_label
+FROM sys_pm_clients_returns r
+
+-- Get previous month
+LEFT JOIN sys_pm_clients_returns AS prev
+    ON r.lease_id = prev.lease_id
+    AND r.trans_type_id = prev.trans_type_id
+    AND prev.return_date LIKE CONCAT(@previous_month, '%')
+
+-- Get historical average
+LEFT JOIN (
+    SELECT
+        lease_id,
+        trans_type_id,
+        ROUND(AVG(threshold_percentage), 2) as avg_historical_threshold,
+        COUNT(*) as historical_count
+    FROM sys_pm_clients_returns
+    WHERE return_date < @current_month
+      AND threshold_percentage > 0
+    GROUP BY lease_id, trans_type_id
+) AS hist
+    ON r.lease_id = hist.lease_id
+    AND r.trans_type_id = hist.trans_type_id
+
+WHERE r.return_date LIKE @current_month
+ORDER BY r.payable_status_id, r.ref_number
+LIMIT 50;
+```
+
+---
+
+## 🔧 PHP FUNCTION: Update Real Threshold on Invoice Payment
+
+### Modified `updateReturnOnInvoicePayment()` Method
+
+**Location:** `libraries/ipms/Domain/Service/ClientReturnService.php`
+
+```php
+/**
+ * Update return threshold and payable status when tenant makes payment
+ * Updates REAL threshold (threshold_percentage) and abstract_threshold if return exists
+ *
+ * @param int $invoice_id Invoice ID that received payment
+ * @return bool Success status
+ */
+public static function updateReturnOnInvoicePayment($invoice_id)
+{
+    $invoice_dao = new InvoiceDao();
+    $client_return_dao = new ClientReturnDao();
+    $item_dao = new ItemDao();
+    $recovery_dao = new RecoveryDao();
+
+    $return_statuses = ToolsService::getGlobalSettings()['return_statuses'];
+    $allowed_thresh = $return_statuses['allowed_thresh']; // 85
+    $pending_id = 1;
+
+    // Get invoice details
+    $invoice = $invoice_dao->getById($invoice_id);
+    if(!$invoice) {
+        return false;
+    }
+
+    // Check if return exists for this invoice
+    $return = $client_return_dao->getByInvoice($invoice_id);
+
+    // If no return exists yet, invoice payment is recorded but no return to update
+    if(!$return) {
+        // Return will be generated later with abstract threshold
+        return true;
+    }
+
+    // Calculate REAL threshold from actual payment
+    $invoice_amount = $invoice->total_amount;
+    $current_balance = $invoice->current_balance;
+    $paid_so_far = $invoice_amount - $current_balance;
+    $threshold = round(($paid_so_far * 100) / $invoice_amount, 2);
+
+    // Determine payable status
+    $payable_status_id = 0; // Default: Unpayable
+
+    // Check if invoice is fully cleared
+    if($invoice->current_status_id == 9) {
+        $payable_status_id = 1; // Payable
+        $threshold = 100.00;
+    }
+    // Check if recovery status (paid by non-tenant means)
+    else if(in_array($invoice->current_status_id, [37, 35, 36, 34])) {
+        $payable_status_id = 0; // Unpayable
+        $threshold = 100.00;
+
+        // Create recovery if return was already paid
+        if($return->paid_status_id == 2) {
+            $recovery_dao->createFromReturn($return);
+        }
+    }
+    // Check current threshold
+    else if($threshold >= $allowed_thresh) {
+        $payable_status_id = 1; // Payable
+    }
+    // Check if item uses advance payable logic
+    else {
+        $item_details = $item_dao->getById($return->trans_type_id);
+
+        if($item_details && $item_details->advance_payable == 'Yes') {
+            // Use abstract threshold (already calculated from historical data)
+            // If abstract threshold >= 85, keep it payable
+            if($return->abstract_threshold >= $allowed_thresh) {
+                $payable_status_id = 1; // Keep payable based on historical data
+            }
+        }
+    }
+
+    // Update return with BOTH thresholds
+    $values = [
+        'threshold_percentage' => $threshold,      // REAL threshold
+        'abstract_threshold' => $threshold,         // Update abstract too (real data overrides estimate)
+        'payable_status_id' => $payable_status_id
+    ];
+
+    $params = ['id' => $return->id];
+    $client_return_dao->updateVals($values, $params);
+
+    // Update landlord ledger if became payable
+    self::updateLandlordLedger($payable_status_id, $invoice_id);
+
+    return true;
+}
+
+/**
+ * Update landlord ledger payable status to match return
+ *
+ * @param int $payable_status_id Return payable status
+ * @param int $invoice_id Invoice ID
+ */
+private static function updateLandlordLedger($payable_status_id, $invoice_id)
+{
+    // Only update if return is payable
+    if($payable_status_id == 1) {
+        $landlord_trans_dao = new LandlordTransDao();
+
+        $values = ['payable_status' => 1];
+        $params = [
+            'invoice_id' => $invoice_id,
+            'amount_type' => 'Credit'
+        ];
+
+        $landlord_trans_dao->updateVals($values, $params);
+    }
+}
+```
+
+---
+
+## 📈 EXAMPLE SCENARIOS
+
+### Scenario 1: New Return with 100% Previous Month
+
+**Timeline:**
+
+- January 2026: Tenant paid 100% (threshold = 100%)
+- February 2026: Return generated, invoice not yet paid
+
+**Bulk Update Result:**
+
+```sql
+abstract_threshold = 100.00    -- Previous month was perfect
+payable_status_id = 1          -- Payable
+threshold_percentage = 0.00    -- Invoice not paid yet
+```
+
+**When Tenant Pays (February 15):**
+
+```sql
+threshold_percentage = 86.00   -- Actual payment (updated)
+abstract_threshold = 86.00     -- Overwritten with real data
+payable_status_id = 1          -- Still payable
+```
+
+---
+
+### Scenario 2: New Return with Poor Previous Month
+
+**Timeline:**
+
+- January 2026: Tenant paid 40% (threshold = 40%)
+- Historical average: 75% over last 6 months
+- February 2026: Return generated
+
+**Bulk Update Result:**
+
+```sql
+abstract_threshold = 75.00     -- Historical average (previous < 100%)
+payable_status_id = 0          -- Unpayable (< 85%)
+threshold_percentage = 0.00    -- Invoice not paid yet
+```
+
+**When Tenant Pays 90% (February 20):**
+
+```sql
+threshold_percentage = 90.00   -- Actual payment exceeds threshold!
+abstract_threshold = 90.00     -- Updated with real data
+payable_status_id = 1          -- NOW PAYABLE!
+payable_status (ledger) = 1    -- Landlord ledger updated
+```
+
+---
+
+### Scenario 3: First Invoice Ever (No History)
+
+**Timeline:**
+
+- New lease, first month
+- No previous months, no historical data
+- February 2026: First return generated
+
+**Bulk Update Result:**
+
+```sql
+abstract_threshold = 0.00      -- No history
+payable_status_id = 2          -- No Past Invoice (special status - makes it payable)
+threshold_percentage = 0.00    -- Invoice not paid yet
+```
+
+**When Tenant Pays 50% (February 10):**
+
+```sql
+threshold_percentage = 50.00   -- Actual payment
+abstract_threshold = 50.00     -- Updated
+payable_status_id = 0          -- NOW UNPAYABLE (first month grace removed)
+```
+
+---
+
+### Scenario 4: Consistent Good Payer
+
+**Timeline:**
+
+- Historical average: 95% over last 6 months
+- Previous month: 92% (not 100%)
+- February 2026: Return generated
+
+**Bulk Update Result:**
+
+```sql
+abstract_threshold = 95.00     -- Strong historical average
+payable_status_id = 1          -- Payable (>= 85%)
+threshold_percentage = 0.00    -- Invoice not paid yet
+```
+
+**When Tenant Pays 88% (February 25):**
+
+```sql
+threshold_percentage = 88.00   -- Actual payment
+abstract_threshold = 88.00     -- Updated
+payable_status_id = 1          -- Still payable (>= 85%)
+```
+
+---
+
+## 💡 KEY DIFFERENCES FROM OLD APPROACH
+
+### Old Approach (1-Month Lookback)
+
+| Aspect                   | Old Behavior                             |
+| ------------------------ | ---------------------------------------- |
+| **Lookback Period**      | Only previous month                      |
+| **Gaming Vulnerability** | Tenant can alternate: 90%, 40%, 90%, 40% |
+| **Data Used**            | Single month threshold                   |
+| **First Invoice**        | Automatically payable                    |
+| **Threshold Column**     | Single: `threshold_percentage`           |
+
+### New Approach (Historical Aggregate)
+
+| Aspect                | New Behavior                                        |
+| --------------------- | --------------------------------------------------- |
+| **Lookback Period**   | Entire historical data                              |
+| **Gaming Protection** | Average across all months prevents gaming           |
+| **Data Used**         | Average historical threshold                        |
+| **First Invoice**     | Payable (status 2) until first payment              |
+| **Threshold Columns** | Dual: `abstract_threshold` + `threshold_percentage` |
+
+---
+
+## ⚠️ IMPORTANT CONSIDERATIONS
+
+### 1. **Abstract vs Real Threshold**
+
+- `abstract_threshold` = **Prediction** based on history
+- `threshold_percentage` = **Reality** from actual payment
+- Abstract used at generation time, real updates as tenant pays
+
+### 2. **When Abstract Gets Overwritten**
+
+Abstract threshold is **overwritten** when:
+
+- Tenant makes payment on that invoice
+- Both columns become equal (real data replaces estimate)
+
+### 3. **Future Invoices (No Return Yet)**
+
+When tenant pays on invoice **before** return is generated:
+
+- Invoice payment recorded
+- No return to update (doesn't exist yet)
+- When return is generated, bulk update sets abstract threshold
+- Real threshold stays 0 until next payment (or gets synced in bulk update)
+
+**Solution:** Add step to bulk update that syncs real threshold from invoice:
+
+```sql
+-- Sync threshold_percentage from invoice for newly generated returns
+UPDATE sys_pm_clients_returns AS r
+JOIN sys_pm_debtors_invoices AS i ON r.invoice_id = i.id
+SET r.threshold_percentage = ROUND(
+    ((i.total_amount - i.current_balance) / i.total_amount) * 100,
+    2
+)
+WHERE r.return_date LIKE @current_month
+  AND i.total_amount > 0;
+```
+
+### 4. **Historical Average Calculation**
+
+Current query uses **simple average**. Consider:
+
+- Weighted average (recent months count more)
+- Median instead of mean (handles outliers)
+- Minimum threshold over last N months
+
+---
+
+## 🔧 RECOMMENDED ENHANCEMENTS
+
+### Enhancement 1: Weighted Historical Average
+
+Give more weight to recent months:
+
+```sql
+-- Replace historical average subquery with weighted version
+LEFT JOIN (
+    SELECT
+        lease_id,
+        trans_type_id,
+        ROUND(
+            SUM(
+                threshold_percentage *
+                CASE
+                    WHEN return_date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) THEN 0.5
+                    WHEN return_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) THEN 0.3
+                    ELSE 0.2
+                END
+            ) /
+            SUM(
+                CASE
+                    WHEN return_date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) THEN 0.5
+                    WHEN return_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) THEN 0.3
+                    ELSE 0.2
+                END
+            ),
+            2
+        ) as weighted_avg_threshold,
+        COUNT(*) as historical_count
+    FROM sys_pm_clients_returns
+    WHERE return_date < @current_month
+      AND threshold_percentage > 0
+    GROUP BY lease_id, trans_type_id
+) AS hist ON ...
+```
+
+### Enhancement 2: Sync Real Threshold from Invoice
+
+Add to bulk update query:
+
+```sql
+-- STEP 0: Sync threshold_percentage from invoices (before abstract calculation)
+UPDATE sys_pm_clients_returns AS r
+JOIN sys_pm_debtors_invoices AS i ON r.invoice_id = i.id
+SET r.threshold_percentage = CASE
+    WHEN i.total_amount > 0 THEN ROUND(
+        ((i.total_amount - i.current_balance) / i.total_amount) * 100,
+        2
+    )
+    ELSE 0
+END
+WHERE r.return_date LIKE @current_month
+  AND r.invoice_id IS NOT NULL;
+```
+
+---
+
+## 📚 RELATED DOCUMENTATION
+
+- [INVOICE_PAYMENT_TO_LANDLORD_LEDGER_FLOW.md](INVOICE_PAYMENT_TO_LANDLORD_LEDGER_FLOW.md) - Complete payment flow
+- [RETURNS_PROCESS_FLOW_DOCUMENTATION.md](RETURNS_PROCESS_FLOW_DOCUMENTATION.md) - Returns process details
+- [ADD_ABSTRACT_THRESHOLD_COLUMN.sql](migrations/ADD_ABSTRACT_THRESHOLD_COLUMN.sql) - Migration file
+
+---
+
+**Document Version:** 2.0 (NEW DUAL-THRESHOLD APPROACH)  
+**Last Updated:** February 2, 2026  
+**Maintained By:** System Documentation Team
+JOIN sys_pm_clients_returns AS r
+ON l.invoice_id = r.invoice_id
+SET l.payable_status = r.payable_status_id
+WHERE r.return_date LIKE '2026-02%'
+AND r.payable_status_id IN (1, 2, 3) -- Any payable status
+AND l.amount_type = 'Credit'
+AND l.transaction_type_id = 13; -- Client Return
+
+````
+
+---
+
+### Query 2: Recalculate Thresholds for All Returns from Invoices
+
+**Scenario:** Recalculate threshold percentages for all existing returns based on current invoice balances.
+
+```sql
+-- Update threshold_percentage for all returns
+UPDATE sys_pm_clients_returns AS r
+JOIN sys_pm_debtors_invoices AS i
+    ON r.invoice_id = i.id
+SET r.threshold_percentage = ROUND(
+    ((i.total_amount - i.current_balance) / i.total_amount) * 100,
+    2
+)
+WHERE r.invoice_id IS NOT NULL
+  AND i.total_amount > 0
+  AND r.current_status_id = 1;
+````
+
+---
+
+### Query 3: Update Payable Status Based on Current Threshold
+
+**Scenario:** Mark returns as payable if their current invoice threshold >= 85%.
+
+```sql
+-- Update returns to payable if current threshold meets requirement
+UPDATE sys_pm_clients_returns AS r
+JOIN sys_pm_debtors_invoices AS i
+    ON r.invoice_id = i.id
+JOIN sys_set_invoiceable_items AS items
+    ON i.item_type_id = items.id
+SET r.payable_status_id = CASE
+        WHEN i.current_status_id = 9 THEN 1  -- Cleared
+        WHEN ((i.total_amount - i.current_balance) / i.total_amount * 100) >= 85
+            AND items.advance_payable = 'Yes' THEN 1  -- Threshold met
+        ELSE r.payable_status_id  -- Keep current status
+    END
+WHERE r.current_status_id = 1
+  AND r.invoice_id IS NOT NULL;
+```
+
+---
+
+### Query 4: Sync Landlord Ledger with Returns Payable Status
+
+**Scenario:** Ensure landlord ledger matches returns table payable status.
+
+```sql
+-- Sync landlord ledger payable_status with returns
+UPDATE sys_pm_landlord_accounts_transaction AS l
+JOIN sys_pm_clients_returns AS r
+    ON l.invoice_id = r.invoice_id
+SET l.payable_status = r.payable_status_id
+WHERE l.amount_type = 'Credit'
+  AND l.transaction_type_id = 13  -- Client Return
+  AND l.payable_status != r.payable_status_id;  -- Only update mismatches
+```
+
+---
+
+## 🔄 COMPLETE BULK UPDATE PROCESS
+
+**Run this after generating new month's returns:**
+
+```sql
+-- ============================================================================
+-- BULK UPDATE: Current Month Returns Based on Previous Month Performance
+-- Run after generating returns for new month
+-- Example: Generated February 2026 returns, update based on January 2026
+-- ============================================================================
+
+-- VARIABLES (Update these for your scenario)
+SET @current_month = '2026-02%';
+SET @previous_month = '2026-01%';
+SET @allowed_threshold = 85;
+
+-- ============================================================================
+-- STEP 1: Calculate threshold percentages from current invoices
+-- ============================================================================
+UPDATE sys_pm_clients_returns AS r
+JOIN sys_pm_debtors_invoices AS i ON r.invoice_id = i.id
+SET r.threshold_percentage = ROUND(
+    ((i.total_amount - i.current_balance) / i.total_amount) * 100,
+    2
+)
+WHERE r.return_date LIKE @current_month
+  AND r.invoice_id IS NOT NULL
+  AND i.total_amount > 0;
+
+-- ============================================================================
+-- STEP 2: Update payable status based on CURRENT invoice threshold
+-- ============================================================================
+UPDATE sys_pm_clients_returns AS r
+JOIN sys_pm_debtors_invoices AS i ON r.invoice_id = i.id
+SET r.payable_status_id = CASE
+    -- Fully cleared invoice
+    WHEN i.current_status_id = 9 THEN 1
+
+    -- Recovery invoices - unpayable
+    WHEN i.current_status_id IN (37, 35, 36, 34) THEN 0
+
+    -- Current threshold meets requirement
+    WHEN r.threshold_percentage >= @allowed_threshold THEN 1
+
+    -- Otherwise keep unpayable
+    ELSE 0
+END
+WHERE r.return_date LIKE @current_month
+  AND r.current_status_id = 1;
+
+-- ============================================================================
+-- STEP 3: Update based on PREVIOUS MONTH for advance_payable items
+-- ============================================================================
+-- 3a. Previous month passed threshold
+UPDATE sys_pm_clients_returns AS curr
+JOIN sys_pm_debtors_invoices AS inv
+    ON curr.invoice_id = inv.id
+JOIN sys_set_invoiceable_items AS items
+    ON inv.item_type_id = items.id
+JOIN sys_pm_clients_returns AS prev
+    ON curr.lease_id = prev.lease_id
+    AND inv.item_type_id = prev.trans_type_id
+SET curr.payable_status_id = 3  -- Past Passed Threshold
+WHERE curr.return_date LIKE @current_month
+  AND prev.return_date LIKE @previous_month
+  AND prev.threshold_percentage >= @allowed_threshold
+  AND items.advance_payable = 'Yes'
+  AND curr.payable_status_id = 0  -- Only update if still unpayable
+  AND curr.current_status_id = 1;
+
+-- 3b. First invoice (no previous month) - make payable
+UPDATE sys_pm_clients_returns AS curr
+JOIN sys_pm_debtors_invoices AS inv
+    ON curr.invoice_id = inv.id
+JOIN sys_set_invoiceable_items AS items
+    ON inv.item_type_id = items.id
+LEFT JOIN sys_pm_clients_returns AS prev
+    ON curr.lease_id = prev.lease_id
+    AND inv.item_type_id = prev.trans_type_id
+    AND prev.return_date LIKE @previous_month
+SET curr.payable_status_id = 2  -- No Past Invoice
+WHERE curr.return_date LIKE @current_month
+  AND prev.id IS NULL
+  AND items.advance_payable = 'Yes'
+  AND curr.payable_status_id = 0
+  AND curr.current_status_id = 1;
+
+-- ============================================================================
+-- STEP 4: Sync landlord ledger with returns payable status
+-- ============================================================================
+UPDATE sys_pm_landlord_accounts_transaction AS l
+JOIN sys_pm_clients_returns AS r
+    ON l.invoice_id = r.invoice_id
+SET l.payable_status = CASE
+    WHEN r.payable_status_id IN (1, 2, 3, 17) THEN r.payable_status_id
+    ELSE 0
+END
+WHERE r.return_date LIKE @current_month
+  AND l.amount_type = 'Credit'
+  AND l.transaction_type_id = 13;
+
+-- ============================================================================
+-- VERIFICATION: Check results
+-- ============================================================================
+SELECT
+    r.ref_number,
+    r.return_date,
+    r.threshold_percentage,
+    r.payable_status_id,
+    l.payable_status as ledger_payable_status,
+    CASE
+        WHEN r.payable_status_id = 0 THEN '❌ Unpayable'
+        WHEN r.payable_status_id = 1 THEN '✅ Payable'
+        WHEN r.payable_status_id = 2 THEN '✅ No Past Invoice'
+        WHEN r.payable_status_id = 3 THEN '✅ Past Passed Threshold'
+        WHEN r.payable_status_id = 17 THEN '✅ Processed'
+    END as status_label,
+    CASE
+        WHEN r.payable_status_id = l.payable_status THEN '✅ SYNCED'
+        ELSE '❌ MISMATCH'
+    END as sync_status
+FROM sys_pm_clients_returns r
+LEFT JOIN sys_pm_landlord_accounts_transaction l
+    ON r.invoice_id = l.invoice_id
+    AND l.amount_type = 'Credit'
+WHERE r.return_date LIKE @current_month
+ORDER BY r.payable_status_id, r.ref_number;
+```
+
+---
+
+## 📈 TIMING PERSPECTIVES
+
+### Perspective 1: Right After Returns Generation
+
+**When:** Cron job runs to generate monthly returns  
+**What Happens:**
+
+1. Returns created for all active leases
+2. Initial `payable_status_id = 0`, `threshold_percentage = 0`
+3. Landlord ledger entries created with `payable_status = 0`
+4. **THEN** run bulk update queries above
+5. Returns updated based on previous month's performance
+6. Landlord ledger synced
+
+**Timing:** Once per month, typically on 1st of the month
+
+---
+
+### Perspective 2: During Invoice Payment Processing
+
+**When:** Tenant makes payment on any invoice  
+**What Happens:**
+
+1. Invoice balance updated
+2. Return threshold recalculated for that specific invoice
+3. Check previous month's threshold for that specific lease+item
+4. Update that specific return's `payable_status_id`
+5. If became payable, update landlord ledger `payable_status = 1`
+
+**Timing:** Real-time, multiple times per day
+
+---
+
+## ⚠️ IMPORTANT CONSIDERATIONS
+
+### 1. **Previous Month Query Pattern**
+
+Current implementation uses:
+
+```php
+$past_month = date('Y-m',strtotime('last month',strtotime($invoice->date_due)));
+```
+
+This checks the **calendar month before the invoice due date**, not necessarily the immediate previous return.
+
+### 2. **Only Checks 1 Month Back**
+
+⚠️ **Limitation:** System only looks at immediate previous month, not entire payment history.
+
+**Gaming Scenario:**
+
+- January: Tenant pays 90% → Return payable
+- February: Tenant pays 40% → Return unpayable (but previous month was good)
+- March: Tenant pays 40% again → Return is PAYABLE because February return shows 40% threshold but system doesn't check!
+
+### 3. **Landlord Ledger Sync Timing**
+
+- Landlord ledger is **only updated when `payable_status_id = 1`**
+- If return goes from 0 → 3 (Past Passed Threshold), ledger stays at 0
+- This is **intentional** - only status 1 (Payable) triggers ledger update
+
+### 4. **Items Without advance_payable**
+
+Items where `advance_payable = 'No'`:
+
+- Do NOT check previous month
+- Payability only based on current invoice status (cleared or threshold)
+
+---
+
+## 🔧 RECOMMENDED ENHANCEMENTS
+
+### Enhancement 1: Historical Aggregate Check
+
+Instead of checking just last month, check **overall payment history**:
+
+```sql
+-- Calculate historical threshold for lease+item
+SELECT
+    lease_id,
+    trans_type_id,
+    AVG(threshold_percentage) as avg_historical_threshold,
+    COUNT(*) as months_count
+FROM sys_pm_clients_returns
+WHERE return_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+  AND lease_id = :lease_id
+  AND trans_type_id = :item_id
+GROUP BY lease_id, trans_type_id
+HAVING avg_historical_threshold >= 85;
+```
+
+### Enhancement 2: Weighted Recent Months
+
+Give more weight to recent months:
+
+```sql
+-- Weighted threshold (recent months count more)
+SELECT
+    lease_id,
+    trans_type_id,
+    SUM(
+        threshold_percentage *
+        CASE
+            WHEN return_date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) THEN 0.5
+            WHEN return_date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) THEN 0.3
+            ELSE 0.2
+        END
+    ) as weighted_threshold
+FROM sys_pm_clients_returns
+WHERE return_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+  AND lease_id = :lease_id
+  AND trans_type_id = :item_id
+GROUP BY lease_id, trans_type_id;
+```
+
+---
+
+## 📚 RELATED DOCUMENTATION
+
+- [INVOICE_PAYMENT_TO_LANDLORD_LEDGER_FLOW.md](INVOICE_PAYMENT_TO_LANDLORD_LEDGER_FLOW.md) - Complete payment flow
+- [RETURNS_PROCESS_FLOW_DOCUMENTATION.md](RETURNS_PROCESS_FLOW_DOCUMENTATION.md) - Returns process details
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** February 2, 2026  
+**Maintained By:** System Documentation Team

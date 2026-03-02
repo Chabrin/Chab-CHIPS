@@ -122,6 +122,34 @@
                                     @enderror
                                 </div>
 
+                                <!-- Live Tenant Balance Card -->
+                                <div class="col-md-12 mb-3" id="tenantBalanceCard" style="display:none;">
+                                    <div class="card border-0 shadow-sm">
+                                        <div class="card-header bg-light py-2 d-flex align-items-center gap-2">
+                                            <span class="material-symbols-outlined" style="font-size:18px;">account_balance_wallet</span>
+                                            <span class="fw-semibold small">Tenant Account Balance</span>
+                                            <span class="ms-auto" id="balanceStatusBadge"></span>
+                                        </div>
+                                        <div class="card-body py-2">
+                                            <div class="row text-center">
+                                                <div class="col-4 border-end">
+                                                    <small class="text-muted d-block">Total Invoiced</small>
+                                                    <span class="fw-bold" id="balTotalInvoiced">—</span>
+                                                </div>
+                                                <div class="col-4 border-end">
+                                                    <small class="text-muted d-block">Total Paid</small>
+                                                    <span class="fw-bold text-success" id="balTotalPaid">—</span>
+                                                </div>
+                                                <div class="col-4">
+                                                    <small class="text-muted d-block">Balance</small>
+                                                    <span class="fw-bold" id="balBalance">—</span>
+                                                </div>
+                                            </div>
+                                            <p class="text-muted small mb-0 mt-2" id="balAsOf"></p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Hidden fields -->
                                 <input type="hidden" id="tenant_id" name="tenant_id">
                                 <input type="hidden" id="zone_id" name="zone_id">
@@ -474,6 +502,28 @@
             });
         }
 
+        function fetchTenantBalance(tenantId) {
+            $('#tenantBalanceCard').hide();
+            if (!tenantId) return;
+            $.get('{{ route('get.tenant.balance') }}', { tenant_id: tenantId }, function(res) {
+                const b = res.balance;
+                if (!b) return;
+                const inArrears = b.is_in_arrears;
+                const balColour  = inArrears ? 'text-danger' : 'text-success';
+                const badgeHtml  = inArrears
+                    ? '<span class="badge bg-danger">In Arrears</span>'
+                    : '<span class="badge bg-success">Credit</span>';
+                $('#balTotalInvoiced').text(parseFloat(b.total_invoiced).toLocaleString('en', {minimumFractionDigits:2}));
+                $('#balTotalPaid').text(parseFloat(b.total_paid).toLocaleString('en', {minimumFractionDigits:2}));
+                $('#balBalance').removeClass('text-danger text-success').addClass(balColour)
+                    .text((inArrears ? '(' : '') + b.balance_formatted + (inArrears ? ')' : ''));
+                $('#balanceStatusBadge').html(badgeHtml);
+                $('#balAsOf').text('As of: ' + b.as_of_date);
+                $('#current_balance').val(parseFloat(b.balance).toFixed(2));
+                $('#tenantBalanceCard').fadeIn();
+            });
+        }
+
         // When Unit From changes, populate lease information
         $('#unit_from_id').on('change', function() {
             const selectedOption = $(this).find('option:selected');
@@ -487,10 +537,13 @@
                 $('#lease_id').val(leaseId);
                 $('#lease_display').val(leaseRef + ' - ' + tenantName);
                 $('#tenant_id').val(tenantId);
+                fetchTenantBalance(tenantId);
             } else {
                 $('#lease_id').val('');
                 $('#lease_display').val('');
                 $('#tenant_id').val('');
+                $('#tenantBalanceCard').hide();
+                $('#current_balance').val(0);
             }
         })
 

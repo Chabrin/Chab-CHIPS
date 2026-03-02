@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Unit;
 use App\Models\Client;
 use App\Models\Property;
+use App\Models\Role;
 use App\Models\LeaseAgreement;
 use App\Models\LeaseEscalation;
 use App\Models\LeaseEscalationApproval;
+use App\Models\LeaseEscalationNotificationSetting;
 use App\Models\LeaseAgreementInvoiceableItem;
 use App\Services\ErrorDispatcher;
 use Illuminate\Http\Request;
@@ -23,7 +25,9 @@ class LeaseEscalationController extends Controller
     public function index()
     {
         try {
-            return view('property.escalations.index');
+            $settings = LeaseEscalationNotificationSetting::instance();
+            $roles    = Role::select('id', 'name', 'display_name')->orderBy('display_name')->get();
+            return view('property.escalations.index', compact('settings', 'roles'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading escalations index: ' . $e->getMessage());
@@ -90,6 +94,8 @@ class LeaseEscalationController extends Controller
                         'previous_amount' => $esc->previous_amount,
                         'new_amount'      => $esc->new_amount,
                         'effective_date'  => $esc->effective_date,
+                        'notification_sent_at' => $esc->notification_sent_at,
+                        'applied_at'      => $esc->applied_at,
                         'status'          => $esc->status,
                         'status_label'    => $esc->status_label,
                         'status_badge'    => $esc->status_badge,
@@ -355,7 +361,7 @@ class LeaseEscalationController extends Controller
                 $newStatus = 'pending_pm';
             } elseif ($escalation->status === 'pending_pm') {
                 $step      = 3;
-                $newStatus = 'approved';
+                $newStatus = 'approved_pending_effective';
             } else {
                 return response()->json(['error' => 'This escalation is not pending approval'], 422);
             }
@@ -383,10 +389,8 @@ class LeaseEscalationController extends Controller
             $escalation->status = $newStatus;
             $escalation->save();
 
-            // If final approval (PM), apply the escalation to the lease
-            if ($newStatus === 'approved') {
-                $this->applyEscalation($escalation);
-            }
+            // PM approval: queued for auto-apply on effective date.
+            // The daily ProcessEscalations command will apply it automatically.
 
             DB::commit();
 
@@ -394,7 +398,9 @@ class LeaseEscalationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => "Escalation {$stepLabel}-approved successfully." .
-                    ($newStatus === 'approved' ? ' Lease amounts have been updated.' : ''),
+                    ($newStatus === 'approved_pending_effective'
+                        ? ' It will be automatically applied on the effective date.'
+                        : ''),
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -452,13 +458,116 @@ class LeaseEscalationController extends Controller
     }
 
     // ────────────────────────────────────────────────────────────────
+    //  CANCEL – authorised roles stop a fully-approved escalation
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Cancel an approved-pending-effective escalation.
+     * Only roles listed in the notification settings cancel_roles may do this.
+     */
+    public function cancel(Request $request, $id)
+    {
+        $request->validate([
+            'comments' => 'required|string|max:2000',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $escalation = LeaseEscalation::findOrFail($id);
+
+            if ($escalation->status !== 'approved_pending_effective') {
+                return response()->json(['error' => 'Only approved-pending escalations can be cancelled'], 422);
+            }
+
+            // Check that the current user has one of the allowed cancel roles
+            $settings    = LeaseEscalationNotificationSetting::instance();
+            $cancelRoles = $settings->cancel_roles ?? [];
+
+            if (!empty($cancelRoles) && !Auth::user()->hasRole($cancelRoles)) {
+                return response()->json(['error' => 'You are not authorised to cancel this escalation'], 403);
+            }
+
+            LeaseEscalationApproval::create([
+                'escalation_id' => $escalation->id,
+                'approval_step' => 4,
+                'user_id'       => Auth::id(),
+                'action'        => 'cancelled',
+                'comments'      => $request->comments,
+                'documents'     => null,
+                'date_time'     => now(),
+            ]);
+
+            $escalation->status = 'cancelled';
+            $escalation->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Escalation has been cancelled and will not be applied.',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error cancelling escalation: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to cancel escalation'], 500);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    //  NOTIFICATION SETTINGS
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Return current notification settings (AJAX).
+     */
+    public function getNotificationSettings()
+    {
+        try {
+            return response()->json(['data' => LeaseEscalationNotificationSetting::instance()]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            return response()->json(['error' => 'Failed to load settings'], 500);
+        }
+    }
+
+    /**
+     * Persist notification settings (AJAX).
+     */
+    public function saveNotificationSettings(Request $request)
+    {
+        $request->validate([
+            'notify_roles'   => 'required|array',
+            'notify_roles.*' => 'string',
+            'cancel_roles'   => 'required|array',
+            'cancel_roles.*' => 'string',
+        ]);
+
+        try {
+            $settings = LeaseEscalationNotificationSetting::instance();
+            $settings->update([
+                'notify_roles' => $request->notify_roles,
+                'cancel_roles' => $request->cancel_roles,
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Notification settings saved.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error saving escalation notification settings: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to save settings'], 500);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────
     //  PRIVATE: Apply the approved escalation to lease records
     // ────────────────────────────────────────────────────────────────
 
     /**
      * Apply the escalation values to the lease invoiceable items.
+     * Also called by the ProcessEscalations artisan command.
      */
-    protected function applyEscalation(LeaseEscalation $escalation)
+    public function applyEscalation(LeaseEscalation $escalation)
     {
         if (!$escalation->lease_agreement_id) {
             return;
@@ -475,8 +584,6 @@ class LeaseEscalationController extends Controller
             if ($escalation->escalation_type === 'percentage') {
                 $item->amount = round($item->amount * (1 + ($escalation->escalation_value / 100)), 2);
             } else {
-                // Flat rate: distribute proportionally or add to primary item
-                // For simplicity, add the flat amount to each item proportionally
                 $totalBefore = $items->sum('amount');
                 if ($totalBefore > 0) {
                     $proportion = $item->amount / $totalBefore;
@@ -490,5 +597,10 @@ class LeaseEscalationController extends Controller
         $lease->escalation_rate = $escalation->escalation_value;
         $lease->escalation_frequency = $escalation->escalation_type;
         $lease->save();
+
+        // Mark the escalation as applied
+        $escalation->status     = 'applied';
+        $escalation->applied_at = now();
+        $escalation->save();
     }
 }
