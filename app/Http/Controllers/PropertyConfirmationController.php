@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\ConfirmationLog;
+use App\Models\DebtorInvoice;
+use App\Models\InvoiceWorkflow;
+use App\Services\TenantBalanceService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
@@ -441,6 +444,79 @@ class PropertyConfirmationController extends Controller
                     $record = \App\Models\TenantMovement::findOrFail($id);
                     $record->current_status_id = 5; // Confirmed
                     $record->save();
+
+                    // Terminate old lease
+                    if ($record->lease_id) {
+                        $oldLease = \App\Models\LeaseAgreement::find($record->lease_id);
+                        if ($oldLease) {
+                            $oldLease->current_status_id = 28; // Terminated
+                            $oldLease->save();
+                        }
+                    }
+
+                    // Release old unit — vacant
+                    if ($record->unit_from_id) {
+                        $oldUnit = \App\Models\Unit::find($record->unit_from_id);
+                        if ($oldUnit) {
+                            $oldUnit->occupancy_status_id = 31;
+                            $oldUnit->current_status_id   = 31;
+                            $oldUnit->save();
+                        }
+                    }
+
+                    // Activate new lease
+                    if ($record->new_lease_id) {
+                        $newLease = \App\Models\LeaseAgreement::find($record->new_lease_id);
+                        if ($newLease) {
+                            $newLease->current_status_id = 5; // Active
+                            $newLease->save();
+                        }
+                    }
+
+                    // Mark new unit as occupied
+                    if ($record->unit_to_id) {
+                        $newUnit = \App\Models\Unit::find($record->unit_to_id);
+                        if ($newUnit) {
+                            $newUnit->occupancy_status_id = 38; // Occupied
+                            $newUnit->save();
+                        }
+                    }
+
+                    // Carry-forward invoice — only if flagged and tenant is in arrears
+                    if ($record->move_with_balance && $record->tenant_id && $record->new_lease_id) {
+                        $balanceData = TenantBalanceService::getBalance((int) $record->tenant_id);
+                        if ($balanceData['is_in_arrears']) {
+                            $arrearAmount = abs($balanceData['balance']);
+                            $cfRef = 'CF-' . date('Ymd') . '-' . str_pad(DebtorInvoice::tenantInvoices()->count() + 1, 5, '0', STR_PAD_LEFT);
+                            $cfInvoice = DebtorInvoice::create([
+                                'date_time'         => now(),
+                                'date_due'          => now()->toDateString(),
+                                'debtor_type_id'    => 2,
+                                'tenant_id'         => $record->tenant_id,
+                                'lease_id'          => $record->new_lease_id,
+                                'unit_id'           => $record->unit_to_id,
+                                'property_id'       => $record->property_id,
+                                'client_id'         => $record->client_id,
+                                'zone_id'           => $record->zone_id,
+                                'sla_id'            => $record->sla_id,
+                                'reference_number'  => $cfRef,
+                                'narration'         => 'Balance carried forward from Unit ' . ($record->unitFrom->unit_code ?? $record->unit_from_id) . ' — Movement Ref: ' . ($record->reference_number ?? $record->id),
+                                'total_amount'      => $arrearAmount,
+                                'current_balance'   => $arrearAmount,
+                                'current_status_id' => 1,
+                                'created_by'        => Auth::id(),
+                                'created_date'      => now(),
+                            ]);
+                            InvoiceWorkflow::create([
+                                'parent_id'          => $cfInvoice->id,
+                                'action_by_id'       => Auth::id(),
+                                'action_position_id' => 1,
+                                'action_id'          => 1,
+                                'action_date_time'   => now(),
+                                'remark'             => 'Carry-forward invoice created from Movement ' . ($record->reference_number ?? $record->id),
+                            ]);
+                        }
+                    }
                     break;
 
                 case 'Tenant Blacklist':

@@ -345,6 +345,7 @@ class TenantMovementController extends Controller
                 'tenant_id' => $validated['tenant_id'],
                 'current_status_id' => 1, // Pending
                 'current_balance' => $validated['current_balance'],
+                'move_with_balance' => $request->boolean('move_with_balance'),
                 'new_lease_start_date' => $validated['new_lease_start_date'],
                 'new_lease_end_date' => $validated['new_lease_end_date'],
                 'sla_id' => $validated['sla_id'],
@@ -370,7 +371,7 @@ class TenantMovementController extends Controller
                 'years' => $years > 0 ? $years : 1,
                 'sla_id' => $validated['sla_id'],
                 'zone_id' => $validated['zone_id'] ?? $property->zone_id,
-                'current_status_id' => 5, // Active
+                'current_status_id' => 1, // Pending — activated on confirmation
                 'auto_renewal' => $oldLease->auto_renewal,
                 'initial_water_meter_reading' => $newUnit->initial_water_meter_reading ?? 0,
                 'escalation_rate' => $oldLease->escalation_rate ?? 0,
@@ -412,18 +413,6 @@ class TenantMovementController extends Controller
                     ]);
                 }
             }
-
-            // Update old lease status to "Moved" or "Terminated"
-            $oldLease->current_status_id = 6; // Assuming 6 is terminated/moved status
-            $oldLease->save();
-
-            // Update unit statuses
-            $oldUnit = Unit::findOrFail($validated['unit_from_id']);
-            $oldUnit->occupancy_status_id = 37; // Vacant
-            $oldUnit->save();
-
-            $newUnit->occupancy_status_id = 38; // Occupied
-            $newUnit->save();
 
             DB::commit();
 
@@ -495,6 +484,7 @@ class TenantMovementController extends Controller
                 'tenant_id' => $validated['tenant_id'],
                 'zone_id' => $validated['zone_id'],
                 'current_balance' => $validated['current_balance'],
+                'move_with_balance' => $request->boolean('move_with_balance'),
                 'new_lease_end_date' => $validated['new_lease_end_date'],
                 'new_lease_start_date' => $validated['new_lease_start_date'],
             ]);

@@ -120,6 +120,14 @@
                                     @error('current_balance')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="move_with_balance" name="move_with_balance" value="1"
+                                               {{ old('move_with_balance') ? 'checked' : '' }}>
+                                        <label class="form-check-label" for="move_with_balance">
+                                            Move with balance to the new unit
+                                        </label>
+                                        <div class="form-text text-muted">Check this to carry the current outstanding balance over to the new unit's lease. <strong>If the tenant is in arrears at the time of confirmation, a carried-forward balance invoice will automatically be raised against the new lease.</strong></div>
+                                    </div>
                                 </div>
 
                                 <!-- Live Tenant Balance Card -->
