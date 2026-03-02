@@ -1,0 +1,1077 @@
+@php
+use Illuminate\Support\Facades\Crypt;
+@endphp
+@extends('layouts.main')
+@section('content')
+<div class="page-body" style="padding-top:10px;">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="card">
+                    <div class="card-header card-no-border d-flex align-items-center">
+                        <h5 class="mb-0">Staff Details</h5>
+                        <div class="ms-auto d-flex gap-2">
+                            <a href="{{ route('staff.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">arrow_back</span>
+                                <span class="ms-1">Back to List</span>
+                            </a>
+                            @permission('update_staff')
+                            <a href="{{ route('staff.edit', Crypt::encrypt($staff->id)) }}" class="btn btn-primary btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">edit_document</span>
+                                <span class="ms-1">Edit Staff</span>
+                            </a>
+                            @endpermission
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if(session('success'))
+                        <div class="alert alert-light-success alert-dismissible fade show" role="alert">
+                            <strong>Success!</strong> {{ session('success') }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        @endif
+                        @if(session('error'))
+                        <div class="alert alert-light-danger alert-dismissible fade show" role="alert">
+                            <strong>Error!</strong> {{ session('error') }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        @endif
+
+                        <!-- Summary Header -->
+                        <div class="mb-3">
+                            <h5 class="mb-1 d-inline"><b>{{ $staff->full_names }}</b></h5>
+                            <span class="text-muted ms-2" style="font-size: 0.875rem;">
+                                <strong>Staff #:</strong> {{ $staff->staff_number }} |
+                                <strong>Dept:</strong> <span class="badge bg-primary">
+                                    {{ $staff->department->department_name ?? 'N/A' }}</span>
+                            </span>
+                            <p class="text-muted mb-0" style="font-size: 0.8rem;">
+                                <strong>ID:</strong> {{ $staff->national_id ?? '-' }} |
+                                <strong>Email:</strong> <span style="text-decoration:underline; color: #1976d2;">{{ $staff->email_address ?? '-' }}</span> |
+                                <strong>Phone:</strong> {{ $staff->mobile_number ?? '-' }}
+                            </p>
+                        </div>
+
+                        <!-- Tabs Navigation -->
+                        <ul class="nav nav-tabs mb-4" id="staffTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="personal-tab" data-bs-toggle="tab" data-bs-target="#personal" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">person</span>
+                                    Personal
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="employment-tab" data-bs-toggle="tab" data-bs-target="#employment" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">work</span>
+                                    Work
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="banking-tab" data-bs-toggle="tab" data-bs-target="#banking" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">account_balance</span>
+                                    Banking
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="contact-tab" data-bs-toggle="tab" data-bs-target="#contact" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">contacts</span>
+                                    Contacts
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#contract" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">contract</span>
+                                    Contract
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#discipline" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">record_voice_over</span>
+                                    Disciplinary
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">punch_clock</span>
+                                    Attendance
+                                </button>
+                            </li>
+                        </ul>
+
+                        <!-- Tabs Content -->
+                        <div class="tab-content" id="staffTabsContent">
+                            <!-- Personal Information Tab -->
+                            <div class="tab-pane fade show active" id="personal" role="tabpanel" aria-labelledby="personal-tab">
+                                <div class="row g-3">
+                                    <!-- Basic Information Card -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">badge</span>
+                                                    Basic Information
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Full Names:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->full_names ?? '-' }}</strong></small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Staff Number:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->staff_number ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Gender:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->gender ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Date of Birth:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->birth_date ? $staff->birth_date->format('d M Y') : '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Birth Place:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->birth_place ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">National ID:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->national_id ?? '-' }}</small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Identity & Status Card -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">fingerprint</span>
+                                                    Identity & Status
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Passport:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->passport ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Citizenship:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->citizenship ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Marital Status:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->marital ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Spouse Name:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->spouse_name ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Disability:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->disability ?? '-' }}</small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Next of Kin Card -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">family_restroom</span>
+                                                    Emergency Contact
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Next of Kin:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->kins_names ?? '-' }}</strong></small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Employment Details Tab -->
+                            <div class="tab-pane fade" id="employment" role="tabpanel" aria-labelledby="employment-tab">
+                                <div class="row g-3">
+                                    <!-- Employment Info Card -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">work</span>
+                                                    Employment Info
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Department:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->department->department_name ?? '-' }}</strong></small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Position:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->position->position_name ?? '-' }}</strong></small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Hire Date:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->hire_date ? $staff->hire_date->format('d M Y') : '-' }}</small></div>
+
+                                                    <!-- <div class="col-5"><small class="text-muted">Status:</small></div>
+                                                    <div class="col-7"><small><span class="badge bg-success">{{ $staff->current_status_id ?? 'Active' }}</span></small></div> -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Location & Access Card -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">location_on</span>
+                                                    Location & Access
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Branch ID:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->branch_id ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Zone:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->zone->zone_name ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Zone Area:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->zoneArea->area_name ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Username:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->username ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Permission Group:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->permission_group_id ?? '-' }}</small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Registration Card -->
+                                    <div class="col-md-4">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">event</span>
+                                                    Registration
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Date Registered:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->date_time ? $staff->date_time->format('d M Y H:i') : '-' }}</small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Banking & Statutory Tab -->
+                            <div class="tab-pane fade" id="banking" role="tabpanel" aria-labelledby="banking-tab">
+                                <div class="row g-3">
+                                    <!-- Bank Details Card -->
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">account_balance</span>
+                                                    Bank Details
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Bank Name:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->bank->bank_name ?? '-' }}</strong></small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Account Name:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->account_name ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Account Number:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->account_number ?? '-' }}</strong></small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Statutory Numbers Card -->
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">quick_reference_all</span>
+                                                    Statutory Numbers
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">PIN Number:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->pin_number ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">NHIF Number:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->nhif_number ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">NSSF Number:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->nssf_number ?? '-' }}</small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Contact & Location Tab -->
+                            <div class="tab-pane fade" id="contact" role="tabpanel" aria-labelledby="contact-tab">
+                                <div class="row g-3">
+                                    <!-- Contact Information Card -->
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">contact_phone</span>
+                                                    Contact Information
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Mobile Number:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->mobile_number ?? '-' }}</strong></small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Email Address:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->email_address ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Personal Email:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->personal_email ?? '-' }}</small></div>
+
+                                                    <div class="col-12 mt-2"><small class="text-muted">Address:</small></div>
+                                                    <div class="col-12"><small>{{ $staff->address ?? '-' }}</small></div>
+
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Location Details Card -->
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size: 0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">location_on</span>
+                                                    Location Details
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">District:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->district ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Location:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->location ?? '-' }}</small></div>
+
+                                                    <div class="col-5"><small class="text-muted">Sub Location:</small></div>
+                                                    <div class="col-7"><small>{{ $staff->sub_location ?? '-' }}</small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Contract Tab -->
+                            <div class="tab-pane fade" id="contract" role="tabpanel" aria-labelledby="contract-tab">
+                                @if($staff->contract)
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light py-2">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">contract</span>
+                                            Contract Details
+                                        </h6>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        <div class="row g-2">
+                                            <div class="col-md-6"><small class="text-muted">Staff Number:</small> <strong>{{ $staff->contract->staff_number ?? '-' }}</strong></div>
+                                            <div class="col-md-6"><small class="text-muted">Position:</small> <strong>{{ $staff->contract->position->position_name ?? '-' }}</strong></div>
+                                            <div class="col-md-6"><small class="text-muted">Date Start:</small> <strong>{{ $staff->contract->date_start ? \Carbon\Carbon::parse($staff->contract->date_start)->format('d M Y') : '-' }}</strong></div>
+                                            <div class="col-md-6"><small class="text-muted">Date End:</small> <strong>{{ $staff->contract->date_end ? \Carbon\Carbon::parse($staff->contract->date_end)->format('d M Y') : '-' }}</strong></div>
+                                            <div class="col-md-6"><small class="text-muted">Basic Salary:</small> <strong>{{ number_format($staff->contract->basic_salary, 2) }}</strong></div>
+                                            <div class="col-md-6"><small class="text-muted">Status:</small> <strong>{{ $staff->contract->current_status_id == 5 ? 'Active' : 'Inactive' }}</strong></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-header bg-light py-2">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">list_alt</span>
+                                            Contract Elements
+                                        </h6>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        @if($staff->contract->elements && $staff->contract->elements->count())
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Element Name</th>
+                                                    <th>Entry Type</th>
+                                                    <th>Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($staff->contract->elements as $i => $element)
+                                                <tr>
+                                                    <td>{{ $i + 1 }}</td>
+                                                    <td>{{ $element->payrollElement->element_name ?? '-' }}</td>
+                                                    <td>
+                                                        @if($element->entry_type_id == 2)
+                                                        Allowance
+                                                        @elseif($element->entry_type_id == 1)
+                                                        Deduction
+                                                        @else
+                                                        -
+                                                        @endif
+                                                    </td>
+                                                    <td>{{ number_format($element->amount, 2) }}</td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                        @else
+                                        <div class="text-muted">No contract elements found.</div>
+                                        @endif
+                                    </div>
+                                </div>
+                                @else
+                                <div class="alert alert-info mt-3">No contract found for this staff member.</div>
+                                @endif
+                            </div>
+
+                            <!-- Disciplinary Records Tab -->
+                            <div class="tab-pane fade" id="discipline" role="tabpanel" aria-labelledby="discipline-tab">
+                                
+                                @php
+                                    // Only show cases that have reached step 7 or beyond (employee is formally notified)
+                                    $visibleCases = $staff->disciplineCases->filter(function($case) {
+                                        return $case->current_step >= 7;
+                                    });
+                            
+                                    // Map internal steps to employee-facing steps
+                                    function getEmployeeStep($internalStep) {
+                                        $stepMapping = [
+                                            7 => 1,  // Show Cause Notice Issued
+                                            8 => 2,  // Employee Response
+                                            9 => 3,  // Disciplinary Hearing
+                                            10 => 4, // Hearing Minutes
+                                            11 => 5, // Outcome Decision
+                                            12 => 6, // Training Assignment (if applicable)
+                                            13 => 7, // History Update
+                                            14 => 8, // Case Closure
+                                        ];
+                                        return $stepMapping[$internalStep] ?? 1;
+                                    }
+                            
+                                    function getEmployeeStepName($internalStep) {
+                                        $stepNames = [
+                                            7 => 'Show Cause Notice Received',
+                                            8 => 'Your Response Required',
+                                            9 => 'Hearing Scheduled',
+                                            10 => 'Hearing Completed',
+                                            11 => 'Decision Issued',
+                                            12 => 'Training Assignment',
+                                            13 => 'Record Updated',
+                                            14 => 'Case Closed',
+                                        ];
+                                        return $stepNames[$internalStep] ?? 'In Progress';
+                                    }
+                                @endphp
+                                
+                                <!-- Cases Against This Staff -->
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">gavel</span>
+                                            My Discipline Cases
+                                        </h6>
+                                        <span class="badge bg-danger text-white">{{ $visibleCases->count() }}</span>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        @if($visibleCases->count() > 0)
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-bordered mb-0">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width: 120px;">Case #</th>
+                                                        <th style="width: 150px;">Date Received</th>
+                                                        <th>Allegation</th>
+                                                        <th style="width: 100px;">Severity</th>
+                                                        <th style="width: 150px;">Current Stage</th>
+                                                        <th style="width: 120px;">Status</th>
+                                                        <th style="width: 200px;">Actions Required</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($visibleCases as $case)
+                                                    <tr>
+                                                        <td><strong>{{ $case->case_number }}</strong></td>
+                                                        <td>
+                                                            @if($case->showCauseNotice)
+                                                                {{ $case->showCauseNotice->issue_date ? \Carbon\Carbon::parse($case->showCauseNotice->issue_date)->format('d M Y') : '-' }}
+                                                            @else
+                                                                {{ $case->date_time ? $case->date_time->format('d M Y') : '-' }}
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            @if($case->showCauseNotice)
+                                                                {{ Str::limit($case->showCauseNotice->allegations, 60) }}
+                                                            @elseif($case->incidentReports->first())
+                                                                {{ Str::limit($case->incidentReports->first()->incident_description, 60) }}
+                                                            @else
+                                                                -
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            @if($case->severity_level == 'Minor')
+                                                                <span class="badge bg-warning">Minor</span>
+                                                            @elseif($case->severity_level == 'Major')
+                                                                <span class="badge bg-danger">Major</span>
+                                                            @elseif($case->severity_level == 'Gross')
+                                                                <span class="badge bg-dark">Gross</span>
+                                                            @else
+                                                                <span class="badge bg-secondary">{{ $case->severity_level }}</span>
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            <div><small class="text-muted">{{ getEmployeeStepName($case->current_step) }}</small></div>
+                                                            <span class="badge bg-info">Step {{ getEmployeeStep($case->current_step) }} of 8</span>
+                                                        </td>
+                                                        <td>
+                                                            @if($case->closed_at)
+                                                                <span class="badge bg-secondary">Closed</span>
+                                                            @else
+                                                                <span class="badge bg-success">Active</span>
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            @php
+                                                                $pendingActions = [];
+                                                                
+                                                                // Calculate deadline status
+                                                                if($case->showCauseNotice && $case->showCauseNotice->response_deadline) {
+                                                                    $originalDeadline = \Carbon\Carbon::parse($case->showCauseNotice->response_deadline);
+                                                                    $currentDeadline = $originalDeadline;
+                                                                    
+                                                                    // Check for approved extensions (use collection, not query)
+                                                                    $latestExtension = $case->deadlineExtensions
+                                                                        ->where('request_status', 'Approved')
+                                                                        ->whereNotNull('new_deadline')
+                                                                        ->sortByDesc('extended_at')
+                                                                        ->first();
+                                                                    
+                                                                    if ($latestExtension) {
+                                                                        $currentDeadline = \Carbon\Carbon::parse($latestExtension->new_deadline);
+                                                                    }
+                                                                    
+                                                                    $now = \Carbon\Carbon::now();
+                                                                    $deadlineExpired = $now->greaterThan($currentDeadline);
+                                                                    $hoursRemaining = $now->diffInHours($currentDeadline, false);
+                                                                    
+                                                                    // Check for pending extension request by this employee (use collection, not query)
+                                                                    $pendingRequest = $case->deadlineExtensions
+                                                                        // ->where('requested_by', $staff->id)
+                                                                        ->where('request_status', 'Pending')
+                                                                        ->whereNull('reviewed_at')
+                                                                        ->first();
+                                                                    
+                                                                    // Step 7 or 8: Employee Response needed
+                                                                    if(($case->current_step == 7 || $case->current_step == 8) && !$case->employeeResponse) {
+                                                                        if($deadlineExpired) {
+                                                                            // Deadline expired
+                                                                            $pendingActions[] = '<div class="mb-2"><span class="badge bg-danger">Deadline Expired: '.$currentDeadline->format('d M Y H:i').'</span></div>';
+                                                                            
+                                                                            if($pendingRequest) {
+                                                                                // Show pending request badge
+                                                                                $pendingActions[] = '<div><span class="badge bg-warning text-dark">
+                                                                                    <span class="material-symbols-outlined" style="font-size:12px; vertical-align:middle;">pending</span>
+                                                                                    Extension Request Pending
+                                                                                </span></div>';
+                                                                            } else {
+                                                                                // Show request extension button
+                                                                                $pendingActions[] = '<button type="button" class="btn btn-sm btn-info" onclick="openExtensionRequestModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')">
+                                                                                    <span class="material-symbols-outlined" style="font-size:14px;">schedule_send</span>
+                                                                                    Request Extension
+                                                                                </button>';
+                                                                            }
+                                                                        } elseif($hoursRemaining > 0 && $hoursRemaining <= 24) {
+                                                                            // Urgent - less than 24 hours
+                                                                            $pendingActions[] = '<div class="mb-2"><span class="badge bg-warning text-dark">Urgent: '.round($hoursRemaining).'h remaining</span></div>';
+                                                                            
+                                                                            if($pendingRequest) {
+                                                                                $pendingActions[] = '<div class="mb-2"><span class="badge bg-info text-dark" style="font-size:0.7rem;">Extension Request Pending</span></div>';
+                                                                            }
+                                                                            
+                                                                            $pendingActions[] = '<button type="button" class="btn btn-sm btn-warning" onclick="openResponseModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')">
+                                                                                <span class="material-symbols-outlined" style="font-size:14px;">edit_note</span>
+                                                                                Respond Now
+                                                                            </button>';
+                                                                        } else {
+                                                                            // Normal - deadline not yet expired
+                                                                            $pendingActions[] = '<div class="mb-2"><span class="badge bg-info">Due: '.$currentDeadline->format('d M Y H:i').'</span></div>';
+                                                                            
+                                                                            if($pendingRequest) {
+                                                                                $pendingActions[] = '<div class="mb-2"><span class="badge bg-info text-dark" style="font-size:0.7rem;">Extension Request Pending</span></div>';
+                                                                            }
+                                                                            
+                                                                            $pendingActions[] = '<button type="button" class="btn btn-sm btn-primary d-flex align-items-center" onclick="openResponseModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')">
+                                                                                <span class="material-symbols-outlined" style="font-size:14px;">edit_note</span>
+                                                                                Respond
+                                                                            </button>';
+                                                                        }
+                                                                    }
+                                                                }
+                                                                
+                                                                // Step 9-10: Hearing Attendance
+                                                                if(in_array($case->current_step, [9, 10]) && $case->hearings->count()) {
+                                                                    $hearing = $case->hearings->first();
+                                                                    if($hearing) {
+                                                                        $hearingDate = \Carbon\Carbon::parse($hearing->hearing_date)->format('d M Y H:i');
+                                                                        $pendingActions[] = '<span class="badge bg-primary">Hearing: '.$hearingDate.'</span>';
+                                                                    }
+                                                                }
+                                                            @endphp
+                                                            @if(count($pendingActions))
+                                                                {!! implode(' ', $pendingActions) !!}
+                                                            @else
+                                                                <span class="text-muted" style="font-size: 0.75rem;">No action needed</span>
+                                                            @endif
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        @else
+                                        <div class="text-muted" style="font-size: 0.875rem;">No formal discipline notices have been issued to you.</div>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <!-- Cases Where Staff is Investigator -->
+                                @if($staff->investigationsAssigned && $staff->investigationsAssigned->count())
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">search</span>
+                                            Assigned Investigations
+                                        </h6>
+                                        <span class="badge bg-primary text-white">{{ $staff->investigationsAssigned->count() }}</span>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-bordered mb-0">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Case #</th>
+                                                        <th>Subject</th>
+                                                        <th>Assigned Date</th>
+                                                        <th>Status</th>
+                                                        <th>Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($staff->investigationsAssigned as $investigation)
+                                                    @php $case = $investigation->case; @endphp
+                                                    <tr>
+                                                        <td><strong>{{ $case->case_number }}</strong></td>
+                                                        <td>{{ $case->staff->full_names ?? '-' }}</td>
+                                                        <td>{{ $investigation->assigned_at ? \Carbon\Carbon::parse($investigation->assigned_at)->format('d M Y') : '-' }}</td>
+                                                        <td>
+                                                            @if($investigation->status == 'Completed')
+                                                                <span class="badge bg-success">Completed</span>
+                                                            @elseif($investigation->status == 'In Progress')
+                                                                <span class="badge bg-warning text-dark">In Progress</span>
+                                                            @else
+                                                                <span class="badge bg-secondary">{{ $investigation->status }}</span>
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            <a href="{{ route('discipline.tracker.show', Crypt::encrypt($case->id)) }}" 
+                                                            class="btn btn-sm btn-outline-primary d-flex align-items-center">
+                                                                <span class="material-symbols-outlined" style="font-size:16px;">visibility</span>
+                                                                View
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                @endif
+
+                                <!-- Cases Where Staff Reported Incident -->
+                                @if($staff->incidentReports && $staff->incidentReports->count())
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">report</span>
+                                            Reported Incidents
+                                        </h6>
+                                        <span class="badge bg-info text-white">{{ $staff->incidentReports->count() }}</span>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-bordered mb-0">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Case #</th>
+                                                        <th>Incident Date</th>
+                                                        <th>Description</th>
+                                                        <th>Subject</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($staff->incidentReports as $report)
+                                                    @php $case = $report->case; @endphp
+                                                    <tr>
+                                                        <td><strong>{{ $case->case_number }}</strong></td>
+                                                        <td>{{ $report->incident_date_time ? \Carbon\Carbon::parse($report->incident_date_time)->format('d M Y') : '-' }}</td>
+                                                        <td>{{ Str::limit($report->incident_description, 60) }}</td>
+                                                        <td>{{ $case->staff->full_names ?? '-' }}</td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                @endif
+
+                                <!-- Cases Where Staff is Witness -->
+                                @if($staff->witnessStatements && $staff->witnessStatements->count())
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">contact_support</span>
+                                            Witness Statements Provided
+                                        </h6>
+                                        <span class="badge bg-secondary text-white">{{ $staff->witnessStatements->count() }}</span>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-bordered mb-0">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Case #</th>
+                                                        <th>Statement Date</th>
+                                                        <th>Subject</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($staff->witnessStatements as $statement)
+                                                    @php $case = $statement->case; @endphp
+                                                    <tr>
+                                                        <td><strong>{{ $case->case_number }}</strong></td>
+                                                        <td>{{ $statement->statement_date ? \Carbon\Carbon::parse($statement->statement_date)->format('d M Y') : '-' }}</td>
+                                                        <td>{{ $case->staff->full_names ?? '-' }}</td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                @endif
+                                <!-- Rest of sections... -->
+                            </div>
+
+                            <!-- Attendance Records Tab -->
+                            <div class="tab-pane fade" id="attendance" role="tabpanel" aria-labelledby="attendance-tab">
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light py-2">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">punch_clock</span>
+                                            Attendance Records
+                                        </h6>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        @if($staff->employee_attendances && $staff->employee_attendances->count())
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Date/Time</th>
+                                                    <th>Month/Year</th>
+                                                    <th>Time In</th>
+                                                    <th>Time Out</th>
+                                                    <th>Hours</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($staff->employee_attendances as $i => $attendance)
+                                                @php
+                                                $timed = $attendance->employee_attendance_timed->first();
+                                                @endphp
+                                                <tr>
+                                                    <td>{{ $i + 1 }}</td>
+                                                    <td>{{ $attendance->date_time ? \Carbon\Carbon::parse($attendance->date_time)->format('d M Y H:i') : '-' }}</td>
+                                                    <td>{{ $attendance->month_year ?? '-' }}</td>
+                                                    <td>{{ $timed ? \Carbon\Carbon::parse($timed->time_in)->format('H:i') : '-' }}</td>
+                                                    <td>{{ $timed ? \Carbon\Carbon::parse($timed->time_out)->format('H:i') : '-' }}</td>
+                                                    <td>{{ $timed ? $timed->hours : '-' }}</td>
+                                                    <td>
+                                                        @if($attendance->current_status_id == 1)
+                                                        Pending
+                                                        @else
+                                                        {{ $attendance->current_status_id }}
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                        @else
+                                        <div class="text-muted">No attendance records found for this staff member.</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card-header {
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .card-body .row.g-1>div {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+        line-height: 1.5;
+    }
+
+    .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+    }
+
+    .nav-link {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .card {
+        border: 1px solid #e0e0e0;
+    }
+</style>
+
+<!-- Employee Response Modal -->
+<div class="modal fade" id="employeeResponseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Submit Response to Show Cause Notice</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="employeeResponseForm" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="case_id" id="response_case_id">
+                
+                <div class="modal-body">
+                    <div class="alert alert-info mb-3">
+                        <strong>Case #:</strong> <span id="response_case_number"></span><br>
+                        <strong>Deadline:</strong> <span id="response_deadline"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="response_date" class="form-label">Response Date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" name="response_date" id="response_date" value="{{ date('Y-m-d') }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="admits_allegations" class="form-label">Do you admit to the allegations? <span class="text-danger">*</span></label>
+                        <select class="form-select" name="admits_allegations" id="admits_allegations" required>
+                            <option value="">Select...</option>
+                            <option value="1">Yes, I admit</option>
+                            <option value="0">No, I deny</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="response_text" class="form-label">Your Response <span class="text-danger">*</span></label>
+                        <textarea class="form-control" name="response_text" id="response_text" rows="6" required placeholder="Provide your detailed response to the allegations..."></textarea>
+                        <small class="text-muted">Explain your position clearly and provide any relevant context.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="mitigating_circumstances" class="form-label">Mitigating Circumstances</label>
+                        <textarea class="form-control" name="mitigating_circumstances" id="mitigating_circumstances" rows="4" placeholder="Any factors that should be considered in your defense..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="response_documents" class="form-label">Supporting Documents</label>
+                        <input type="file" class="form-control" name="documents[]" id="response_documents" multiple>
+                        <small class="text-muted">Upload any evidence or supporting documents (PDF, DOC, images)</small>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">send</span>
+                        Submit Response
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Extension Request Modal -->
+<div class="modal fade" id="extensionRequestModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">Request Deadline Extension</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="extensionRequestForm">
+                @csrf
+                <input type="hidden" name="case_id" id="ext_case_id">
+                
+                <div class="modal-body">
+                    <div class="alert alert-info mb-3">
+                        <strong>Case #:</strong> <span id="ext_case_number"></span><br>
+                        <strong>Current Deadline:</strong> <span id="ext_current_deadline"></span>
+                    </div>
+
+                    <div class="alert alert-warning mb-3">
+                        <span class="material-symbols-outlined" style="vertical-align:middle;">info</span>
+                        <strong>Note:</strong> Your extension request will be reviewed by HR. You will be notified of the decision.
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ext_reason" class="form-label">Reason for Extension Request <span class="text-danger">*</span></label>
+                        <textarea class="form-control" name="extension_reason" id="ext_reason" rows="4" required placeholder="Explain why you need more time to respond (e.g., gathering evidence, consulting with legal counsel, medical reasons...)"></textarea>
+                        <small class="text-muted">Be specific and provide valid justification.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ext_requested_days" class="form-label">Additional Days Requested <span class="text-danger">*</span></label>
+                        <select class="form-select" name="requested_days" id="ext_requested_days" required>
+                            <option value="">Select...</option>
+                            <option value="1">1 Day</option>
+                            <option value="2">2 Days</option>
+                            <option value="3">3 Days</option>
+                            <option value="5">5 Days</option>
+                            <option value="7">7 Days</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">schedule_send</span>
+                        Submit Request
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script>
+function openResponseModal(caseId, caseNumber, deadline) {
+    $('#response_case_id').val(caseId);
+    $('#response_case_number').text(caseNumber);
+    $('#response_deadline').text(deadline);
+    $('#employeeResponseModal').modal('show');
+}
+
+function openExtensionRequestModal(caseId, caseNumber, currentDeadline) {
+    $('#ext_case_id').val(caseId);
+    $('#ext_case_number').text(caseNumber);
+    $('#ext_current_deadline').text(currentDeadline);
+    $('#extensionRequestModal').modal('show');
+}
+
+$(document).ready(function() {
+    // Submit Employee Response
+    $('#employeeResponseForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        let formData = new FormData(this);
+        let caseId = $('#response_case_id').val();
+        
+        $.ajax({
+            url: "{{ url('/discipline/tracker/case') }}/" + caseId + "/submit-response",
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if(response.success) {
+                    $('#employeeResponseModal').modal('hide');
+                    toastr.success(response.message);
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1500);
+                }
+            },
+            error: function(xhr) {
+                if(xhr.status === 403 && xhr.responseJSON?.error) {
+                    toastr.error(xhr.responseJSON.error);
+                } else {
+                    toastr.error('Failed to submit response. Please try again.');
+                }
+            }
+        });
+    });
+
+    // Submit Extension Request
+    $('#extensionRequestForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        let formData = {
+            _token: '{{ csrf_token() }}',
+            case_id: $('#ext_case_id').val(),
+            extension_reason: $('#ext_reason').val(),
+            requested_days: $('#ext_requested_days').val()
+        };
+        
+        $.ajax({
+            url: "{{ route('discipline.tracker.request.extension') }}",
+            type: 'POST',
+            data: formData,
+            success: function(response) {
+                if(response.success) {
+                    $('#extensionRequestModal').modal('hide');
+                    toastr.success(response.message);
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1500);
+                }
+            },
+            error: function(xhr) {
+                toastr.error(xhr.responseJSON?.error || 'Failed to submit extension request. Please try again.');
+            }
+        });
+    });
+});
+</script>
+
+@endsection

@@ -1,0 +1,43 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+
+class OneLogin
+{
+    /**
+     * Handle an incoming request.
+     * If the user's stored session id does not match the current session id,
+     * log the user out and redirect to login with a message.
+     */
+    public function handle(Request $request, Closure $next)
+    {
+        try {
+            if (!Auth::check()) {
+                return $next($request);
+            }
+
+            $user = Auth::user();
+            $currentSessionId = $request->session()->getId();
+            $stored = Cache::get("onelogin_user_{$user->id}");
+
+            if ($stored && $stored !== $currentSessionId) {
+                Log::info('OneLogin: session mismatch, logging out user', ['user_id' => $user->id, 'current' => $currentSessionId, 'stored' => $stored]);
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return redirect()->route('login')->with('error', 'You were logged out because your account was signed in from another location.');
+            }
+
+            return $next($request);
+        } catch (\Throwable $e) {
+            Log::error('OneLogin middleware error: ' . $e->getMessage());
+            return $next($request);
+        }
+    }
+}

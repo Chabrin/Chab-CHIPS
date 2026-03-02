@@ -1,0 +1,3217 @@
+2026-02-19 12:44:53,552  INFO      Starting MySQL -> PostgreSQL schema migration
+2026-02-19 12:44:53,782  INFO      Connected to MySQL: chips_2
+2026-02-19 12:44:53,861  INFO      Connected to PostgreSQL: chips_db_v3
+2026-02-19 12:44:53,862  INFO      PostgreSQL schema 'chips_db_v3' ready
+2026-02-19 12:44:53,878  INFO      Found 733 tables to migrate
+
+2026-02-19 12:44:54,048  INFO        [OK] action_taken
+2026-02-19 12:44:54,066  INFO        [OK] cb_approval_actions
+2026-02-19 12:44:54,093  INFO        [OK] cb_approval_items
+2026-02-19 12:44:54,107  INFO        [OK] cb_audit_logs
+2026-02-19 12:44:54,118  INFO        [OK] cb_cache
+2026-02-19 12:44:54,128  INFO        [OK] cb_cache_locks
+2026-02-19 12:44:54,138  INFO        [OK] cb_config_categories
+2026-02-19 12:44:54,155  INFO        [OK] cb_discipline_deadline_extensions
+2026-02-19 12:44:54,182  INFO        [OK] cb_error_logs
+2026-02-19 12:44:54,192  INFO        [OK] cb_item_approvers
+2026-02-19 12:44:54,210  INFO        [OK] cb_modules
+2026-02-19 12:44:54,222  INFO        [OK] cb_permission_role
+2026-02-19 12:44:54,234  INFO        [OK] cb_permission_user
+2026-02-19 12:44:54,263  INFO        [OK] cb_permissions
+2026-02-19 12:44:54,271  INFO        [OK] cb_role_user
+2026-02-19 12:44:54,286  INFO        [OK] cb_roles
+2026-02-19 12:44:54,298  INFO        [OK] cb_sessions
+2026-02-19 12:44:54,307  INFO        [OK] cb_sub_module_permissions
+2026-02-19 12:44:54,321  INFO        [OK] cb_sub_modules
+2026-02-19 12:44:54,334  INFO        [OK] cb_system_configs
+2026-02-19 12:44:54,347  INFO        [OK] communications
+2026-02-19 12:44:54,359  INFO        [OK] confirmation_logs
+2026-02-19 12:44:54,374  INFO        [OK] discipline_activity_log
+2026-02-19 12:44:54,389  INFO        [OK] discipline_case_closures
+2026-02-19 12:44:54,409  INFO        [OK] discipline_case_registrations
+2026-02-19 12:44:54,430  INFO        [OK] discipline_cases
+2026-02-19 12:44:54,444  INFO        [OK] discipline_employee_responses
+2026-02-19 12:44:54,460  INFO        [OK] discipline_evidence
+2026-02-19 12:44:54,476  INFO        [OK] discipline_evidence_files
+2026-02-19 12:44:54,494  INFO        [OK] discipline_hearing_documents
+2026-02-19 12:44:54,509  INFO        [OK] discipline_hearing_minutes
+2026-02-19 12:44:54,527  INFO        [OK] discipline_hearings
+2026-02-19 12:44:54,542  INFO        [OK] discipline_history_updates
+2026-02-19 12:44:54,558  INFO        [OK] discipline_incident_documents
+2026-02-19 12:44:54,580  INFO        [OK] discipline_incident_reports
+2026-02-19 12:44:54,597  INFO        [OK] discipline_investigation_notes
+2026-02-19 12:44:54,612  INFO        [OK] discipline_investigators
+2026-02-19 12:44:54,631  INFO        [OK] discipline_notifications
+2026-02-19 12:44:54,648  INFO        [OK] discipline_outcome_documents
+2026-02-19 12:44:54,668  INFO        [OK] discipline_outcomes
+2026-02-19 12:44:54,684  INFO        [OK] discipline_response_documents
+2026-02-19 12:44:54,701  INFO        [OK] discipline_show_cause_documents
+2026-02-19 12:44:54,719  INFO        [OK] discipline_show_cause_notices
+2026-02-19 12:44:54,736  INFO        [OK] discipline_training_assignments
+2026-02-19 12:44:54,754  INFO        [OK] discipline_witness_documents
+2026-02-19 12:44:54,770  INFO        [OK] discipline_witness_statements
+2026-02-19 12:44:54,785  INFO        [OK] failed_jobs
+2026-02-19 12:44:54,801  INFO        [OK] hr_employment_termination
+2026-02-19 12:44:54,813  INFO        [OK] hr_employment_termination_305_repeat
+2026-02-19 12:44:54,829  INFO        [OK] hr_employment_termination_repeat_documents
+2026-02-19 12:44:54,841  INFO        [OK] incidents
+2026-02-19 12:44:54,859  INFO        [OK] jobs
+2026-02-19 12:44:54,872  INFO        [OK] josya_action_log_config
+2026-02-19 12:44:54,886  ERROR       [FAILED] josya_action_logs: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 5:     "log_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:...
+                                                  ^
+
+2026-02-19 12:44:54,886  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_action_logs" (
+    "id" SERIAL,
+    "message_language_key" VARCHAR(255) NOT NULL DEFAULT '',
+    "message" TEXT NOT NULL,
+    "log_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "extension" VARCHAR(50) NOT NULL DEFAULT '',
+    "user_id" INTEGER NOT NULL DEFAULT 0,
+    "item_id" INTEGER NOT NULL DEFAULT 0,
+    "ip_address" VARCHAR(40) NOT NULL DEFAULT '0.0.0.0',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:54,896  INFO        [OK] josya_action_logs_extensions
+2026-02-19 12:44:54,913  INFO        [OK] josya_action_logs_users
+2026-02-19 12:44:54,991  INFO        [OK] josya_ak_profiles
+2026-02-19 12:44:55,021  INFO        [OK] josya_ak_stats
+2026-02-19 12:44:55,033  INFO        [OK] josya_ak_storage
+2026-02-19 12:44:55,044  INFO        [OK] josya_akeeba_common
+2026-02-19 12:44:55,063  INFO        [OK] josya_assets
+2026-02-19 12:44:55,073  INFO        [OK] josya_associations
+2026-02-19 12:44:55,082  ERROR       [FAILED] josya_banner_clients: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                          ^
+
+2026-02-19 12:44:55,083  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_banner_clients" (
+    "id" SERIAL,
+    "name" VARCHAR(255) NOT NULL DEFAULT '',
+    "contact" VARCHAR(255) NOT NULL DEFAULT '',
+    "email" VARCHAR(255) NOT NULL DEFAULT '',
+    "extrainfo" TEXT NOT NULL,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "metakey" TEXT NOT NULL,
+    "own_prefix" SMALLINT NOT NULL DEFAULT 0,
+    "metakey_prefix" VARCHAR(400) NOT NULL DEFAULT '',
+    "purchase_type" SMALLINT NOT NULL DEFAULT -1,
+    "track_clicks" SMALLINT NOT NULL DEFAULT -1,
+    "track_impressions" SMALLINT NOT NULL DEFAULT -1,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:55,101  INFO        [OK] josya_banner_tracks
+2026-02-19 12:44:55,112  ERROR       [FAILED] josya_banners: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 25:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:55,113  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_banners" (
+    "id" SERIAL,
+    "cid" INTEGER NOT NULL DEFAULT 0,
+    "type" INTEGER NOT NULL DEFAULT 0,
+    "name" VARCHAR(255) NOT NULL DEFAULT '',
+    "alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "imptotal" INTEGER NOT NULL DEFAULT 0,
+    "impmade" INTEGER NOT NULL DEFAULT 0,
+    "clicks" INTEGER NOT NULL DEFAULT 0,
+    "clickurl" VARCHAR(200) NOT NULL DEFAULT '',
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "catid" BIGINT NOT NULL DEFAULT 0,
+    "description" TEXT NOT NULL,
+    "custombannercode" VARCHAR(2048) NOT NULL,
+    "sticky" SMALLINT NOT NULL DEFAULT 0,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "metakey" TEXT NOT NULL,
+    "params" TEXT NOT NULL,
+    "own_prefix" BOOLEAN NOT NULL DEFAULT FALSE,
+    "metakey_prefix" VARCHAR(400) NOT NULL DEFAULT '',
+    "purchase_type" SMALLINT NOT NULL DEFAULT -1,
+    "track_clicks" SMALLINT NOT NULL DEFAULT -1,
+    "track_impressions" SMALLINT NOT NULL DEFAULT -1,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "reset" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "language" CHAR(7) NOT NULL DEFAULT '',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "created_by_alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "version" BIGINT NOT NULL DEFAULT 1,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:55,122  ERROR       [FAILED] josya_categories: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 16:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:55,123  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_categories" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "parent_id" BIGINT NOT NULL DEFAULT 0,
+    "lft" INTEGER NOT NULL DEFAULT 0,
+    "rgt" INTEGER NOT NULL DEFAULT 0,
+    "level" BIGINT NOT NULL DEFAULT 0,
+    "path" VARCHAR(400) NOT NULL DEFAULT '',
+    "extension" VARCHAR(50) NOT NULL DEFAULT '',
+    "title" VARCHAR(255) NOT NULL DEFAULT '',
+    "alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    "description" TEXT,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "params" TEXT,
+    "metadesc" VARCHAR(1024) NOT NULL DEFAULT '',
+    "metakey" VARCHAR(1024) NOT NULL DEFAULT '',
+    "metadata" VARCHAR(2048) NOT NULL DEFAULT '',
+    "created_user_id" BIGINT NOT NULL DEFAULT 0,
+    "created_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_user_id" BIGINT NOT NULL DEFAULT 0,
+    "modified_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    "language" CHAR(7) NOT NULL DEFAULT '',
+    "version" BIGINT NOT NULL DEFAULT 1,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:55,137  INFO        [OK] josya_com_wallfactory_bookmarks
+2026-02-19 12:44:55,165  INFO        [OK] josya_com_wallfactory_comments
+2026-02-19 12:44:55,176  INFO        [OK] josya_com_wallfactory_emoticons
+2026-02-19 12:44:55,194  INFO        [OK] josya_com_wallfactory_likes
+2026-02-19 12:44:55,208  INFO        [OK] josya_com_wallfactory_media
+2026-02-19 12:44:55,221  INFO        [OK] josya_com_wallfactory_media_audio
+2026-02-19 12:44:55,235  INFO        [OK] josya_com_wallfactory_media_files
+2026-02-19 12:44:55,247  INFO        [OK] josya_com_wallfactory_media_links
+2026-02-19 12:44:55,261  INFO        [OK] josya_com_wallfactory_media_photos
+2026-02-19 12:44:55,273  INFO        [OK] josya_com_wallfactory_media_videos
+2026-02-19 12:44:55,285  INFO        [OK] josya_com_wallfactory_notifications
+2026-02-19 12:44:55,326  INFO        [OK] josya_com_wallfactory_posts
+2026-02-19 12:44:55,339  INFO        [OK] josya_com_wallfactory_profiles
+2026-02-19 12:44:55,362  INFO        [OK] josya_com_wallfactory_reports
+2026-02-19 12:44:55,373  INFO        [OK] josya_com_wallfactory_subscriptions
+2026-02-19 12:44:55,404  INFO        [OK] josya_community_activities
+2026-02-19 12:44:55,412  INFO        [OK] josya_community_activities_hide
+2026-02-19 12:44:55,429  INFO        [OK] josya_community_apps
+2026-02-19 12:44:55,440  INFO        [OK] josya_community_avatar
+2026-02-19 12:44:55,454  INFO        [OK] josya_community_backgrounds
+2026-02-19 12:44:55,466  INFO        [OK] josya_community_badges
+2026-02-19 12:44:55,483  INFO        [OK] josya_community_blocklist
+2026-02-19 12:44:55,496  INFO        [OK] josya_community_chat
+2026-02-19 12:44:55,517  INFO        [OK] josya_community_chat_activity
+2026-02-19 12:44:55,536  INFO        [OK] josya_community_chat_participants
+2026-02-19 12:44:55,548  INFO        [OK] josya_community_config
+2026-02-19 12:44:55,559  INFO        [OK] josya_community_connect_users
+2026-02-19 12:44:55,584  INFO        [OK] josya_community_connection
+2026-02-19 12:44:55,592  INFO        [OK] josya_community_digest_email
+2026-02-19 12:44:55,606  INFO        [OK] josya_community_engagement
+2026-02-19 12:44:55,620  INFO        [OK] josya_community_event_stats
+2026-02-19 12:44:55,651  INFO        [OK] josya_community_events
+2026-02-19 12:44:55,663  INFO        [OK] josya_community_events_category
+2026-02-19 12:44:55,688  INFO        [OK] josya_community_events_members
+2026-02-19 12:44:55,702  INFO        [OK] josya_community_featured
+2026-02-19 12:44:55,720  INFO        [OK] josya_community_fields
+2026-02-19 12:44:55,744  INFO        [OK] josya_community_fields_values
+2026-02-19 12:44:55,770  INFO        [OK] josya_community_files
+2026-02-19 12:44:55,787  INFO        [OK] josya_community_follower
+2026-02-19 12:44:55,800  INFO        [OK] josya_community_group_stats
+2026-02-19 12:44:55,814  INFO        [OK] josya_community_groups
+2026-02-19 12:44:55,831  INFO        [OK] josya_community_groups_bulletins
+2026-02-19 12:44:55,844  INFO        [OK] josya_community_groups_category
+2026-02-19 12:44:55,864  INFO        [OK] josya_community_groups_discuss
+2026-02-19 12:44:55,869  INFO        [OK] josya_community_groups_invite
+2026-02-19 12:44:55,881  INFO        [OK] josya_community_groups_members
+2026-02-19 12:44:55,896  INFO        [OK] josya_community_hashtag
+2026-02-19 12:44:55,909  INFO        [OK] josya_community_invitations
+2026-02-19 12:44:55,925  INFO        [OK] josya_community_likes
+2026-02-19 12:44:55,934  INFO        [OK] josya_community_location_cache
+2026-02-19 12:44:55,954  INFO        [OK] josya_community_mailq
+2026-02-19 12:44:55,967  INFO        [OK] josya_community_memberlist
+2026-02-19 12:44:55,984  INFO        [OK] josya_community_memberlist_criteria
+2026-02-19 12:44:55,997  INFO        [OK] josya_community_moods
+2026-02-19 12:44:56,012  INFO        [OK] josya_community_msg
+2026-02-19 12:44:56,028  INFO        [OK] josya_community_msg_recepient
+2026-02-19 12:44:56,055  INFO        [OK] josya_community_notifications
+2026-02-19 12:44:56,067  INFO        [OK] josya_community_oauth
+2026-02-19 12:44:56,080  INFO        [OK] josya_community_page_stats
+2026-02-19 12:44:56,094  INFO        [OK] josya_community_pages
+2026-02-19 12:44:56,106  INFO        [OK] josya_community_pages_category
+2026-02-19 12:44:56,112  INFO        [OK] josya_community_pages_invite
+2026-02-19 12:44:56,122  INFO        [OK] josya_community_pages_members
+2026-02-19 12:44:56,135  INFO        [OK] josya_community_photo_stats
+2026-02-19 12:44:56,154  INFO        [OK] josya_community_photos
+2026-02-19 12:44:56,187  INFO        [OK] josya_community_photos_albums
+2026-02-19 12:44:56,208  INFO        [OK] josya_community_photos_tag
+2026-02-19 12:44:56,215  INFO        [OK] josya_community_photos_tokens
+2026-02-19 12:44:56,245  INFO        [OK] josya_community_polls
+2026-02-19 12:44:56,257  INFO        [OK] josya_community_polls_category
+2026-02-19 12:44:56,272  INFO        [OK] josya_community_polls_items
+2026-02-19 12:44:56,291  INFO        [OK] josya_community_polls_users
+2026-02-19 12:44:56,302  INFO        [OK] josya_community_profile_stats
+2026-02-19 12:44:56,322  INFO        [OK] josya_community_profiles
+2026-02-19 12:44:56,339  INFO        [OK] josya_community_profiles_fields
+2026-02-19 12:44:56,357  INFO        [OK] josya_community_ratings
+2026-02-19 12:44:56,372  INFO        [OK] josya_community_register
+2026-02-19 12:44:56,385  INFO        [OK] josya_community_register_auth_token
+2026-02-19 12:44:56,395  INFO        [OK] josya_community_reports
+2026-02-19 12:44:56,407  INFO        [OK] josya_community_reports_actions
+2026-02-19 12:44:56,418  INFO        [OK] josya_community_reports_reporter
+2026-02-19 12:44:56,428  INFO        [OK] josya_community_storage_s3
+2026-02-19 12:44:56,437  INFO        [OK] josya_community_tags
+2026-02-19 12:44:56,447  INFO        [OK] josya_community_tags_words
+2026-02-19 12:44:56,464  INFO        [OK] josya_community_theme
+2026-02-19 12:44:56,477  INFO        [OK] josya_community_thirdparty_wall_options
+2026-02-19 12:44:56,488  INFO        [OK] josya_community_user_invites
+2026-02-19 12:44:56,504  INFO        [OK] josya_community_user_status
+2026-02-19 12:44:56,517  INFO        [OK] josya_community_userpoints
+2026-02-19 12:44:56,531  INFO        [OK] josya_community_users
+2026-02-19 12:44:56,543  INFO        [OK] josya_community_video_stats
+2026-02-19 12:44:56,552  ERROR       [FAILED] josya_community_videos: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:56,552  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_community_videos" (
+    "id" SERIAL,
+    "title" VARCHAR(200) NOT NULL,
+    "type" VARCHAR(200) NOT NULL DEFAULT 'file',
+    "video_id" VARCHAR(200),
+    "description" TEXT NOT NULL,
+    "creator" BIGINT NOT NULL,
+    "creator_type" VARCHAR(200) NOT NULL DEFAULT 'user',
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "permissions" VARCHAR(255) NOT NULL DEFAULT '0',
+    "category_id" BIGINT NOT NULL,
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    "published" SMALLINT NOT NULL DEFAULT 1,
+    "featured" SMALLINT NOT NULL DEFAULT 0,
+    "duration" REAL DEFAULT 0,
+    "status" VARCHAR(200) NOT NULL DEFAULT 'pending',
+    "thumb" VARCHAR(255),
+    "path" VARCHAR(255),
+    "pageid" BIGINT NOT NULL DEFAULT 0,
+    "groupid" BIGINT NOT NULL DEFAULT 0,
+    "eventid" BIGINT NOT NULL DEFAULT 0,
+    "filesize" INTEGER NOT NULL DEFAULT 0,
+    "storage" VARCHAR(64) NOT NULL DEFAULT 'file',
+    "location" TEXT NOT NULL,
+    "latitude" REAL NOT NULL DEFAULT 255.000000,
+    "longitude" REAL NOT NULL DEFAULT 255.000000,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:56,566  INFO        [OK] josya_community_videos_category
+2026-02-19 12:44:56,578  INFO        [OK] josya_community_videos_tag
+2026-02-19 12:44:56,597  INFO        [OK] josya_community_wall
+2026-02-19 12:44:56,606  ERROR       [FAILED] josya_contact_details: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 19:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:56,608  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_contact_details" (
+    "id" SERIAL,
+    "name" VARCHAR(255) NOT NULL,
+    "alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "con_position" VARCHAR(255),
+    "address" TEXT,
+    "suburb" VARCHAR(100),
+    "state" VARCHAR(100),
+    "country" VARCHAR(100),
+    "postcode" VARCHAR(100),
+    "telephone" VARCHAR(255),
+    "fax" VARCHAR(255),
+    "misc" TEXT,
+    "image" VARCHAR(255),
+    "email_to" VARCHAR(255),
+    "default_con" SMALLINT NOT NULL DEFAULT 0,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    "user_id" INTEGER NOT NULL DEFAULT 0,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "mobile" VARCHAR(255) NOT NULL DEFAULT '',
+    "webpage" VARCHAR(255) NOT NULL DEFAULT '',
+    "sortname1" VARCHAR(255) NOT NULL DEFAULT '',
+    "sortname2" VARCHAR(255) NOT NULL DEFAULT '',
+    "sortname3" VARCHAR(255) NOT NULL DEFAULT '',
+    "language" VARCHAR(7) NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "created_by_alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "metakey" TEXT NOT NULL,
+    "metadesc" TEXT NOT NULL,
+    "metadata" TEXT NOT NULL,
+    "featured" SMALLINT NOT NULL DEFAULT 0,
+    "xreference" VARCHAR(50) NOT NULL DEFAULT '',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "version" BIGINT NOT NULL DEFAULT 1,
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:56,619  ERROR       [FAILED] josya_content: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 10:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:56,619  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_content" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(255) NOT NULL DEFAULT '',
+    "alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "introtext" TEXT NOT NULL,
+    "fulltext" TEXT NOT NULL,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "catid" BIGINT NOT NULL DEFAULT 0,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "created_by_alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "images" TEXT NOT NULL,
+    "urls" TEXT NOT NULL,
+    "attribs" VARCHAR(5120) NOT NULL,
+    "version" BIGINT NOT NULL DEFAULT 1,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "metakey" TEXT NOT NULL,
+    "metadesc" TEXT NOT NULL,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    "metadata" TEXT NOT NULL,
+    "featured" SMALLINT NOT NULL DEFAULT 0,
+    "language" CHAR(7) NOT NULL,
+    "xreference" VARCHAR(50) NOT NULL DEFAULT '',
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:56,630  INFO        [OK] josya_content_frontpage
+2026-02-19 12:44:56,638  INFO        [OK] josya_content_rating
+2026-02-19 12:44:56,654  INFO        [OK] josya_content_types
+2026-02-19 12:44:56,684  INFO        [OK] josya_contentitem_tag_map
+2026-02-19 12:44:56,689  INFO        [OK] josya_core_log_searches
+2026-02-19 12:44:56,699  ERROR       [FAILED] josya_extensions: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 17:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:56,699  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_extensions" (
+    "extension_id" SERIAL,
+    "package_id" INTEGER NOT NULL DEFAULT 0,
+    "name" VARCHAR(100) NOT NULL,
+    "type" VARCHAR(20) NOT NULL,
+    "element" VARCHAR(100) NOT NULL,
+    "folder" VARCHAR(100) NOT NULL,
+    "client_id" SMALLINT NOT NULL,
+    "enabled" SMALLINT NOT NULL DEFAULT 0,
+    "access" BIGINT NOT NULL DEFAULT 1,
+    "protected" SMALLINT NOT NULL DEFAULT 0,
+    "manifest_cache" TEXT NOT NULL,
+    "params" TEXT NOT NULL,
+    "custom_data" TEXT NOT NULL,
+    "system_data" TEXT NOT NULL,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER DEFAULT 0,
+    "state" INTEGER DEFAULT 0,
+    PRIMARY KEY ("extension_id")
+)
+2026-02-19 12:44:56,711  INFO        [OK] josya_fabrik_attending
+2026-02-19 12:44:56,724  INFO        [OK] josya_fabrik_comments
+2026-02-19 12:44:56,736  INFO        [OK] josya_fabrik_connections
+2026-02-19 12:44:56,751  INFO        [OK] josya_fabrik_cron
+2026-02-19 12:44:56,784  INFO        [OK] josya_fabrik_elements
+2026-02-19 12:44:56,796  INFO        [OK] josya_fabrik_form_sessions
+2026-02-19 12:44:56,813  INFO        [OK] josya_fabrik_formgroup
+2026-02-19 12:44:56,829  INFO        [OK] josya_fabrik_forms
+2026-02-19 12:44:56,849  INFO        [OK] josya_fabrik_groups
+2026-02-19 12:44:56,873  INFO        [OK] josya_fabrik_joins
+2026-02-19 12:44:56,888  INFO        [OK] josya_fabrik_jsactions
+2026-02-19 12:44:56,906  INFO        [OK] josya_fabrik_lists
+2026-02-19 12:44:56,919  INFO        [OK] josya_fabrik_log
+2026-02-19 12:44:56,931  INFO        [OK] josya_fabrik_notification
+2026-02-19 12:44:56,943  INFO        [OK] josya_fabrik_notification_event
+2026-02-19 12:44:56,955  INFO        [OK] josya_fabrik_notification_event_sent
+2026-02-19 12:44:56,968  INFO        [OK] josya_fabrik_packages
+2026-02-19 12:44:56,982  INFO        [OK] josya_fabrik_privacy
+2026-02-19 12:44:56,990  INFO        [OK] josya_fabrik_ratings
+2026-02-19 12:44:56,998  INFO        [OK] josya_fabrik_sequences
+2026-02-19 12:44:57,006  INFO        [OK] josya_fabrik_thumbs
+2026-02-19 12:44:57,017  INFO        [OK] josya_fabrik_validations
+2026-02-19 12:44:57,030  INFO        [OK] josya_fabrik_visualizations
+2026-02-19 12:44:57,041  ERROR       [FAILED] josya_fields: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 16:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:57,041  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_fields" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "context" VARCHAR(255) NOT NULL DEFAULT '',
+    "group_id" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(255) NOT NULL DEFAULT '',
+    "name" VARCHAR(255) NOT NULL DEFAULT '',
+    "label" VARCHAR(255) NOT NULL DEFAULT '',
+    "default_value" TEXT,
+    "type" VARCHAR(255) NOT NULL DEFAULT 'text',
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "state" BOOLEAN NOT NULL DEFAULT FALSE,
+    "required" BOOLEAN NOT NULL DEFAULT FALSE,
+    "checked_out" INTEGER NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    "fieldparams" TEXT NOT NULL,
+    "language" CHAR(7) NOT NULL DEFAULT '',
+    "created_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_user_id" BIGINT NOT NULL DEFAULT 0,
+    "modified_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "access" INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,052  INFO        [OK] josya_fields_categories
+2026-02-19 12:44:57,061  ERROR       [FAILED] josya_fields_groups: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 10:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:57,062  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_fields_groups" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "context" VARCHAR(255) NOT NULL DEFAULT '',
+    "title" VARCHAR(255) NOT NULL DEFAULT '',
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "state" BOOLEAN NOT NULL DEFAULT FALSE,
+    "checked_out" INTEGER NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    "language" CHAR(7) NOT NULL DEFAULT '',
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "access" INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,076  INFO        [OK] josya_fields_values
+2026-02-19 12:44:57,084  ERROR       [FAILED] josya_finder_filters: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 6:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:57,085  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_finder_filters" (
+    "filter_id" SERIAL,
+    "title" VARCHAR(255) NOT NULL,
+    "alias" VARCHAR(255) NOT NULL,
+    "state" BOOLEAN NOT NULL DEFAULT TRUE,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "created_by_alias" VARCHAR(255) NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "map_count" BIGINT NOT NULL DEFAULT 0,
+    "data" TEXT NOT NULL,
+    "params" TEXT,
+    PRIMARY KEY ("filter_id")
+)
+2026-02-19 12:44:57,095  ERROR       [FAILED] josya_finder_links: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "indexdate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00...
+                                                   ^
+
+2026-02-19 12:44:57,095  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_finder_links" (
+    "link_id" SERIAL,
+    "url" VARCHAR(255) NOT NULL,
+    "route" VARCHAR(255) NOT NULL,
+    "title" VARCHAR(400),
+    "description" TEXT,
+    "indexdate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "md5sum" VARCHAR(32),
+    "published" BOOLEAN NOT NULL DEFAULT TRUE,
+    "state" INTEGER DEFAULT 1,
+    "access" INTEGER DEFAULT 0,
+    "language" VARCHAR(8) NOT NULL,
+    "publish_start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_end_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "end_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "list_price" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "sale_price" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "type_id" INTEGER NOT NULL,
+    "object" BYTEA NOT NULL,
+    PRIMARY KEY ("link_id")
+)
+2026-02-19 12:44:57,109  INFO        [OK] josya_finder_links_terms0
+2026-02-19 12:44:57,122  INFO        [OK] josya_finder_links_terms1
+2026-02-19 12:44:57,135  INFO        [OK] josya_finder_links_terms2
+2026-02-19 12:44:57,150  INFO        [OK] josya_finder_links_terms3
+2026-02-19 12:44:57,163  INFO        [OK] josya_finder_links_terms4
+2026-02-19 12:44:57,177  INFO        [OK] josya_finder_links_terms5
+2026-02-19 12:44:57,190  INFO        [OK] josya_finder_links_terms6
+2026-02-19 12:44:57,203  INFO        [OK] josya_finder_links_terms7
+2026-02-19 12:44:57,216  INFO        [OK] josya_finder_links_terms8
+2026-02-19 12:44:57,234  INFO        [OK] josya_finder_links_terms9
+2026-02-19 12:44:57,248  INFO        [OK] josya_finder_links_termsa
+2026-02-19 12:44:57,262  INFO        [OK] josya_finder_links_termsb
+2026-02-19 12:44:57,276  INFO        [OK] josya_finder_links_termsc
+2026-02-19 12:44:57,292  INFO        [OK] josya_finder_links_termsd
+2026-02-19 12:44:57,305  INFO        [OK] josya_finder_links_termse
+2026-02-19 12:44:57,318  INFO        [OK] josya_finder_links_termsf
+2026-02-19 12:44:57,347  INFO        [OK] josya_finder_taxonomy
+2026-02-19 12:44:57,385  INFO        [OK] josya_finder_taxonomy_map
+2026-02-19 12:44:57,421  INFO        [OK] josya_finder_terms
+2026-02-19 12:44:57,433  INFO        [OK] josya_finder_terms_common
+2026-02-19 12:44:57,448  INFO        [OK] josya_finder_tokens
+2026-02-19 12:44:57,464  INFO        [OK] josya_finder_tokens_aggregate
+2026-02-19 12:44:57,479  INFO        [OK] josya_finder_types
+2026-02-19 12:44:57,494  INFO        [OK] josya_jbolo_chat_msgs
+2026-02-19 12:44:57,500  INFO        [OK] josya_jbolo_chat_msgs_xref
+2026-02-19 12:44:57,506  INFO        [OK] josya_jbolo_node_users
+2026-02-19 12:44:57,521  INFO        [OK] josya_jbolo_nodes
+2026-02-19 12:44:57,531  INFO        [OK] josya_jbolo_privacy
+2026-02-19 12:44:57,542  INFO        [OK] josya_jbolo_users
+2026-02-19 12:44:57,574  INFO        [OK] josya_jchat
+2026-02-19 12:44:57,586  INFO        [OK] josya_jchat_banned_users
+2026-02-19 12:44:57,595  INFO        [OK] josya_jchat_banned_users_ids
+2026-02-19 12:44:57,616  INFO        [OK] josya_jchat_deleted_messages
+2026-02-19 12:44:57,631  INFO        [OK] josya_jchat_emoticons
+2026-02-19 12:44:57,641  ERROR       [FAILED] josya_jchat_lamessages: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 12:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:57,641  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jchat_lamessages" (
+    "id" SERIAL,
+    "name" VARCHAR(255),
+    "email" VARCHAR(255),
+    "phonenumber" VARCHAR(255),
+    "message" VARCHAR(255),
+    "sentdate" DATE,
+    "userid" INTEGER,
+    "worked" SMALLINT,
+    "responses" TEXT,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "closed_ticket" SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,670  INFO        [OK] josya_jchat_login
+2026-02-19 12:44:57,681  ERROR       [FAILED] josya_jchat_meetings: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "start_datetime" TIMESTAMP NOT NULL DEFAULT '0000-00-00 ...
+                                                        ^
+
+2026-02-19 12:44:57,681  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jchat_meetings" (
+    "id" SERIAL,
+    "hash" VARCHAR(191) NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
+    "description" TEXT,
+    "participants" TEXT,
+    "start_datetime" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "end_datetime" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "published" SMALLINT NOT NULL DEFAULT 1,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,690  INFO        [OK] josya_jchat_messaging_deletedmessages
+2026-02-19 12:44:57,700  INFO        [OK] josya_jchat_public_readmessages
+2026-02-19 12:44:57,712  INFO        [OK] josya_jchat_public_sessionrelations
+2026-02-19 12:44:57,724  INFO        [OK] josya_jchat_recordings
+2026-02-19 12:44:57,734  ERROR       [FAILED] josya_jchat_rooms: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 6:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                          ^
+
+2026-02-19 12:44:57,734  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jchat_rooms" (
+    "id" SERIAL,
+    "name" VARCHAR(255) NOT NULL,
+    "description" TEXT,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "published" SMALLINT NOT NULL DEFAULT 1,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "access" INTEGER NOT NULL DEFAULT 1,
+    "menuitems" TEXT,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,757  INFO        [OK] josya_jchat_sessionstatus
+2026-02-19 12:44:57,769  INFO        [OK] josya_jchat_userstatus
+2026-02-19 12:44:57,781  INFO        [OK] josya_jchat_webrtc
+2026-02-19 12:44:57,792  INFO        [OK] josya_jchat_webrtc_blackboard
+2026-02-19 12:44:57,809  INFO        [OK] josya_jchat_webrtc_conference
+2026-02-19 12:44:57,821  ERROR       [FAILED] josya_jp_comments: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 10:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:57,821  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_comments" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL,
+    "project_id" BIGINT NOT NULL DEFAULT 0,
+    "item_id" BIGINT NOT NULL DEFAULT 0,
+    "context" VARCHAR(50) NOT NULL,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "parent_id" BIGINT NOT NULL,
+    "lft" INTEGER NOT NULL,
+    "rgt" INTEGER NOT NULL,
+    "level" BIGINT NOT NULL,
+    "path" VARCHAR(255) NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,831  ERROR       [FAILED] josya_jp_design_albums: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:57,831  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_design_albums" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" VARCHAR(255) NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    "ordering" INTEGER NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_design_albums_idx_alias" UNIQUE ("project_id", "alias")
+)
+2026-02-19 12:44:57,843  ERROR       [FAILED] josya_jp_design_revisions: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 12:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:57,844  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_design_revisions" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "parent_id" BIGINT NOT NULL,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" TEXT NOT NULL,
+    "file_name" VARCHAR(255) NOT NULL,
+    "file_extension" VARCHAR(32) NOT NULL,
+    "file_size" BIGINT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    "ordering" INTEGER NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_design_revisions_idx_alias" UNIQUE ("project_id", "parent_id", "alias")
+)
+2026-02-19 12:44:57,853  ERROR       [FAILED] josya_jp_designs: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 12:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:57,854  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_designs" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "album_id" BIGINT NOT NULL,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" TEXT NOT NULL,
+    "file_name" VARCHAR(255) NOT NULL,
+    "file_extension" VARCHAR(32) NOT NULL,
+    "file_size" BIGINT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    "ordering" INTEGER NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_designs_idx_alias" UNIQUE ("project_id", "album_id", "alias")
+)
+2026-02-19 12:44:57,861  ERROR       [FAILED] josya_jp_designs_approved: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 5:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:57,861  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_designs_approved" (
+    "id" BIGINT NOT NULL,
+    "revision_id" BIGINT NOT NULL,
+    "created_by" BIGINT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "state" SMALLINT NOT NULL,
+    PRIMARY KEY ("id", "revision_id", "created_by")
+)
+2026-02-19 12:44:57,881  ERROR       [FAILED] josya_jp_emailqueue: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 6:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:57,882  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_emailqueue" (
+    "id" SERIAL,
+    "email" VARCHAR(100) NOT NULL,
+    "subject" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:57,896  INFO        [OK] josya_jp_groups_view_action
+2026-02-19 12:44:57,914  INFO        [OK] josya_jp_labels
+2026-02-19 12:44:57,927  ERROR       [FAILED] josya_jp_milestones: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:57,927  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_milestones" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "project_id" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" VARCHAR(255) NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "end_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_milestones_idx_alias" UNIQUE ("alias", "project_id")
+)
+2026-02-19 12:44:57,937  ERROR       [FAILED] josya_jp_projects: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:57,937  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_projects" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "catid" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "end_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_projects_idx_alias" UNIQUE ("alias")
+)
+2026-02-19 12:44:57,965  INFO        [OK] josya_jp_ref_attachments
+2026-02-19 12:44:57,988  INFO        [OK] josya_jp_ref_labels
+2026-02-19 12:44:58,004  INFO        [OK] josya_jp_ref_observer
+2026-02-19 12:44:58,029  INFO        [OK] josya_jp_ref_tasks
+2026-02-19 12:44:58,046  INFO        [OK] josya_jp_ref_users
+2026-02-19 12:44:58,057  ERROR       [FAILED] josya_jp_reminders: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                    ^
+
+2026-02-19 12:44:58,058  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_reminders" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "task_id" BIGINT NOT NULL,
+    "assigned_users" VARCHAR(255) NOT NULL,
+    "description" TEXT NOT NULL,
+    "start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "amount" INTEGER NOT NULL,
+    "types" INTEGER NOT NULL,
+    "repeats" INTEGER NOT NULL,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "access" INTEGER NOT NULL,
+    "attribs" VARCHAR(5120) NOT NULL,
+    "ordering" INTEGER NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,066  ERROR       [FAILED] josya_jp_reminders_dates: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 4:     "date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+                                              ^
+
+2026-02-19 12:44:58,066  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_reminders_dates" (
+    "id" SERIAL,
+    "reminder_id" BIGINT NOT NULL,
+    "date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,076  ERROR       [FAILED] josya_jp_replies: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,077  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_replies" (
+    "id" SERIAL,
+    "asset_id" INTEGER NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "topic_id" BIGINT NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,104  ERROR       [FAILED] josya_jp_repo_dirs: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,104  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_repo_dirs" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "title" VARCHAR(56) NOT NULL,
+    "alias" VARCHAR(56) NOT NULL,
+    "description" VARCHAR(128) NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    "protected" BOOLEAN NOT NULL,
+    "parent_id" BIGINT NOT NULL,
+    "lft" INTEGER NOT NULL,
+    "rgt" INTEGER NOT NULL,
+    "level" BIGINT NOT NULL,
+    "path" TEXT NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_repo_dirs_idx_alias" UNIQUE ("alias", "parent_id")
+)
+2026-02-19 12:44:58,113  ERROR       [FAILED] josya_jp_repo_file_revs: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 11:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:58,113  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_repo_file_revs" (
+    "id" SERIAL,
+    "project_id" BIGINT NOT NULL,
+    "parent_id" BIGINT NOT NULL,
+    "title" VARCHAR(56) NOT NULL,
+    "alias" VARCHAR(56) NOT NULL,
+    "description" VARCHAR(128) NOT NULL,
+    "file_name" VARCHAR(255) NOT NULL,
+    "file_extension" VARCHAR(32) NOT NULL,
+    "file_size" BIGINT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "attribs" TEXT NOT NULL,
+    "ordering" INTEGER NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_repo_file_revs_idx_alias" UNIQUE ("alias", "parent_id")
+)
+2026-02-19 12:44:58,123  ERROR       [FAILED] josya_jp_repo_files: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 12:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:58,125  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_repo_files" (
+    "id" SERIAL,
+    "asset_id" INTEGER NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "dir_id" BIGINT NOT NULL,
+    "title" VARCHAR(56) NOT NULL,
+    "alias" VARCHAR(56) NOT NULL,
+    "description" VARCHAR(128) NOT NULL,
+    "file_name" VARCHAR(255) NOT NULL,
+    "file_extension" VARCHAR(32) NOT NULL,
+    "file_size" BIGINT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_repo_files_idx_alias" UNIQUE ("dir_id", "alias")
+)
+2026-02-19 12:44:58,134  ERROR       [FAILED] josya_jp_repo_note_revs: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,134  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_repo_note_revs" (
+    "id" SERIAL,
+    "project_id" BIGINT NOT NULL,
+    "parent_id" INTEGER NOT NULL,
+    "title" VARCHAR(56) NOT NULL,
+    "alias" VARCHAR(56) NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "attribs" TEXT NOT NULL,
+    "ordering" INTEGER NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_repo_note_revs_idx_alias" UNIQUE ("alias", "parent_id")
+)
+2026-02-19 12:44:58,143  ERROR       [FAILED] josya_jp_repo_notes: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,143  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_repo_notes" (
+    "id" SERIAL,
+    "asset_id" INTEGER NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "dir_id" BIGINT NOT NULL,
+    "title" VARCHAR(56) NOT NULL,
+    "alias" VARCHAR(56) NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_repo_notes_idx_alias" UNIQUE ("dir_id", "alias")
+)
+2026-02-19 12:44:58,156  INFO        [OK] josya_jp_tags
+2026-02-19 12:44:58,168  ERROR       [FAILED] josya_jp_task_lists: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,168  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_task_lists" (
+    "id" SERIAL,
+    "asset_id" INTEGER NOT NULL DEFAULT 0,
+    "project_id" BIGINT NOT NULL DEFAULT 0,
+    "milestone_id" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(64) NOT NULL,
+    "alias" VARCHAR(64) NOT NULL,
+    "description" VARCHAR(255) NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "ordering" BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_task_lists_idx_alias" UNIQUE ("project_id", "alias", "milestone_id")
+)
+2026-02-19 12:44:58,179  ERROR       [FAILED] josya_jp_tasks: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 10:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                  ^
+
+2026-02-19 12:44:58,180  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_tasks" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "project_id" BIGINT NOT NULL DEFAULT 0,
+    "list_id" BIGINT NOT NULL DEFAULT 0,
+    "milestone_id" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(128) NOT NULL,
+    "alias" VARCHAR(128) NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "priority" SMALLINT NOT NULL DEFAULT 0,
+    "complete" BOOLEAN NOT NULL DEFAULT FALSE,
+    "completed" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "completed_by" BIGINT NOT NULL,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "start_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "end_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "rate" NUMERIC(5,2) NOT NULL,
+    "estimate" BIGINT NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_tasks_idx_alias" UNIQUE ("project_id", "milestone_id", "list_id", "alias")
+)
+2026-02-19 12:44:58,189  ERROR       [FAILED] josya_jp_timesheet: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,189  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_timesheet" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "task_id" BIGINT NOT NULL,
+    "task_title" VARCHAR(128) NOT NULL,
+    "description" VARCHAR(255) NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "billable" BOOLEAN NOT NULL,
+    "rate" NUMERIC(5,2) NOT NULL,
+    "access" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    "log_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "log_time" BIGINT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,198  ERROR       [FAILED] josya_jp_topics: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,199  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_jp_topics" (
+    "id" SERIAL,
+    "asset_id" INTEGER NOT NULL,
+    "project_id" BIGINT NOT NULL,
+    "title" VARCHAR(124) NOT NULL,
+    "alias" VARCHAR(124) NOT NULL,
+    "description" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL,
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL,
+    "checked_out" BIGINT NOT NULL,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "attribs" TEXT NOT NULL,
+    "access" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_jp_topics_idx_alias" UNIQUE ("project_id", "alias")
+)
+2026-02-19 12:44:58,222  INFO        [OK] josya_languages
+2026-02-19 12:44:58,234  INFO        [OK] josya_maximenuck_menus
+2026-02-19 12:44:58,248  INFO        [OK] josya_maximenuck_styles
+2026-02-19 12:44:58,259  ERROR       [FAILED] josya_menu: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 15:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:58,260  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_menu" (
+    "id" SERIAL,
+    "menutype" VARCHAR(24) NOT NULL,
+    "title" VARCHAR(255) NOT NULL,
+    "alias" VARCHAR(400) NOT NULL,
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    "path" VARCHAR(1024) NOT NULL,
+    "link" VARCHAR(1024) NOT NULL,
+    "type" VARCHAR(16) NOT NULL,
+    "published" SMALLINT NOT NULL DEFAULT 0,
+    "parent_id" BIGINT NOT NULL DEFAULT 1,
+    "level" BIGINT NOT NULL DEFAULT 0,
+    "component_id" BIGINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "browserNav" SMALLINT NOT NULL DEFAULT 0,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "img" VARCHAR(255) NOT NULL,
+    "template_style_id" BIGINT NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    "lft" INTEGER NOT NULL DEFAULT 0,
+    "rgt" INTEGER NOT NULL DEFAULT 0,
+    "home" SMALLINT NOT NULL DEFAULT 0,
+    "language" CHAR(7) NOT NULL DEFAULT '',
+    "client_id" SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_menu_idx_client_id_parent_id_alias_language" UNIQUE ("client_id", "parent_id", "alias", "language")
+)
+2026-02-19 12:44:58,272  INFO        [OK] josya_menu_types
+2026-02-19 12:44:58,281  ERROR       [FAILED] josya_messages: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 6:     "date_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00...
+                                                   ^
+
+2026-02-19 12:44:58,281  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_messages" (
+    "message_id" SERIAL,
+    "user_id_from" BIGINT NOT NULL DEFAULT 0,
+    "user_id_to" BIGINT NOT NULL DEFAULT 0,
+    "folder_id" SMALLINT NOT NULL DEFAULT 0,
+    "date_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "state" BOOLEAN NOT NULL DEFAULT FALSE,
+    "priority" SMALLINT NOT NULL DEFAULT 0,
+    "subject" VARCHAR(255) NOT NULL DEFAULT '',
+    "message" TEXT NOT NULL,
+    PRIMARY KEY ("message_id")
+)
+2026-02-19 12:44:58,290  INFO        [OK] josya_messages_cfg
+2026-02-19 12:44:58,299  ERROR       [FAILED] josya_modules: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 10:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:58,299  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_modules" (
+    "id" SERIAL,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "title" VARCHAR(100) NOT NULL DEFAULT '',
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    "content" TEXT,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "position" VARCHAR(50) NOT NULL DEFAULT '',
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "module" VARCHAR(50),
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "showtitle" SMALLINT NOT NULL DEFAULT 1,
+    "params" TEXT NOT NULL,
+    "client_id" SMALLINT NOT NULL DEFAULT 0,
+    "language" CHAR(7) NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,309  INFO        [OK] josya_modules_menu
+2026-02-19 12:44:58,318  ERROR       [FAILED] josya_newsfeeds: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 11:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:58,318  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_newsfeeds" (
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "id" SERIAL,
+    "name" VARCHAR(100) NOT NULL DEFAULT '',
+    "alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "link" VARCHAR(2048) NOT NULL DEFAULT '',
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "numarticles" BIGINT NOT NULL DEFAULT 1,
+    "cache_time" BIGINT NOT NULL DEFAULT 3600,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "rtl" SMALLINT NOT NULL DEFAULT 0,
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "language" CHAR(7) NOT NULL DEFAULT '',
+    "params" TEXT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by" BIGINT NOT NULL DEFAULT 0,
+    "created_by_alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "modified" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_by" BIGINT NOT NULL DEFAULT 0,
+    "metakey" TEXT NOT NULL,
+    "metadesc" TEXT NOT NULL,
+    "metadata" TEXT NOT NULL,
+    "xreference" VARCHAR(50) NOT NULL DEFAULT '',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "description" TEXT NOT NULL,
+    "version" BIGINT NOT NULL DEFAULT 1,
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    "images" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,332  INFO        [OK] josya_overrider
+2026-02-19 12:44:58,353  INFO        [OK] josya_plotalot
+2026-02-19 12:44:58,363  INFO        [OK] josya_plotalot_categories
+2026-02-19 12:44:58,376  INFO        [OK] josya_plotalot_databases
+2026-02-19 12:44:58,389  INFO        [OK] josya_postinstall_messages
+2026-02-19 12:44:58,397  ERROR       [FAILED] josya_privacy_consents: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 5:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,398  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_privacy_consents" (
+    "id" SERIAL,
+    "user_id" BIGINT NOT NULL DEFAULT 0,
+    "state" INTEGER NOT NULL DEFAULT 1,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "subject" VARCHAR(255) NOT NULL DEFAULT '',
+    "body" TEXT NOT NULL,
+    "remind" SMALLINT NOT NULL DEFAULT 0,
+    "token" VARCHAR(100) NOT NULL DEFAULT '',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,406  ERROR       [FAILED] josya_privacy_requests: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 4:     "requested_at" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00...
+                                                      ^
+
+2026-02-19 12:44:58,406  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_privacy_requests" (
+    "id" SERIAL,
+    "email" VARCHAR(100) NOT NULL DEFAULT '',
+    "requested_at" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "status" SMALLINT NOT NULL DEFAULT 0,
+    "request_type" VARCHAR(25) NOT NULL DEFAULT '',
+    "confirm_token" VARCHAR(100) NOT NULL DEFAULT '',
+    "confirm_token_created_at" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,416  ERROR       [FAILED] josya_redirect_links: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "created_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00...
+                                                      ^
+
+2026-02-19 12:44:58,417  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_redirect_links" (
+    "id" SERIAL,
+    "old_url" VARCHAR(2048) NOT NULL,
+    "new_url" VARCHAR(2048),
+    "referer" VARCHAR(2048) NOT NULL,
+    "comment" VARCHAR(255) NOT NULL DEFAULT '',
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    "published" SMALLINT NOT NULL,
+    "created_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "header" SMALLINT NOT NULL DEFAULT 301,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,426  INFO        [OK] josya_schemas
+2026-02-19 12:44:58,447  INFO        [OK] josya_session
+2026-02-19 12:44:58,456  ERROR       [FAILED] josya_tags: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 14:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                           ^
+
+2026-02-19 12:44:58,458  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_tags" (
+    "id" SERIAL,
+    "parent_id" BIGINT NOT NULL DEFAULT 0,
+    "lft" INTEGER NOT NULL DEFAULT 0,
+    "rgt" INTEGER NOT NULL DEFAULT 0,
+    "level" BIGINT NOT NULL DEFAULT 0,
+    "path" VARCHAR(400) NOT NULL DEFAULT '',
+    "title" VARCHAR(255) NOT NULL,
+    "alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "note" VARCHAR(255) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "access" BIGINT NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    "metadesc" VARCHAR(1024) NOT NULL,
+    "metakey" VARCHAR(1024) NOT NULL,
+    "metadata" VARCHAR(2048) NOT NULL,
+    "created_user_id" BIGINT NOT NULL DEFAULT 0,
+    "created_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_by_alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "modified_user_id" BIGINT NOT NULL DEFAULT 0,
+    "modified_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "images" TEXT NOT NULL,
+    "urls" TEXT NOT NULL,
+    "hits" BIGINT NOT NULL DEFAULT 0,
+    "language" CHAR(7) NOT NULL,
+    "version" BIGINT NOT NULL DEFAULT 1,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,481  INFO        [OK] josya_template_styles
+2026-02-19 12:44:58,498  INFO        [OK] josya_ucm_base
+2026-02-19 12:44:58,510  ERROR       [FAILED] josya_ucm_content: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 16: ...   "core_created_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                              ^
+
+2026-02-19 12:44:58,511  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_ucm_content" (
+    "core_content_id" SERIAL,
+    "core_type_alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "core_title" VARCHAR(400) NOT NULL DEFAULT '',
+    "core_alias" VARCHAR(400) NOT NULL DEFAULT '',
+    "core_body" TEXT,
+    "core_state" BOOLEAN NOT NULL DEFAULT FALSE,
+    "core_checked_out_time" VARCHAR(255) NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "core_checked_out_user_id" BIGINT NOT NULL DEFAULT 0,
+    "core_access" BIGINT NOT NULL DEFAULT 0,
+    "core_params" TEXT,
+    "core_featured" SMALLINT NOT NULL DEFAULT 0,
+    "core_metadata" VARCHAR(2048) NOT NULL DEFAULT '',
+    "core_created_user_id" BIGINT NOT NULL DEFAULT 0,
+    "core_created_by_alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "core_created_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "core_modified_user_id" BIGINT NOT NULL DEFAULT 0,
+    "core_modified_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "core_language" CHAR(7) NOT NULL DEFAULT '',
+    "core_publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "core_publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "core_content_item_id" BIGINT NOT NULL DEFAULT 0,
+    "asset_id" BIGINT NOT NULL DEFAULT 0,
+    "core_images" TEXT,
+    "core_urls" TEXT,
+    "core_hits" BIGINT NOT NULL DEFAULT 0,
+    "core_version" BIGINT NOT NULL DEFAULT 1,
+    "core_ordering" INTEGER NOT NULL DEFAULT 0,
+    "core_metakey" TEXT,
+    "core_metadesc" TEXT,
+    "core_catid" BIGINT NOT NULL DEFAULT 0,
+    "core_xreference" VARCHAR(50) NOT NULL DEFAULT '',
+    "core_type_id" BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("core_content_id")
+)
+2026-02-19 12:44:58,518  ERROR       [FAILED] josya_ucm_history: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 6:     "save_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00...
+                                                   ^
+
+2026-02-19 12:44:58,519  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_ucm_history" (
+    "version_id" SERIAL,
+    "ucm_item_id" BIGINT NOT NULL,
+    "ucm_type_id" BIGINT NOT NULL,
+    "version_note" VARCHAR(255) NOT NULL DEFAULT '',
+    "save_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "editor_user_id" BIGINT NOT NULL DEFAULT 0,
+    "character_count" BIGINT NOT NULL DEFAULT 0,
+    "sha1_hash" VARCHAR(50) NOT NULL DEFAULT '',
+    "version_data" TEXT NOT NULL,
+    "keep_forever" SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("version_id")
+)
+2026-02-19 12:44:58,534  INFO        [OK] josya_update_sites
+2026-02-19 12:44:58,542  INFO        [OK] josya_update_sites_extensions
+2026-02-19 12:44:58,555  INFO        [OK] josya_updates
+2026-02-19 12:44:58,564  ERROR       [FAILED] josya_user_activity: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 6:     "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:0...
+                                                 ^
+
+2026-02-19 12:44:58,565  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_user_activity" (
+    "id" SERIAL,
+    "item_id" BIGINT NOT NULL,
+    "event_id" INTEGER NOT NULL,
+    "client_id" SMALLINT NOT NULL,
+    "created" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_day" SMALLINT NOT NULL,
+    "created_by" BIGINT NOT NULL,
+    "delta_time" BIGINT NOT NULL,
+    "state" SMALLINT NOT NULL,
+    "vaccess" BIGINT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,575  INFO        [OK] josya_user_activity_events
+2026-02-19 12:44:58,585  INFO        [OK] josya_user_activity_item_types
+2026-02-19 12:44:58,602  INFO        [OK] josya_user_activity_items
+2026-02-19 12:44:58,621  INFO        [OK] josya_user_keys
+2026-02-19 12:44:58,630  ERROR       [FAILED] josya_user_notes: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-0...
+                                                          ^
+
+2026-02-19 12:44:58,630  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_user_notes" (
+    "id" SERIAL,
+    "user_id" BIGINT NOT NULL DEFAULT 0,
+    "catid" BIGINT NOT NULL DEFAULT 0,
+    "subject" VARCHAR(100) NOT NULL DEFAULT '',
+    "body" TEXT NOT NULL,
+    "state" SMALLINT NOT NULL DEFAULT 0,
+    "checked_out" BIGINT NOT NULL DEFAULT 0,
+    "checked_out_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "created_user_id" BIGINT NOT NULL DEFAULT 0,
+    "created_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "modified_user_id" BIGINT NOT NULL,
+    "modified_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "review_time" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,642  INFO        [OK] josya_user_profiles
+2026-02-19 12:44:58,650  INFO        [OK] josya_user_usergroup_map
+2026-02-19 12:44:58,671  INFO        [OK] josya_usergroups
+2026-02-19 12:44:58,681  ERROR       [FAILED] josya_users: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 9:     "registerDate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00...
+                                                      ^
+
+2026-02-19 12:44:58,681  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_users" (
+    "id" SERIAL,
+    "name" VARCHAR(400) NOT NULL DEFAULT '',
+    "username" VARCHAR(150) NOT NULL DEFAULT '',
+    "email" VARCHAR(100) NOT NULL DEFAULT '',
+    "password" VARCHAR(100) NOT NULL DEFAULT '',
+    "block" SMALLINT NOT NULL DEFAULT 0,
+    "sendEmail" SMALLINT DEFAULT 0,
+    "registerDate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "lastvisitDate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "activation" VARCHAR(100) NOT NULL DEFAULT '',
+    "params" TEXT NOT NULL,
+    "lastResetTime" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "resetCount" INTEGER NOT NULL DEFAULT 0,
+    "otpKey" VARCHAR(1000) NOT NULL DEFAULT '',
+    "reset_token" VARCHAR(255),
+    "reset_token_expires_at" TIMESTAMP,
+    "otep" VARCHAR(1000) NOT NULL DEFAULT '',
+    "requireReset" SMALLINT NOT NULL DEFAULT 0,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "uq_josya_users_idx_username" UNIQUE ("username")
+)
+2026-02-19 12:44:58,688  INFO        [OK] josya_utf8_conversion
+2026-02-19 12:44:58,701  INFO        [OK] josya_viewlevels
+2026-02-19 12:44:58,712  ERROR       [FAILED] josya_zhgooglemaps_infobubbles: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 24:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,712  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_infobubbles" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "shadowstyle" INTEGER NOT NULL DEFAULT 0,
+    "padding" VARCHAR(50) NOT NULL DEFAULT '',
+    "borderradius" VARCHAR(50) NOT NULL DEFAULT '',
+    "borderwidth" VARCHAR(50) NOT NULL DEFAULT '',
+    "bordercolor" VARCHAR(50) NOT NULL DEFAULT '',
+    "backgroundcolor" VARCHAR(50) NOT NULL DEFAULT '',
+    "minwidth" VARCHAR(50) NOT NULL DEFAULT '',
+    "maxwidth" VARCHAR(50) NOT NULL DEFAULT '',
+    "minheight" VARCHAR(50) NOT NULL DEFAULT '',
+    "maxheight" VARCHAR(50) NOT NULL DEFAULT '',
+    "arrowsize" VARCHAR(50) NOT NULL DEFAULT '',
+    "arrowposition" VARCHAR(50) NOT NULL DEFAULT '',
+    "arrowstyle" INTEGER NOT NULL DEFAULT 0,
+    "disableautopan" BOOLEAN NOT NULL DEFAULT FALSE,
+    "disableanimation" BOOLEAN NOT NULL DEFAULT FALSE,
+    "hideclosebutton" BOOLEAN NOT NULL DEFAULT FALSE,
+    "backgroundclassname" VARCHAR(250) NOT NULL DEFAULT '',
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,723  ERROR       [FAILED] josya_zhgooglemaps_log: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 13:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,723  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_log" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "extension" VARCHAR(250) NOT NULL DEFAULT '',
+    "kind" VARCHAR(250) NOT NULL DEFAULT '',
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "remarks" TEXT NOT NULL,
+    "id_target" INTEGER NOT NULL DEFAULT 0,
+    "id_source" INTEGER NOT NULL DEFAULT 0,
+    "id_find" INTEGER NOT NULL DEFAULT 0,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,762  INFO        [OK] josya_zhgooglemaps_maps
+2026-02-19 12:44:58,771  ERROR       [FAILED] josya_zhgooglemaps_maptypes: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 20:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,771  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_maptypes" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "gettileurl" TEXT NOT NULL,
+    "tilewidth" INTEGER NOT NULL DEFAULT 256,
+    "tileheight" INTEGER NOT NULL DEFAULT 256,
+    "ispng" BOOLEAN NOT NULL DEFAULT TRUE,
+    "minzoom" INTEGER NOT NULL DEFAULT 0,
+    "maxzoom" INTEGER NOT NULL DEFAULT 18,
+    "opacity" VARCHAR(20) NOT NULL DEFAULT '',
+    "opacitymanage" BOOLEAN NOT NULL DEFAULT TRUE,
+    "layertype" BOOLEAN NOT NULL DEFAULT TRUE,
+    "projectionglobal" TEXT NOT NULL,
+    "projectiondefinition" TEXT NOT NULL,
+    "fromlatlngtopoint" TEXT NOT NULL,
+    "frompointtolatlng" TEXT NOT NULL,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,782  ERROR       [FAILED] josya_zhgooglemaps_marker_buffer: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 8:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                    ^
+
+2026-02-19 12:44:58,782  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_marker_buffer" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "latitude" VARCHAR(20) NOT NULL DEFAULT '',
+    "longitude" VARCHAR(20) NOT NULL DEFAULT '',
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "addresstext" TEXT NOT NULL,
+    "icontype" VARCHAR(250) NOT NULL DEFAULT '',
+    "iconofsetx" BOOLEAN NOT NULL DEFAULT FALSE,
+    "iconofsety" BOOLEAN NOT NULL DEFAULT FALSE,
+    "description" TEXT NOT NULL,
+    "descriptionhtml" TEXT NOT NULL,
+    "hrefimage" TEXT NOT NULL,
+    "markergroup" INTEGER NOT NULL DEFAULT 0,
+    "createdbyuser" INTEGER NOT NULL DEFAULT 0,
+    "showuser" BOOLEAN NOT NULL DEFAULT FALSE,
+    "createddate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "showgps" BOOLEAN NOT NULL DEFAULT FALSE,
+    "preparecontent" BOOLEAN NOT NULL DEFAULT FALSE,
+    "markercontent" BOOLEAN NOT NULL DEFAULT FALSE,
+    "status" BOOLEAN NOT NULL DEFAULT FALSE,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,790  ERROR       [FAILED] josya_zhgooglemaps_marker_content: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                    ^
+
+2026-02-19 12:44:58,791  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_marker_content" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,800  ERROR       [FAILED] josya_zhgooglemaps_marker_rates: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 5:     "rating_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:...
+                                                     ^
+
+2026-02-19 12:44:58,800  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_marker_rates" (
+    "id" SERIAL,
+    "markerid" INTEGER NOT NULL DEFAULT 0,
+    "rating_value" REAL NOT NULL DEFAULT 0,
+    "rating_date" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ip" TEXT NOT NULL,
+    "hostname" TEXT NOT NULL,
+    "createdbyuser" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,810  ERROR       [FAILED] josya_zhgooglemaps_markergroups: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 15:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,811  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_markergroups" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "icontype" VARCHAR(250) NOT NULL DEFAULT '',
+    "iconofsetx" BOOLEAN NOT NULL DEFAULT FALSE,
+    "iconofsety" BOOLEAN NOT NULL DEFAULT FALSE,
+    "overridegroupicon" BOOLEAN NOT NULL DEFAULT FALSE,
+    "overridemarkericon" BOOLEAN NOT NULL DEFAULT FALSE,
+    "markermanagerminzoom" INTEGER NOT NULL DEFAULT 0,
+    "markermanagermaxzoom" INTEGER NOT NULL DEFAULT 18,
+    "activeincluster" BOOLEAN NOT NULL DEFAULT FALSE,
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "userorder" INTEGER NOT NULL DEFAULT 0,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,826  ERROR       [FAILED] josya_zhgooglemaps_markers: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 31:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,827  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_markers" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "latitude" VARCHAR(20) NOT NULL DEFAULT '',
+    "longitude" VARCHAR(20) NOT NULL DEFAULT '',
+    "addresstext" TEXT NOT NULL,
+    "mapid" INTEGER NOT NULL DEFAULT 0,
+    "openbaloon" BOOLEAN NOT NULL DEFAULT FALSE,
+    "actionbyclick" BOOLEAN NOT NULL DEFAULT TRUE,
+    "zoombyclick" INTEGER NOT NULL DEFAULT 100,
+    "baloon" BOOLEAN NOT NULL DEFAULT FALSE,
+    "icontype" VARCHAR(250) NOT NULL DEFAULT '',
+    "iconofsetx" BOOLEAN NOT NULL DEFAULT FALSE,
+    "iconofsety" BOOLEAN NOT NULL DEFAULT FALSE,
+    "description" TEXT NOT NULL,
+    "descriptionhtml" TEXT NOT NULL,
+    "descriptionfullhtml" TEXT NOT NULL,
+    "hoverhtml" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "hrefsite" TEXT NOT NULL,
+    "hrefimage" TEXT NOT NULL,
+    "hrefimagethumbnail" TEXT NOT NULL,
+    "hrefsitename" TEXT NOT NULL,
+    "markergroup" INTEGER NOT NULL DEFAULT 0,
+    "markercontent" BOOLEAN NOT NULL DEFAULT FALSE,
+    "contactid" INTEGER NOT NULL DEFAULT 0,
+    "createdbyuser" INTEGER NOT NULL DEFAULT 0,
+    "showcontact" BOOLEAN NOT NULL DEFAULT FALSE,
+    "showuser" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "createddate" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "userprotection" BOOLEAN NOT NULL DEFAULT FALSE,
+    "streetviewstyleid" INTEGER NOT NULL DEFAULT 0,
+    "streetviewinfowin" BOOLEAN NOT NULL DEFAULT FALSE,
+    "streetviewinfowinw" INTEGER NOT NULL DEFAULT 400,
+    "streetviewinfowinh" INTEGER NOT NULL DEFAULT 250,
+    "params" TEXT NOT NULL,
+    "attribute1" TEXT NOT NULL,
+    "attribute2" TEXT NOT NULL,
+    "attribute3" TEXT NOT NULL,
+    "attribute4" TEXT NOT NULL,
+    "attribute5" TEXT NOT NULL,
+    "attribute6" TEXT NOT NULL,
+    "attribute7" TEXT NOT NULL,
+    "attribute8" TEXT NOT NULL,
+    "attribute9" TEXT NOT NULL,
+    "tabid" INTEGER NOT NULL DEFAULT 0,
+    "tab1" TEXT NOT NULL,
+    "tab2" TEXT NOT NULL,
+    "tab3" TEXT NOT NULL,
+    "tab4" TEXT NOT NULL,
+    "tab5" TEXT NOT NULL,
+    "tab6" TEXT NOT NULL,
+    "tab7" TEXT NOT NULL,
+    "tab8" TEXT NOT NULL,
+    "tab9" TEXT NOT NULL,
+    "tab10" TEXT NOT NULL,
+    "tab11" TEXT NOT NULL,
+    "tab12" TEXT NOT NULL,
+    "tab13" TEXT NOT NULL,
+    "tab14" TEXT NOT NULL,
+    "tab15" TEXT NOT NULL,
+    "tab16" TEXT NOT NULL,
+    "tab17" TEXT NOT NULL,
+    "tab18" TEXT NOT NULL,
+    "tab19" TEXT NOT NULL,
+    "tab1title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab2title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab3title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab4title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab5title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab6title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab7title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab8title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab9title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab10title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab11title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab12title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab13title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab14title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab15title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab16title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab17title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab18title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab19title" VARCHAR(250) NOT NULL DEFAULT '',
+    "tab1image" TEXT NOT NULL,
+    "tab2image" TEXT NOT NULL,
+    "tab3image" TEXT NOT NULL,
+    "tab4image" TEXT NOT NULL,
+    "tab5image" TEXT NOT NULL,
+    "tab6image" TEXT NOT NULL,
+    "tab7image" TEXT NOT NULL,
+    "tab8image" TEXT NOT NULL,
+    "tab9image" TEXT NOT NULL,
+    "tab10image" TEXT NOT NULL,
+    "tab11image" TEXT NOT NULL,
+    "tab12image" TEXT NOT NULL,
+    "tab13image" TEXT NOT NULL,
+    "tab14image" TEXT NOT NULL,
+    "tab15image" TEXT NOT NULL,
+    "tab16image" TEXT NOT NULL,
+    "tab17image" TEXT NOT NULL,
+    "tab18image" TEXT NOT NULL,
+    "tab19image" TEXT NOT NULL,
+    "tab_info" BOOLEAN NOT NULL DEFAULT FALSE,
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "rating_value" REAL NOT NULL DEFAULT 0,
+    "rating_count" INTEGER NOT NULL DEFAULT 0,
+    "labelinbackground" BOOLEAN NOT NULL DEFAULT FALSE,
+    "labelanchorx" INTEGER NOT NULL DEFAULT 0,
+    "labelanchory" INTEGER NOT NULL DEFAULT 0,
+    "labelclass" VARCHAR(250) NOT NULL DEFAULT '',
+    "labelcontent" TEXT NOT NULL,
+    "includeinlist" BOOLEAN NOT NULL DEFAULT TRUE,
+    "access" INTEGER NOT NULL DEFAULT 1,
+    "alias" VARCHAR(255) NOT NULL DEFAULT '',
+    "hrefcontact" TEXT NOT NULL,
+    "hrefarticle" TEXT NOT NULL,
+    "hrefdetail" TEXT NOT NULL,
+    "toolbarcontact" BOOLEAN NOT NULL DEFAULT FALSE,
+    "toolbararticle" BOOLEAN NOT NULL DEFAULT FALSE,
+    "toolbardetail" BOOLEAN NOT NULL DEFAULT FALSE,
+    "articleid" INTEGER NOT NULL DEFAULT 0,
+    "attributesdetail" TEXT NOT NULL,
+    "userorder" INTEGER NOT NULL DEFAULT 0,
+    "showgps" BOOLEAN NOT NULL DEFAULT FALSE,
+    "iframearticleclass" VARCHAR(250) NOT NULL DEFAULT '',
+    "gogoogle" BOOLEAN NOT NULL DEFAULT FALSE,
+    "preparecontent" BOOLEAN NOT NULL DEFAULT FALSE,
+    "tag_show" BOOLEAN NOT NULL DEFAULT FALSE,
+    "tag_style" BOOLEAN NOT NULL DEFAULT FALSE,
+    "hrefimagecss" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,838  ERROR       [FAILED] josya_zhgooglemaps_paths: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 19:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,838  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_paths" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "weight" BOOLEAN NOT NULL DEFAULT FALSE,
+    "color" VARCHAR(250) NOT NULL DEFAULT '',
+    "hover_color" VARCHAR(250) NOT NULL DEFAULT '',
+    "opacity" VARCHAR(20) NOT NULL DEFAULT '',
+    "path" TEXT NOT NULL,
+    "kmllayer" TEXT NOT NULL,
+    "mapid" INTEGER NOT NULL DEFAULT 0,
+    "description" TEXT NOT NULL,
+    "descriptionhtml" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "elevation" BOOLEAN NOT NULL DEFAULT FALSE,
+    "showtype" BOOLEAN NOT NULL DEFAULT FALSE,
+    "suppressinfowindows" BOOLEAN NOT NULL DEFAULT FALSE,
+    "geodesic" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "infowincontent" BOOLEAN NOT NULL DEFAULT FALSE,
+    "actionbyclick" BOOLEAN NOT NULL DEFAULT FALSE,
+    "objecttype" BOOLEAN NOT NULL DEFAULT FALSE,
+    "fillcolor" VARCHAR(250) NOT NULL DEFAULT '',
+    "fillopacity" VARCHAR(20) NOT NULL DEFAULT '',
+    "hover_fillcolor" VARCHAR(250) NOT NULL DEFAULT '',
+    "radius" VARCHAR(250) NOT NULL DEFAULT '',
+    "elevationwidth" INTEGER NOT NULL DEFAULT 400,
+    "elevationheight" INTEGER NOT NULL DEFAULT 200,
+    "elevationcount" INTEGER NOT NULL DEFAULT 256,
+    "elevationcountkml" INTEGER NOT NULL DEFAULT 0,
+    "elevationicontype" VARCHAR(250) NOT NULL DEFAULT '',
+    "elevationbaseline" INTEGER NOT NULL DEFAULT 0,
+    "v_min_value" VARCHAR(20) NOT NULL DEFAULT '',
+    "v_max_value" VARCHAR(20) NOT NULL DEFAULT '',
+    "v_baseline_color" VARCHAR(250) NOT NULL DEFAULT '',
+    "v_gridline_color" VARCHAR(250) NOT NULL DEFAULT '',
+    "v_gridline_count" INTEGER NOT NULL DEFAULT 5,
+    "v_minor_gridline_color" VARCHAR(250) NOT NULL DEFAULT '',
+    "v_minor_gridline_count" INTEGER NOT NULL DEFAULT 0,
+    "background_color_stroke" VARCHAR(250) NOT NULL DEFAULT '',
+    "background_color_width" BOOLEAN NOT NULL DEFAULT FALSE,
+    "background_color_fill" VARCHAR(250) NOT NULL DEFAULT '',
+    "markergroup" INTEGER NOT NULL DEFAULT 0,
+    "hoverhtml" TEXT NOT NULL,
+    "hrefsite" TEXT NOT NULL,
+    "hrefsitename" TEXT NOT NULL,
+    "imgurl" TEXT NOT NULL,
+    "imgclickable" BOOLEAN NOT NULL DEFAULT FALSE,
+    "imgbounds" VARCHAR(100) NOT NULL DEFAULT '',
+    "imgopacity" VARCHAR(20) NOT NULL DEFAULT '',
+    "imgopacitymanage" BOOLEAN NOT NULL DEFAULT TRUE,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,848  ERROR       [FAILED] josya_zhgooglemaps_routers: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 26:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                     ^
+
+2026-02-19 12:44:58,849  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_routers" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "providealt" BOOLEAN NOT NULL DEFAULT FALSE,
+    "optimizewaypoints" BOOLEAN NOT NULL DEFAULT FALSE,
+    "avoidhighways" BOOLEAN NOT NULL DEFAULT FALSE,
+    "avoidtolls" BOOLEAN NOT NULL DEFAULT FALSE,
+    "travelmode" BOOLEAN NOT NULL DEFAULT FALSE,
+    "unitsystem" BOOLEAN NOT NULL DEFAULT FALSE,
+    "route" TEXT NOT NULL,
+    "routebymarker" TEXT NOT NULL,
+    "csv_file" TEXT NOT NULL,
+    "csv_sep" VARCHAR(1) NOT NULL DEFAULT '',
+    "route_data" BOOLEAN NOT NULL DEFAULT FALSE,
+    "mapid" INTEGER NOT NULL DEFAULT 0,
+    "description" TEXT NOT NULL,
+    "descriptionhtml" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "showtype" BOOLEAN NOT NULL DEFAULT FALSE,
+    "draggable" BOOLEAN NOT NULL DEFAULT FALSE,
+    "showpanel" BOOLEAN NOT NULL DEFAULT FALSE,
+    "showpaneltotal" BOOLEAN NOT NULL DEFAULT TRUE,
+    "showdescription" BOOLEAN NOT NULL DEFAULT FALSE,
+    "suppressmarkers" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "weight" BOOLEAN NOT NULL,
+    "color" VARCHAR(250) NOT NULL DEFAULT '#4FA4FF',
+    "opacity" VARCHAR(20) NOT NULL DEFAULT '0.7',
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,859  ERROR       [FAILED] josya_zhgooglemaps_streetviews: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                    ^
+
+2026-02-19 12:44:58,859  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_streetviews" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "heading" VARCHAR(10) NOT NULL DEFAULT '0',
+    "pitch" VARCHAR(10) NOT NULL DEFAULT '0',
+    "zoom" INTEGER NOT NULL DEFAULT 1,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,869  ERROR       [FAILED] josya_zhgooglemaps_text_overrides: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                    ^
+
+2026-02-19 12:44:58,870  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_text_overrides" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "ordering" INTEGER NOT NULL DEFAULT 0,
+    "placemark_list_title" TEXT NOT NULL,
+    "placemark_list_button_title" TEXT NOT NULL,
+    "placemark_list_button_hint" TEXT NOT NULL,
+    "panelcontrol_hint" TEXT NOT NULL,
+    "panel_detail_title" TEXT NOT NULL,
+    "panel_placemarklist_title" TEXT NOT NULL,
+    "panel_route_title" TEXT NOT NULL,
+    "panel_group_title" TEXT NOT NULL,
+    "group_list_title" TEXT NOT NULL,
+    "gogoogle_text" TEXT NOT NULL,
+    "placemark_list_search" BOOLEAN NOT NULL DEFAULT FALSE,
+    "placemark_list_mapping_type" BOOLEAN NOT NULL DEFAULT FALSE,
+    "placemark_list_accent" TEXT NOT NULL,
+    "placemark_list_mapping" TEXT NOT NULL,
+    "placemark_list_accent_side" BOOLEAN NOT NULL,
+    "group_list_search" BOOLEAN NOT NULL DEFAULT FALSE,
+    "group_list_mapping_type" BOOLEAN NOT NULL DEFAULT FALSE,
+    "group_list_accent" TEXT NOT NULL,
+    "group_list_mapping" TEXT NOT NULL,
+    "group_list_accent_side" BOOLEAN NOT NULL,
+    "placemark_date_fmt" TEXT NOT NULL,
+    "circle_radius" VARCHAR(250) NOT NULL DEFAULT '',
+    "circle_stroke_weight" BOOLEAN NOT NULL,
+    "circle_stroke_color" VARCHAR(250) NOT NULL DEFAULT '',
+    "circle_stroke_opacity" VARCHAR(20) NOT NULL DEFAULT '',
+    "circle_fill_color" VARCHAR(250) NOT NULL DEFAULT '',
+    "circle_fill_opacity" VARCHAR(20) NOT NULL DEFAULT '',
+    "circle_draggable" BOOLEAN NOT NULL DEFAULT TRUE,
+    "circle_editable" BOOLEAN NOT NULL DEFAULT TRUE,
+    "circle_info" BOOLEAN NOT NULL DEFAULT TRUE,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,880  ERROR       [FAILED] josya_zhgooglemaps_weathertypes: date/time field value out of range: "0000-00-00 00:00:00"
+LINE 7:     "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:0...
+                                                    ^
+
+2026-02-19 12:44:58,880  ERROR       DDL was:
+CREATE TABLE "chips_db_v3"."josya_zhgooglemaps_weathertypes" (
+    "id" SERIAL,
+    "catid" INTEGER NOT NULL DEFAULT 0,
+    "title" VARCHAR(250) NOT NULL DEFAULT '',
+    "description" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT FALSE,
+    "publish_up" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "publish_down" TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+    "clickable" BOOLEAN NOT NULL DEFAULT TRUE,
+    "suppressinfowindows" BOOLEAN NOT NULL DEFAULT FALSE,
+    "labelcolor" BOOLEAN NOT NULL DEFAULT FALSE,
+    "temperatureunits" BOOLEAN NOT NULL DEFAULT TRUE,
+    "windspeedunits" BOOLEAN NOT NULL,
+    "weatherlayer" BOOLEAN NOT NULL DEFAULT TRUE,
+    "cloudlayer" BOOLEAN NOT NULL DEFAULT TRUE,
+    "params" TEXT NOT NULL,
+    PRIMARY KEY ("id")
+)
+2026-02-19 12:44:58,900  INFO        [OK] lfm_sys_workflow_activities
+2026-02-19 12:44:58,909  INFO        [OK] migrations
+2026-02-19 12:44:58,926  INFO        [OK] notifications
+2026-02-19 12:44:58,958  INFO        [OK] old_sys_pm_clients_invoices
+2026-02-19 12:44:58,972  INFO        [OK] old_sys_pm_clients_invoices_167_repeat
+2026-02-19 12:44:58,982  INFO        [OK] sys_alerts_configurations
+2026-02-19 12:44:59,001  INFO        [OK] sys_alerts_configurations_109_repeat
+2026-02-19 12:44:59,016  WARNING     Index warning on sys_alerts_configurations_109_repeat_repeat_recipients_groups: relation "idx_sys_alerts_configurations_109_repeat_repeat_recipients_grou" already exists
+
+2026-02-19 12:44:59,017  INFO        [OK] sys_alerts_configurations_109_repeat_repeat_recipients_groups
+2026-02-19 12:44:59,037  INFO        [OK] sys_alerts_configurations_repeat_recipients_groups
+2026-02-19 12:44:59,049  INFO        [OK] sys_alerts_messages
+2026-02-19 12:44:59,062  INFO        [OK] sys_alerts_messages_items
+2026-02-19 12:44:59,074  INFO        [OK] sys_alerts_messages_notifications
+2026-02-19 12:44:59,095  INFO        [OK] sys_alerts_messages_repeat_properties
+2026-02-19 12:44:59,112  INFO        [OK] sys_alerts_messages_repeat_units
+2026-02-19 12:44:59,130  INFO        [OK] sys_alerts_messages_repeat_zone
+2026-02-19 12:44:59,146  INFO        [OK] sys_alerts_notifications
+2026-02-19 12:44:59,159  INFO        [OK] sys_alerts_sms_logs
+2026-02-19 12:44:59,178  INFO        [OK] sys_api_query_map
+2026-02-19 12:44:59,191  INFO        [OK] sys_assets_categories
+2026-02-19 12:44:59,203  INFO        [OK] sys_assets_depreciation
+2026-02-19 12:44:59,221  INFO        [OK] sys_assets_register
+2026-02-19 12:44:59,236  INFO        [OK] sys_assets_register_repeat_files
+2026-02-19 12:44:59,281  INFO        [OK] sys_crm_leads
+2026-02-19 12:44:59,293  INFO        [OK] sys_crons
+2026-02-19 12:44:59,303  INFO        [OK] sys_crons_entities_management
+2026-02-19 12:44:59,313  INFO        [OK] sys_crons_invoices_tenants_management
+2026-02-19 12:44:59,323  INFO        [OK] sys_crons_track_entities_changes
+2026-02-19 12:44:59,331  INFO        [OK] sys_eg_plot_sample
+2026-02-19 12:44:59,339  INFO        [OK] sys_eg_plot_sample2
+2026-02-19 12:44:59,359  INFO        [OK] sys_eports_returns_batches_configurations
+2026-02-19 12:44:59,371  INFO        [OK] sys_eports_returns_batches_configurations_298_repeat
+2026-02-19 12:44:59,401  WARNING     Index warning on sys_eports_returns_batches_configurations_298_repeat_repeat_prs: relation "idx_sys_eports_returns_batches_configurations_298_repeat_repeat" already exists
+
+2026-02-19 12:44:59,402  INFO        [OK] sys_eports_returns_batches_configurations_298_repeat_repeat_prs
+2026-02-19 12:44:59,425  INFO        [OK] sys_eports_returns_batches_configurations_repeat_prs
+2026-02-19 12:44:59,444  INFO        [OK] sys_fin_audit_queries
+2026-02-19 12:44:59,504  INFO        [OK] sys_fin_audit_queries_repeat_group_id
+2026-02-19 12:44:59,533  INFO        [OK] sys_fin_audit_queries_repeat_notify
+2026-02-19 12:44:59,574  INFO        [OK] sys_fin_auditors_logs
+2026-02-19 12:44:59,599  INFO        [OK] sys_fin_bank_deposits
+2026-02-19 12:44:59,630  INFO        [OK] sys_fin_bank_transfers
+2026-02-19 12:44:59,672  INFO        [OK] sys_fin_billing_management
+2026-02-19 12:44:59,690  INFO        [OK] sys_fin_billing_management_repeat_documents
+2026-02-19 12:44:59,721  INFO        [OK] sys_fin_budgeting
+2026-02-19 12:44:59,738  INFO        [OK] sys_fin_budgeting_153_repeat
+2026-02-19 12:44:59,764  INFO        [OK] sys_fin_cheque_books
+2026-02-19 12:44:59,778  INFO        [OK] sys_fin_cheque_books_261_repeat
+2026-02-19 12:44:59,816  INFO        [OK] sys_fin_client_cheques
+2026-02-19 12:44:59,833  INFO        [OK] sys_fin_client_cheques_262_repeat
+2026-02-19 12:44:59,851  WARNING     Index warning on sys_fin_client_cheques_262_repeat_repeat_voucher_items_id: relation "idx_sys_fin_client_cheques_262_repeat_repeat_voucher_items_id_f" already exists
+
+2026-02-19 12:44:59,851  INFO        [OK] sys_fin_client_cheques_262_repeat_repeat_voucher_items_id
+2026-02-19 12:44:59,869  INFO        [OK] sys_fin_client_cheques_repeat_documents
+2026-02-19 12:44:59,887  INFO        [OK] sys_fin_client_cheques_vouchers
+2026-02-19 12:44:59,910  INFO        [OK] sys_fin_client_cheques_vouchers_repeat_cheques_id
+2026-02-19 12:44:59,930  INFO        [OK] sys_fin_client_cheques_vouchers_repeat_voucher_id
+2026-02-19 12:44:59,950  INFO        [OK] sys_fin_client_remittances
+2026-02-19 12:44:59,962  INFO        [OK] sys_fin_client_remittances_201_repeat
+2026-02-19 12:44:59,971  INFO        [OK] sys_fin_income_transactions
+2026-02-19 12:45:00,002  INFO        [OK] sys_fin_pay_allocations_extracts
+2026-02-19 12:45:00,016  INFO        [OK] sys_fin_pay_allocations_imports
+2026-02-19 12:45:00,027  INFO        [OK] sys_fin_pay_channels
+2026-02-19 12:45:00,077  INFO        [OK] sys_fin_pay_cooperative_bank
+2026-02-19 12:45:00,105  INFO        [OK] sys_fin_pay_daily_extracts
+2026-02-19 12:45:00,148  INFO        [OK] sys_fin_pay_equity_bank
+2026-02-19 12:45:00,180  INFO        [OK] sys_fin_pay_equity_bank_extracts
+2026-02-19 12:45:00,218  INFO        [OK] sys_fin_pay_failed_equity_bank_extracts
+2026-02-19 12:45:00,249  WARNING     Index warning on sys_fin_pay_failed_mpesa_coop_bank_extracts: relation "idx_sys_fin_pay_failed_mpesa_coop_bank_extracts_fb_filter_linke" already exists
+
+2026-02-19 12:45:00,250  WARNING     Index warning on sys_fin_pay_failed_mpesa_coop_bank_extracts: relation "idx_sys_fin_pay_failed_mpesa_coop_bank_extracts_fb_filter_linke" already exists
+
+2026-02-19 12:45:00,258  INFO        [OK] sys_fin_pay_failed_mpesa_coop_bank_extracts
+2026-02-19 12:45:00,297  INFO        [OK] sys_fin_pay_mpesa_coop_bank_extracts
+2026-02-19 12:45:00,337  INFO        [OK] sys_fin_pay_mpesatransactions
+2026-02-19 12:45:00,398  INFO        [OK] sys_fin_payment_vouchers
+2026-02-19 12:45:00,413  INFO        [OK] sys_fin_payment_vouchers_264_repeat
+2026-02-19 12:45:00,437  INFO        [OK] sys_fin_payment_vouchers_264_repeat_repeat_property_id
+2026-02-19 12:45:00,452  INFO        [OK] sys_fin_payment_vouchers_repeat_documents
+2026-02-19 12:45:00,457  INFO        [OK] sys_fin_payment_vouchers_types
+2026-02-19 12:45:00,481  INFO        [OK] sys_fin_payments_eft
+2026-02-19 12:45:00,515  INFO        [OK] sys_fin_payments_requisitions
+2026-02-19 12:45:00,524  INFO        [OK] sys_fin_payments_requisitions_types
+2026-02-19 12:45:00,534  INFO        [OK] sys_fin_payments_tenants_sources_types
+2026-02-19 12:45:00,561  INFO        [OK] sys_fin_petty_cash_ledger
+2026-02-19 12:45:00,577  INFO        [OK] sys_fin_petty_cash_ledger_155_repeat
+2026-02-19 12:45:00,591  INFO        [OK] sys_fin_reccurent_client_remittances
+2026-02-19 12:45:00,605  INFO        [OK] sys_fin_reimbursement_requests
+2026-02-19 12:45:00,616  INFO        [OK] sys_fin_reimbursement_requests_182_repeat
+2026-02-19 12:45:00,663  INFO        [OK] sys_fin_tenants_charges
+2026-02-19 12:45:00,675  INFO        [OK] sys_gis_tracking
+2026-02-19 12:45:00,690  INFO        [OK] sys_gl_acc_classes
+2026-02-19 12:45:00,700  INFO        [OK] sys_gl_acc_groups
+2026-02-19 12:45:00,711  INFO        [OK] sys_gl_acc_trans_types
+2026-02-19 12:45:00,721  INFO        [OK] sys_gl_accounts_categories
+2026-02-19 12:45:00,732  INFO        [OK] sys_gl_accounts_entries
+2026-02-19 12:45:00,752  INFO        [OK] sys_gl_accounts_setup
+2026-02-19 12:45:00,786  INFO        [OK] sys_gl_chart_accounts_master
+2026-02-19 12:45:00,797  INFO        [OK] sys_gl_chart_financial_statements
+2026-02-19 12:45:00,808  INFO        [OK] sys_gl_chart_groups
+2026-02-19 12:45:00,819  INFO        [OK] sys_gl_chart_sub_groups
+2026-02-19 12:45:00,839  INFO        [OK] sys_gl_ledgers_transactions
+2026-02-19 12:45:00,850  INFO        [OK] sys_gl_periods
+2026-02-19 12:45:00,864  INFO        [OK] sys_gl_taxes
+2026-02-19 12:45:00,891  INFO        [OK] sys_gl_transactions
+2026-02-19 12:45:00,907  INFO        [OK] sys_gl_transactions_91_repeat
+2026-02-19 12:45:00,924  INFO        [OK] sys_helb_deductions
+2026-02-19 12:45:00,937  INFO        [OK] sys_helb_deductions_250_repeat
+2026-02-19 12:45:00,953  INFO        [OK] sys_hr_communication_templates
+2026-02-19 12:45:00,975  INFO        [OK] sys_hr_employee_amortized_deductions
+2026-02-19 12:45:00,990  INFO        [OK] sys_hr_employee_amortized_deductions_252_repeat
+2026-02-19 12:45:01,001  INFO        [OK] sys_hr_employee_amortized_deductions_types
+2026-02-19 12:45:01,026  INFO        [OK] sys_hr_employee_contracts
+2026-02-19 12:45:01,043  INFO        [OK] sys_hr_employee_contracts_279_repeat
+2026-02-19 12:45:01,060  INFO        [OK] sys_hr_employees_attendance
+2026-02-19 12:45:01,075  INFO        [OK] sys_hr_employees_attendance_255_repeat
+2026-02-19 12:45:01,087  INFO        [OK] sys_hr_institution_levels
+2026-02-19 12:45:01,098  INFO        [OK] sys_hr_institutions
+2026-02-19 12:45:01,108  INFO        [OK] sys_hr_kra_settings
+2026-02-19 12:45:01,121  INFO        [OK] sys_hr_kra_settings_150_repeat
+2026-02-19 12:45:01,135  INFO        [OK] sys_hr_leave_adjustments
+2026-02-19 12:45:01,150  INFO        [OK] sys_hr_leave_calendar
+2026-02-19 12:45:01,183  INFO        [OK] sys_hr_leave_requests
+2026-02-19 12:45:01,199  INFO        [OK] sys_hr_leave_requests_234_repeat
+2026-02-19 12:45:01,214  INFO        [OK] sys_hr_leave_types
+2026-02-19 12:45:01,226  INFO        [OK] sys_hr_nhif_rates
+2026-02-19 12:45:01,239  INFO        [OK] sys_hr_nhif_rates_236_repeat
+2026-02-19 12:45:01,254  INFO        [OK] sys_hr_nssf_rates
+2026-02-19 12:45:01,266  INFO        [OK] sys_hr_payroll_calendar
+2026-02-19 12:45:01,290  INFO        [OK] sys_hr_payroll_calendar_repeat_position_id
+2026-02-19 12:45:01,306  INFO        [OK] sys_hr_payroll_deductions_register
+2026-02-19 12:45:01,327  INFO        [OK] sys_hr_payroll_elements
+2026-02-19 12:45:01,346  INFO        [OK] sys_hr_payroll_elements_repeat_staff_positions_id
+2026-02-19 12:45:01,362  INFO        [OK] sys_hr_payroll_periods
+2026-02-19 12:45:01,397  INFO        [OK] sys_hr_payroll_salary_register
+2026-02-19 12:45:01,414  INFO        [OK] sys_hr_payroll_salary_register_118_repeat
+2026-02-19 12:45:01,427  INFO        [OK] sys_hr_payroll_salary_register_238_repeat
+2026-02-19 12:45:01,461  INFO        [OK] sys_hr_payroll_summary
+2026-02-19 12:45:01,472  INFO        [OK] sys_hr_public_holidays
+2026-02-19 12:45:01,487  INFO        [OK] sys_hr_staff_clock_in_clock_out
+2026-02-19 12:45:01,509  INFO        [OK] sys_hr_staff_discipline_tracker
+2026-02-19 12:45:01,524  INFO        [OK] sys_hr_staff_discipline_tracker_repeat_documents
+2026-02-19 12:45:01,546  INFO        [OK] sys_hr_staff_vacancies
+2026-02-19 12:45:01,558  INFO        [OK] sys_hr_working_days
+2026-02-19 12:45:01,573  INFO        [OK] sys_pm_auction_tasks
+2026-02-19 12:45:01,603  INFO        [OK] sys_pm_caretakers
+2026-02-19 12:45:01,616  INFO        [OK] sys_pm_caretakers_165_repeat
+2026-02-19 12:45:01,637  INFO        [OK] sys_pm_caretakers_repeat_properties_ids
+2026-02-19 12:45:01,654  INFO        [OK] sys_pm_caretakers_repeat_property_id
+2026-02-19 12:45:01,675  INFO        [OK] sys_pm_caretakers_repeat_zones_id
+2026-02-19 12:45:01,736  INFO        [OK] sys_pm_clients
+2026-02-19 12:45:01,749  INFO        [OK] sys_pm_clients_17_repeat
+2026-02-19 12:45:01,765  INFO        [OK] sys_pm_clients_19_repeat
+2026-02-19 12:45:01,781  INFO        [OK] sys_pm_clients_65_repeat
+2026-02-19 12:45:01,796  INFO        [OK] sys_pm_clients_66_repeat
+2026-02-19 12:45:01,833  INFO        [OK] sys_pm_clients_advances_requisitions
+2026-02-19 12:45:01,845  INFO        [OK] sys_pm_clients_advances_requisitions_46_repeat
+2026-02-19 12:45:01,861  INFO        [OK] sys_pm_clients_advances_requisitions_89_repeat
+2026-02-19 12:45:01,877  WARNING     Index warning on sys_pm_clients_advances_requisitions_repeat_property_id: relation "idx_sys_pm_clients_advances_requisitions_repeat_property_id_fb_" already exists
+
+2026-02-19 12:45:01,877  INFO        [OK] sys_pm_clients_advances_requisitions_repeat_property_id
+2026-02-19 12:45:01,910  INFO        [OK] sys_pm_clients_disbursements
+2026-02-19 12:45:01,923  INFO        [OK] sys_pm_clients_disbursements_44_repeat
+2026-02-19 12:45:01,932  INFO        [OK] sys_pm_clients_disbursements_types
+2026-02-19 12:45:01,966  INFO        [OK] sys_pm_clients_invoices
+2026-02-19 12:45:01,991  INFO        [OK] sys_pm_clients_periods_closures
+2026-02-19 12:45:02,009  INFO        [OK] sys_pm_clients_repeat_documents
+2026-02-19 12:45:02,079  INFO        [OK] sys_pm_clients_returns
+2026-02-19 12:45:02,091  INFO        [OK] sys_pm_clients_returns_54_repeat
+2026-02-19 12:45:02,146  INFO        [OK] sys_pm_clients_returns_batches
+2026-02-19 12:45:02,167  INFO        [OK] sys_pm_clients_returns_master
+2026-02-19 12:45:02,188  INFO        [OK] sys_pm_clients_returns_payments_distributions
+2026-02-19 12:45:02,200  INFO        [OK] sys_pm_clients_returns_payments_distributions_204_repeat
+2026-02-19 12:45:02,212  INFO        [OK] sys_pm_clients_returns_payments_distributions_242_repeat
+2026-02-19 12:45:02,234  INFO        [OK] sys_pm_clients_returns_payments_units_breakdown
+2026-02-19 12:45:02,250  INFO        [OK] sys_pm_clients_returns_payments_units_breakdown_240_repeat
+2026-02-19 12:45:02,265  INFO        [OK] sys_pm_clients_returns_payments_units_breakdown_241_repeat
+2026-02-19 12:45:02,275  INFO        [OK] sys_pm_clients_returns_types
+2026-02-19 12:45:02,354  INFO        [OK] sys_pm_debtors_invoices
+2026-02-19 12:45:02,367  INFO        [OK] sys_pm_debtors_invoices_293_repeat
+2026-02-19 12:45:02,384  INFO        [OK] sys_pm_debtors_invoices_41_repeat
+2026-02-19 12:45:02,402  INFO        [OK] sys_pm_debtors_invoices_60_repeat
+2026-02-19 12:45:02,448  INFO        [OK] sys_pm_debtors_invoices_clients
+2026-02-19 12:45:02,555  INFO        [OK] sys_pm_debtors_invoices_defaulters
+2026-02-19 12:45:02,584  INFO        [OK] sys_pm_debtors_invoices_imports
+2026-02-19 12:45:02,634  INFO        [OK] sys_pm_deposits
+2026-02-19 12:45:02,677  INFO        [OK] sys_pm_deposits_requests
+2026-02-19 12:45:02,691  INFO        [OK] sys_pm_deposits_requests_156_repeat
+2026-02-19 12:45:02,705  INFO        [OK] sys_pm_deposits_requests_157_repeat
+2026-02-19 12:45:02,718  INFO        [OK] sys_pm_deposits_requests_31_repeat
+2026-02-19 12:45:02,728  INFO        [OK] sys_pm_entities_history
+2026-02-19 12:45:02,756  INFO        [OK] sys_pm_evictions
+2026-02-19 12:45:02,779  WARNING     Index warning on sys_pm_generated_invoice_months: relation "idx_sys_pm_generated_invoice_months_sys_pm_generated_invoice_mo" already exists
+
+2026-02-19 12:45:02,780  INFO        [OK] sys_pm_generated_invoice_months
+2026-02-19 12:45:02,818  INFO        [OK] sys_pm_invoice_status_uploads
+2026-02-19 12:45:02,861  INFO        [OK] sys_pm_landlord_accounts_transaction
+2026-02-19 12:45:02,904  INFO        [OK] sys_pm_lease_agreements
+2026-02-19 12:45:02,925  INFO        [OK] sys_pm_lease_agreements_27_repeat
+2026-02-19 12:45:02,960  INFO        [OK] sys_pm_lease_agreements_archives
+2026-02-19 12:45:02,974  INFO        [OK] sys_pm_lease_agreements_archives_211_repeat
+2026-02-19 12:45:02,992  INFO        [OK] sys_pm_lease_agreements_archives_repeat_documents
+2026-02-19 12:45:03,013  INFO        [OK] sys_pm_lease_agreements_pairing
+2026-02-19 12:45:03,028  INFO        [OK] sys_pm_lease_agreements_pairing_313_repeat
+2026-02-19 12:45:03,044  INFO        [OK] sys_pm_lease_agreements_repeat_documents
+2026-02-19 12:45:03,086  INFO        [OK] sys_pm_movement_requests
+2026-02-19 12:45:03,102  INFO        [OK] sys_pm_movement_requests_190_repeat
+2026-02-19 12:45:03,118  INFO        [OK] sys_pm_movement_requests_35_repeat
+2026-02-19 12:45:03,150  INFO        [OK] sys_pm_paid_owner
+2026-02-19 12:45:03,163  INFO        [OK] sys_pm_paid_owner_52_repeat
+2026-02-19 12:45:03,209  INFO        [OK] sys_pm_properties
+2026-02-19 12:45:03,223  INFO        [OK] sys_pm_properties_184_repeat
+2026-02-19 12:45:03,240  INFO        [OK] sys_pm_properties_184_repeat_repeat_services
+2026-02-19 12:45:03,258  INFO        [OK] sys_pm_properties_185_repeat
+2026-02-19 12:45:03,280  INFO        [OK] sys_pm_properties_attendance_register
+2026-02-19 12:45:03,290  INFO        [OK] sys_pm_properties_elements
+2026-02-19 12:45:03,316  INFO        [OK] sys_pm_properties_inspections
+2026-02-19 12:45:03,331  INFO        [OK] sys_pm_properties_inspections_39_repeat
+2026-02-19 12:45:03,346  INFO        [OK] sys_pm_properties_inspections_39_repeat_repeat_unit_photos
+2026-02-19 12:45:03,371  INFO        [OK] sys_pm_properties_ledger
+2026-02-19 12:45:03,383  INFO        [OK] sys_pm_properties_repair_types
+2026-02-19 12:45:03,403  INFO        [OK] sys_pm_properties_repair_types_repeat_element_id
+2026-02-19 12:45:03,433  INFO        [OK] sys_pm_properties_repairs_requests
+2026-02-19 12:45:03,448  INFO        [OK] sys_pm_properties_repairs_requests_49_repeat
+2026-02-19 12:45:03,461  INFO        [OK] sys_pm_properties_repairs_requests_50_repeat
+2026-02-19 12:45:03,481  INFO        [OK] sys_pm_properties_repeat_photos_and_documents
+2026-02-19 12:45:03,499  INFO        [OK] sys_pm_properties_tranfer_cloning
+2026-02-19 12:45:03,530  INFO        [OK] sys_pm_properties_withdrawal_requests
+2026-02-19 12:45:03,543  INFO        [OK] sys_pm_properties_withdrawal_requests_56_repeat
+2026-02-19 12:45:03,588  INFO        [OK] sys_pm_recoveries
+2026-02-19 12:45:03,606  INFO        [OK] sys_pm_service_agreements
+2026-02-19 12:45:03,620  INFO        [OK] sys_pm_service_agreements_186_repeat
+2026-02-19 12:45:03,635  INFO        [OK] sys_pm_service_agreements_24_repeat
+2026-02-19 12:45:03,648  INFO        [OK] sys_pm_service_agreements_282_repeat
+2026-02-19 12:45:03,664  WARNING     Index warning on sys_pm_service_agreements_282_repeat_repeat_return_items: relation "idx_sys_pm_service_agreements_282_repeat_repeat_return_items_fb" already exists
+
+2026-02-19 12:45:03,664  INFO        [OK] sys_pm_service_agreements_282_repeat_repeat_return_items
+2026-02-19 12:45:03,677  INFO        [OK] sys_pm_service_agreements_296_repeat
+2026-02-19 12:45:03,692  INFO        [OK] sys_pm_service_agreements_repeat_sla_documents
+2026-02-19 12:45:03,725  INFO        [OK] sys_pm_tenancy_closure
+2026-02-19 12:45:03,741  INFO        [OK] sys_pm_tenancy_closure_repeat_closure_document
+2026-02-19 12:45:03,776  INFO        [OK] sys_pm_tenants_accounts_transactions
+2026-02-19 12:45:03,808  INFO        [OK] sys_pm_tenants_blacklist
+2026-02-19 12:45:03,820  INFO        [OK] sys_pm_tenants_blacklist_reasons
+2026-02-19 12:45:03,847  INFO        [OK] sys_pm_tenants_invoices
+2026-02-19 12:45:03,862  INFO        [OK] sys_pm_tenants_invoices_41_repeat
+2026-02-19 12:45:03,923  INFO        [OK] sys_pm_tenants_payments
+2026-02-19 12:45:03,944  INFO        [OK] sys_pm_tenants_payments_87_repeat
+2026-02-19 12:45:03,983  INFO        [OK] sys_pm_tenants_payments_anomalies
+2026-02-19 12:45:04,009  INFO        [OK] sys_pm_tenants_payments_anomalies_58_repeat
+2026-02-19 12:45:04,107  INFO        [OK] sys_pm_tenants_payments_imports
+2026-02-19 12:45:04,156  INFO        [OK] sys_pm_tenants_payments_invalidations
+2026-02-19 12:45:04,171  INFO        [OK] sys_pm_tenants_payments_invalidations_repeat_documents
+2026-02-19 12:45:04,200  INFO        [OK] sys_pm_tenants_payments_invoices
+2026-02-19 12:45:04,244  INFO        [OK] sys_pm_tenants_payments_rerouting
+2026-02-19 12:45:04,277  INFO        [OK] sys_pm_tenants_prepayments
+2026-02-19 12:45:04,289  INFO        [OK] sys_pm_tenants_prepayments_222_repeat
+2026-02-19 12:45:04,337  INFO        [OK] sys_pm_unit_status_uploads
+2026-02-19 12:45:04,391  INFO        [OK] sys_pm_units
+2026-02-19 12:45:04,413  INFO        [OK] sys_pm_units_ledger
+2026-02-19 12:45:04,422  INFO        [OK] sys_pm_units_meter_readings
+2026-02-19 12:45:04,437  INFO        [OK] sys_pm_units_repeat_unit_uploads
+2026-02-19 12:45:04,474  INFO        [OK] sys_pm_vacation_requests
+2026-02-19 12:45:04,491  INFO        [OK] sys_pm_vacation_requests_33_repeat
+2026-02-19 12:45:04,513  INFO        [OK] sys_pm_zones_assignments
+2026-02-19 12:45:04,532  INFO        [OK] sys_pm_zones_assignments_37_repeat
+2026-02-19 12:45:04,549  INFO        [OK] sys_pm_zones_assignments_repeat_fo_ids
+2026-02-19 12:45:04,567  INFO        [OK] sys_pm_zones_assignments_repeat_properties_ids
+2026-02-19 12:45:04,584  INFO        [OK] sys_pm_zones_assignments_repeat_zone_id
+2026-02-19 12:45:04,593  INFO        [OK] sys_pm_zones_assignments_types
+2026-02-19 12:45:04,606  INFO        [OK] sys_pr_activities_calendar_configurations
+2026-02-19 12:45:04,624  WARNING     Index warning on sys_pr_activities_calendar_configurations_repeat_groups_id: relation "idx_sys_pr_activities_calendar_configurations_repeat_groups_id_" already exists
+
+2026-02-19 12:45:04,624  INFO        [OK] sys_pr_activities_calendar_configurations_repeat_groups_id
+2026-02-19 12:45:04,642  WARNING     Index warning on sys_pr_activities_calendar_configurations_repeat_persons: relation "idx_sys_pr_activities_calendar_configurations_repeat_persons_fb" already exists
+
+2026-02-19 12:45:04,642  INFO        [OK] sys_pr_activities_calendar_configurations_repeat_persons
+2026-02-19 12:45:04,658  WARNING     Index warning on sys_pr_activities_calendar_configurations_repeat_property_id: relation "idx_sys_pr_activities_calendar_configurations_repeat_property_i" already exists
+
+2026-02-19 12:45:04,658  INFO        [OK] sys_pr_activities_calendar_configurations_repeat_property_id
+2026-02-19 12:45:04,670  INFO        [OK] sys_pr_address_book
+2026-02-19 12:45:04,691  INFO        [OK] sys_pr_complaints
+2026-02-19 12:45:04,708  INFO        [OK] sys_pr_complaints_repeat_documents
+2026-02-19 12:45:04,717  INFO        [OK] sys_pr_complaints_types
+2026-02-19 12:45:04,734  WARNING     Index warning on sys_pr_complaints_types_repeat_responsible_department_id: relation "idx_sys_pr_complaints_types_repeat_responsible_department_id_fb" already exists
+
+2026-02-19 12:45:04,734  INFO        [OK] sys_pr_complaints_types_repeat_responsible_department_id
+2026-02-19 12:45:04,749  INFO        [OK] sys_pr_documents_library
+2026-02-19 12:45:04,766  INFO        [OK] sys_pr_documents_library_repeat_files
+2026-02-19 12:45:04,783  INFO        [OK] sys_pr_inquiries
+2026-02-19 12:45:04,797  INFO        [OK] sys_pr_meetings
+2026-02-19 12:45:04,816  INFO        [OK] sys_pr_meetings_repeat_documents
+2026-02-19 12:45:04,877  INFO        [OK] sys_pr_tasks_management
+2026-02-19 12:45:04,891  INFO        [OK] sys_pr_tasks_management_124_repeat
+2026-02-19 12:45:04,913  INFO        [OK] sys_pr_tasks_management_repeat_client_id
+2026-02-19 12:45:04,934  INFO        [OK] sys_pr_tasks_management_repeat_property_id
+2026-02-19 12:45:04,955  INFO        [OK] sys_pr_tasks_management_repeat_responsible_persons
+2026-02-19 12:45:04,975  INFO        [OK] sys_pr_tasks_management_repeat_tenant_id
+2026-02-19 12:45:04,996  INFO        [OK] sys_pr_tasks_management_repeat_user_group_id
+2026-02-19 12:45:05,016  INFO        [OK] sys_pr_tasks_management_repeat_zone_id
+2026-02-19 12:45:05,026  INFO        [OK] sys_pr_tasks_types
+2026-02-19 12:45:05,052  INFO        [OK] sys_proc_requisitions
+2026-02-19 12:45:05,064  INFO        [OK] sys_proc_requisitions_138_repeat
+2026-02-19 12:45:05,087  INFO        [OK] sys_proc_requisitions_repeat_department_id
+2026-02-19 12:45:05,145  INFO        [OK] sys_proc_supplier_invoices
+2026-02-19 12:45:05,173  INFO        [OK] sys_proc_supplier_invoices_142_repeat
+2026-02-19 12:45:05,203  WARNING     Index warning on sys_proc_supplier_invoices_142_repeat_repeat_tax_types_id: relation "idx_sys_proc_supplier_invoices_142_repeat_repeat_tax_types_id_f" already exists
+
+2026-02-19 12:45:05,203  INFO        [OK] sys_proc_supplier_invoices_142_repeat_repeat_tax_types_id
+2026-02-19 12:45:05,221  INFO        [OK] sys_proc_supplier_orders
+2026-02-19 12:45:05,238  INFO        [OK] sys_proc_supplier_orders_140_repeat
+2026-02-19 12:45:05,266  INFO        [OK] sys_proc_suppliers_accounts_transactions
+2026-02-19 12:45:05,280  INFO        [OK] sys_proc_suppliers_contracts
+2026-02-19 12:45:05,287  INFO        [OK] sys_properties_team_types
+2026-02-19 12:45:05,297  INFO        [OK] sys_queued_tasks_invoices_changes
+2026-02-19 12:45:05,311  INFO        [OK] sys_queued_tasks_returns
+2026-02-19 12:45:05,321  INFO        [OK] sys_queued_tasks_units_changes
+2026-02-19 12:45:05,365  INFO        [OK] sys_reports_landlord_accounts
+2026-02-19 12:45:05,378  INFO        [OK] sys_reports_mobile_login_logs
+2026-02-19 12:45:05,403  INFO        [OK] sys_reports_returns_anomalies
+2026-02-19 12:45:05,438  INFO        [OK] sys_reports_returns_approval
+2026-02-19 12:45:05,460  INFO        [OK] sys_reports_returns_arrears
+2026-02-19 12:45:05,496  INFO        [OK] sys_reports_returns_batches
+2026-02-19 12:45:05,560  INFO        [OK] sys_reports_returns_batches_276_repeat
+2026-02-19 12:45:05,575  INFO        [OK] sys_reports_returns_batches_280_repeat
+2026-02-19 12:45:05,592  INFO        [OK] sys_reports_returns_batches_283_repeat
+2026-02-19 12:45:05,613  INFO        [OK] sys_reports_returns_batches_repeat_featured_properties
+2026-02-19 12:45:05,636  INFO        [OK] sys_reports_returns_batches_repeat_properties_id
+2026-02-19 12:45:05,656  INFO        [OK] sys_reports_returns_batches_repeat_property_report_id
+2026-02-19 12:45:05,678  INFO        [OK] sys_reports_returns_batches_repeat_recoveries_id
+2026-02-19 12:45:05,699  INFO        [OK] sys_reports_returns_batches_repeat_returns_id
+2026-02-19 12:45:05,719  INFO        [OK] sys_reports_returns_batches_repeat_transaction_id
+2026-02-19 12:45:05,735  INFO        [OK] sys_reports_returns_charges
+2026-02-19 12:45:05,753  INFO        [OK] sys_reports_returns_clients_manual_ledgers
+2026-02-19 12:45:05,773  INFO        [OK] sys_reports_returns_items
+2026-02-19 12:45:05,790  INFO        [OK] sys_reports_returns_master
+2026-02-19 12:45:05,813  INFO        [OK] sys_reports_returns_prepayments
+2026-02-19 12:45:05,860  INFO        [OK] sys_reports_returns_properties
+2026-02-19 12:45:05,877  INFO        [OK] sys_reports_returns_recoveries
+2026-02-19 12:45:05,883  INFO        [OK] sys_reports_returns_recoveries_temp
+2026-02-19 12:45:05,905  INFO        [OK] sys_reports_returns_units
+2026-02-19 12:45:05,944  INFO        [OK] sys_reports_stats_occupancy
+2026-02-19 12:45:05,974  INFO        [OK] sys_reports_stats_returns_workflow
+2026-02-19 12:45:06,020  INFO        [OK] sys_reports_stats_units
+2026-02-19 12:45:06,029  INFO        [OK] sys_reports_user_browser_activities
+2026-02-19 12:45:06,056  INFO        [OK] sys_set_audit_trail
+2026-02-19 12:45:06,065  INFO        [OK] sys_set_audit_types
+2026-02-19 12:45:06,074  INFO        [OK] sys_set_bank_accounts
+2026-02-19 12:45:06,083  INFO        [OK] sys_set_bank_accounts_213_repeat
+2026-02-19 12:45:06,096  INFO        [OK] sys_set_banks
+2026-02-19 12:45:06,114  INFO        [OK] sys_set_banks_branches
+2026-02-19 12:45:06,127  INFO        [OK] sys_set_clients_dependent_charges
+2026-02-19 12:45:06,137  INFO        [OK] sys_set_constituencies
+2026-02-19 12:45:06,146  INFO        [OK] sys_set_counties
+2026-02-19 12:45:06,156  INFO        [OK] sys_set_countries
+2026-02-19 12:45:06,165  INFO        [OK] sys_set_data_types
+2026-02-19 12:45:06,176  INFO        [OK] sys_set_departments
+2026-02-19 12:45:06,192  INFO        [OK] sys_set_entities_permissions
+2026-02-19 12:45:06,205  INFO        [OK] sys_set_entities_status_types
+2026-02-19 12:45:06,217  INFO        [OK] sys_set_entities_types
+2026-02-19 12:45:06,234  INFO        [OK] sys_set_estates
+2026-02-19 12:45:06,243  INFO        [OK] sys_set_frequency_cycles
+2026-02-19 12:45:06,252  INFO        [OK] sys_set_gender_types
+2026-02-19 12:45:06,264  INFO        [OK] sys_set_global_settings
+2026-02-19 12:45:06,282  INFO        [OK] sys_set_invoiceable_items
+2026-02-19 12:45:06,292  INFO        [OK] sys_set_invoiceable_items_cycles
+2026-02-19 12:45:06,313  INFO        [OK] sys_set_menus_access_permissions
+2026-02-19 12:45:06,330  INFO        [OK] sys_set_menus_access_permissions_repeat_groups
+2026-02-19 12:45:06,350  INFO        [OK] sys_set_menus_access_permissions_repeat_members_id
+2026-02-19 12:45:06,367  INFO        [OK] sys_set_menus_access_permissions_repeat_menu_items
+2026-02-19 12:45:06,383  WARNING     Index warning on sys_set_menus_access_permissions_repeat_menu_items_field: relation "idx_sys_set_menus_access_permissions_repeat_menu_items_field_fb" already exists
+
+2026-02-19 12:45:06,383  INFO        [OK] sys_set_menus_access_permissions_repeat_menu_items_field
+2026-02-19 12:45:06,392  INFO        [OK] sys_set_onboarding
+2026-02-19 12:45:06,401  INFO        [OK] sys_set_payments_methods
+2026-02-19 12:45:06,412  INFO        [OK] sys_set_predefined_remarks
+2026-02-19 12:45:06,435  INFO        [OK] sys_set_predefined_remarks_repeat_groups_id
+2026-02-19 12:45:06,456  INFO        [OK] sys_set_providers
+2026-02-19 12:45:06,471  INFO        [OK] sys_set_providers_repeat_files
+2026-02-19 12:45:06,490  INFO        [OK] sys_set_providers_repeat_services_id
+2026-02-19 12:45:06,510  INFO        [OK] sys_set_providers_repeat_zone_areas
+2026-02-19 12:45:06,530  INFO        [OK] sys_set_providers_repeat_zone_id
+2026-02-19 12:45:06,538  INFO        [OK] sys_set_returns_anomaly_types
+2026-02-19 12:45:06,547  INFO        [OK] sys_set_sections
+2026-02-19 12:45:06,565  INFO        [OK] sys_set_sections_repeat_section_head_staff_id
+2026-02-19 12:45:06,583  INFO        [OK] sys_set_sections_repeat_supervisory_staff_id
+2026-02-19 12:45:06,604  INFO        [OK] sys_set_staff_positions
+2026-02-19 12:45:06,619  INFO        [OK] sys_set_staff_positions_115_repeat
+2026-02-19 12:45:06,638  INFO        [OK] sys_set_system_users
+2026-02-19 12:45:06,659  INFO        [OK] sys_set_transactions_types
+2026-02-19 12:45:06,670  INFO        [OK] sys_set_transactions_types_categories
+2026-02-19 12:45:06,679  INFO        [OK] sys_set_transport_routes
+2026-02-19 12:45:06,689  INFO        [OK] sys_set_unit_status_types
+2026-02-19 12:45:06,702  INFO        [OK] sys_set_wards
+2026-02-19 12:45:06,711  INFO        [OK] sys_set_workflow_reasons
+2026-02-19 12:45:06,727  INFO        [OK] sys_set_workflow_settings
+2026-02-19 12:45:06,744  INFO        [OK] sys_set_workflow_settings_63_repeat
+2026-02-19 12:45:06,754  INFO        [OK] sys_set_workflow_statuses
+2026-02-19 12:45:06,766  INFO        [OK] sys_set_zone_areas
+2026-02-19 12:45:06,775  INFO        [OK] sys_set_zones
+2026-02-19 12:45:06,793  INFO        [OK] sys_set_zones_repeat_estates_id
+2026-02-19 12:45:06,857  INFO        [OK] sys_staff
+2026-02-19 12:45:06,873  INFO        [OK] sys_staff_207_repeat
+2026-02-19 12:45:06,887  INFO        [OK] sys_staff_207_repeat_repeat_documents
+2026-02-19 12:45:06,901  INFO        [OK] sys_staff_209_repeat
+2026-02-19 12:45:06,918  INFO        [OK] sys_staff_209_repeat_repeat_documents
+2026-02-19 12:45:06,936  INFO        [OK] sys_staff_232_repeat
+2026-02-19 12:45:06,955  INFO        [OK] sys_tools_bulk_data_import
+2026-02-19 12:45:06,964  INFO        [OK] sys_units_topology
+2026-02-19 12:45:06,975  INFO        [OK] sys_user_pass_logs
+2026-02-19 12:45:06,986  INFO        [OK] sys_util_token_requests
+2026-02-19 12:45:07,020  INFO        [OK] sys_workflow_activities
+2026-02-19 12:45:07,031  INFO        [OK] sys_workflow_activities_300_repeat
+2026-02-19 12:45:07,047  INFO        [OK] um_tax_bands
+2026-02-19 12:45:07,074  INFO        [OK] zimport_sys_reports_returns_properties
+2026-02-19 12:45:07,084  INFO        [OK] zmigra_chbank
+2026-02-19 12:45:07,093  INFO        [OK] zmigra_chbbra
+2026-02-19 12:45:07,107  INFO        [OK] zmigra_chblocks
+2026-02-19 12:45:07,122  INFO        [OK] zmigra_chbunits
+2026-02-19 12:45:07,135  INFO        [OK] zmigra_chjvd
+2026-02-19 12:45:07,154  INFO        [OK] zmigra_chlrds
+2026-02-19 12:45:07,164  INFO        [OK] zmigra_chlrh
+2026-02-19 12:45:07,178  INFO        [OK] zmigra_chrhms
+2026-02-19 12:45:07,192  INFO        [OK] zmigra_chtacc
+2026-02-19 12:45:07,207  INFO        [OK] zmigra_chtens
+2026-02-19 12:45:07,222  INFO        [OK] zmigra_chtntrs
+2026-02-19 12:45:07,231  INFO        [OK] zmigra_chtntrs_invoice_settings1
+2026-02-19 12:45:07,247  INFO        [OK] zmigra_chtpays
+2026-02-19 12:45:07,258  INFO        [OK] zmigra_promas_chips_returns_final_net
+2026-02-19 12:45:07,273  INFO        [OK] zmigra_promas_chips_returns_net
+2026-02-19 12:45:07,290  INFO        [OK] zmigra_promas_returns_invoices
+2026-02-19 12:45:07,303  INFO        [OK] zmigra_promas_returns_net
+2026-02-19 12:45:07,319  INFO        [OK] zmigra_promas_returns_recoveries
+2026-02-19 12:45:07,328  INFO      Connections closed
+2026-02-19 12:49:07,545  INFO      Starting MySQL -> PostgreSQL schema migration
+2026-02-19 12:49:07,718  INFO      Connected to MySQL: chips_2
+2026-02-19 12:49:07,776  INFO      Connected to PostgreSQL: chips_db_v3
+2026-02-19 12:49:07,777  INFO      PostgreSQL schema 'chips_db_v3' ready
+2026-02-19 12:49:07,790  INFO      Found 733 tables to migrate
+
+2026-02-19 12:49:07,845  INFO        [OK] action_taken
+2026-02-19 12:49:07,865  INFO        [OK] cb_approval_actions
+2026-02-19 12:49:07,901  INFO        [OK] cb_approval_items
+2026-02-19 12:49:07,916  INFO        [OK] cb_audit_logs
+2026-02-19 12:49:07,929  INFO        [OK] cb_cache
+2026-02-19 12:49:07,938  INFO        [OK] cb_cache_locks
+2026-02-19 12:49:07,951  INFO        [OK] cb_config_categories
+2026-02-19 12:49:07,976  INFO        [OK] cb_discipline_deadline_extensions
+2026-02-19 12:49:07,997  INFO        [OK] cb_error_logs
+2026-02-19 12:49:08,011  INFO        [OK] cb_item_approvers
+2026-02-19 12:49:08,036  INFO        [OK] cb_modules
+2026-02-19 12:49:08,051  INFO        [OK] cb_permission_role
+2026-02-19 12:49:08,066  INFO        [OK] cb_permission_user
+2026-02-19 12:49:08,089  INFO        [OK] cb_permissions
+2026-02-19 12:49:08,100  INFO        [OK] cb_role_user
+2026-02-19 12:49:08,120  INFO        [OK] cb_roles
+2026-02-19 12:49:08,136  INFO        [OK] cb_sessions
+2026-02-19 12:49:08,150  INFO        [OK] cb_sub_module_permissions
+2026-02-19 12:49:08,169  INFO        [OK] cb_sub_modules
+2026-02-19 12:49:08,188  INFO        [OK] cb_system_configs
+2026-02-19 12:49:08,206  INFO        [OK] communications
+2026-02-19 12:49:08,223  INFO        [OK] confirmation_logs
+2026-02-19 12:49:08,247  INFO        [OK] discipline_activity_log
+2026-02-19 12:49:08,268  INFO        [OK] discipline_case_closures
+2026-02-19 12:49:08,290  INFO        [OK] discipline_case_registrations
+2026-02-19 12:49:08,321  INFO        [OK] discipline_cases
+2026-02-19 12:49:08,343  INFO        [OK] discipline_employee_responses
+2026-02-19 12:49:08,388  INFO        [OK] discipline_evidence
+2026-02-19 12:49:08,440  INFO        [OK] discipline_evidence_files
+2026-02-19 12:49:08,465  INFO        [OK] discipline_hearing_documents
+2026-02-19 12:49:08,488  INFO        [OK] discipline_hearing_minutes
+2026-02-19 12:49:08,509  INFO        [OK] discipline_hearings
+2026-02-19 12:49:08,531  INFO        [OK] discipline_history_updates
+2026-02-19 12:49:08,552  INFO        [OK] discipline_incident_documents
+2026-02-19 12:49:08,575  INFO        [OK] discipline_incident_reports
+2026-02-19 12:49:08,598  INFO        [OK] discipline_investigation_notes
+2026-02-19 12:49:08,618  INFO        [OK] discipline_investigators
+2026-02-19 12:49:08,644  INFO        [OK] discipline_notifications
+2026-02-19 12:49:08,667  INFO        [OK] discipline_outcome_documents
+2026-02-19 12:49:08,694  INFO        [OK] discipline_outcomes
+2026-02-19 12:49:08,713  INFO        [OK] discipline_response_documents
+2026-02-19 12:49:08,737  INFO        [OK] discipline_show_cause_documents
+2026-02-19 12:49:08,758  INFO        [OK] discipline_show_cause_notices
+2026-02-19 12:49:08,777  INFO        [OK] discipline_training_assignments
+2026-02-19 12:49:08,799  INFO        [OK] discipline_witness_documents
+2026-02-19 12:49:08,822  INFO        [OK] discipline_witness_statements
+2026-02-19 12:49:08,842  INFO        [OK] failed_jobs
+2026-02-19 12:49:08,861  INFO        [OK] hr_employment_termination
+2026-02-19 12:49:08,877  INFO        [OK] hr_employment_termination_305_repeat
+2026-02-19 12:49:08,903  INFO        [OK] hr_employment_termination_repeat_documents
+2026-02-19 12:49:08,918  INFO        [OK] incidents
+2026-02-19 12:49:08,938  INFO        [OK] jobs
+2026-02-19 12:49:08,965  INFO        [OK] josya_action_log_config
+2026-02-19 12:49:08,992  INFO        [OK] josya_action_logs
+2026-02-19 12:49:09,008  INFO        [OK] josya_action_logs_extensions
+2026-02-19 12:49:09,026  INFO        [OK] josya_action_logs_users
+2026-02-19 12:49:09,042  INFO        [OK] josya_ak_profiles
+2026-02-19 12:49:09,069  INFO        [OK] josya_ak_stats
+2026-02-19 12:49:09,083  INFO        [OK] josya_ak_storage
+2026-02-19 12:49:09,096  INFO        [OK] josya_akeeba_common
+2026-02-19 12:49:09,123  INFO        [OK] josya_assets
+2026-02-19 12:49:09,139  INFO        [OK] josya_associations
+2026-02-19 12:49:09,160  INFO        [OK] josya_banner_clients
+2026-02-19 12:49:09,184  INFO        [OK] josya_banner_tracks
+2026-02-19 12:49:09,218  INFO        [OK] josya_banners
+2026-02-19 12:49:09,252  INFO        [OK] josya_categories
+2026-02-19 12:49:09,268  INFO        [OK] josya_com_wallfactory_bookmarks
+2026-02-19 12:49:09,304  INFO        [OK] josya_com_wallfactory_comments
+2026-02-19 12:49:09,321  INFO        [OK] josya_com_wallfactory_emoticons
+2026-02-19 12:49:09,341  INFO        [OK] josya_com_wallfactory_likes
+2026-02-19 12:49:09,359  INFO        [OK] josya_com_wallfactory_media
+2026-02-19 12:49:09,374  INFO        [OK] josya_com_wallfactory_media_audio
+2026-02-19 12:49:09,394  INFO        [OK] josya_com_wallfactory_media_files
+2026-02-19 12:49:09,410  INFO        [OK] josya_com_wallfactory_media_links
+2026-02-19 12:49:09,426  INFO        [OK] josya_com_wallfactory_media_photos
+2026-02-19 12:49:09,443  INFO        [OK] josya_com_wallfactory_media_videos
+2026-02-19 12:49:09,459  INFO        [OK] josya_com_wallfactory_notifications
+2026-02-19 12:49:09,492  INFO        [OK] josya_com_wallfactory_posts
+2026-02-19 12:49:09,512  INFO        [OK] josya_com_wallfactory_profiles
+2026-02-19 12:49:09,540  INFO        [OK] josya_com_wallfactory_reports
+2026-02-19 12:49:09,555  INFO        [OK] josya_com_wallfactory_subscriptions
+2026-02-19 12:49:09,592  INFO        [OK] josya_community_activities
+2026-02-19 12:49:09,601  INFO        [OK] josya_community_activities_hide
+2026-02-19 12:49:09,625  INFO        [OK] josya_community_apps
+2026-02-19 12:49:09,644  INFO        [OK] josya_community_avatar
+2026-02-19 12:49:09,664  INFO        [OK] josya_community_backgrounds
+2026-02-19 12:49:09,678  INFO        [OK] josya_community_badges
+2026-02-19 12:49:09,697  INFO        [OK] josya_community_blocklist
+2026-02-19 12:49:09,713  INFO        [OK] josya_community_chat
+2026-02-19 12:49:09,738  INFO        [OK] josya_community_chat_activity
+2026-02-19 12:49:09,763  INFO        [OK] josya_community_chat_participants
+2026-02-19 12:49:09,775  INFO        [OK] josya_community_config
+2026-02-19 12:49:09,789  INFO        [OK] josya_community_connect_users
+2026-02-19 12:49:09,819  INFO        [OK] josya_community_connection
+2026-02-19 12:49:09,830  INFO        [OK] josya_community_digest_email
+2026-02-19 12:49:09,844  INFO        [OK] josya_community_engagement
+2026-02-19 12:49:09,860  INFO        [OK] josya_community_event_stats
+2026-02-19 12:49:09,897  INFO        [OK] josya_community_events
+2026-02-19 12:49:09,911  INFO        [OK] josya_community_events_category
+2026-02-19 12:49:09,942  INFO        [OK] josya_community_events_members
+2026-02-19 12:49:09,957  INFO        [OK] josya_community_featured
+2026-02-19 12:49:09,976  INFO        [OK] josya_community_fields
+2026-02-19 12:49:10,008  INFO        [OK] josya_community_fields_values
+2026-02-19 12:49:10,042  INFO        [OK] josya_community_files
+2026-02-19 12:49:10,065  INFO        [OK] josya_community_follower
+2026-02-19 12:49:10,081  INFO        [OK] josya_community_group_stats
+2026-02-19 12:49:10,098  INFO        [OK] josya_community_groups
+2026-02-19 12:49:10,117  INFO        [OK] josya_community_groups_bulletins
+2026-02-19 12:49:10,134  INFO        [OK] josya_community_groups_category
+2026-02-19 12:49:10,163  INFO        [OK] josya_community_groups_discuss
+2026-02-19 12:49:10,170  INFO        [OK] josya_community_groups_invite
+2026-02-19 12:49:10,188  INFO        [OK] josya_community_groups_members
+2026-02-19 12:49:10,210  INFO        [OK] josya_community_hashtag
+2026-02-19 12:49:10,230  INFO        [OK] josya_community_invitations
+2026-02-19 12:49:10,253  INFO        [OK] josya_community_likes
+2026-02-19 12:49:10,268  INFO        [OK] josya_community_location_cache
+2026-02-19 12:49:10,293  INFO        [OK] josya_community_mailq
+2026-02-19 12:49:10,313  INFO        [OK] josya_community_memberlist
+2026-02-19 12:49:10,343  INFO        [OK] josya_community_memberlist_criteria
+2026-02-19 12:49:10,366  INFO        [OK] josya_community_moods
+2026-02-19 12:49:10,386  INFO        [OK] josya_community_msg
+2026-02-19 12:49:10,411  INFO        [OK] josya_community_msg_recepient
+2026-02-19 12:49:10,450  INFO        [OK] josya_community_notifications
+2026-02-19 12:49:10,469  INFO        [OK] josya_community_oauth
+2026-02-19 12:49:10,488  INFO        [OK] josya_community_page_stats
+2026-02-19 12:49:10,510  INFO        [OK] josya_community_pages
+2026-02-19 12:49:10,531  INFO        [OK] josya_community_pages_category
+2026-02-19 12:49:10,538  INFO        [OK] josya_community_pages_invite
+2026-02-19 12:49:10,556  INFO        [OK] josya_community_pages_members
+2026-02-19 12:49:10,581  INFO        [OK] josya_community_photo_stats
+2026-02-19 12:49:10,613  INFO        [OK] josya_community_photos
+2026-02-19 12:49:10,670  INFO        [OK] josya_community_photos_albums
+2026-02-19 12:49:10,704  INFO        [OK] josya_community_photos_tag
+2026-02-19 12:49:10,713  INFO        [OK] josya_community_photos_tokens
+2026-02-19 12:49:10,757  INFO        [OK] josya_community_polls
+2026-02-19 12:49:10,778  INFO        [OK] josya_community_polls_category
+2026-02-19 12:49:10,803  INFO        [OK] josya_community_polls_items
+2026-02-19 12:49:10,828  INFO        [OK] josya_community_polls_users
+2026-02-19 12:49:10,843  INFO        [OK] josya_community_profile_stats
+2026-02-19 12:49:10,865  INFO        [OK] josya_community_profiles
+2026-02-19 12:49:10,886  INFO        [OK] josya_community_profiles_fields
+2026-02-19 12:49:10,914  INFO        [OK] josya_community_ratings
+2026-02-19 12:49:10,932  INFO        [OK] josya_community_register
+2026-02-19 12:49:10,952  INFO        [OK] josya_community_register_auth_token
+2026-02-19 12:49:10,965  INFO        [OK] josya_community_reports
+2026-02-19 12:49:10,983  INFO        [OK] josya_community_reports_actions
+2026-02-19 12:49:10,995  INFO        [OK] josya_community_reports_reporter
+2026-02-19 12:49:11,011  INFO        [OK] josya_community_storage_s3
+2026-02-19 12:49:11,027  INFO        [OK] josya_community_tags
+2026-02-19 12:49:11,039  INFO        [OK] josya_community_tags_words
+2026-02-19 12:49:11,059  INFO        [OK] josya_community_theme
+2026-02-19 12:49:11,074  INFO        [OK] josya_community_thirdparty_wall_options
+2026-02-19 12:49:11,093  INFO        [OK] josya_community_user_invites
+2026-02-19 12:49:11,117  INFO        [OK] josya_community_user_status
+2026-02-19 12:49:11,136  INFO        [OK] josya_community_userpoints
+2026-02-19 12:49:11,157  INFO        [OK] josya_community_users
+2026-02-19 12:49:11,178  INFO        [OK] josya_community_video_stats
+2026-02-19 12:49:11,207  INFO        [OK] josya_community_videos
+2026-02-19 12:49:11,228  INFO        [OK] josya_community_videos_category
+2026-02-19 12:49:11,247  INFO        [OK] josya_community_videos_tag
+2026-02-19 12:49:11,273  INFO        [OK] josya_community_wall
+2026-02-19 12:49:11,319  INFO        [OK] josya_contact_details
+2026-02-19 12:49:11,367  INFO        [OK] josya_content
+2026-02-19 12:49:11,377  INFO        [OK] josya_content_frontpage
+2026-02-19 12:49:11,389  INFO        [OK] josya_content_rating
+2026-02-19 12:49:11,413  INFO        [OK] josya_content_types
+2026-02-19 12:49:11,439  INFO        [OK] josya_contentitem_tag_map
+2026-02-19 12:49:11,446  INFO        [OK] josya_core_log_searches
+2026-02-19 12:49:11,469  INFO        [OK] josya_extensions
+2026-02-19 12:49:11,485  INFO        [OK] josya_fabrik_attending
+2026-02-19 12:49:11,506  INFO        [OK] josya_fabrik_comments
+2026-02-19 12:49:11,527  INFO        [OK] josya_fabrik_connections
+2026-02-19 12:49:11,588  INFO        [OK] josya_fabrik_cron
+2026-02-19 12:49:11,654  INFO        [OK] josya_fabrik_elements
+2026-02-19 12:49:11,677  INFO        [OK] josya_fabrik_form_sessions
+2026-02-19 12:49:11,706  INFO        [OK] josya_fabrik_formgroup
+2026-02-19 12:49:11,729  INFO        [OK] josya_fabrik_forms
+2026-02-19 12:49:11,751  INFO        [OK] josya_fabrik_groups
+2026-02-19 12:49:11,791  INFO        [OK] josya_fabrik_joins
+2026-02-19 12:49:11,815  INFO        [OK] josya_fabrik_jsactions
+2026-02-19 12:49:11,839  INFO        [OK] josya_fabrik_lists
+2026-02-19 12:49:11,857  INFO        [OK] josya_fabrik_log
+2026-02-19 12:49:11,874  INFO        [OK] josya_fabrik_notification
+2026-02-19 12:49:11,887  INFO        [OK] josya_fabrik_notification_event
+2026-02-19 12:49:11,904  INFO        [OK] josya_fabrik_notification_event_sent
+2026-02-19 12:49:11,921  INFO        [OK] josya_fabrik_packages
+2026-02-19 12:49:11,940  INFO        [OK] josya_fabrik_privacy
+2026-02-19 12:49:11,952  INFO        [OK] josya_fabrik_ratings
+2026-02-19 12:49:11,963  INFO        [OK] josya_fabrik_sequences
+2026-02-19 12:49:11,974  INFO        [OK] josya_fabrik_thumbs
+2026-02-19 12:49:11,991  INFO        [OK] josya_fabrik_validations
+2026-02-19 12:49:12,009  INFO        [OK] josya_fabrik_visualizations
+2026-02-19 12:49:12,045  INFO        [OK] josya_fields
+2026-02-19 12:49:12,056  INFO        [OK] josya_fields_categories
+2026-02-19 12:49:12,093  INFO        [OK] josya_fields_groups
+2026-02-19 12:49:12,112  INFO        [OK] josya_fields_values
+2026-02-19 12:49:12,123  INFO        [OK] josya_finder_filters
+2026-02-19 12:49:12,160  INFO        [OK] josya_finder_links
+2026-02-19 12:49:12,181  INFO        [OK] josya_finder_links_terms0
+2026-02-19 12:49:12,200  INFO        [OK] josya_finder_links_terms1
+2026-02-19 12:49:12,217  INFO        [OK] josya_finder_links_terms2
+2026-02-19 12:49:12,234  INFO        [OK] josya_finder_links_terms3
+2026-02-19 12:49:12,253  INFO        [OK] josya_finder_links_terms4
+2026-02-19 12:49:12,271  INFO        [OK] josya_finder_links_terms5
+2026-02-19 12:49:12,288  INFO        [OK] josya_finder_links_terms6
+2026-02-19 12:49:12,307  INFO        [OK] josya_finder_links_terms7
+2026-02-19 12:49:12,326  INFO        [OK] josya_finder_links_terms8
+2026-02-19 12:49:12,347  INFO        [OK] josya_finder_links_terms9
+2026-02-19 12:49:12,363  INFO        [OK] josya_finder_links_termsa
+2026-02-19 12:49:12,381  INFO        [OK] josya_finder_links_termsb
+2026-02-19 12:49:12,398  INFO        [OK] josya_finder_links_termsc
+2026-02-19 12:49:12,414  INFO        [OK] josya_finder_links_termsd
+2026-02-19 12:49:12,430  INFO        [OK] josya_finder_links_termse
+2026-02-19 12:49:12,449  INFO        [OK] josya_finder_links_termsf
+2026-02-19 12:49:12,479  INFO        [OK] josya_finder_taxonomy
+2026-02-19 12:49:12,495  INFO        [OK] josya_finder_taxonomy_map
+2026-02-19 12:49:12,527  INFO        [OK] josya_finder_terms
+2026-02-19 12:49:12,540  INFO        [OK] josya_finder_terms_common
+2026-02-19 12:49:12,556  INFO        [OK] josya_finder_tokens
+2026-02-19 12:49:12,572  INFO        [OK] josya_finder_tokens_aggregate
+2026-02-19 12:49:12,589  INFO        [OK] josya_finder_types
+2026-02-19 12:49:12,606  INFO        [OK] josya_jbolo_chat_msgs
+2026-02-19 12:49:12,613  INFO        [OK] josya_jbolo_chat_msgs_xref
+2026-02-19 12:49:12,619  INFO        [OK] josya_jbolo_node_users
+2026-02-19 12:49:12,636  INFO        [OK] josya_jbolo_nodes
+2026-02-19 12:49:12,649  INFO        [OK] josya_jbolo_privacy
+2026-02-19 12:49:12,664  INFO        [OK] josya_jbolo_users
+2026-02-19 12:49:12,707  INFO        [OK] josya_jchat
+2026-02-19 12:49:12,723  INFO        [OK] josya_jchat_banned_users
+2026-02-19 12:49:12,733  INFO        [OK] josya_jchat_banned_users_ids
+2026-02-19 12:49:12,756  INFO        [OK] josya_jchat_deleted_messages
+2026-02-19 12:49:12,772  INFO        [OK] josya_jchat_emoticons
+2026-02-19 12:49:12,793  INFO        [OK] josya_jchat_lamessages
+2026-02-19 12:49:12,830  INFO        [OK] josya_jchat_login
+2026-02-19 12:49:12,850  INFO        [OK] josya_jchat_meetings
+2026-02-19 12:49:12,859  INFO        [OK] josya_jchat_messaging_deletedmessages
+2026-02-19 12:49:12,868  INFO        [OK] josya_jchat_public_readmessages
+2026-02-19 12:49:12,883  INFO        [OK] josya_jchat_public_sessionrelations
+2026-02-19 12:49:12,899  INFO        [OK] josya_jchat_recordings
+2026-02-19 12:49:12,919  INFO        [OK] josya_jchat_rooms
+2026-02-19 12:49:12,946  INFO        [OK] josya_jchat_sessionstatus
+2026-02-19 12:49:12,960  INFO        [OK] josya_jchat_userstatus
+2026-02-19 12:49:12,974  INFO        [OK] josya_jchat_webrtc
+2026-02-19 12:49:12,990  INFO        [OK] josya_jchat_webrtc_blackboard
+2026-02-19 12:49:13,005  INFO        [OK] josya_jchat_webrtc_conference
+2026-02-19 12:49:13,043  INFO        [OK] josya_jp_comments
+2026-02-19 12:49:13,084  INFO        [OK] josya_jp_design_albums
+2026-02-19 12:49:13,123  INFO        [OK] josya_jp_design_revisions
+2026-02-19 12:49:13,185  INFO        [OK] josya_jp_designs
+2026-02-19 12:49:13,214  INFO        [OK] josya_jp_designs_approved
+2026-02-19 12:49:13,232  INFO        [OK] josya_jp_emailqueue
+2026-02-19 12:49:13,253  INFO        [OK] josya_jp_groups_view_action
+2026-02-19 12:49:13,273  INFO        [OK] josya_jp_labels
+2026-02-19 12:49:13,307  INFO        [OK] josya_jp_milestones
+2026-02-19 12:49:13,338  INFO        [OK] josya_jp_projects
+2026-02-19 12:49:13,365  INFO        [OK] josya_jp_ref_attachments
+2026-02-19 12:49:13,389  INFO        [OK] josya_jp_ref_labels
+2026-02-19 12:49:13,405  INFO        [OK] josya_jp_ref_observer
+2026-02-19 12:49:13,428  INFO        [OK] josya_jp_ref_tasks
+2026-02-19 12:49:13,446  INFO        [OK] josya_jp_ref_users
+2026-02-19 12:49:13,462  INFO        [OK] josya_jp_reminders
+2026-02-19 12:49:13,476  INFO        [OK] josya_jp_reminders_dates
+2026-02-19 12:49:13,512  INFO        [OK] josya_jp_replies
+2026-02-19 12:49:13,551  INFO        [OK] josya_jp_repo_dirs
+2026-02-19 12:49:13,582  INFO        [OK] josya_jp_repo_file_revs
+2026-02-19 12:49:13,619  INFO        [OK] josya_jp_repo_files
+2026-02-19 12:49:13,645  INFO        [OK] josya_jp_repo_note_revs
+2026-02-19 12:49:13,685  INFO        [OK] josya_jp_repo_notes
+2026-02-19 12:49:13,701  INFO        [OK] josya_jp_tags
+2026-02-19 12:49:13,743  INFO        [OK] josya_jp_task_lists
+2026-02-19 12:49:13,799  INFO        [OK] josya_jp_tasks
+2026-02-19 12:49:13,841  INFO        [OK] josya_jp_timesheet
+2026-02-19 12:49:13,877  INFO        [OK] josya_jp_topics
+2026-02-19 12:49:13,917  INFO        [OK] josya_languages
+2026-02-19 12:49:13,936  INFO        [OK] josya_maximenuck_menus
+2026-02-19 12:49:13,959  INFO        [OK] josya_maximenuck_styles
+2026-02-19 12:49:14,000  INFO        [OK] josya_menu
+2026-02-19 12:49:14,018  INFO        [OK] josya_menu_types
+2026-02-19 12:49:14,039  INFO        [OK] josya_messages
+2026-02-19 12:49:14,052  INFO        [OK] josya_messages_cfg
+2026-02-19 12:49:14,083  INFO        [OK] josya_modules
+2026-02-19 12:49:14,094  INFO        [OK] josya_modules_menu
+2026-02-19 12:49:14,138  INFO        [OK] josya_newsfeeds
+2026-02-19 12:49:14,156  INFO        [OK] josya_overrider
+2026-02-19 12:49:14,187  INFO        [OK] josya_plotalot
+2026-02-19 12:49:14,201  INFO        [OK] josya_plotalot_categories
+2026-02-19 12:49:14,223  INFO        [OK] josya_plotalot_databases
+2026-02-19 12:49:14,247  INFO        [OK] josya_postinstall_messages
+2026-02-19 12:49:14,269  INFO        [OK] josya_privacy_consents
+2026-02-19 12:49:14,284  INFO        [OK] josya_privacy_requests
+2026-02-19 12:49:14,307  INFO        [OK] josya_redirect_links
+2026-02-19 12:49:14,321  INFO        [OK] josya_schemas
+2026-02-19 12:49:14,352  INFO        [OK] josya_session
+2026-02-19 12:49:14,409  INFO        [OK] josya_tags
+2026-02-19 12:49:14,443  INFO        [OK] josya_template_styles
+2026-02-19 12:49:14,468  INFO        [OK] josya_ucm_base
+2026-02-19 12:49:14,531  INFO        [OK] josya_ucm_content
+2026-02-19 12:49:14,554  INFO        [OK] josya_ucm_history
+2026-02-19 12:49:14,575  INFO        [OK] josya_update_sites
+2026-02-19 12:49:14,587  INFO        [OK] josya_update_sites_extensions
+2026-02-19 12:49:14,611  INFO        [OK] josya_updates
+2026-02-19 12:49:14,633  INFO        [OK] josya_user_activity
+2026-02-19 12:49:14,647  INFO        [OK] josya_user_activity_events
+2026-02-19 12:49:14,661  INFO        [OK] josya_user_activity_item_types
+2026-02-19 12:49:14,688  INFO        [OK] josya_user_activity_items
+2026-02-19 12:49:14,717  INFO        [OK] josya_user_keys
+2026-02-19 12:49:14,737  INFO        [OK] josya_user_notes
+2026-02-19 12:49:14,751  INFO        [OK] josya_user_profiles
+2026-02-19 12:49:14,762  INFO        [OK] josya_user_usergroup_map
+2026-02-19 12:49:14,790  INFO        [OK] josya_usergroups
+2026-02-19 12:49:14,821  INFO        [OK] josya_users
+2026-02-19 12:49:14,828  INFO        [OK] josya_utf8_conversion
+2026-02-19 12:49:14,848  INFO        [OK] josya_viewlevels
+2026-02-19 12:49:14,866  INFO        [OK] josya_zhgooglemaps_infobubbles
+2026-02-19 12:49:14,885  INFO        [OK] josya_zhgooglemaps_log
+2026-02-19 12:49:15,020  INFO        [OK] josya_zhgooglemaps_maps
+2026-02-19 12:49:15,044  INFO        [OK] josya_zhgooglemaps_maptypes
+2026-02-19 12:49:15,069  INFO        [OK] josya_zhgooglemaps_marker_buffer
+2026-02-19 12:49:15,085  INFO        [OK] josya_zhgooglemaps_marker_content
+2026-02-19 12:49:15,102  INFO        [OK] josya_zhgooglemaps_marker_rates
+2026-02-19 12:49:15,121  INFO        [OK] josya_zhgooglemaps_markergroups
+2026-02-19 12:49:15,179  INFO        [OK] josya_zhgooglemaps_markers
+2026-02-19 12:49:15,208  INFO        [OK] josya_zhgooglemaps_paths
+2026-02-19 12:49:15,231  INFO        [OK] josya_zhgooglemaps_routers
+2026-02-19 12:49:15,247  INFO        [OK] josya_zhgooglemaps_streetviews
+2026-02-19 12:49:15,266  INFO        [OK] josya_zhgooglemaps_text_overrides
+2026-02-19 12:49:15,283  INFO        [OK] josya_zhgooglemaps_weathertypes
+2026-02-19 12:49:15,304  INFO        [OK] lfm_sys_workflow_activities
+2026-02-19 12:49:15,316  INFO        [OK] migrations
+2026-02-19 12:49:15,339  INFO        [OK] notifications
+2026-02-19 12:49:15,382  INFO        [OK] old_sys_pm_clients_invoices
+2026-02-19 12:49:15,398  INFO        [OK] old_sys_pm_clients_invoices_167_repeat
+2026-02-19 12:49:15,410  INFO        [OK] sys_alerts_configurations
+2026-02-19 12:49:15,430  INFO        [OK] sys_alerts_configurations_109_repeat
+2026-02-19 12:49:15,449  WARNING     Index warning on sys_alerts_configurations_109_repeat_repeat_recipients_groups: relation "idx_sys_alerts_configurations_109_repeat_repeat_recipients_grou" already exists
+
+2026-02-19 12:49:15,450  INFO        [OK] sys_alerts_configurations_109_repeat_repeat_recipients_groups
+2026-02-19 12:49:15,474  INFO        [OK] sys_alerts_configurations_repeat_recipients_groups
+2026-02-19 12:49:15,489  INFO        [OK] sys_alerts_messages
+2026-02-19 12:49:15,508  INFO        [OK] sys_alerts_messages_items
+2026-02-19 12:49:15,526  INFO        [OK] sys_alerts_messages_notifications
+2026-02-19 12:49:15,550  INFO        [OK] sys_alerts_messages_repeat_properties
+2026-02-19 12:49:15,578  INFO        [OK] sys_alerts_messages_repeat_units
+2026-02-19 12:49:15,602  INFO        [OK] sys_alerts_messages_repeat_zone
+2026-02-19 12:49:15,622  INFO        [OK] sys_alerts_notifications
+2026-02-19 12:49:15,639  INFO        [OK] sys_alerts_sms_logs
+2026-02-19 12:49:15,658  INFO        [OK] sys_api_query_map
+2026-02-19 12:49:15,676  INFO        [OK] sys_assets_categories
+2026-02-19 12:49:15,693  INFO        [OK] sys_assets_depreciation
+2026-02-19 12:49:15,717  INFO        [OK] sys_assets_register
+2026-02-19 12:49:15,740  INFO        [OK] sys_assets_register_repeat_files
+2026-02-19 12:49:15,804  INFO        [OK] sys_crm_leads
+2026-02-19 12:49:15,825  INFO        [OK] sys_crons
+2026-02-19 12:49:15,839  INFO        [OK] sys_crons_entities_management
+2026-02-19 12:49:15,854  INFO        [OK] sys_crons_invoices_tenants_management
+2026-02-19 12:49:15,870  INFO        [OK] sys_crons_track_entities_changes
+2026-02-19 12:49:15,881  INFO        [OK] sys_eg_plot_sample
+2026-02-19 12:49:15,895  INFO        [OK] sys_eg_plot_sample2
+2026-02-19 12:49:15,916  INFO        [OK] sys_eports_returns_batches_configurations
+2026-02-19 12:49:15,937  INFO        [OK] sys_eports_returns_batches_configurations_298_repeat
+2026-02-19 12:49:15,962  WARNING     Index warning on sys_eports_returns_batches_configurations_298_repeat_repeat_prs: relation "idx_sys_eports_returns_batches_configurations_298_repeat_repeat" already exists
+
+2026-02-19 12:49:15,962  INFO        [OK] sys_eports_returns_batches_configurations_298_repeat_repeat_prs
+2026-02-19 12:49:15,991  INFO        [OK] sys_eports_returns_batches_configurations_repeat_prs
+2026-02-19 12:49:16,019  INFO        [OK] sys_fin_audit_queries
+2026-02-19 12:49:16,045  INFO        [OK] sys_fin_audit_queries_repeat_group_id
+2026-02-19 12:49:16,068  INFO        [OK] sys_fin_audit_queries_repeat_notify
+2026-02-19 12:49:16,115  INFO        [OK] sys_fin_auditors_logs
+2026-02-19 12:49:16,148  INFO        [OK] sys_fin_bank_deposits
+2026-02-19 12:49:16,186  INFO        [OK] sys_fin_bank_transfers
+2026-02-19 12:49:16,235  INFO        [OK] sys_fin_billing_management
+2026-02-19 12:49:16,254  INFO        [OK] sys_fin_billing_management_repeat_documents
+2026-02-19 12:49:16,292  INFO        [OK] sys_fin_budgeting
+2026-02-19 12:49:16,312  INFO        [OK] sys_fin_budgeting_153_repeat
+2026-02-19 12:49:16,340  INFO        [OK] sys_fin_cheque_books
+2026-02-19 12:49:16,355  INFO        [OK] sys_fin_cheque_books_261_repeat
+2026-02-19 12:49:16,398  INFO        [OK] sys_fin_client_cheques
+2026-02-19 12:49:16,417  INFO        [OK] sys_fin_client_cheques_262_repeat
+2026-02-19 12:49:16,437  WARNING     Index warning on sys_fin_client_cheques_262_repeat_repeat_voucher_items_id: relation "idx_sys_fin_client_cheques_262_repeat_repeat_voucher_items_id_f" already exists
+
+2026-02-19 12:49:16,438  INFO        [OK] sys_fin_client_cheques_262_repeat_repeat_voucher_items_id
+2026-02-19 12:49:16,460  INFO        [OK] sys_fin_client_cheques_repeat_documents
+2026-02-19 12:49:16,480  INFO        [OK] sys_fin_client_cheques_vouchers
+2026-02-19 12:49:16,503  INFO        [OK] sys_fin_client_cheques_vouchers_repeat_cheques_id
+2026-02-19 12:49:16,530  INFO        [OK] sys_fin_client_cheques_vouchers_repeat_voucher_id
+2026-02-19 12:49:16,561  INFO        [OK] sys_fin_client_remittances
+2026-02-19 12:49:16,579  INFO        [OK] sys_fin_client_remittances_201_repeat
+2026-02-19 12:49:16,592  INFO        [OK] sys_fin_income_transactions
+2026-02-19 12:49:16,631  INFO        [OK] sys_fin_pay_allocations_extracts
+2026-02-19 12:49:16,651  INFO        [OK] sys_fin_pay_allocations_imports
+2026-02-19 12:49:16,667  INFO        [OK] sys_fin_pay_channels
+2026-02-19 12:49:16,739  INFO        [OK] sys_fin_pay_cooperative_bank
+2026-02-19 12:49:16,781  INFO        [OK] sys_fin_pay_daily_extracts
+2026-02-19 12:49:16,840  INFO        [OK] sys_fin_pay_equity_bank
+2026-02-19 12:49:16,886  INFO        [OK] sys_fin_pay_equity_bank_extracts
+2026-02-19 12:49:16,937  INFO        [OK] sys_fin_pay_failed_equity_bank_extracts
+2026-02-19 12:49:16,982  WARNING     Index warning on sys_fin_pay_failed_mpesa_coop_bank_extracts: relation "idx_sys_fin_pay_failed_mpesa_coop_bank_extracts_fb_filter_linke" already exists
+
+2026-02-19 12:49:16,983  WARNING     Index warning on sys_fin_pay_failed_mpesa_coop_bank_extracts: relation "idx_sys_fin_pay_failed_mpesa_coop_bank_extracts_fb_filter_linke" already exists
+
+2026-02-19 12:49:16,991  INFO        [OK] sys_fin_pay_failed_mpesa_coop_bank_extracts
+2026-02-19 12:49:17,047  INFO        [OK] sys_fin_pay_mpesa_coop_bank_extracts
+2026-02-19 12:49:17,103  INFO        [OK] sys_fin_pay_mpesatransactions
+2026-02-19 12:49:17,208  INFO        [OK] sys_fin_payment_vouchers
+2026-02-19 12:49:17,227  INFO        [OK] sys_fin_payment_vouchers_264_repeat
+2026-02-19 12:49:17,249  INFO        [OK] sys_fin_payment_vouchers_264_repeat_repeat_property_id
+2026-02-19 12:49:17,270  INFO        [OK] sys_fin_payment_vouchers_repeat_documents
+2026-02-19 12:49:17,279  INFO        [OK] sys_fin_payment_vouchers_types
+2026-02-19 12:49:17,310  INFO        [OK] sys_fin_payments_eft
+2026-02-19 12:49:17,347  INFO        [OK] sys_fin_payments_requisitions
+2026-02-19 12:49:17,361  INFO        [OK] sys_fin_payments_requisitions_types
+2026-02-19 12:49:17,372  INFO        [OK] sys_fin_payments_tenants_sources_types
+2026-02-19 12:49:17,409  INFO        [OK] sys_fin_petty_cash_ledger
+2026-02-19 12:49:17,433  INFO        [OK] sys_fin_petty_cash_ledger_155_repeat
+2026-02-19 12:49:17,451  INFO        [OK] sys_fin_reccurent_client_remittances
+2026-02-19 12:49:17,476  INFO        [OK] sys_fin_reimbursement_requests
+2026-02-19 12:49:17,495  INFO        [OK] sys_fin_reimbursement_requests_182_repeat
+2026-02-19 12:49:17,559  INFO        [OK] sys_fin_tenants_charges
+2026-02-19 12:49:17,575  INFO        [OK] sys_gis_tracking
+2026-02-19 12:49:17,591  INFO        [OK] sys_gl_acc_classes
+2026-02-19 12:49:17,606  INFO        [OK] sys_gl_acc_groups
+2026-02-19 12:49:17,619  INFO        [OK] sys_gl_acc_trans_types
+2026-02-19 12:49:17,632  INFO        [OK] sys_gl_accounts_categories
+2026-02-19 12:49:17,645  INFO        [OK] sys_gl_accounts_entries
+2026-02-19 12:49:17,668  INFO        [OK] sys_gl_accounts_setup
+2026-02-19 12:49:17,711  INFO        [OK] sys_gl_chart_accounts_master
+2026-02-19 12:49:17,722  INFO        [OK] sys_gl_chart_financial_statements
+2026-02-19 12:49:17,735  INFO        [OK] sys_gl_chart_groups
+2026-02-19 12:49:17,749  INFO        [OK] sys_gl_chart_sub_groups
+2026-02-19 12:49:17,778  INFO        [OK] sys_gl_ledgers_transactions
+2026-02-19 12:49:17,789  INFO        [OK] sys_gl_periods
+2026-02-19 12:49:17,808  INFO        [OK] sys_gl_taxes
+2026-02-19 12:49:17,835  INFO        [OK] sys_gl_transactions
+2026-02-19 12:49:17,858  INFO        [OK] sys_gl_transactions_91_repeat
+2026-02-19 12:49:17,881  INFO        [OK] sys_helb_deductions
+2026-02-19 12:49:17,898  INFO        [OK] sys_helb_deductions_250_repeat
+2026-02-19 12:49:17,916  INFO        [OK] sys_hr_communication_templates
+2026-02-19 12:49:17,942  INFO        [OK] sys_hr_employee_amortized_deductions
+2026-02-19 12:49:17,962  INFO        [OK] sys_hr_employee_amortized_deductions_252_repeat
+2026-02-19 12:49:17,973  INFO        [OK] sys_hr_employee_amortized_deductions_types
+2026-02-19 12:49:17,999  INFO        [OK] sys_hr_employee_contracts
+2026-02-19 12:49:18,020  INFO        [OK] sys_hr_employee_contracts_279_repeat
+2026-02-19 12:49:18,040  INFO        [OK] sys_hr_employees_attendance
+2026-02-19 12:49:18,056  INFO        [OK] sys_hr_employees_attendance_255_repeat
+2026-02-19 12:49:18,069  INFO        [OK] sys_hr_institution_levels
+2026-02-19 12:49:18,082  INFO        [OK] sys_hr_institutions
+2026-02-19 12:49:18,096  INFO        [OK] sys_hr_kra_settings
+2026-02-19 12:49:18,112  INFO        [OK] sys_hr_kra_settings_150_repeat
+2026-02-19 12:49:18,129  INFO        [OK] sys_hr_leave_adjustments
+2026-02-19 12:49:18,149  INFO        [OK] sys_hr_leave_calendar
+2026-02-19 12:49:18,187  INFO        [OK] sys_hr_leave_requests
+2026-02-19 12:49:18,206  INFO        [OK] sys_hr_leave_requests_234_repeat
+2026-02-19 12:49:18,221  INFO        [OK] sys_hr_leave_types
+2026-02-19 12:49:18,232  INFO        [OK] sys_hr_nhif_rates
+2026-02-19 12:49:18,250  INFO        [OK] sys_hr_nhif_rates_236_repeat
+2026-02-19 12:49:18,267  INFO        [OK] sys_hr_nssf_rates
+2026-02-19 12:49:18,279  INFO        [OK] sys_hr_payroll_calendar
+2026-02-19 12:49:18,305  INFO        [OK] sys_hr_payroll_calendar_repeat_position_id
+2026-02-19 12:49:18,325  INFO        [OK] sys_hr_payroll_deductions_register
+2026-02-19 12:49:18,349  INFO        [OK] sys_hr_payroll_elements
+2026-02-19 12:49:18,371  INFO        [OK] sys_hr_payroll_elements_repeat_staff_positions_id
+2026-02-19 12:49:18,392  INFO        [OK] sys_hr_payroll_periods
+2026-02-19 12:49:18,437  INFO        [OK] sys_hr_payroll_salary_register
+2026-02-19 12:49:18,485  INFO        [OK] sys_hr_payroll_salary_register_118_repeat
+2026-02-19 12:49:18,518  INFO        [OK] sys_hr_payroll_salary_register_238_repeat
+2026-02-19 12:49:18,568  INFO        [OK] sys_hr_payroll_summary
+2026-02-19 12:49:18,584  INFO        [OK] sys_hr_public_holidays
+2026-02-19 12:49:18,601  INFO        [OK] sys_hr_staff_clock_in_clock_out
+2026-02-19 12:49:18,626  INFO        [OK] sys_hr_staff_discipline_tracker
+2026-02-19 12:49:18,645  INFO        [OK] sys_hr_staff_discipline_tracker_repeat_documents
+2026-02-19 12:49:18,669  INFO        [OK] sys_hr_staff_vacancies
+2026-02-19 12:49:18,692  INFO        [OK] sys_hr_working_days
+2026-02-19 12:49:18,712  INFO        [OK] sys_pm_auction_tasks
+2026-02-19 12:49:18,751  INFO        [OK] sys_pm_caretakers
+2026-02-19 12:49:18,769  INFO        [OK] sys_pm_caretakers_165_repeat
+2026-02-19 12:49:18,793  INFO        [OK] sys_pm_caretakers_repeat_properties_ids
+2026-02-19 12:49:18,816  INFO        [OK] sys_pm_caretakers_repeat_property_id
+2026-02-19 12:49:18,840  INFO        [OK] sys_pm_caretakers_repeat_zones_id
+2026-02-19 12:49:18,912  INFO        [OK] sys_pm_clients
+2026-02-19 12:49:18,929  INFO        [OK] sys_pm_clients_17_repeat
+2026-02-19 12:49:18,950  INFO        [OK] sys_pm_clients_19_repeat
+2026-02-19 12:49:18,969  INFO        [OK] sys_pm_clients_65_repeat
+2026-02-19 12:49:18,989  INFO        [OK] sys_pm_clients_66_repeat
+2026-02-19 12:49:19,038  INFO        [OK] sys_pm_clients_advances_requisitions
+2026-02-19 12:49:19,053  INFO        [OK] sys_pm_clients_advances_requisitions_46_repeat
+2026-02-19 12:49:19,076  INFO        [OK] sys_pm_clients_advances_requisitions_89_repeat
+2026-02-19 12:49:19,097  WARNING     Index warning on sys_pm_clients_advances_requisitions_repeat_property_id: relation "idx_sys_pm_clients_advances_requisitions_repeat_property_id_fb_" already exists
+
+2026-02-19 12:49:19,098  INFO        [OK] sys_pm_clients_advances_requisitions_repeat_property_id
+2026-02-19 12:49:19,147  INFO        [OK] sys_pm_clients_disbursements
+2026-02-19 12:49:19,163  INFO        [OK] sys_pm_clients_disbursements_44_repeat
+2026-02-19 12:49:19,176  INFO        [OK] sys_pm_clients_disbursements_types
+2026-02-19 12:49:19,227  INFO        [OK] sys_pm_clients_invoices
+2026-02-19 12:49:19,295  INFO        [OK] sys_pm_clients_periods_closures
+2026-02-19 12:49:19,326  INFO        [OK] sys_pm_clients_repeat_documents
+2026-02-19 12:49:19,431  INFO        [OK] sys_pm_clients_returns
+2026-02-19 12:49:19,454  INFO        [OK] sys_pm_clients_returns_54_repeat
+2026-02-19 12:49:19,505  INFO        [OK] sys_pm_clients_returns_batches
+2026-02-19 12:49:19,537  INFO        [OK] sys_pm_clients_returns_master
+2026-02-19 12:49:19,574  INFO        [OK] sys_pm_clients_returns_payments_distributions
+2026-02-19 12:49:19,591  INFO        [OK] sys_pm_clients_returns_payments_distributions_204_repeat
+2026-02-19 12:49:19,609  INFO        [OK] sys_pm_clients_returns_payments_distributions_242_repeat
+2026-02-19 12:49:19,641  INFO        [OK] sys_pm_clients_returns_payments_units_breakdown
+2026-02-19 12:49:19,667  INFO        [OK] sys_pm_clients_returns_payments_units_breakdown_240_repeat
+2026-02-19 12:49:19,692  INFO        [OK] sys_pm_clients_returns_payments_units_breakdown_241_repeat
+2026-02-19 12:49:19,705  INFO        [OK] sys_pm_clients_returns_types
+2026-02-19 12:49:19,816  INFO        [OK] sys_pm_debtors_invoices
+2026-02-19 12:49:19,836  INFO        [OK] sys_pm_debtors_invoices_293_repeat
+2026-02-19 12:49:19,858  INFO        [OK] sys_pm_debtors_invoices_41_repeat
+2026-02-19 12:49:19,889  INFO        [OK] sys_pm_debtors_invoices_60_repeat
+2026-02-19 12:49:19,950  INFO        [OK] sys_pm_debtors_invoices_clients
+2026-02-19 12:49:20,023  INFO        [OK] sys_pm_debtors_invoices_defaulters
+2026-02-19 12:49:20,069  INFO        [OK] sys_pm_debtors_invoices_imports
+2026-02-19 12:49:20,134  INFO        [OK] sys_pm_deposits
+2026-02-19 12:49:20,190  INFO        [OK] sys_pm_deposits_requests
+2026-02-19 12:49:20,212  INFO        [OK] sys_pm_deposits_requests_156_repeat
+2026-02-19 12:49:20,230  INFO        [OK] sys_pm_deposits_requests_157_repeat
+2026-02-19 12:49:20,249  INFO        [OK] sys_pm_deposits_requests_31_repeat
+2026-02-19 12:49:20,263  INFO        [OK] sys_pm_entities_history
+2026-02-19 12:49:20,301  INFO        [OK] sys_pm_evictions
+2026-02-19 12:49:20,328  WARNING     Index warning on sys_pm_generated_invoice_months: relation "idx_sys_pm_generated_invoice_months_sys_pm_generated_invoice_mo" already exists
+
+2026-02-19 12:49:20,328  INFO        [OK] sys_pm_generated_invoice_months
+2026-02-19 12:49:20,379  INFO        [OK] sys_pm_invoice_status_uploads
+2026-02-19 12:49:20,436  INFO        [OK] sys_pm_landlord_accounts_transaction
+2026-02-19 12:49:20,502  INFO        [OK] sys_pm_lease_agreements
+2026-02-19 12:49:20,526  INFO        [OK] sys_pm_lease_agreements_27_repeat
+2026-02-19 12:49:20,578  INFO        [OK] sys_pm_lease_agreements_archives
+2026-02-19 12:49:20,597  INFO        [OK] sys_pm_lease_agreements_archives_211_repeat
+2026-02-19 12:49:20,621  INFO        [OK] sys_pm_lease_agreements_archives_repeat_documents
+2026-02-19 12:49:20,647  INFO        [OK] sys_pm_lease_agreements_pairing
+2026-02-19 12:49:20,666  INFO        [OK] sys_pm_lease_agreements_pairing_313_repeat
+2026-02-19 12:49:20,690  INFO        [OK] sys_pm_lease_agreements_repeat_documents
+2026-02-19 12:49:20,743  INFO        [OK] sys_pm_movement_requests
+2026-02-19 12:49:20,761  INFO        [OK] sys_pm_movement_requests_190_repeat
+2026-02-19 12:49:20,783  INFO        [OK] sys_pm_movement_requests_35_repeat
+2026-02-19 12:49:20,825  INFO        [OK] sys_pm_paid_owner
+2026-02-19 12:49:20,841  INFO        [OK] sys_pm_paid_owner_52_repeat
+2026-02-19 12:49:20,901  INFO        [OK] sys_pm_properties
+2026-02-19 12:49:20,924  INFO        [OK] sys_pm_properties_184_repeat
+2026-02-19 12:49:20,947  INFO        [OK] sys_pm_properties_184_repeat_repeat_services
+2026-02-19 12:49:20,967  INFO        [OK] sys_pm_properties_185_repeat
+2026-02-19 12:49:20,999  INFO        [OK] sys_pm_properties_attendance_register
+2026-02-19 12:49:21,013  INFO        [OK] sys_pm_properties_elements
+2026-02-19 12:49:21,050  INFO        [OK] sys_pm_properties_inspections
+2026-02-19 12:49:21,070  INFO        [OK] sys_pm_properties_inspections_39_repeat
+2026-02-19 12:49:21,094  INFO        [OK] sys_pm_properties_inspections_39_repeat_repeat_unit_photos
+2026-02-19 12:49:21,125  INFO        [OK] sys_pm_properties_ledger
+2026-02-19 12:49:21,140  INFO        [OK] sys_pm_properties_repair_types
+2026-02-19 12:49:21,166  INFO        [OK] sys_pm_properties_repair_types_repeat_element_id
+2026-02-19 12:49:21,210  INFO        [OK] sys_pm_properties_repairs_requests
+2026-02-19 12:49:21,230  INFO        [OK] sys_pm_properties_repairs_requests_49_repeat
+2026-02-19 12:49:21,245  INFO        [OK] sys_pm_properties_repairs_requests_50_repeat
+2026-02-19 12:49:21,265  INFO        [OK] sys_pm_properties_repeat_photos_and_documents
+2026-02-19 12:49:21,287  INFO        [OK] sys_pm_properties_tranfer_cloning
+2026-02-19 12:49:21,325  INFO        [OK] sys_pm_properties_withdrawal_requests
+2026-02-19 12:49:21,340  INFO        [OK] sys_pm_properties_withdrawal_requests_56_repeat
+2026-02-19 12:49:21,397  INFO        [OK] sys_pm_recoveries
+2026-02-19 12:49:21,419  INFO        [OK] sys_pm_service_agreements
+2026-02-19 12:49:21,440  INFO        [OK] sys_pm_service_agreements_186_repeat
+2026-02-19 12:49:21,460  INFO        [OK] sys_pm_service_agreements_24_repeat
+2026-02-19 12:49:21,476  INFO        [OK] sys_pm_service_agreements_282_repeat
+2026-02-19 12:49:21,497  WARNING     Index warning on sys_pm_service_agreements_282_repeat_repeat_return_items: relation "idx_sys_pm_service_agreements_282_repeat_repeat_return_items_fb" already exists
+
+2026-02-19 12:49:21,497  INFO        [OK] sys_pm_service_agreements_282_repeat_repeat_return_items
+2026-02-19 12:49:21,514  INFO        [OK] sys_pm_service_agreements_296_repeat
+2026-02-19 12:49:21,531  INFO        [OK] sys_pm_service_agreements_repeat_sla_documents
+2026-02-19 12:49:21,575  INFO        [OK] sys_pm_tenancy_closure
+2026-02-19 12:49:21,595  INFO        [OK] sys_pm_tenancy_closure_repeat_closure_document
+2026-02-19 12:49:21,637  INFO        [OK] sys_pm_tenants_accounts_transactions
+2026-02-19 12:49:21,685  INFO        [OK] sys_pm_tenants_blacklist
+2026-02-19 12:49:21,705  INFO        [OK] sys_pm_tenants_blacklist_reasons
+2026-02-19 12:49:21,744  INFO        [OK] sys_pm_tenants_invoices
+2026-02-19 12:49:21,762  INFO        [OK] sys_pm_tenants_invoices_41_repeat
+2026-02-19 12:49:21,848  INFO        [OK] sys_pm_tenants_payments
+2026-02-19 12:49:21,874  INFO        [OK] sys_pm_tenants_payments_87_repeat
+2026-02-19 12:49:21,927  INFO        [OK] sys_pm_tenants_payments_anomalies
+2026-02-19 12:49:21,945  INFO        [OK] sys_pm_tenants_payments_anomalies_58_repeat
+2026-02-19 12:49:21,999  INFO        [OK] sys_pm_tenants_payments_imports
+2026-02-19 12:49:22,062  INFO        [OK] sys_pm_tenants_payments_invalidations
+2026-02-19 12:49:22,086  INFO        [OK] sys_pm_tenants_payments_invalidations_repeat_documents
+2026-02-19 12:49:22,127  INFO        [OK] sys_pm_tenants_payments_invoices
+2026-02-19 12:49:22,188  INFO        [OK] sys_pm_tenants_payments_rerouting
+2026-02-19 12:49:22,236  INFO        [OK] sys_pm_tenants_prepayments
+2026-02-19 12:49:22,255  INFO        [OK] sys_pm_tenants_prepayments_222_repeat
+2026-02-19 12:49:22,325  INFO        [OK] sys_pm_unit_status_uploads
+2026-02-19 12:49:22,397  INFO        [OK] sys_pm_units
+2026-02-19 12:49:22,425  INFO        [OK] sys_pm_units_ledger
+2026-02-19 12:49:22,439  INFO        [OK] sys_pm_units_meter_readings
+2026-02-19 12:49:22,461  INFO        [OK] sys_pm_units_repeat_unit_uploads
+2026-02-19 12:49:22,504  INFO        [OK] sys_pm_vacation_requests
+2026-02-19 12:49:22,525  INFO        [OK] sys_pm_vacation_requests_33_repeat
+2026-02-19 12:49:22,553  INFO        [OK] sys_pm_zones_assignments
+2026-02-19 12:49:22,578  INFO        [OK] sys_pm_zones_assignments_37_repeat
+2026-02-19 12:49:22,660  INFO        [OK] sys_pm_zones_assignments_repeat_fo_ids
+2026-02-19 12:49:22,709  INFO        [OK] sys_pm_zones_assignments_repeat_properties_ids
+2026-02-19 12:49:22,753  INFO        [OK] sys_pm_zones_assignments_repeat_zone_id
+2026-02-19 12:49:22,765  INFO        [OK] sys_pm_zones_assignments_types
+2026-02-19 12:49:22,784  INFO        [OK] sys_pr_activities_calendar_configurations
+2026-02-19 12:49:22,806  WARNING     Index warning on sys_pr_activities_calendar_configurations_repeat_groups_id: relation "idx_sys_pr_activities_calendar_configurations_repeat_groups_id_" already exists
+
+2026-02-19 12:49:22,807  INFO        [OK] sys_pr_activities_calendar_configurations_repeat_groups_id
+2026-02-19 12:49:22,830  WARNING     Index warning on sys_pr_activities_calendar_configurations_repeat_persons: relation "idx_sys_pr_activities_calendar_configurations_repeat_persons_fb" already exists
+
+2026-02-19 12:49:22,830  INFO        [OK] sys_pr_activities_calendar_configurations_repeat_persons
+2026-02-19 12:49:22,856  WARNING     Index warning on sys_pr_activities_calendar_configurations_repeat_property_id: relation "idx_sys_pr_activities_calendar_configurations_repeat_property_i" already exists
+
+2026-02-19 12:49:22,857  INFO        [OK] sys_pr_activities_calendar_configurations_repeat_property_id
+2026-02-19 12:49:22,874  INFO        [OK] sys_pr_address_book
+2026-02-19 12:49:22,905  INFO        [OK] sys_pr_complaints
+2026-02-19 12:49:22,926  INFO        [OK] sys_pr_complaints_repeat_documents
+2026-02-19 12:49:22,940  INFO        [OK] sys_pr_complaints_types
+2026-02-19 12:49:22,961  WARNING     Index warning on sys_pr_complaints_types_repeat_responsible_department_id: relation "idx_sys_pr_complaints_types_repeat_responsible_department_id_fb" already exists
+
+2026-02-19 12:49:22,962  INFO        [OK] sys_pr_complaints_types_repeat_responsible_department_id
+2026-02-19 12:49:22,983  INFO        [OK] sys_pr_documents_library
+2026-02-19 12:49:23,006  INFO        [OK] sys_pr_documents_library_repeat_files
+2026-02-19 12:49:23,029  INFO        [OK] sys_pr_inquiries
+2026-02-19 12:49:23,047  INFO        [OK] sys_pr_meetings
+2026-02-19 12:49:23,068  INFO        [OK] sys_pr_meetings_repeat_documents
+2026-02-19 12:49:23,132  INFO        [OK] sys_pr_tasks_management
+2026-02-19 12:49:23,149  INFO        [OK] sys_pr_tasks_management_124_repeat
+2026-02-19 12:49:23,178  INFO        [OK] sys_pr_tasks_management_repeat_client_id
+2026-02-19 12:49:23,206  INFO        [OK] sys_pr_tasks_management_repeat_property_id
+2026-02-19 12:49:23,236  INFO        [OK] sys_pr_tasks_management_repeat_responsible_persons
+2026-02-19 12:49:23,262  INFO        [OK] sys_pr_tasks_management_repeat_tenant_id
+2026-02-19 12:49:23,289  INFO        [OK] sys_pr_tasks_management_repeat_user_group_id
+2026-02-19 12:49:23,315  INFO        [OK] sys_pr_tasks_management_repeat_zone_id
+2026-02-19 12:49:23,328  INFO        [OK] sys_pr_tasks_types
+2026-02-19 12:49:23,362  INFO        [OK] sys_proc_requisitions
+2026-02-19 12:49:23,379  INFO        [OK] sys_proc_requisitions_138_repeat
+2026-02-19 12:49:23,405  INFO        [OK] sys_proc_requisitions_repeat_department_id
+2026-02-19 12:49:23,447  INFO        [OK] sys_proc_supplier_invoices
+2026-02-19 12:49:23,464  INFO        [OK] sys_proc_supplier_invoices_142_repeat
+2026-02-19 12:49:23,485  WARNING     Index warning on sys_proc_supplier_invoices_142_repeat_repeat_tax_types_id: relation "idx_sys_proc_supplier_invoices_142_repeat_repeat_tax_types_id_f" already exists
+
+2026-02-19 12:49:23,486  INFO        [OK] sys_proc_supplier_invoices_142_repeat_repeat_tax_types_id
+2026-02-19 12:49:23,506  INFO        [OK] sys_proc_supplier_orders
+2026-02-19 12:49:23,524  INFO        [OK] sys_proc_supplier_orders_140_repeat
+2026-02-19 12:49:23,557  INFO        [OK] sys_proc_suppliers_accounts_transactions
+2026-02-19 12:49:23,573  INFO        [OK] sys_proc_suppliers_contracts
+2026-02-19 12:49:23,579  INFO        [OK] sys_properties_team_types
+2026-02-19 12:49:23,592  INFO        [OK] sys_queued_tasks_invoices_changes
+2026-02-19 12:49:23,610  INFO        [OK] sys_queued_tasks_returns
+2026-02-19 12:49:23,622  INFO        [OK] sys_queued_tasks_units_changes
+2026-02-19 12:49:23,670  INFO        [OK] sys_reports_landlord_accounts
+2026-02-19 12:49:23,690  INFO        [OK] sys_reports_mobile_login_logs
+2026-02-19 12:49:23,716  INFO        [OK] sys_reports_returns_anomalies
+2026-02-19 12:49:23,756  INFO        [OK] sys_reports_returns_approval
+2026-02-19 12:49:23,783  INFO        [OK] sys_reports_returns_arrears
+2026-02-19 12:49:23,825  INFO        [OK] sys_reports_returns_batches
+2026-02-19 12:49:23,841  INFO        [OK] sys_reports_returns_batches_276_repeat
+2026-02-19 12:49:23,857  INFO        [OK] sys_reports_returns_batches_280_repeat
+2026-02-19 12:49:23,877  INFO        [OK] sys_reports_returns_batches_283_repeat
+2026-02-19 12:49:23,906  INFO        [OK] sys_reports_returns_batches_repeat_featured_properties
+2026-02-19 12:49:23,932  INFO        [OK] sys_reports_returns_batches_repeat_properties_id
+2026-02-19 12:49:23,964  INFO        [OK] sys_reports_returns_batches_repeat_property_report_id
+2026-02-19 12:49:23,991  INFO        [OK] sys_reports_returns_batches_repeat_recoveries_id
+2026-02-19 12:49:24,021  INFO        [OK] sys_reports_returns_batches_repeat_returns_id
+2026-02-19 12:49:24,049  INFO        [OK] sys_reports_returns_batches_repeat_transaction_id
+2026-02-19 12:49:24,068  INFO        [OK] sys_reports_returns_charges
+2026-02-19 12:49:24,087  INFO        [OK] sys_reports_returns_clients_manual_ledgers
+2026-02-19 12:49:24,112  INFO        [OK] sys_reports_returns_items
+2026-02-19 12:49:24,133  INFO        [OK] sys_reports_returns_master
+2026-02-19 12:49:24,165  INFO        [OK] sys_reports_returns_prepayments
+2026-02-19 12:49:24,230  INFO        [OK] sys_reports_returns_properties
+2026-02-19 12:49:24,256  INFO        [OK] sys_reports_returns_recoveries
+2026-02-19 12:49:24,265  INFO        [OK] sys_reports_returns_recoveries_temp
+2026-02-19 12:49:24,331  INFO        [OK] sys_reports_returns_units
+2026-02-19 12:49:24,411  INFO        [OK] sys_reports_stats_occupancy
+2026-02-19 12:49:24,491  INFO        [OK] sys_reports_stats_returns_workflow
+2026-02-19 12:49:24,574  INFO        [OK] sys_reports_stats_units
+2026-02-19 12:49:24,595  INFO        [OK] sys_reports_user_browser_activities
+2026-02-19 12:49:24,644  INFO        [OK] sys_set_audit_trail
+2026-02-19 12:49:24,664  INFO        [OK] sys_set_audit_types
+2026-02-19 12:49:24,680  INFO        [OK] sys_set_bank_accounts
+2026-02-19 12:49:24,698  INFO        [OK] sys_set_bank_accounts_213_repeat
+2026-02-19 12:49:24,723  INFO        [OK] sys_set_banks
+2026-02-19 12:49:24,752  INFO        [OK] sys_set_banks_branches
+2026-02-19 12:49:24,776  INFO        [OK] sys_set_clients_dependent_charges
+2026-02-19 12:49:24,794  INFO        [OK] sys_set_constituencies
+2026-02-19 12:49:24,812  INFO        [OK] sys_set_counties
+2026-02-19 12:49:24,832  INFO        [OK] sys_set_countries
+2026-02-19 12:49:24,852  INFO        [OK] sys_set_data_types
+2026-02-19 12:49:24,870  INFO        [OK] sys_set_departments
+2026-02-19 12:49:24,901  INFO        [OK] sys_set_entities_permissions
+2026-02-19 12:49:24,923  INFO        [OK] sys_set_entities_status_types
+2026-02-19 12:49:24,940  INFO        [OK] sys_set_entities_types
+2026-02-19 12:49:24,976  INFO        [OK] sys_set_estates
+2026-02-19 12:49:24,993  INFO        [OK] sys_set_frequency_cycles
+2026-02-19 12:49:25,012  INFO        [OK] sys_set_gender_types
+2026-02-19 12:49:25,032  INFO        [OK] sys_set_global_settings
+2026-02-19 12:49:25,063  INFO        [OK] sys_set_invoiceable_items
+2026-02-19 12:49:25,081  INFO        [OK] sys_set_invoiceable_items_cycles
+2026-02-19 12:49:25,125  INFO        [OK] sys_set_menus_access_permissions
+2026-02-19 12:49:25,160  INFO        [OK] sys_set_menus_access_permissions_repeat_groups
+2026-02-19 12:49:25,194  INFO        [OK] sys_set_menus_access_permissions_repeat_members_id
+2026-02-19 12:49:25,228  INFO        [OK] sys_set_menus_access_permissions_repeat_menu_items
+2026-02-19 12:49:25,259  WARNING     Index warning on sys_set_menus_access_permissions_repeat_menu_items_field: relation "idx_sys_set_menus_access_permissions_repeat_menu_items_field_fb" already exists
+
+2026-02-19 12:49:25,259  INFO        [OK] sys_set_menus_access_permissions_repeat_menu_items_field
+2026-02-19 12:49:25,276  INFO        [OK] sys_set_onboarding
+2026-02-19 12:49:25,293  INFO        [OK] sys_set_payments_methods
+2026-02-19 12:49:25,314  INFO        [OK] sys_set_predefined_remarks
+2026-02-19 12:49:25,348  INFO        [OK] sys_set_predefined_remarks_repeat_groups_id
+2026-02-19 12:49:25,384  INFO        [OK] sys_set_providers
+2026-02-19 12:49:25,408  INFO        [OK] sys_set_providers_repeat_files
+2026-02-19 12:49:25,435  INFO        [OK] sys_set_providers_repeat_services_id
+2026-02-19 12:49:25,464  INFO        [OK] sys_set_providers_repeat_zone_areas
+2026-02-19 12:49:25,490  INFO        [OK] sys_set_providers_repeat_zone_id
+2026-02-19 12:49:25,503  INFO        [OK] sys_set_returns_anomaly_types
+2026-02-19 12:49:25,516  INFO        [OK] sys_set_sections
+2026-02-19 12:49:25,543  INFO        [OK] sys_set_sections_repeat_section_head_staff_id
+2026-02-19 12:49:25,571  INFO        [OK] sys_set_sections_repeat_supervisory_staff_id
+2026-02-19 12:49:25,599  INFO        [OK] sys_set_staff_positions
+2026-02-19 12:49:25,620  INFO        [OK] sys_set_staff_positions_115_repeat
+2026-02-19 12:49:25,649  INFO        [OK] sys_set_system_users
+2026-02-19 12:49:25,684  INFO        [OK] sys_set_transactions_types
+2026-02-19 12:49:25,697  INFO        [OK] sys_set_transactions_types_categories
+2026-02-19 12:49:25,711  INFO        [OK] sys_set_transport_routes
+2026-02-19 12:49:25,724  INFO        [OK] sys_set_unit_status_types
+2026-02-19 12:49:25,743  INFO        [OK] sys_set_wards
+2026-02-19 12:49:25,758  INFO        [OK] sys_set_workflow_reasons
+2026-02-19 12:49:25,780  INFO        [OK] sys_set_workflow_settings
+2026-02-19 12:49:25,804  INFO        [OK] sys_set_workflow_settings_63_repeat
+2026-02-19 12:49:25,822  INFO        [OK] sys_set_workflow_statuses
+2026-02-19 12:49:25,843  INFO        [OK] sys_set_zone_areas
+2026-02-19 12:49:25,856  INFO        [OK] sys_set_zones
+2026-02-19 12:49:25,886  INFO        [OK] sys_set_zones_repeat_estates_id
+2026-02-19 12:49:25,978  INFO        [OK] sys_staff
+2026-02-19 12:49:25,999  INFO        [OK] sys_staff_207_repeat
+2026-02-19 12:49:26,023  INFO        [OK] sys_staff_207_repeat_repeat_documents
+2026-02-19 12:49:26,045  INFO        [OK] sys_staff_209_repeat
+2026-02-19 12:49:26,068  INFO        [OK] sys_staff_209_repeat_repeat_documents
+2026-02-19 12:49:26,092  INFO        [OK] sys_staff_232_repeat
+2026-02-19 12:49:26,119  INFO        [OK] sys_tools_bulk_data_import
+2026-02-19 12:49:26,132  INFO        [OK] sys_units_topology
+2026-02-19 12:49:26,146  INFO        [OK] sys_user_pass_logs
+2026-02-19 12:49:26,163  INFO        [OK] sys_util_token_requests
+2026-02-19 12:49:26,208  INFO        [OK] sys_workflow_activities
+2026-02-19 12:49:26,225  INFO        [OK] sys_workflow_activities_300_repeat
+2026-02-19 12:49:26,250  INFO        [OK] um_tax_bands
+2026-02-19 12:49:26,291  INFO        [OK] zimport_sys_reports_returns_properties
+2026-02-19 12:49:26,304  INFO        [OK] zmigra_chbank
+2026-02-19 12:49:26,318  INFO        [OK] zmigra_chbbra
+2026-02-19 12:49:26,340  INFO        [OK] zmigra_chblocks
+2026-02-19 12:49:26,359  INFO        [OK] zmigra_chbunits
+2026-02-19 12:49:26,380  INFO        [OK] zmigra_chjvd
+2026-02-19 12:49:26,399  INFO        [OK] zmigra_chlrds
+2026-02-19 12:49:26,412  INFO        [OK] zmigra_chlrh
+2026-02-19 12:49:26,431  INFO        [OK] zmigra_chrhms
+2026-02-19 12:49:26,452  INFO        [OK] zmigra_chtacc
+2026-02-19 12:49:26,471  INFO        [OK] zmigra_chtens
+2026-02-19 12:49:26,491  INFO        [OK] zmigra_chtntrs
+2026-02-19 12:49:26,504  INFO        [OK] zmigra_chtntrs_invoice_settings1
+2026-02-19 12:49:26,524  INFO        [OK] zmigra_chtpays
+2026-02-19 12:49:26,538  INFO        [OK] zmigra_promas_chips_returns_final_net
+2026-02-19 12:49:26,554  INFO        [OK] zmigra_promas_chips_returns_net
+2026-02-19 12:49:26,576  INFO        [OK] zmigra_promas_returns_invoices
+2026-02-19 12:49:26,593  INFO        [OK] zmigra_promas_returns_net
+2026-02-19 12:49:26,615  INFO        [OK] zmigra_promas_returns_recoveries
+2026-02-19 12:49:26,617  INFO      Connections closed

@@ -1,0 +1,762 @@
+# PROCESSED RETURNS REPORT - UI & EXPORT GUIDE
+
+## Overview
+
+The **Processed Returns Report** is a summarized listing screen that displays completed property returns for landlords/clients. Users can:
+
+1. View returns in a **summary table** (per landlord/property)
+2. **Filter** by period, client, property, status
+3. **Download PDF** - Formatted report with details
+4. **Download Excel** - Data export for analysis
+5. **Drill down** - Click on report to view full details
+
+This document covers the database tables, query joins, UI columns, and export columns for implementation.
+
+---
+
+## 📊 Primary Database Tables
+
+### 1. **`sys_reports_returns_properties`** - Main Returns Table
+
+**Purpose:** Stores processed property return reports
+
+| Column                      | Type     | Description                                    |
+| --------------------------- | -------- | ---------------------------------------------- |
+| id                          | INT      | Primary key (report_id)                        |
+| date_time                   | DATETIME | When report created                            |
+| period_id                   | INT      | Links to accounting period                     |
+| period_date                 | DATE     | Month/year for returns (YYYY-MM-01)            |
+| client_id                   | INT      | Landlord/Client ID                             |
+| property_id                 | INT      | Property ID                                    |
+| sla_id                      | INT      | Service Level Agreement ID                     |
+| return_type_id              | INT      | Type of return (1=Normal, 2=Credit Note, etc.) |
+| reference_number            | VARCHAR  | Unique return reference (e.g., RET-2026-001)   |
+| batch_id                    | INT      | Links to returns batch (if batched)            |
+| field_officer_id            | INT      | Field officer assigned                         |
+| total_gross_amount          | DECIMAL  | Total gross returns before deductions          |
+| total_commissionable        | DECIMAL  | Commissionable amount                          |
+| total_commission            | DECIMAL  | Management commission                          |
+| vat_on_commission           | DECIMAL  | VAT on commission                              |
+| total_vat                   | DECIMAL  | Total VAT collected                            |
+| total_recoveries            | DECIMAL  | Total recoveries/deductions                    |
+| total_net_amount            | DECIMAL  | **Net amount payable to landlord**             |
+| properties_net              | DECIMAL  | Net from properties only                       |
+| other_transactions          | DECIMAL  | Other adjustments                              |
+| current_status_id           | INT      | 1=Pending, 5=Approved, 17=Processed            |
+| created_by                  | INT      | User who created                               |
+| approved_by                 | INT      | User who approved                              |
+| approval_date               | DATETIME | When approved                                  |
+| narration                   | TEXT     | Additional notes                               |
+| total_featured_items_amount | DECIMAL  | Featured items total                           |
+
+---
+
+### 2. **`sys_pm_clients`** - Clients/Landlords Table
+
+**Purpose:** Client details
+
+| Column             | Type    | Description        |
+| ------------------ | ------- | ------------------ |
+| id                 | INT     | Primary key        |
+| names              | VARCHAR | First name         |
+| second_name        | VARCHAR | Middle name        |
+| last_name          | VARCHAR | Last name          |
+| email              | VARCHAR | Email address      |
+| phone              | VARCHAR | Phone number       |
+| physical_address   | TEXT    | Address            |
+| id_number          | VARCHAR | ID/Passport number |
+| kra_pin            | VARCHAR | Tax PIN            |
+| current_status_id  | INT     | Active/Inactive    |
+| client_category_id | INT     | Category           |
+
+---
+
+### 3. **`sys_pm_properties`** - Properties Table
+
+**Purpose:** Property details
+
+| Column            | Type    | Description               |
+| ----------------- | ------- | ------------------------- |
+| id                | INT     | Primary key               |
+| reference_number  | VARCHAR | Property code (e.g., P01) |
+| property_name     | VARCHAR | Property name             |
+| client_id         | INT     | Owner/Landlord ID         |
+| zone_id           | INT     | Zone/area                 |
+| property_type_id  | INT     | Type (residential, etc.)  |
+| location          | TEXT    | Physical location         |
+| units_count       | INT     | Number of units           |
+| current_status_id | INT     | Active/Inactive           |
+
+---
+
+### 4. **`sys_pm_clients_periods_closures`** - Accounting Periods
+
+**Purpose:** Accounting period definitions
+
+| Column            | Type     | Description                     |
+| ----------------- | -------- | ------------------------------- |
+| id                | INT      | Primary key (period_id)         |
+| period_date       | DATE     | Period month (YYYY-MM-01)       |
+| period_name       | VARCHAR  | Display name (e.g., "Jan 2026") |
+| start_date        | DATE     | Period start                    |
+| end_date          | DATE     | Period end                      |
+| current_status_id | INT      | 1=Open, 2=Closed                |
+| closed_by         | INT      | User who closed                 |
+| closing_date      | DATETIME | When closed                     |
+
+---
+
+### 5. **`sys_pm_service_agreements`** - Service Agreements (SLA)
+
+**Purpose:** Management agreements per property
+
+| Column            | Type    | Description              |
+| ----------------- | ------- | ------------------------ |
+| id                | INT     | Primary key              |
+| reference_number  | VARCHAR | SLA reference            |
+| client_id         | INT     | Landlord ID              |
+| property_id       | INT     | Property ID              |
+| commission_rate   | DECIMAL | Commission % (e.g., 10%) |
+| vat_rate          | DECIMAL | VAT % (e.g., 16%)        |
+| start_date        | DATE    | Agreement start          |
+| end_date          | DATE    | Agreement end            |
+| current_status_id | INT     | Active/Inactive          |
+| agreement_type_id | INT     | Type of agreement        |
+
+---
+
+### 6. **`sys_pm_clients_returns_types`** - Return Types
+
+**Purpose:** Types of returns
+
+| Column            | Type    | Description                          |
+| ----------------- | ------- | ------------------------------------ |
+| id                | INT     | Primary key                          |
+| type_name         | VARCHAR | Type (e.g., "Normal", "Credit Note") |
+| type_code         | VARCHAR | Short code                           |
+| current_status_id | INT     | Active/Inactive                      |
+
+---
+
+### 7. **`sys_set_workflow_statuses`** - Workflow Statuses
+
+**Purpose:** Status definitions
+
+| Column      | Type    | Description                        |
+| ----------- | ------- | ---------------------------------- |
+| id          | INT     | Primary key                        |
+| status_name | VARCHAR | Name (e.g., "Pending", "Approved") |
+| status_code | VARCHAR | Short code                         |
+| status_type | VARCHAR | Category                           |
+
+---
+
+### 8. **`sys_staff`** - Staff/Field Officers
+
+**Purpose:** Staff details
+
+| Column      | Type    | Description |
+| ----------- | ------- | ----------- |
+| id          | INT     | Primary key |
+| names       | VARCHAR | Full name   |
+| email       | VARCHAR | Email       |
+| phone       | VARCHAR | Phone       |
+| designation | VARCHAR | Job title   |
+
+---
+
+### 9. **`sys_reports_returns_batches`** - Returns Batches
+
+**Purpose:** Batch groupings for returns
+
+| Column            | Type     | Description         |
+| ----------------- | -------- | ------------------- |
+| id                | INT      | Primary key         |
+| date_time         | DATETIME | When created        |
+| client_id         | INT      | Landlord ID         |
+| period_id         | INT      | Period reference    |
+| month_year        | DATE     | Month for batch     |
+| batch_config_id   | INT      | Configuration used  |
+| net_amount        | DECIMAL  | Total net for batch |
+| current_status_id | INT      | Status              |
+| reference_number  | VARCHAR  | Batch reference     |
+
+---
+
+## 🔗 Database Query with Joins
+
+### SQL Query for Returns Listing
+
+```sql
+SELECT
+    -- Report details
+    rp.id AS report_id,
+    rp.date_time,
+    rp.reference_number,
+    rp.period_date,
+    rp.batch_id,
+
+    -- Period details
+    period.period_name,
+    period.period_date AS period_month,
+
+    -- Client details
+    c.id AS client_id,
+    CONCAT_WS(' ', c.names, c.second_name, c.last_name) AS client_name,
+    c.email AS client_email,
+    c.phone AS client_phone,
+    c.kra_pin AS client_kra_pin,
+
+    -- Property details
+    p.id AS property_id,
+    CONCAT_WS(' - ', p.reference_number, p.property_name) AS property,
+    p.reference_number AS property_code,
+    p.property_name,
+    p.location AS property_location,
+
+    -- SLA details
+    sla.reference_number AS sla_reference,
+    sla.commission_rate,
+    sla.vat_rate,
+
+    -- Return type
+    rt.type_name AS return_type,
+
+    -- Financial details
+    rp.total_gross_amount,
+    rp.total_commissionable,
+    rp.total_commission,
+    rp.vat_on_commission,
+    rp.total_vat,
+    rp.total_recoveries,
+    rp.total_net_amount,
+    rp.properties_net,
+    rp.other_transactions,
+    rp.total_featured_items_amount,
+
+    -- Status
+    ws.status_name AS current_status,
+    ws.id AS status_id,
+
+    -- Field officer
+    staff.names AS field_officer,
+
+    -- Batch
+    batch.reference_number AS batch_reference,
+
+    -- Approval details
+    rp.approved_by,
+    rp.approval_date,
+    rp.created_by
+
+FROM sys_reports_returns_properties rp
+
+-- Client join (REQUIRED)
+INNER JOIN sys_pm_clients c
+    ON c.id = rp.client_id
+
+-- Property join (REQUIRED)
+INNER JOIN sys_pm_properties p
+    ON p.id = rp.property_id
+
+-- Period join (REQUIRED)
+LEFT JOIN sys_pm_clients_periods_closures period
+    ON period.id = rp.period_id
+
+-- Status join (REQUIRED)
+LEFT JOIN sys_set_workflow_statuses ws
+    ON ws.id = rp.current_status_id
+
+-- Return type join
+LEFT JOIN sys_pm_clients_returns_types rt
+    ON rt.id = rp.return_type_id
+
+-- SLA join
+LEFT JOIN sys_pm_service_agreements sla
+    ON sla.id = rp.sla_id
+
+-- Field officer join
+LEFT JOIN sys_staff staff
+    ON staff.id = rp.field_officer_id
+
+-- Batch join
+LEFT JOIN sys_reports_returns_batches batch
+    ON batch.id = rp.batch_id
+
+-- Filter conditions (add WHERE clause as needed)
+WHERE rp.current_status_id IN (5, 17)  -- Approved or Processed
+  -- AND DATE_FORMAT(rp.period_date, '%Y-%m') = '2026-01'  -- Optional: Filter by period
+  -- AND rp.client_id = 14  -- Optional: Filter by client
+  -- AND rp.property_id = 501  -- Optional: Filter by property
+
+ORDER BY rp.period_date DESC, c.names ASC, p.property_name ASC;
+```
+
+---
+
+## 🖥️ UI Columns (Summary Table)
+
+### Desktop/Wide Screen View
+
+| Column           | Field                     | Width | Sortable | Format            |
+| ---------------- | ------------------------- | ----- | -------- | ----------------- |
+| **#**            | Row number                | 40px  | No       | Auto-increment    |
+| **Date**         | `date_time`               | 100px | Yes      | DD-MMM-YYYY       |
+| **Period**       | `period_name`             | 100px | Yes      | Jan 2026          |
+| **Client**       | `client_name`             | 180px | Yes      | Full name         |
+| **Property**     | `property` (code + name)  | 220px | Yes      | P01 - Apartments  |
+| **SLA**          | `sla_reference`           | 100px | Yes      | SLA-2026-001      |
+| **Gross Amount** | `total_gross_amount`      | 120px | Yes      | KSh 150,000       |
+| **Commission**   | `total_commission`        | 110px | Yes      | KSh 15,000        |
+| **VAT**          | `vat_on_commission`       | 90px  | Yes      | KSh 2,400         |
+| **Recoveries**   | `total_recoveries`        | 110px | Yes      | KSh 12,000        |
+| **Net Amount**   | `total_net_amount` (bold) | 130px | Yes      | **KSh 120,600**   |
+| **Status**       | `current_status` (badge)  | 100px | Yes      | Processed (green) |
+| **Actions**      | Buttons (View/PDF/Excel)  | 150px | No       | Icons/dropdowns   |
+
+**Total Row:**
+
+- Show sum of: Gross Amount, Commission, VAT, Recoveries, Net Amount
+- Bold formatting
+
+---
+
+### Mobile/Tablet View
+
+Collapsed card view:
+
+```
+┌─────────────────────────────────────────────┐
+│ John Doe                         [Actions ▼]│
+│ Sunshine Apartments (P01)                   │
+│ Period: Jan 2026                            │
+│                                             │
+│ Gross:    KSh 150,000                       │
+│ Net:      KSh 120,600                       │
+│ Status:   [Processed]                       │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## 🔍 Filter Panel
+
+### Available Filters
+
+| Filter          | Type         | Source                            | Default            |
+| --------------- | ------------ | --------------------------------- | ------------------ |
+| **Period**      | Dropdown     | `sys_pm_clients_periods_closures` | Current period     |
+| **Client**      | Searchable   | `sys_pm_clients`                  | All                |
+| **Property**    | Searchable   | `sys_pm_properties`               | All                |
+| **Status**      | Multi-select | `sys_set_workflow_statuses`       | Approved+Processed |
+| **Return Type** | Dropdown     | `sys_pm_clients_returns_types`    | All                |
+| **Batch**       | Dropdown     | `sys_reports_returns_batches`     | All                |
+| **Date Range**  | Date picker  | Custom                            | Last 3 months      |
+
+**Filter Query Example:**
+
+```sql
+WHERE rp.current_status_id IN (5, 17)  -- Approved, Processed
+  AND DATE_FORMAT(rp.period_date, '%Y-%m') = '2026-01'  -- Period filter
+  AND rp.client_id = 14  -- Client filter
+  AND rp.property_id = 501  -- Property filter (if selected)
+  AND rp.return_type_id = 1  -- Return type filter (if selected)
+  AND rp.batch_id = 100  -- Batch filter (if selected)
+  AND rp.date_time BETWEEN '2025-10-01' AND '2026-01-31'  -- Date range
+```
+
+---
+
+## 📄 PDF Export Columns
+
+### PDF Header Section
+
+```
+┌────────────────────────────────────────────────────────────┐
+│           PROPERTY MANAGEMENT RETURNS REPORT                │
+│                                                              │
+│  Period: January 2026                                        │
+│  Generated: 29-Jan-2026 14:30                               │
+│  Generated By: Admin User                                    │
+│  Total Records: 15                                           │
+└────────────────────────────────────────────────────────────┘
+```
+
+### PDF Table Columns
+
+| Column         | Field                | Width | Format       |
+| -------------- | -------------------- | ----- | ------------ |
+| **Date**       | `date_time`          | 10%   | DD-MMM-YYYY  |
+| **Period**     | `period_name`        | 8%    | Jan 2026     |
+| **Client**     | `client_name`        | 15%   | Full name    |
+| **Property**   | `property`           | 17%   | Code + Name  |
+| **Gross**      | `total_gross_amount` | 10%   | Currency     |
+| **Commission** | `total_commission`   | 10%   | Currency     |
+| **VAT**        | `vat_on_commission`  | 8%    | Currency     |
+| **Recoveries** | `total_recoveries`   | 10%   | Currency     |
+| **Net Amount** | `total_net_amount`   | 12%   | **Currency** |
+
+**PDF Footer:**
+
+- Page numbers
+- Total rows
+- Grand totals for financial columns
+- Disclaimer: "This is a system-generated report"
+
+---
+
+### Detailed PDF (Single Return)
+
+When user clicks "Download PDF" for a specific return:
+
+#### Section 1: Return Header
+
+```
+PROPERTY RETURN REPORT
+Reference: RET-2026-001
+
+Client: John Doe
+Property: Sunshine Apartments (P01)
+Period: January 2026
+Status: Processed
+Approved By: Jane Smith
+Approval Date: 28-Jan-2026
+```
+
+#### Section 2: Financial Summary
+
+```
+┌──────────────────────────────────────────────────┐
+│ FINANCIAL SUMMARY                                 │
+├──────────────────────────────────────────────────┤
+│ Gross Returns              KSh 150,000.00        │
+│ Less: Commission (10%)     KSh  15,000.00        │
+│ Less: VAT on Commission    KSh   2,400.00        │
+│ Less: VAT Collected        KSh   5,000.00        │
+│ Less: Total Recoveries     KSh  12,000.00        │
+│ ──────────────────────────────────────────────   │
+│ NET PAYABLE                KSh 115,600.00        │
+└──────────────────────────────────────────────────┘
+```
+
+#### Section 3: Breakdown Tables
+
+**Invoices Paid:**
+| Invoice | Unit | Tenant | Amount | Commission | VAT |
+| ------------ | ----- | -------- | --------- | ---------- | ------ |
+| INV-2026-001 | A01 | John Doe | 50,000 | 5,000 | 800 |
+| INV-2026-002 | A02 | Jane Doe | 45,000 | 4,500 | 720 |
+
+**Recoveries/Deductions:**
+| Type | Description | Amount |
+| ------------------- | -------------- | -------- |
+| Loan Principal | Advance repay | 10,000 |
+| Loan Interest | Interest | 2,000 |
+
+**Total Recoveries:** KSh 12,000.00
+
+---
+
+## 📊 Excel Export Columns
+
+### Sheet 1: Returns Summary
+
+All columns from database query (comprehensive):
+
+| Column                    | Field                         | Format            |
+| ------------------------- | ----------------------------- | ----------------- |
+| Report ID                 | `report_id`                   | Number            |
+| Report Date               | `date_time`                   | DD-MMM-YYYY HH:MM |
+| Reference Number          | `reference_number`            | Text              |
+| Period                    | `period_name`                 | Text              |
+| Period Date               | `period_date`                 | MMM-YYYY          |
+| Client ID                 | `client_id`                   | Number            |
+| Client Name               | `client_name`                 | Text              |
+| Client Email              | `client_email`                | Email             |
+| Client Phone              | `client_phone`                | Phone             |
+| Client KRA PIN            | `client_kra_pin`              | Text              |
+| Property ID               | `property_id`                 | Number            |
+| Property Code             | `property_code`               | Text              |
+| Property Name             | `property_name`               | Text              |
+| Property Location         | `property_location`           | Text              |
+| SLA Reference             | `sla_reference`               | Text              |
+| Commission Rate (%)       | `commission_rate`             | Percentage        |
+| VAT Rate (%)              | `vat_rate`                    | Percentage        |
+| Return Type               | `return_type`                 | Text              |
+| **Gross Amount**          | `total_gross_amount`          | **Currency**      |
+| Commissionable Amount     | `total_commissionable`        | Currency          |
+| **Management Commission** | `total_commission`            | **Currency**      |
+| **VAT on Commission**     | `vat_on_commission`           | **Currency**      |
+| Total VAT Collected       | `total_vat`                   | Currency          |
+| **Total Recoveries**      | `total_recoveries`            | **Currency**      |
+| **NET AMOUNT PAYABLE**    | `total_net_amount`            | **Currency**      |
+| Properties Net            | `properties_net`              | Currency          |
+| Other Transactions        | `other_transactions`          | Currency          |
+| Featured Items Amount     | `total_featured_items_amount` | Currency          |
+| Status                    | `current_status`              | Text              |
+| Field Officer             | `field_officer`               | Text              |
+| Batch Reference           | `batch_reference`             | Text              |
+| Approved By               | `approved_by`                 | Number            |
+| Approval Date             | `approval_date`               | DD-MMM-YYYY       |
+| Created By                | `created_by`                  | Number            |
+
+**Excel Features:**
+
+- Header row: Bold, background color, freeze panes
+- Currency columns: Format as currency with 2 decimals
+- Percentage columns: Format as percentage
+- Auto-filter enabled on all columns
+- Totals row at bottom (Sum of financial columns)
+- Column auto-width
+
+---
+
+### Sheet 2: Summary Statistics (Optional)
+
+| Metric                      | Value             |
+| --------------------------- | ----------------- |
+| Total Reports               | 15                |
+| Total Clients               | 8                 |
+| Total Properties            | 12                |
+| Total Gross Amount          | KSh 2,450,000     |
+| Total Commission            | KSh 245,000       |
+| Total VAT                   | KSh 39,200        |
+| Total Recoveries            | KSh 180,000       |
+| **Total Net Payable**       | **KSh 1,985,800** |
+| Average Return per Property | KSh 165,483       |
+
+---
+
+## 🎨 UI Actions
+
+### Actions Menu (Per Row)
+
+```
+┌──────────────────────────────┐
+│ [•••] Actions                │
+├──────────────────────────────┤
+│ 👁️  View Full Details        │
+│ 📄 Download PDF              │
+│ 📊 Download Excel            │
+│ 📧 Email to Client           │
+│ 🔗 Copy Link                 │
+│ 📝 View Approval History     │
+└──────────────────────────────┘
+```
+
+### Bulk Actions
+
+```
+☑️  Select All | Deselect All
+
+Selected: 3 items
+
+[Bulk Actions ▼]
+├─ Download Selected (PDF)
+├─ Download Selected (Excel)
+├─ Email to Clients
+├─ Generate Combined Report
+└─ Export to Accounting System
+```
+
+---
+
+## 🔐 Access Control & Permissions
+
+### View Permissions
+
+- **All Users**: Can view returns for assigned clients/properties
+- **Finance Team**: Can view all returns
+- **Landlords**: Can view only their own returns (client portal)
+- **Property Managers**: Can view returns for managed properties
+
+### Download Permissions
+
+- **PDF Export**: All users with view permission
+- **Excel Export**: Finance team, Admins, Managers only
+- **Bulk Export**: Admins and Finance Managers only
+
+### Status Filters by Role
+
+- **Landlords**: Only "Processed" status visible
+- **Staff**: Can see "Approved" and "Processed"
+- **Finance**: Can see all statuses including "Pending"
+
+---
+
+## 💡 Additional Features
+
+### 1. **Quick Search**
+
+```sql
+-- Search across multiple fields
+WHERE (
+    c.names LIKE '%search_term%'
+    OR p.property_name LIKE '%search_term%'
+    OR rp.reference_number LIKE '%search_term%'
+    OR period.period_name LIKE '%search_term%'
+)
+```
+
+### 2. **Pagination**
+
+- **Default Page Size**: 25 records
+- **Options**: 25, 50, 100, 500, All
+- **Implementation**: LIMIT and OFFSET
+
+```sql
+-- Page 2, 25 per page
+LIMIT 25 OFFSET 25
+```
+
+### 3. **Sorting**
+
+- **Default Sort**: Period Date DESC, Client Name ASC
+- **Multi-column Sort**: Shift+Click headers
+- **Saved Preferences**: Per user
+
+### 4. **Column Visibility Toggle**
+
+Allow users to show/hide columns:
+
+- Gross Amount ☑️
+- Commission ☑️
+- VAT ☑️
+- Recoveries ☑️
+- Net Amount ☑️ (always visible)
+- Status ☑️
+- Field Officer ☐
+
+### 5. **Export Customization**
+
+```
+┌────────────────────────────────────┐
+│ Export Options                     │
+├────────────────────────────────────┤
+│ Format: ⦿ PDF  ○ Excel            │
+│                                    │
+│ Include:                           │
+│ ☑️ Financial Summary               │
+│ ☑️ Invoice Breakdown               │
+│ ☑️ Recoveries Detail               │
+│ ☑️ Client Information              │
+│ ☐ Property Images                  │
+│                                    │
+│ Date Range: [Jan 2026__]          │
+│                                    │
+│             [Cancel] [Export]      │
+└────────────────────────────────────┘
+```
+
+---
+
+## 📝 Implementation Checklist
+
+### Backend
+
+- [ ] Create DAO method: `ClientReturnDao::getAllDetails($filters)`
+- [ ] Implement filtering logic (period, client, property, status)
+- [ ] Add pagination support
+- [ ] Implement sorting
+- [ ] Create PDF generation service (TCPDF/FPDF)
+- [ ] Create Excel generation service (PhpSpreadsheet)
+- [ ] Add access control checks
+- [ ] Implement email delivery for reports
+
+### Frontend
+
+- [ ] Build summary table with responsive design
+- [ ] Add filter panel with auto-complete
+- [ ] Implement column sorting
+- [ ] Add pagination controls
+- [ ] Create actions dropdown menu
+- [ ] Build bulk actions interface
+- [ ] Add loading states and error handling
+- [ ] Implement export dialogs (PDF/Excel options)
+- [ ] Add column visibility toggle
+- [ ] Mobile-responsive card view
+
+### Reports
+
+- [ ] Design PDF template (header, footer, tables)
+- [ ] Create detailed PDF with breakdowns
+- [ ] Design Excel template with multiple sheets
+- [ ] Add summary statistics sheet
+- [ ] Implement currency formatting
+- [ ] Add branding (logo, colors)
+
+### Performance
+
+- [ ] Add database indexes on frequently filtered columns
+- [ ] Implement query caching for filters
+- [ ] Optimize joins (use EXPLAIN)
+- [ ] Add pagination to prevent memory issues
+- [ ] Cache PDF/Excel for recently generated reports
+
+---
+
+## 🎯 Sample Queries
+
+### Get Returns for Client
+
+```sql
+SELECT
+    rp.id,
+    rp.reference_number,
+    p.property_name,
+    period.period_name,
+    rp.total_net_amount,
+    ws.status_name
+FROM sys_reports_returns_properties rp
+INNER JOIN sys_pm_clients c ON c.id = rp.client_id
+INNER JOIN sys_pm_properties p ON p.id = rp.property_id
+LEFT JOIN sys_pm_clients_periods_closures period ON period.id = rp.period_id
+LEFT JOIN sys_set_workflow_statuses ws ON ws.id = rp.current_status_id
+WHERE rp.client_id = 14
+  AND rp.current_status_id = 17  -- Processed
+ORDER BY rp.period_date DESC
+LIMIT 10;
+```
+
+### Get Returns by Period
+
+```sql
+SELECT
+    c.names AS client_name,
+    COUNT(rp.id) AS returns_count,
+    SUM(rp.total_gross_amount) AS total_gross,
+    SUM(rp.total_commission) AS total_commission,
+    SUM(rp.total_net_amount) AS total_net
+FROM sys_reports_returns_properties rp
+INNER JOIN sys_pm_clients c ON c.id = rp.client_id
+WHERE DATE_FORMAT(rp.period_date, '%Y-%m') = '2026-01'
+  AND rp.current_status_id = 17
+GROUP BY c.id, c.names
+ORDER BY total_net DESC;
+```
+
+### Get Top Properties by Returns
+
+```sql
+SELECT
+    p.reference_number,
+    p.property_name,
+    c.names AS client_name,
+    COUNT(rp.id) AS months_count,
+    AVG(rp.total_net_amount) AS avg_monthly_return,
+    SUM(rp.total_net_amount) AS total_returns
+FROM sys_reports_returns_properties rp
+INNER JOIN sys_pm_properties p ON p.id = rp.property_id
+INNER JOIN sys_pm_clients c ON c.id = rp.client_id
+WHERE rp.current_status_id = 17
+  AND rp.period_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+GROUP BY p.id, p.reference_number, p.property_name, c.names
+ORDER BY total_returns DESC
+LIMIT 10;
+```
+
+---
+
+**End of Documentation**
+
+This guide provides complete implementation details for building a Processed Returns Report listing with PDF and Excel export functionality.

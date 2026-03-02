@@ -1,0 +1,319 @@
+# MS SQL → Laravel Table Mapping
+
+> **MS SQL Server**: `localhost:51837` | **Database**: `chips`
+
+---
+
+## 1. Table-Level Mapping
+
+| MS SQL Table | Laravel Table             | Laravel Model  | Purpose                        |
+|--------------|---------------------------|----------------|--------------------------------|
+| `CHSTFF`     | `sys_staff`               | `Staff`        | Employee/staff records         |
+| `CHDEPT`     | `sys_set_departments`     | `Department`   | Departments                    |
+| `CHDESN`     | `sys_set_staff_positions` | `Position`     | Job titles / Designations      |
+| `CHBANK`     | `sys_set_banks`           | `Bank`         | Banks                          |
+| `CHBBRA`     | *(no direct match)*       | —              | Bank branches                  |
+| `CHGRDS`     | *(no direct match)*       | —              | Pay grades (MAN / NMA)         |
+| `CHSNOK`     | `sys_staff` (embedded)    | `Staff`        | Next of kin (stored on staff)  |
+
+---
+
+## 2. Column-Level Mapping
+
+### 2.1 CHSTFF → sys_staff
+
+| CHSTFF Column | Type        | sys_staff Column    | Type       | Notes                                      |
+|---------------|-------------|---------------------|------------|---------------------------------------------|
+| `EMPNUMB`     | nvarchar(10)| `staff_number`      | varchar    | Primary identifier / employee number        |
+| `FULLNAME`    | nvarchar(100)| `full_names`       | varchar    | Full name                                   |
+| `SURNAME`     | nvarchar(50)| *(no match)*        | —          | Surname only — Laravel stores full name     |
+| `OTHRNAM`     | nvarchar(50)| *(no match)*        | —          | Other names — Laravel stores full name      |
+| `GENDER`      | nvarchar(6) | `gender`            | varchar    |                                             |
+| `EMPADDR`     | varchar(50) | `address`           | varchar    |                                             |
+| `MOBNUM1`     | varchar(13) | `mobile_number`     | varchar    | Primary mobile                              |
+| `MOBNUM2`     | varchar(13) | *(no match)*        | —          | Second mobile — not in Laravel              |
+| `WEMAIL`      | nvarchar(100)| `email_address`    | varchar    | Work email                                  |
+| `PEMAIL`      | nvarchar(100)| `personal_email`   | varchar    | Personal email                              |
+| `EMPDOB`      | smalldatetime| `birth_date`       | date       | Date of birth                               |
+| `NATIDNO`     | nvarchar(10)| `national_id`       | varchar    | National ID number                          |
+| `BANKCODE`    | nvarchar(20)| `bank_name`         | int (FK)   | FK to banks — MSSQL uses string code        |
+| `BANKBRAN`    | nvarchar(20)| *(no match)*        | —          | Bank branch code — not in Laravel           |
+| `BANKACC`     | varchar(30) | `account_number`    | varchar    | Bank account number                         |
+| `NUMPIN`      | nvarchar(50)| `pin_number`        | varchar    | KRA PIN                                     |
+| `APPDATE`     | varchar(25) | `hire_date`         | datetime   | Appointment / hire date                     |
+| `DEPTCODE`    | nvarchar(50)| `department_id`     | int (FK)   | FK to departments — MSSQL uses string code  |
+| `DESIGN`      | nvarchar(50)| `position_id`       | int (FK)   | FK to positions — MSSQL uses string code    |
+| `SALBASC`     | money       | *(on Position)*     | decimal    | Basic salary — in Laravel lives on Position |
+| `GRADE`       | nvarchar(10)| *(no match)*        | —          | Grade code — no Grade model in Laravel      |
+| `EMPSECT`     | nvarchar(50)| *(no match)*        | —          | Section — not in Laravel                    |
+| `CURRSTAT`    | nvarchar(20)| `current_status_id` | int        | Active / Inactive status                    |
+| `DISTRCT`     | nvarchar(30)| `district`          | varchar    |                                             |
+| `IDLOCAT`     | nvarchar(30)| `location`          | varchar    |                                             |
+| `IDSUBLOC`    | nvarchar(30)| `sub_location`      | varchar    |                                             |
+| `MSTATUS`     | nvarchar(10)| `marital`           | varchar    | Marital status                              |
+| `SPOUSNAM`    | nvarchar(60)| `spouse_name`       | varchar    |                                             |
+| `PLACEOB`     | nvarchar(50)| `birth_place`       | varchar    | Place of birth                              |
+| `NUMNHIF`     | nvarchar(50)| `nhif_number`       | varchar    |                                             |
+| `NUMNSSF`     | nvarchar(50)| `nssf_number`       | varchar    |                                             |
+| `CITIZEN`     | varchar(13) | `citizenship`       | varchar    |                                             |
+| `PRMSPAS`     | varchar(50) | `system_password`   | varchar    | Password hash                               |
+| `SYSGRP`      | varchar(50) | `permission_group_id`| int       | Access group                                |
+| `EMPLOC`      | nvarchar(50)| *(no match)*        | —          | Employee location — not directly mapped     |
+| `EMPTYPE`     | nvarchar(20)| *(no match)*        | —          | Employee type — not in Laravel              |
+| `NHIFSTAT`    | smallint    | *(no match)*        | —          | NHIF contribution status                    |
+| `NSSFSTAT`    | smallint    | *(no match)*        | —          | NSSF contribution status                    |
+| `ENTSRC`      | nvarchar(50)| *(no match)*        | —          | Entry source                                |
+| `LSTAUDT`     | smalldatetime| *(no match)*       | —          | Last audit date                             |
+| `ENTRYBY`     | nvarchar(50)| *(no match)*        | —          | Created by user                             |
+| `REPSTOD`     | varchar(50) | *(no match)*        | —          | Reports to                                  |
+| `CHANPAS`     | int         | *(no match)*        | —          | Change password flag                        |
+| `RTNCAT`      | varchar(50) | *(no match)*        | —          | Return category                             |
+| `RECCAT`      | varchar(50) | *(no match)*        | —          | Record category                             |
+| `RETAUDIT`    | nvarchar(50)| *(no match)*        | —          | Retirement audit                            |
+| `PWDSTAT`     | varchar(5)  | *(no match)*        | —          | Password status                             |
+| *(none)*      | —           | `passport`          | varchar    | Not in MSSQL                                |
+| *(none)*      | —           | `photo`             | varchar    | Not in MSSQL                                |
+| *(none)*      | —           | `uid`               | varchar    | Auto-generated in Laravel                   |
+| *(none)*      | —           | `zone_id`           | int (FK)   | Not in MSSQL                                |
+| *(none)*      | —           | `zone_area_id`      | int (FK)   | Not in MSSQL                                |
+| *(none)*      | —           | `kins_names`        | varchar    | In MSSQL this is in CHSNOK table            |
+| *(none)*      | —           | `account_name`      | varchar    | Not in MSSQL                                |
+| *(none)*      | —           | `branch_id`         | int (FK)   | Not in MSSQL                                |
+| *(none)*      | —           | `disability`        | varchar    | Not in MSSQL                                |
+
+### 2.2 CHDEPT → sys_set_departments
+
+| CHDEPT Column | Type        | sys_set_departments Column | Type    | Notes                       |
+|---------------|-------------|----------------------------|---------|-----------------------------|
+| `DEPTCODE`    | nvarchar(20)| `id`                       | int (PK)| MSSQL uses string code      |
+| `DEPTNAME`    | nvarchar(50)| `department_name`          | varchar |                             |
+| *(none)*      | —           | `date_time`                | datetime| Not in MSSQL                |
+
+### 2.3 CHDESN → sys_set_staff_positions
+
+| CHDESN Column | Type        | sys_set_staff_positions Column | Type    | Notes                          |
+|---------------|-------------|--------------------------------|---------|--------------------------------|
+| `DESIGNCODE`  | nvarchar(20)| `id`                           | int (PK)| MSSQL uses string code         |
+| `DESGINNAME`  | nvarchar(50)| `position_name`                | varchar |                                |
+| *(none)*      | —           | `basic_salary`                 | decimal | In MSSQL this is on CHSTFF     |
+| *(none)*      | —           | `salary_account_id`            | int (FK)| Not in MSSQL                   |
+| *(none)*      | —           | `current_status_id`            | int     | Not in MSSQL                   |
+| *(none)*      | —           | `reports_to_id`                | int (FK)| Not in MSSQL                   |
+| *(none)*      | —           | `date_time`                    | datetime| Not in MSSQL                   |
+
+### 2.4 CHBANK → sys_set_banks
+
+| CHBANK Column | Type        | sys_set_banks Column | Type    | Notes                       |
+|---------------|-------------|----------------------|---------|-----------------------------|
+| `BANKCODE`    | nvarchar(20)| `id`                 | int (PK)| MSSQL uses string code      |
+| `BANKNAME`    | nvarchar(50)| `bank_name`          | varchar |                             |
+| *(none)*      | —           | `address`            | varchar | Not in MSSQL banks table    |
+| *(none)*      | —           | `current_status_id`  | int     | Not in MSSQL                |
+| *(none)*      | —           | `date_time`          | datetime| Not in MSSQL                |
+
+### 2.5 CHSNOK → sys_staff (kins_names)
+
+| CHSNOK Column | Type       | sys_staff Column | Notes                                         |
+|---------------|------------|------------------|-----------------------------------------------|
+| `EMPNUMB`     | varchar(10)| `staff_number`   | FK linking NOK to staff                       |
+| `NOKNAM`      | varchar(50)| `kins_names`     | Laravel stores one name; MSSQL can have many  |
+| `NOKRELA`     | varchar(30)| *(no match)*     | Relationship (Spouse, Mother, etc.)           |
+| `NOKTYPE`     | varchar(30)| *(no match)*     | NOK type (Next of kin / Alternate NOK)        |
+| `NOKADDR`     | varchar(50)| *(no match)*     | NOK address                                   |
+| `NOKCITY`     | varchar(30)| *(no match)*     | NOK city                                      |
+| `NOKTEL`      | varchar(20)| *(no match)*     | NOK phone number                              |
+
+> **Note**: Laravel collapses NOK into a single `kins_names` field on `sys_staff`.
+> MSSQL has a separate `CHSNOK` table with multiple rows per employee (primary NOK + alternates).
+
+---
+
+## 3. Key Data Differences
+
+| Issue                    | MSSQL (chips)                              | Laravel (sys_staff)                     |
+|--------------------------|--------------------------------------------|-----------------------------------------|
+| **Primary Keys**         | String codes (`EMPNUMB`, `DEPTCODE`)       | Auto-increment integers (`id`)          |
+| **Foreign Keys**         | String codes stored directly               | Integer IDs referencing lookup tables   |
+| **Salary**               | On staff record (`CHSTFF.SALBASC`)         | On position record (`Position.basic_salary`) |
+| **Next of Kin**          | Separate table (`CHSNOK`) with multiples   | Single field on `sys_staff.kins_names`  |
+| **Bank Branches**        | Separate table (`CHBBRA`)                  | Not tracked                             |
+| **Grades**               | Separate table (`CHGRDS`)                  | Not tracked                             |
+| **Zones / Zone Areas**   | Not in MSSQL                               | Separate tables with FK on staff        |
+
+---
+
+## 4. SQL VIEW Statements
+
+These views present MSSQL data in the shape expected by the Laravel application.
+
+### 4.1 VIEW: vw_sys_set_departments
+
+```sql
+CREATE VIEW vw_sys_set_departments AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY DEPTCODE)   AS id,
+    GETDATE()                                AS date_time,
+    DEPTNAME                                 AS department_name,
+    DEPTCODE                                 AS mssql_dept_code  -- preserve original code
+FROM CHDEPT;
+```
+
+### 4.2 VIEW: vw_sys_set_staff_positions
+
+```sql
+CREATE VIEW vw_sys_set_staff_positions AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY DESIGNCODE) AS id,
+    GETDATE()                                AS date_time,
+    DESGINNAME                               AS position_name,
+    NULL                                     AS basic_salary,
+    NULL                                     AS salary_account_id,
+    1                                        AS current_status_id,
+    NULL                                     AS reports_to_id,
+    DESIGNCODE                               AS mssql_design_code  -- preserve original code
+FROM CHDESN;
+```
+
+### 4.3 VIEW: vw_sys_set_banks
+
+```sql
+CREATE VIEW vw_sys_set_banks AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY BANKCODE)   AS id,
+    GETDATE()                                AS date_time,
+    BANKNAME                                 AS bank_name,
+    NULL                                     AS address,
+    1                                        AS current_status_id,
+    BANKCODE                                 AS mssql_bank_code  -- preserve original code
+FROM CHBANK;
+```
+
+### 4.4 VIEW: vw_sys_staff
+
+```sql
+CREATE VIEW vw_sys_staff AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY s.EMPNUMB)  AS id,
+    GETDATE()                                AS date_time,
+    NULL                                     AS photo,
+    s.FULLNAME                               AS full_names,
+    s.GENDER                                 AS gender,
+    s.EMPADDR                                AS address,
+    s.MOBNUM1                                AS mobile_number,
+    s.WEMAIL                                 AS email_address,
+    CAST(s.EMPDOB AS DATE)                   AS birth_date,
+    s.NATIDNO                                AS national_id,
+    NULL                                     AS passport,
+    b.id                                     AS bank_name,         -- FK to vw_sys_set_banks
+    s.NUMPIN                                 AS pin_number,
+    s.APPDATE                                AS hire_date,
+    d.id                                     AS department_id,     -- FK to vw_sys_set_departments
+    p.id                                     AS position_id,       -- FK to vw_sys_set_staff_positions
+    NULL                                     AS username,
+    s.PRMSPAS                                AS system_password,
+    NEWID()                                  AS uid,
+    NULL                                     AS permission_group_id,
+    CASE
+        WHEN s.CURRSTAT = 'Active'   THEN 1
+        WHEN s.CURRSTAT = 'Inactive' THEN 2
+        ELSE NULL
+    END                                      AS current_status_id,
+    NULL                                     AS branch_id,
+    NULL                                     AS account_name,
+    s.BANKACC                                AS account_number,
+    NULL                                     AS zone_id,
+    NULL                                     AS zone_area_id,
+    nok.NOKNAM                               AS kins_names,
+    s.EMPNUMB                                AS staff_number,
+    s.DISTRCT                                AS district,
+    s.IDLOCAT                                AS location,
+    s.IDSUBLOC                               AS sub_location,
+    s.MSTATUS                                AS marital,
+    s.PLACEOB                                AS birth_place,
+    s.NUMNHIF                                AS nhif_number,
+    s.NUMNSSF                                AS nssf_number,
+    s.SPOUSNAM                               AS spouse_name,
+    s.CITIZEN                                AS citizenship,
+    s.PEMAIL                                 AS personal_email,
+    NULL                                     AS disability,
+    -- Extra MSSQL-only fields preserved
+    s.SALBASC                                AS mssql_basic_salary,
+    s.GRADE                                  AS mssql_grade,
+    s.EMPTYPE                                AS mssql_emp_type,
+    s.EMPSECT                                AS mssql_section,
+    s.BANKBRAN                               AS mssql_bank_branch
+FROM CHSTFF s
+LEFT JOIN vw_sys_set_departments d   ON s.DEPTCODE  = d.mssql_dept_code
+LEFT JOIN vw_sys_set_staff_positions p ON s.DESIGN = p.mssql_design_code
+LEFT JOIN vw_sys_set_banks b         ON s.BANKCODE  = b.mssql_bank_code
+OUTER APPLY (
+    SELECT TOP 1 NOKNAM
+    FROM CHSNOK n
+    WHERE n.EMPNUMB = s.EMPNUMB
+      AND n.NOKTYPE = 'Next of kin'
+    ORDER BY n.NOKNAM
+) nok;
+```
+
+### 4.5 VIEW: vw_sys_staff_next_of_kin (full NOK detail)
+
+```sql
+-- Optional: If you want full NOK detail instead of the collapsed kins_names
+CREATE VIEW vw_sys_staff_next_of_kin AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY n.EMPNUMB, n.NOKTYPE) AS id,
+    n.EMPNUMB       AS staff_number,
+    n.NOKNAM         AS kin_name,
+    n.NOKRELA        AS relationship,
+    n.NOKTYPE        AS kin_type,
+    n.NOKADDR        AS kin_address,
+    n.NOKCITY        AS kin_city,
+    n.NOKTEL         AS kin_phone
+FROM CHSNOK n;
+```
+
+---
+
+## 5. Fields Only in MSSQL (Not Mapped)
+
+These MSSQL columns have no equivalent in the Laravel schema:
+
+| Table    | Column    | Description                |
+|----------|-----------|----------------------------|
+| `CHSTFF` | `SURNAME` | Surname (Laravel uses full_names) |
+| `CHSTFF` | `OTHRNAM` | Other names                |
+| `CHSTFF` | `MOBNUM2` | Second mobile number       |
+| `CHSTFF` | `EMPTYPE` | Employee type              |
+| `CHSTFF` | `EMPSECT` | Section                    |
+| `CHSTFF` | `GRADE`   | Grade code                 |
+| `CHSTFF` | `EMPLOC`  | Employee location          |
+| `CHSTFF` | `BANKBRAN`| Bank branch code           |
+| `CHSTFF` | `REPSTOD` | Reports to                 |
+| `CHSTFF` | `NHIFSTAT`| NHIF status                |
+| `CHSTFF` | `NSSFSTAT`| NSSF status                |
+| `CHSTFF` | `ENTSRC`  | Entry source               |
+| `CHSTFF` | `LSTAUDT` | Last audit date            |
+| `CHSTFF` | `ENTRYBY` | Created by                 |
+| `CHSTFF` | `CHANPAS` | Change password flag       |
+| `CHSTFF` | `RTNCAT`  | Return category            |
+| `CHSTFF` | `RECCAT`  | Record category            |
+| `CHSTFF` | `RETAUDIT`| Retirement audit           |
+| `CHSTFF` | `PWDSTAT` | Password status            |
+| `CHSTFF` | `APPYEAR` | Appointment year           |
+| `CHSTFF` | `APPMNTH` | Appointment month          |
+
+## 6. Fields Only in Laravel (Not in MSSQL)
+
+| Laravel Table             | Column          | Description                |
+|---------------------------|-----------------|----------------------------|
+| `sys_staff`               | `passport`      | Passport number            |
+| `sys_staff`               | `photo`         | Profile photo              |
+| `sys_staff`               | `uid`           | Unique identifier          |
+| `sys_staff`               | `zone_id`       | FK to zones                |
+| `sys_staff`               | `zone_area_id`  | FK to zone areas           |
+| `sys_staff`               | `branch_id`     | Branch FK                  |
+| `sys_staff`               | `account_name`  | Bank account name          |
+| `sys_staff`               | `disability`    | Disability status          |
+| `sys_set_staff_positions` | `basic_salary`  | Salary on position (MSSQL has it on staff) |
+| `sys_set_staff_positions` | `reports_to_id` | Supervisor position        |
+| `sys_set_staff_positions` | `salary_account_id` | GL account FK          |

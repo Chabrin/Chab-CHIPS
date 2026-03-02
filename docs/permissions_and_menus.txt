@@ -1,0 +1,39 @@
+#Permissions
+
+communication_templates
+contracts
+departments
+discipline_records
+employee_attendances
+employee_terminations
+helb_loans
+internal_transfers
+leave_adjustments
+leave_applications
+leave_calendar_plans
+leave_types
+nssf_rates
+payroll_calendar
+payroll_elements
+payroll_processing
+payslips
+prorated_deductions
+public_holiday
+shif_rates
+staff
+tax_bands
+workdays
+zone_assignments
+
+
+#Modules
+
+Roles
+IT Settings
+Human Resource
+HR Settings
+Payroll Mgt
+HR Reports
+Accounting
+Property
+Approval Control

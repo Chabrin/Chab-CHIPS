@@ -1,0 +1,154 @@
+<?php
+
+namespace App\Models;
+
+use App\Observers\AuditLogsObserver;
+use Illuminate\Database\Eloquent\Model;
+
+class Staff extends Model
+{
+    protected static function boot()
+    {
+        parent::boot();
+        static::observe(AuditLogsObserver::class);
+    }
+
+    protected $table = 'sys_staff';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
+
+    protected $fillable = [
+        'date_time',
+        'photo',
+        'full_names',
+        'gender',
+        'address',
+        'mobile_number',
+        'email_address',
+        'birth_date',
+        'national_id',
+        'passport',
+        'bank_name',
+        'pin_number',
+        'hire_date',
+        'department_id',
+        'position_id',
+        'username',
+        'system_password',
+        'uid',
+        'permission_group_id',
+        'current_status_id',
+        'branch_id',
+        'account_name',
+        'account_number',
+        'zone_id',
+        'zone_area_id',
+        'kins_names',
+        'staff_number',
+        'district',
+        'location',
+        'sub_location',
+        'marital',
+        'birth_place',
+        'nhif_number',
+        'nssf_number',
+        'spouse_name',
+        'citizenship',
+        'personal_email',
+        'disability',
+    ];
+
+    protected $casts = [
+        'birth_date' => 'date',
+        'hire_date' => 'datetime',
+        'date_time' => 'datetime',
+    ];
+
+    // Relationships
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    public function bank()
+    {
+        return $this->belongsTo(Bank::class, 'bank_name');
+    }
+
+    public function position()
+    {
+        return $this->belongsTo(Position::class, 'position_id');
+    }
+
+    public function zone()
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
+    }
+
+    public function zoneArea()
+    {
+        return $this->belongsTo(ZoneArea::class, 'zone_area_id');
+    }
+
+    public function zone_assignments()
+    {
+        return $this->hasMany(ZoneAssignment::class, 'staff_id');
+    }
+
+    public function leave_calendar_plans()
+    {
+        return $this->hasMany(LeaveCalendarPlan::class, 'employee_id');
+    }
+
+    public function contract()
+    {
+        return $this->hasOne(Contract::class, 'staff_id');
+    }
+
+    public function employee_attendances()
+    {
+        return $this->hasMany(EmployeeAttendance::class, 'employee_id', 'staff_number');
+    }
+
+    // Discipline Tracker Relationships
+    
+    /**
+     * Discipline cases where this staff is the subject
+     */
+    public function disciplineCases()
+    {
+        return $this->hasMany(DisciplineCase::class, 'staff_id');
+    }
+
+    /**
+     * Incident reports submitted by this staff member
+     */
+    public function incidentReports()
+    {
+        return $this->hasMany(DisciplineIncidentReport::class, 'reported_by');
+    }
+
+    /**
+     * Investigations assigned to this staff member as investigator
+     */
+    public function investigationsAssigned()
+    {
+        return $this->hasMany(DisciplineInvestigator::class, 'investigator_id');
+    }
+
+    /**
+     * Investigations reassigned to this staff member
+     */
+    public function investigationsReassigned()
+    {
+        return $this->hasMany(DisciplineInvestigator::class, 'reassigned_to');
+    }
+
+    /**
+     * Witness statements where this staff is the witness
+     */
+    public function witnessStatements()
+    {
+        return $this->hasMany(DisciplineWitnessStatement::class, 'witness_staff_id');
+    }
+}

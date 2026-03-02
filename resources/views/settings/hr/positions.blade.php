@@ -1,0 +1,337 @@
+@extends('layouts.main')
+@section('content')
+<div class="page-body" style="padding-top:10px;">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="card">
+                    <div class="card-header card-no-border d-flex align-items-center">
+                        <h4 class="mb-0">Staff Positions</h4>
+                        <div class="ms-auto d-flex gap-2">
+                            @permission('create_staff_positions')
+                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addPositionBtn">
+                                <span class="material-symbols-outlined" style="font-size:18px;">add_circle</span>
+                                <span class="ms-1">Add Position</span>
+                            </button>
+                            @endpermission
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive custom-scrollbar">
+                            <table class="display" id="positions-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Position Name</th>
+                                        <th>Basic Salary</th>
+                                        <th>Reports To</th>
+                                        <th>Staff Count</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Position Modal -->
+<div class="modal fade" id="addPositionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addPositionForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="add_position_name" class="form-label">Position Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="add_position_name" name="position_name" required>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_basic_salary" class="form-label">Basic Salary</label>
+                        <input type="number" step="0.01" class="form-control" id="add_basic_salary" name="basic_salary">
+                        <div class="invalid-feedback"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined" style="font-size:18px;">cancel</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary d-flex align-items-center" id="addPositionSaveBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="addSaveSpinner"></span>
+                        <span class="material-symbols-outlined" style="font-size:18px;" id="addSaveIcon">save</span>
+                        <span class="ms-1" id="addSaveBtnText">Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Position Modal -->
+<div class="modal fade" id="editPositionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editPositionForm">
+                <div class="modal-body">
+                    <input type="hidden" id="edit_position_id" name="position_id">
+                    <div class="mb-3">
+                        <label for="edit_position_name" class="form-label">Position Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_position_name" name="position_name" required>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_basic_salary" class="form-label">Basic Salary</label>
+                        <input type="number" step="0.01" class="form-control" id="edit_basic_salary" name="basic_salary">
+                        <div class="invalid-feedback"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined" style="font-size:18px;">cancel</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary d-flex align-items-center" id="editPositionSaveBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="editSaveSpinner"></span>
+                        <span class="material-symbols-outlined" style="font-size:18px;" id="editSaveIcon">save</span>
+                        <span class="ms-1" id="editSaveBtnText">Update</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endsection
+
+<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script>
+    var positionsTable;
+
+    $(document).ready(function() {
+        loadPositionsTable();
+
+        // Add position button
+        $('#addPositionBtn').on('click', function(e) {
+            e.preventDefault();
+            resetAddForm();
+            $('#addPositionModal').modal('show');
+        });
+
+        // Edit position
+        $(document).on('click', '.edit-position', function(e) {
+            e.preventDefault();
+            var positionId = $(this).data('id');
+            loadPositionData(positionId);
+            $('#editPositionModal').modal('show');
+        });
+
+        // Add form submission
+        $('#addPositionForm').on('submit', function(e) {
+            e.preventDefault();
+            saveAddPosition();
+        });
+
+        // Edit form submission
+        $('#editPositionForm').on('submit', function(e) {
+            e.preventDefault();
+            saveEditPosition();
+        });
+    });
+
+    function loadPositionsTable() {
+        positionsTable = $('#positions-table').DataTable({
+            ajax: {
+                url: '/ajax/hr/positions/list',
+                dataSrc: 'positions'
+            },
+            columns: [{
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                {
+                    data: 'position_name',
+                    render: function(data, type, row) {
+                        if (row.can_read) {
+                            return '<a href="/hrsettings/positions/' + row.encrypted_id + '">' + data + '</a>';
+                        }
+                        return data;
+                    }
+                },
+                {
+                    data: 'basic_salary',
+                    render: function(data) {
+                        return data ? parseFloat(data).toLocaleString('en-US', {
+                            minimumFractionDigits: 2
+                        }) : '-';
+                    }
+                },
+                {
+                    data: 'reports_to_name',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'staff_count',
+                    defaultContent: '0'
+                },
+                {
+                    data: null,
+                    render: function(data, type, row) {
+                        var actions = '<div class="d-flex flex-row gap-1">';
+                        if (row.can_read) {
+                            actions += '<a href="/hrsettings/positions/' + row.encrypted_id + '" title="View"><span class="material-symbols-outlined" style="font-size:18px;">visibility</span></a>';
+                        }
+                        if (row.can_update) {
+                            actions += '<a href="#" class="edit-position" data-id="' + row.id + '" title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>';
+                        }
+                        actions += '</div>';
+                        return actions;
+                    }
+                }
+            ],
+            paging: true,
+            info: true,
+            lengthChange: true,
+            order: [
+                [1, 'asc']
+            ]
+        });
+    }
+
+    function loadPositionData(positionId) {
+        $.get('/ajax/hr/positions/get', {
+                id: positionId
+            },
+            function(data) {
+                $('#edit_position_id').val(data.position.id);
+                $('#edit_position_name').val(data.position.position_name);
+                $('#edit_basic_salary').val(data.position.basic_salary);
+            });
+    }
+
+    function saveAddPosition() {
+        var $btn = $('#addPositionSaveBtn');
+        var $spinner = $('#addSaveSpinner');
+        var $icon = $('#addSaveIcon');
+        var $btnText = $('#addSaveBtnText');
+
+        $btn.prop('disabled', true);
+        $icon.addClass('d-none');
+        $spinner.removeClass('d-none');
+        $btnText.text('Saving...');
+        $('#addPositionForm .is-invalid').removeClass('is-invalid');
+        $('#addPositionForm .invalid-feedback').text('');
+
+        var formData = {
+            position_name: $('#add_position_name').val(),
+            basic_salary: $('#add_basic_salary').val(),
+            _token: '{{ csrf_token() }}'
+        };
+
+        $.ajax({
+            url: '/ajax/hr/positions',
+            method: 'POST',
+            data: formData,
+            success: function(response) {
+                if (response.success) {
+                    toastr.success(response.message || 'Position added successfully');
+                    $('#addPositionModal').modal('hide');
+                    positionsTable.ajax.reload();
+                } else {
+                    toastr.error(response.error || 'Failed to add position');
+                }
+            },
+            error: function(xhr) {
+                if (xhr.status === 422) {
+                    var errors = xhr.responseJSON.errors;
+                    $.each(errors, function(field, messages) {
+                        var $field = $('#add_' + field);
+                        $field.addClass('is-invalid');
+                        $field.next('.invalid-feedback').text(messages[0]);
+                    });
+                } else {
+                    toastr.error('An error occurred while saving');
+                }
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+                $spinner.addClass('d-none');
+                $icon.removeClass('d-none');
+                $btnText.text('Save');
+            }
+        });
+    }
+
+    function saveEditPosition() {
+        var $btn = $('#editPositionSaveBtn');
+        var $spinner = $('#editSaveSpinner');
+        var $icon = $('#editSaveIcon');
+        var $btnText = $('#editSaveBtnText');
+        var positionId = $('#edit_position_id').val();
+
+        $btn.prop('disabled', true);
+        $icon.addClass('d-none');
+        $spinner.removeClass('d-none');
+        $btnText.text('Updating...');
+        $('#editPositionForm .is-invalid').removeClass('is-invalid');
+        $('#editPositionForm .invalid-feedback').text('');
+
+        var formData = {
+            position_name: $('#edit_position_name').val(),
+            basic_salary: $('#edit_basic_salary').val(),
+            _token: '{{ csrf_token() }}'
+        };
+
+        $.ajax({
+            url: '/ajax/hr/positions/' + positionId,
+            method: 'POST',
+            data: formData,
+            success: function(response) {
+                if (response.success) {
+                    toastr.success(response.message || 'Position updated successfully');
+                    $('#editPositionModal').modal('hide');
+                    positionsTable.ajax.reload();
+                } else {
+                    toastr.error(response.error || 'Failed to update position');
+                }
+            },
+            error: function(xhr) {
+                if (xhr.status === 422) {
+                    var errors = xhr.responseJSON.errors;
+                    $.each(errors, function(field, messages) {
+                        var $field = $('#edit_' + field);
+                        $field.addClass('is-invalid');
+                        $field.next('.invalid-feedback').text(messages[0]);
+                    });
+                } else {
+                    toastr.error('An error occurred while updating');
+                }
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+                $spinner.addClass('d-none');
+                $icon.removeClass('d-none');
+                $btnText.text('Update');
+            }
+        });
+    }
+
+    function resetAddForm() {
+        $('#addPositionForm')[0].reset();
+        $('#addPositionForm .is-invalid').removeClass('is-invalid');
+        $('#addPositionForm .invalid-feedback').text('');
+    }
+</script>

@@ -1,0 +1,753 @@
+2026-02-19 13:04:35,276  INFO      ============================================================
+2026-02-19 13:04:35,276  INFO      INDEX OPTIMIZATION STARTED
+2026-02-19 13:04:35,277  INFO      ============================================================
+2026-02-19 13:04:35,474  INFO      Total non-PK indexes before: 1564
+2026-02-19 13:04:35,482  INFO      
+2026-02-19 13:04:35,483  INFO      --- Step 1: Drop indexes redundant with UNIQUE constraints ---
+2026-02-19 13:04:35,699  INFO      Found 18 redundant indexes
+2026-02-19 13:04:35,743  INFO        DROPPED idx_cb_approval_items_cb_approval_items_item_type_item_id_index  (covered by UNIQUE)
+2026-02-19 13:04:35,747  INFO        DROPPED idx_discipline_cases_idx_case_number  (covered by UNIQUE)
+2026-02-19 13:04:35,750  INFO        DROPPED idx_sys_eports_returns_batches_configurations_fb_filter_client_  (covered by UNIQUE)
+2026-02-19 13:04:35,754  INFO        DROPPED idx_sys_eports_returns_batches_configurations_repeat_prs_fb_rep  (covered by UNIQUE)
+2026-02-19 13:04:35,757  INFO        DROPPED idx_sys_fin_pay_cooperative_bank_fb_filter_TransactionReference  (covered by UNIQUE)
+2026-02-19 13:04:35,761  INFO        DROPPED idx_sys_fin_pay_mpesa_coop_bank_extracts_fb_filter_reference_nu  (covered by UNIQUE)
+2026-02-19 13:04:35,764  INFO        DROPPED idx_sys_fin_pay_mpesatransactions_fb_filter_mpesaTransID_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,768  INFO        DROPPED idx_sys_fin_payment_vouchers_fb_filter_reference_number_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,772  INFO        DROPPED idx_sys_pm_clients_returns_fb_filter_invoice_id_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,776  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_filter_reference_number_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,780  INFO        DROPPED idx_sys_pm_lease_agreements_fb_filter_ref_number_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,784  INFO        DROPPED idx_sys_pm_recoveries_fb_filter_ref_number_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,790  INFO        DROPPED idx_sys_pm_tenants_payments_fb_filter_reference_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,795  INFO        DROPPED idx_sys_pm_units_fb_filter_unit_code_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,799  INFO        DROPPED idx_sys_proc_supplier_invoices_fb_filter_reference_number_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,803  INFO        DROPPED idx_sys_set_system_users_fb_filter_username_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,806  INFO        DROPPED idx_sys_staff_fb_filter_national_id_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,810  INFO        DROPPED idx_sys_staff_fb_filter_staff_number_INDEX  (covered by UNIQUE)
+2026-02-19 13:04:35,810  INFO      
+2026-02-19 13:04:35,811  INFO      --- Step 2: Drop indexes on non-business tables (josya_, old_, zmigra_, zimport_) ---
+2026-02-19 13:04:35,811  INFO      Found 523 non-business indexes
+2026-02-19 13:04:35,815  INFO        DROPPED idx_josya_action_logs_idx_extension_item_id  (non-business table)
+2026-02-19 13:04:35,818  INFO        DROPPED idx_josya_action_logs_idx_user_id  (non-business table)
+2026-02-19 13:04:35,823  INFO        DROPPED idx_josya_action_logs_idx_user_id_extension  (non-business table)
+2026-02-19 13:04:35,826  INFO        DROPPED idx_josya_action_logs_idx_user_id_logdate  (non-business table)
+2026-02-19 13:04:35,830  INFO        DROPPED idx_josya_action_logs_users_idx_notify  (non-business table)
+2026-02-19 13:04:35,833  INFO        DROPPED idx_josya_ak_stats_idx_fullstatus  (non-business table)
+2026-02-19 13:04:35,837  INFO        DROPPED idx_josya_ak_stats_idx_stale  (non-business table)
+2026-02-19 13:04:35,840  INFO        DROPPED idx_josya_assets_idx_lft_rgt  (non-business table)
+2026-02-19 13:04:35,844  INFO        DROPPED idx_josya_assets_idx_parent_id  (non-business table)
+2026-02-19 13:04:35,846  WARNING     FAILED  uq_josya_assets_idx_asset_name: cannot drop index chips_db_v3.uq_josya_assets_idx_asset_name because constraint uq_josya_assets_idx_asset_name on table chips_db_v3.josya_assets requires it
+HINT:  You can drop constraint uq_josya_assets_idx_asset_name on table chips_db_v3.josya_assets instead.
+
+2026-02-19 13:04:35,850  INFO        DROPPED idx_josya_associations_idx_key  (non-business table)
+2026-02-19 13:04:35,854  INFO        DROPPED idx_josya_banner_clients_idx_metakey_prefix  (non-business table)
+2026-02-19 13:04:35,857  INFO        DROPPED idx_josya_banner_clients_idx_own_prefix  (non-business table)
+2026-02-19 13:04:35,861  INFO        DROPPED idx_josya_banner_tracks_idx_banner_id  (non-business table)
+2026-02-19 13:04:35,865  INFO        DROPPED idx_josya_banner_tracks_idx_track_date  (non-business table)
+2026-02-19 13:04:35,868  INFO        DROPPED idx_josya_banner_tracks_idx_track_type  (non-business table)
+2026-02-19 13:04:35,871  INFO        DROPPED idx_josya_banners_idx_banner_catid  (non-business table)
+2026-02-19 13:04:35,874  INFO        DROPPED idx_josya_banners_idx_language  (non-business table)
+2026-02-19 13:04:35,877  INFO        DROPPED idx_josya_banners_idx_metakey_prefix  (non-business table)
+2026-02-19 13:04:35,881  INFO        DROPPED idx_josya_banners_idx_own_prefix  (non-business table)
+2026-02-19 13:04:35,884  INFO        DROPPED idx_josya_banners_idx_state  (non-business table)
+2026-02-19 13:04:35,888  INFO        DROPPED idx_josya_categories_cat_idx  (non-business table)
+2026-02-19 13:04:35,892  INFO        DROPPED idx_josya_categories_idx_access  (non-business table)
+2026-02-19 13:04:35,896  INFO        DROPPED idx_josya_categories_idx_alias  (non-business table)
+2026-02-19 13:04:35,899  INFO        DROPPED idx_josya_categories_idx_checkout  (non-business table)
+2026-02-19 13:04:35,902  INFO        DROPPED idx_josya_categories_idx_language  (non-business table)
+2026-02-19 13:04:35,905  INFO        DROPPED idx_josya_categories_idx_left_right  (non-business table)
+2026-02-19 13:04:35,909  INFO        DROPPED idx_josya_categories_idx_path  (non-business table)
+2026-02-19 13:04:35,913  INFO        DROPPED idx_josya_com_wallfactory_comments_created_at  (non-business table)
+2026-02-19 13:04:35,915  INFO        DROPPED idx_josya_com_wallfactory_comments_post_id  (non-business table)
+2026-02-19 13:04:35,918  INFO        DROPPED idx_josya_com_wallfactory_comments_published  (non-business table)
+2026-02-19 13:04:35,921  INFO        DROPPED idx_josya_com_wallfactory_comments_published_post_id  (non-business table)
+2026-02-19 13:04:35,924  INFO        DROPPED idx_josya_com_wallfactory_comments_user_id  (non-business table)
+2026-02-19 13:04:35,928  INFO        DROPPED idx_josya_com_wallfactory_likes_resource_type_resource_id  (non-business table)
+2026-02-19 13:04:35,932  INFO        DROPPED idx_josya_com_wallfactory_likes_user_id_resource_id  (non-business table)
+2026-02-19 13:04:35,935  INFO        DROPPED idx_josya_com_wallfactory_media_media_type  (non-business table)
+2026-02-19 13:04:35,938  INFO        DROPPED idx_josya_com_wallfactory_media_post_id  (non-business table)
+2026-02-19 13:04:35,941  INFO        DROPPED idx_josya_com_wallfactory_posts_created_at  (non-business table)
+2026-02-19 13:04:35,945  INFO        DROPPED idx_josya_com_wallfactory_posts_published  (non-business table)
+2026-02-19 13:04:35,949  INFO        DROPPED idx_josya_com_wallfactory_posts_published_to_user_id  (non-business table)
+2026-02-19 13:04:35,952  INFO        DROPPED idx_josya_com_wallfactory_posts_to_user_id  (non-business table)
+2026-02-19 13:04:35,955  INFO        DROPPED idx_josya_com_wallfactory_posts_user_id  (non-business table)
+2026-02-19 13:04:35,959  INFO        DROPPED idx_josya_com_wallfactory_profiles_created_at  (non-business table)
+2026-02-19 13:04:35,963  INFO        DROPPED idx_josya_com_wallfactory_reports_created_at  (non-business table)
+2026-02-19 13:04:35,966  INFO        DROPPED idx_josya_com_wallfactory_reports_resolved  (non-business table)
+2026-02-19 13:04:35,969  INFO        DROPPED idx_josya_com_wallfactory_reports_resource_type  (non-business table)
+2026-02-19 13:04:35,973  INFO        DROPPED idx_josya_com_wallfactory_subscriptions_subscriber_id  (non-business table)
+2026-02-19 13:04:35,976  INFO        DROPPED idx_josya_community_activities_actor  (non-business table)
+2026-02-19 13:04:35,980  INFO        DROPPED idx_josya_community_activities_app  (non-business table)
+2026-02-19 13:04:35,983  INFO        DROPPED idx_josya_community_activities_archived  (non-business table)
+2026-02-19 13:04:35,986  INFO        DROPPED idx_josya_community_activities_created  (non-business table)
+2026-02-19 13:04:35,989  INFO        DROPPED idx_josya_community_activities_target  (non-business table)
+2026-02-19 13:04:35,992  INFO        DROPPED idx_josya_community_activities_hide_user_id  (non-business table)
+2026-02-19 13:04:35,995  INFO        DROPPED idx_josya_community_apps_idx_user_apps  (non-business table)
+2026-02-19 13:04:35,999  INFO        DROPPED idx_josya_community_apps_idx_userid  (non-business table)
+2026-02-19 13:04:36,000  WARNING     FAILED  uq_josya_community_avatar_id: cannot drop index chips_db_v3.uq_josya_community_avatar_id because constraint uq_josya_community_avatar_id on table chips_db_v3.josya_community_avatar requires it
+HINT:  You can drop constraint uq_josya_community_avatar_id on table chips_db_v3.josya_community_avatar instead.
+
+2026-02-19 13:04:36,003  INFO        DROPPED idx_josya_community_blocklist_blocked_userid  (non-business table)
+2026-02-19 13:04:36,005  INFO        DROPPED idx_josya_community_blocklist_userid  (non-business table)
+2026-02-19 13:04:36,009  INFO        DROPPED idx_josya_community_chat_activity_idx_chat_id  (non-business table)
+2026-02-19 13:04:36,012  INFO        DROPPED idx_josya_community_chat_activity_idx_user_id  (non-business table)
+2026-02-19 13:04:36,015  INFO        DROPPED idx_josya_community_chat_participants_idx_chat_id  (non-business table)
+2026-02-19 13:04:36,018  INFO        DROPPED idx_josya_community_chat_participants_idx_user_id  (non-business table)
+2026-02-19 13:04:36,021  INFO        DROPPED idx_josya_community_connect_users_type  (non-business table)
+2026-02-19 13:04:36,024  INFO        DROPPED idx_josya_community_connection_connect_from  (non-business table)
+2026-02-19 13:04:36,028  INFO        DROPPED idx_josya_community_connection_idx_connect_from  (non-business table)
+2026-02-19 13:04:36,031  INFO        DROPPED idx_josya_community_connection_idx_connect_to  (non-business table)
+2026-02-19 13:04:36,035  INFO        DROPPED idx_josya_community_connection_idx_connect_tofrom  (non-business table)
+2026-02-19 13:04:36,038  INFO        DROPPED idx_josya_community_engagement_user_id  (non-business table)
+2026-02-19 13:04:36,041  INFO        DROPPED idx_josya_community_events_idx_catid  (non-business table)
+2026-02-19 13:04:36,044  INFO        DROPPED idx_josya_community_events_idx_creator  (non-business table)
+2026-02-19 13:04:36,047  INFO        DROPPED idx_josya_community_events_idx_period  (non-business table)
+2026-02-19 13:04:36,049  INFO        DROPPED idx_josya_community_events_idx_published  (non-business table)
+2026-02-19 13:04:36,052  INFO        DROPPED idx_josya_community_events_idx_type  (non-business table)
+2026-02-19 13:04:36,055  INFO        DROPPED idx_josya_community_events_members_idx_eventid  (non-business table)
+2026-02-19 13:04:36,057  INFO        DROPPED idx_josya_community_events_members_idx_invitedby  (non-business table)
+2026-02-19 13:04:36,060  INFO        DROPPED idx_josya_community_events_members_idx_member_event  (non-business table)
+2026-02-19 13:04:36,064  INFO        DROPPED idx_josya_community_events_members_idx_permission  (non-business table)
+2026-02-19 13:04:36,066  INFO        DROPPED idx_josya_community_events_members_idx_status  (non-business table)
+2026-02-19 13:04:36,070  INFO        DROPPED idx_josya_community_featured_type  (non-business table)
+2026-02-19 13:04:36,073  INFO        DROPPED idx_josya_community_fields_fieldcode  (non-business table)
+2026-02-19 13:04:36,076  INFO        DROPPED idx_josya_community_fields_values_access  (non-business table)
+2026-02-19 13:04:36,079  INFO        DROPPED idx_josya_community_fields_values_field_id  (non-business table)
+2026-02-19 13:04:36,081  INFO        DROPPED idx_josya_community_fields_values_idx_user_fieldid  (non-business table)
+2026-02-19 13:04:36,085  INFO        DROPPED idx_josya_community_fields_values_user_id  (non-business table)
+2026-02-19 13:04:36,088  INFO        DROPPED idx_josya_community_files_bulletinid  (non-business table)
+2026-02-19 13:04:36,090  INFO        DROPPED idx_josya_community_files_creator  (non-business table)
+2026-02-19 13:04:36,093  INFO        DROPPED idx_josya_community_files_discussionid  (non-business table)
+2026-02-19 13:04:36,097  INFO        DROPPED idx_josya_community_files_groupid  (non-business table)
+2026-02-19 13:04:36,099  INFO        DROPPED idx_josya_community_follower_following  (non-business table)
+2026-02-19 13:04:36,103  INFO        DROPPED idx_josya_community_follower_user_id  (non-business table)
+2026-02-19 13:04:36,106  INFO        DROPPED idx_josya_community_groups_bulletins_groupid  (non-business table)
+2026-02-19 13:04:36,108  INFO        DROPPED idx_josya_community_groups_discuss_groupid  (non-business table)
+2026-02-19 13:04:36,112  INFO        DROPPED idx_josya_community_groups_discuss_parentid  (non-business table)
+2026-02-19 13:04:36,115  INFO        DROPPED idx_josya_community_groups_members_groupid  (non-business table)
+2026-02-19 13:04:36,118  INFO        DROPPED idx_josya_community_groups_members_idx_memberid  (non-business table)
+2026-02-19 13:04:36,119  WARNING     FAILED  uq_josya_community_hashtag_tag: cannot drop index chips_db_v3.uq_josya_community_hashtag_tag because constraint uq_josya_community_hashtag_tag on table chips_db_v3.josya_community_hashtag requires it
+HINT:  You can drop constraint uq_josya_community_hashtag_tag on table chips_db_v3.josya_community_hashtag instead.
+
+2026-02-19 13:04:36,122  INFO        DROPPED idx_josya_community_likes_element  (non-business table)
+2026-02-19 13:04:36,125  INFO        DROPPED idx_josya_community_mailq_status  (non-business table)
+2026-02-19 13:04:36,128  INFO        DROPPED idx_josya_community_memberlist_criteria_listid  (non-business table)
+2026-02-19 13:04:36,131  INFO        DROPPED idx_josya_community_msg_recepient_idx_isread_to_deleted  (non-business table)
+2026-02-19 13:04:36,134  INFO        DROPPED idx_josya_community_msg_recepient_msg_id  (non-business table)
+2026-02-19 13:04:36,137  INFO        DROPPED idx_josya_community_msg_recepient_to  (non-business table)
+2026-02-19 13:04:36,138  WARNING     FAILED  uq_josya_community_msg_recepient_un: cannot drop index chips_db_v3.uq_josya_community_msg_recepient_un because constraint uq_josya_community_msg_recepient_un on table chips_db_v3.josya_community_msg_recepient requires it
+HINT:  You can drop constraint uq_josya_community_msg_recepient_un on table chips_db_v3.josya_community_msg_recepient instead.
+
+2026-02-19 13:04:36,141  INFO        DROPPED idx_josya_community_notifications_actor  (non-business table)
+2026-02-19 13:04:36,144  INFO        DROPPED idx_josya_community_notifications_created  (non-business table)
+2026-02-19 13:04:36,147  INFO        DROPPED idx_josya_community_notifications_status  (non-business table)
+2026-02-19 13:04:36,150  INFO        DROPPED idx_josya_community_notifications_target  (non-business table)
+2026-02-19 13:04:36,153  INFO        DROPPED idx_josya_community_notifications_type  (non-business table)
+2026-02-19 13:04:36,157  INFO        DROPPED idx_josya_community_pages_members_idx_memberid  (non-business table)
+2026-02-19 13:04:36,160  INFO        DROPPED idx_josya_community_pages_members_pageid  (non-business table)
+2026-02-19 13:04:36,163  INFO        DROPPED idx_josya_community_photos_albumid  (non-business table)
+2026-02-19 13:04:36,167  INFO        DROPPED idx_josya_community_photos_idx_storage  (non-business table)
+2026-02-19 13:04:36,170  INFO        DROPPED idx_josya_community_photos_albums_creator  (non-business table)
+2026-02-19 13:04:36,174  INFO        DROPPED idx_josya_community_photos_albums_idx_albumtype  (non-business table)
+2026-02-19 13:04:36,177  INFO        DROPPED idx_josya_community_photos_albums_idx_creatortype  (non-business table)
+2026-02-19 13:04:36,180  INFO        DROPPED idx_josya_community_photos_albums_idx_eventid  (non-business table)
+2026-02-19 13:04:36,183  INFO        DROPPED idx_josya_community_photos_albums_idx_groupid  (non-business table)
+2026-02-19 13:04:36,186  INFO        DROPPED idx_josya_community_photos_albums_idx_pageid  (non-business table)
+2026-02-19 13:04:36,189  INFO        DROPPED idx_josya_community_photos_albums_idx_type  (non-business table)
+2026-02-19 13:04:36,193  INFO        DROPPED idx_josya_community_photos_tag_idx_created_by  (non-business table)
+2026-02-19 13:04:36,196  INFO        DROPPED idx_josya_community_photos_tag_idx_photo_user  (non-business table)
+2026-02-19 13:04:36,199  INFO        DROPPED idx_josya_community_photos_tag_idx_photoid  (non-business table)
+2026-02-19 13:04:36,202  INFO        DROPPED idx_josya_community_photos_tag_idx_userid  (non-business table)
+2026-02-19 13:04:36,204  INFO        DROPPED idx_josya_community_polls_catid  (non-business table)
+2026-02-19 13:04:36,207  INFO        DROPPED idx_josya_community_polls_creator  (non-business table)
+2026-02-19 13:04:36,210  INFO        DROPPED idx_josya_community_polls_eventid  (non-business table)
+2026-02-19 13:04:36,214  INFO        DROPPED idx_josya_community_polls_groupid  (non-business table)
+2026-02-19 13:04:36,217  INFO        DROPPED idx_josya_community_polls_pageid  (non-business table)
+2026-02-19 13:04:36,220  INFO        DROPPED idx_josya_community_polls_items_poll_id  (non-business table)
+2026-02-19 13:04:36,223  INFO        DROPPED idx_josya_community_polls_users_poll_id  (non-business table)
+2026-02-19 13:04:36,227  INFO        DROPPED idx_josya_community_polls_users_poll_itemid  (non-business table)
+2026-02-19 13:04:36,230  INFO        DROPPED idx_josya_community_polls_users_user_id  (non-business table)
+2026-02-19 13:04:36,233  INFO        DROPPED idx_josya_community_profiles_approvals  (non-business table)
+2026-02-19 13:04:36,236  INFO        DROPPED idx_josya_community_profiles_fields_field_id  (non-business table)
+2026-02-19 13:04:36,240  INFO        DROPPED idx_josya_community_profiles_fields_multiprofile_id  (non-business table)
+2026-02-19 13:04:36,243  INFO        DROPPED idx_josya_community_ratings_cid  (non-business table)
+2026-02-19 13:04:36,246  INFO        DROPPED idx_josya_community_ratings_userid  (non-business table)
+2026-02-19 13:04:36,249  INFO        DROPPED idx_josya_community_register_auth_token_ip  (non-business table)
+2026-02-19 13:04:36,251  WARNING     FAILED  uq_josya_community_storage_s3_storageid: cannot drop index chips_db_v3.uq_josya_community_storage_s3_storageid because constraint uq_josya_community_storage_s3_storageid on table chips_db_v3.josya_community_storage_s3 requires it
+HINT:  You can drop constraint uq_josya_community_storage_s3_storageid on table chips_db_v3.josya_community_storage_s3 instead.
+
+2026-02-19 13:04:36,252  WARNING     FAILED  uq_josya_community_theme_key: cannot drop index chips_db_v3.uq_josya_community_theme_key because constraint uq_josya_community_theme_key on table chips_db_v3.josya_community_theme requires it
+HINT:  You can drop constraint uq_josya_community_theme_key on table chips_db_v3.josya_community_theme instead.
+
+2026-02-19 13:04:36,255  INFO        DROPPED idx_josya_community_user_status_userid  (non-business table)
+2026-02-19 13:04:36,258  INFO        DROPPED idx_josya_community_videos_creator  (non-business table)
+2026-02-19 13:04:36,261  INFO        DROPPED idx_josya_community_videos_idx_groupid  (non-business table)
+2026-02-19 13:04:36,264  INFO        DROPPED idx_josya_community_videos_idx_pageid  (non-business table)
+2026-02-19 13:04:36,267  INFO        DROPPED idx_josya_community_videos_idx_storage  (non-business table)
+2026-02-19 13:04:36,270  INFO        DROPPED idx_josya_community_wall_contentid  (non-business table)
+2026-02-19 13:04:36,272  INFO        DROPPED idx_josya_community_wall_type  (non-business table)
+2026-02-19 13:04:36,276  INFO        DROPPED idx_josya_contact_details_idx_access  (non-business table)
+2026-02-19 13:04:36,278  INFO        DROPPED idx_josya_contact_details_idx_catid  (non-business table)
+2026-02-19 13:04:36,281  INFO        DROPPED idx_josya_contact_details_idx_checkout  (non-business table)
+2026-02-19 13:04:36,284  INFO        DROPPED idx_josya_contact_details_idx_createdby  (non-business table)
+2026-02-19 13:04:36,287  INFO        DROPPED idx_josya_contact_details_idx_featured_catid  (non-business table)
+2026-02-19 13:04:36,290  INFO        DROPPED idx_josya_contact_details_idx_language  (non-business table)
+2026-02-19 13:04:36,293  INFO        DROPPED idx_josya_contact_details_idx_state  (non-business table)
+2026-02-19 13:04:36,296  INFO        DROPPED idx_josya_contact_details_idx_xreference  (non-business table)
+2026-02-19 13:04:36,300  INFO        DROPPED idx_josya_content_idx_access  (non-business table)
+2026-02-19 13:04:36,303  INFO        DROPPED idx_josya_content_idx_alias  (non-business table)
+2026-02-19 13:04:36,306  INFO        DROPPED idx_josya_content_idx_catid  (non-business table)
+2026-02-19 13:04:36,309  INFO        DROPPED idx_josya_content_idx_checkout  (non-business table)
+2026-02-19 13:04:36,312  INFO        DROPPED idx_josya_content_idx_createdby  (non-business table)
+2026-02-19 13:04:36,316  INFO        DROPPED idx_josya_content_idx_featured_catid  (non-business table)
+2026-02-19 13:04:36,319  INFO        DROPPED idx_josya_content_idx_language  (non-business table)
+2026-02-19 13:04:36,321  INFO        DROPPED idx_josya_content_idx_state  (non-business table)
+2026-02-19 13:04:36,324  INFO        DROPPED idx_josya_content_idx_xreference  (non-business table)
+2026-02-19 13:04:36,328  INFO        DROPPED idx_josya_content_types_idx_alias  (non-business table)
+2026-02-19 13:04:36,331  INFO        DROPPED idx_josya_contentitem_tag_map_idx_core_content_id  (non-business table)
+2026-02-19 13:04:36,335  INFO        DROPPED idx_josya_contentitem_tag_map_idx_date_id  (non-business table)
+2026-02-19 13:04:36,338  INFO        DROPPED idx_josya_contentitem_tag_map_idx_tag_type  (non-business table)
+2026-02-19 13:04:36,339  WARNING     FAILED  uq_josya_contentitem_tag_map_uc_ItemnameTagid: cannot drop index chips_db_v3."uq_josya_contentitem_tag_map_uc_ItemnameTagid" because constraint uq_josya_contentitem_tag_map_uc_ItemnameTagid on table chips_db_v3.josya_contentitem_tag_map requires it
+HINT:  You can drop constraint uq_josya_contentitem_tag_map_uc_ItemnameTagid on table chips_db_v3.josya_contentitem_tag_map instead.
+
+2026-02-19 13:04:36,343  INFO        DROPPED idx_josya_extensions_element_clientid  (non-business table)
+2026-02-19 13:04:36,346  INFO        DROPPED idx_josya_extensions_element_folder_clientid  (non-business table)
+2026-02-19 13:04:36,349  INFO        DROPPED idx_josya_extensions_extension  (non-business table)
+2026-02-19 13:04:36,352  INFO        DROPPED idx_josya_fabrik_elements_checked_out_INDEX  (non-business table)
+2026-02-19 13:04:36,357  INFO        DROPPED idx_josya_fabrik_elements_group_id_INDEX  (non-business table)
+2026-02-19 13:04:36,361  INFO        DROPPED idx_josya_fabrik_elements_parent_id_INDEX  (non-business table)
+2026-02-19 13:04:36,365  INFO        DROPPED idx_josya_fabrik_elements_plugin_INDEX  (non-business table)
+2026-02-19 13:04:36,368  INFO        DROPPED idx_josya_fabrik_elements_show_in_list_summary_INDEX  (non-business table)
+2026-02-19 13:04:36,371  INFO        DROPPED idx_josya_fabrik_formgroup_form_id_INDEX  (non-business table)
+2026-02-19 13:04:36,374  INFO        DROPPED idx_josya_fabrik_formgroup_group_id_INDEX  (non-business table)
+2026-02-19 13:04:36,378  INFO        DROPPED idx_josya_fabrik_formgroup_ordering_INDEX  (non-business table)
+2026-02-19 13:04:36,381  INFO        DROPPED idx_josya_fabrik_forms_published_INDEX  (non-business table)
+2026-02-19 13:04:36,384  INFO        DROPPED idx_josya_fabrik_groups_published_INDEX  (non-business table)
+2026-02-19 13:04:36,388  INFO        DROPPED idx_josya_fabrik_joins_element_id_INDEX  (non-business table)
+2026-02-19 13:04:36,392  INFO        DROPPED idx_josya_fabrik_joins_group_id_INDEX  (non-business table)
+2026-02-19 13:04:36,397  INFO        DROPPED idx_josya_fabrik_joins_list_id_INDEX  (non-business table)
+2026-02-19 13:04:36,400  INFO        DROPPED idx_josya_fabrik_joins_table_join_INDEX  (non-business table)
+2026-02-19 13:04:36,404  INFO        DROPPED idx_josya_fabrik_jsactions_element_id_INDEX  (non-business table)
+2026-02-19 13:04:36,407  INFO        DROPPED idx_josya_fabrik_lists_form_id_INDEX  (non-business table)
+2026-02-19 13:04:36,409  WARNING     FAILED  uq_josya_fabrik_notification_uniquereason: cannot drop index chips_db_v3.uq_josya_fabrik_notification_uniquereason because constraint uq_josya_fabrik_notification_uniquereason on table chips_db_v3.josya_fabrik_notification requires it
+HINT:  You can drop constraint uq_josya_fabrik_notification_uniquereason on table chips_db_v3.josya_fabrik_notification instead.
+
+2026-02-19 13:04:36,410  WARNING     FAILED  uq_josya_fabrik_notification_event_sent_user_notified: cannot drop index chips_db_v3.uq_josya_fabrik_notification_event_sent_user_notified because constraint uq_josya_fabrik_notification_event_sent_user_notified on table chips_db_v3.josya_fabrik_notification_event_sent requires it
+HINT:  You can drop constraint uq_josya_fabrik_notification_event_sent_user_notified on table chips_db_v3.josya_fabrik_notification_event_sent instead.
+
+2026-02-19 13:04:36,414  INFO        DROPPED idx_josya_fields_idx_access  (non-business table)
+2026-02-19 13:04:36,417  INFO        DROPPED idx_josya_fields_idx_checkout  (non-business table)
+2026-02-19 13:04:36,420  INFO        DROPPED idx_josya_fields_idx_context  (non-business table)
+2026-02-19 13:04:36,424  INFO        DROPPED idx_josya_fields_idx_created_user_id  (non-business table)
+2026-02-19 13:04:36,427  INFO        DROPPED idx_josya_fields_idx_language  (non-business table)
+2026-02-19 13:04:36,430  INFO        DROPPED idx_josya_fields_idx_state  (non-business table)
+2026-02-19 13:04:36,434  INFO        DROPPED idx_josya_fields_groups_idx_access  (non-business table)
+2026-02-19 13:04:36,437  INFO        DROPPED idx_josya_fields_groups_idx_checkout  (non-business table)
+2026-02-19 13:04:36,440  INFO        DROPPED idx_josya_fields_groups_idx_context  (non-business table)
+2026-02-19 13:04:36,444  INFO        DROPPED idx_josya_fields_groups_idx_created_by  (non-business table)
+2026-02-19 13:04:36,447  INFO        DROPPED idx_josya_fields_groups_idx_language  (non-business table)
+2026-02-19 13:04:36,451  INFO        DROPPED idx_josya_fields_groups_idx_state  (non-business table)
+2026-02-19 13:04:36,454  INFO        DROPPED idx_josya_fields_values_idx_field_id  (non-business table)
+2026-02-19 13:04:36,457  INFO        DROPPED idx_josya_fields_values_idx_item_id  (non-business table)
+2026-02-19 13:04:36,461  INFO        DROPPED idx_josya_finder_links_idx_md5  (non-business table)
+2026-02-19 13:04:36,464  INFO        DROPPED idx_josya_finder_links_idx_published_list  (non-business table)
+2026-02-19 13:04:36,468  INFO        DROPPED idx_josya_finder_links_idx_published_sale  (non-business table)
+2026-02-19 13:04:36,471  INFO        DROPPED idx_josya_finder_links_idx_title  (non-business table)
+2026-02-19 13:04:36,474  INFO        DROPPED idx_josya_finder_links_idx_type  (non-business table)
+2026-02-19 13:04:36,477  INFO        DROPPED idx_josya_finder_links_idx_url  (non-business table)
+2026-02-19 13:04:36,481  INFO        DROPPED idx_josya_finder_links_terms0_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,485  INFO        DROPPED idx_josya_finder_links_terms0_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,487  INFO        DROPPED idx_josya_finder_links_terms1_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,490  INFO        DROPPED idx_josya_finder_links_terms1_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,493  INFO        DROPPED idx_josya_finder_links_terms2_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,497  INFO        DROPPED idx_josya_finder_links_terms2_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,499  INFO        DROPPED idx_josya_finder_links_terms3_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,503  INFO        DROPPED idx_josya_finder_links_terms3_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,505  INFO        DROPPED idx_josya_finder_links_terms4_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,508  INFO        DROPPED idx_josya_finder_links_terms4_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,512  INFO        DROPPED idx_josya_finder_links_terms5_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,515  INFO        DROPPED idx_josya_finder_links_terms5_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,518  INFO        DROPPED idx_josya_finder_links_terms6_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,522  INFO        DROPPED idx_josya_finder_links_terms6_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,524  INFO        DROPPED idx_josya_finder_links_terms7_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,528  INFO        DROPPED idx_josya_finder_links_terms7_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,531  INFO        DROPPED idx_josya_finder_links_terms8_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,533  INFO        DROPPED idx_josya_finder_links_terms8_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,536  INFO        DROPPED idx_josya_finder_links_terms9_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,539  INFO        DROPPED idx_josya_finder_links_terms9_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,542  INFO        DROPPED idx_josya_finder_links_termsa_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,547  INFO        DROPPED idx_josya_finder_links_termsa_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,550  INFO        DROPPED idx_josya_finder_links_termsb_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,553  INFO        DROPPED idx_josya_finder_links_termsb_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,556  INFO        DROPPED idx_josya_finder_links_termsc_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,559  INFO        DROPPED idx_josya_finder_links_termsc_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,563  INFO        DROPPED idx_josya_finder_links_termsd_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,566  INFO        DROPPED idx_josya_finder_links_termsd_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,569  INFO        DROPPED idx_josya_finder_links_termse_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,573  INFO        DROPPED idx_josya_finder_links_termse_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,576  INFO        DROPPED idx_josya_finder_links_termsf_idx_link_term_weight  (non-business table)
+2026-02-19 13:04:36,579  INFO        DROPPED idx_josya_finder_links_termsf_idx_term_weight  (non-business table)
+2026-02-19 13:04:36,582  INFO        DROPPED idx_josya_finder_taxonomy_access  (non-business table)
+2026-02-19 13:04:36,585  INFO        DROPPED idx_josya_finder_taxonomy_idx_parent_published  (non-business table)
+2026-02-19 13:04:36,588  INFO        DROPPED idx_josya_finder_taxonomy_ordering  (non-business table)
+2026-02-19 13:04:36,591  INFO        DROPPED idx_josya_finder_taxonomy_parent_id  (non-business table)
+2026-02-19 13:04:36,594  INFO        DROPPED idx_josya_finder_taxonomy_state  (non-business table)
+2026-02-19 13:04:36,598  INFO        DROPPED idx_josya_finder_taxonomy_map_link_id  (non-business table)
+2026-02-19 13:04:36,601  INFO        DROPPED idx_josya_finder_taxonomy_map_node_id  (non-business table)
+2026-02-19 13:04:36,604  INFO        DROPPED idx_josya_finder_terms_idx_soundex_phrase  (non-business table)
+2026-02-19 13:04:36,607  INFO        DROPPED idx_josya_finder_terms_idx_stem_phrase  (non-business table)
+2026-02-19 13:04:36,611  INFO        DROPPED idx_josya_finder_terms_idx_term_phrase  (non-business table)
+2026-02-19 13:04:36,612  WARNING     FAILED  uq_josya_finder_terms_idx_term: cannot drop index chips_db_v3.uq_josya_finder_terms_idx_term because constraint uq_josya_finder_terms_idx_term on table chips_db_v3.josya_finder_terms requires it
+HINT:  You can drop constraint uq_josya_finder_terms_idx_term on table chips_db_v3.josya_finder_terms instead.
+
+2026-02-19 13:04:36,615  INFO        DROPPED idx_josya_finder_terms_common_idx_lang  (non-business table)
+2026-02-19 13:04:36,618  INFO        DROPPED idx_josya_finder_terms_common_idx_word_lang  (non-business table)
+2026-02-19 13:04:36,621  INFO        DROPPED idx_josya_finder_tokens_idx_context  (non-business table)
+2026-02-19 13:04:36,624  INFO        DROPPED idx_josya_finder_tokens_idx_word  (non-business table)
+2026-02-19 13:04:36,627  INFO        DROPPED idx_josya_finder_tokens_aggregate_keyword_id  (non-business table)
+2026-02-19 13:04:36,631  INFO        DROPPED idx_josya_finder_tokens_aggregate_token  (non-business table)
+2026-02-19 13:04:36,632  WARNING     FAILED  uq_josya_finder_types_title: cannot drop index chips_db_v3.uq_josya_finder_types_title because constraint uq_josya_finder_types_title on table chips_db_v3.josya_finder_types requires it
+HINT:  You can drop constraint uq_josya_finder_types_title on table chips_db_v3.josya_finder_types instead.
+
+2026-02-19 13:04:36,633  WARNING     FAILED  uq_josya_jbolo_privacy_id: cannot drop index chips_db_v3.uq_josya_jbolo_privacy_id because constraint uq_josya_jbolo_privacy_id on table chips_db_v3.josya_jbolo_privacy requires it
+HINT:  You can drop constraint uq_josya_jbolo_privacy_id on table chips_db_v3.josya_jbolo_privacy instead.
+
+2026-02-19 13:04:36,638  INFO        DROPPED idx_josya_jchat_actualfrom  (non-business table)
+2026-02-19 13:04:36,641  INFO        DROPPED idx_josya_jchat_actualto  (non-business table)
+2026-02-19 13:04:36,645  INFO        DROPPED idx_josya_jchat_from  (non-business table)
+2026-02-19 13:04:36,648  INFO        DROPPED idx_josya_jchat_fromuser  (non-business table)
+2026-02-19 13:04:36,651  INFO        DROPPED idx_josya_jchat_to  (non-business table)
+2026-02-19 13:04:36,654  INFO        DROPPED idx_josya_jchat_touser  (non-business table)
+2026-02-19 13:04:36,657  INFO        DROPPED idx_josya_jchat_deleted_messages_receiver  (non-business table)
+2026-02-19 13:04:36,660  INFO        DROPPED idx_josya_jchat_deleted_messages_sender  (non-business table)
+2026-02-19 13:04:36,664  INFO        DROPPED idx_josya_jchat_lamessages_customer_email  (non-business table)
+2026-02-19 13:04:36,666  INFO        DROPPED idx_josya_jchat_lamessages_customer_name  (non-business table)
+2026-02-19 13:04:36,669  INFO        DROPPED idx_josya_jchat_login_email  (non-business table)
+2026-02-19 13:04:36,674  INFO        DROPPED idx_josya_jchat_login_fb_uid  (non-business table)
+2026-02-19 13:04:36,682  INFO        DROPPED idx_josya_jchat_login_first_name  (non-business table)
+2026-02-19 13:04:36,685  INFO        DROPPED idx_josya_jchat_login_last_name  (non-business table)
+2026-02-19 13:04:36,688  INFO        DROPPED idx_josya_jchat_login_name  (non-business table)
+2026-02-19 13:04:36,691  INFO        DROPPED idx_josya_jchat_meetings_hashindex  (non-business table)
+2026-02-19 13:04:36,694  INFO        DROPPED idx_josya_jchat_meetings_nameindex  (non-business table)
+2026-02-19 13:04:36,699  INFO        DROPPED idx_josya_jchat_rooms_idxname  (non-business table)
+2026-02-19 13:04:36,702  INFO        DROPPED idx_josya_jchat_sessionstatus_meeting_hash  (non-business table)
+2026-02-19 13:04:36,705  INFO        DROPPED idx_josya_jchat_sessionstatus_overridenameidx  (non-business table)
+2026-02-19 13:04:36,708  INFO        DROPPED idx_josya_jchat_sessionstatus_roomidx  (non-business table)
+2026-02-19 13:04:36,711  INFO        DROPPED idx_josya_jchat_userstatus_roomidx  (non-business table)
+2026-02-19 13:04:36,715  INFO        DROPPED idx_josya_jp_comments_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,718  INFO        DROPPED idx_josya_jp_comments_idx_contextitemid  (non-business table)
+2026-02-19 13:04:36,722  INFO        DROPPED idx_josya_jp_comments_idx_createdby  (non-business table)
+2026-02-19 13:04:36,726  INFO        DROPPED idx_josya_jp_comments_idx_nested  (non-business table)
+2026-02-19 13:04:36,730  INFO        DROPPED idx_josya_jp_comments_idx_parentid  (non-business table)
+2026-02-19 13:04:36,733  INFO        DROPPED idx_josya_jp_comments_idx_projectid  (non-business table)
+2026-02-19 13:04:36,736  INFO        DROPPED idx_josya_jp_comments_idx_state  (non-business table)
+2026-02-19 13:04:36,740  INFO        DROPPED idx_josya_jp_design_albums_idx_access  (non-business table)
+2026-02-19 13:04:36,743  INFO        DROPPED idx_josya_jp_design_albums_idx_author  (non-business table)
+2026-02-19 13:04:36,747  INFO        DROPPED idx_josya_jp_design_albums_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,751  INFO        DROPPED idx_josya_jp_design_albums_idx_project  (non-business table)
+2026-02-19 13:04:36,754  INFO        DROPPED idx_josya_jp_design_albums_idx_state  (non-business table)
+2026-02-19 13:04:36,755  WARNING     FAILED  uq_josya_jp_design_albums_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_design_albums_idx_alias because constraint uq_josya_jp_design_albums_idx_alias on table chips_db_v3.josya_jp_design_albums requires it
+HINT:  You can drop constraint uq_josya_jp_design_albums_idx_alias on table chips_db_v3.josya_jp_design_albums instead.
+
+2026-02-19 13:04:36,759  INFO        DROPPED idx_josya_jp_design_revisions_idx_access  (non-business table)
+2026-02-19 13:04:36,762  INFO        DROPPED idx_josya_jp_design_revisions_idx_author  (non-business table)
+2026-02-19 13:04:36,766  INFO        DROPPED idx_josya_jp_design_revisions_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,769  INFO        DROPPED idx_josya_jp_design_revisions_idx_design  (non-business table)
+2026-02-19 13:04:36,772  INFO        DROPPED idx_josya_jp_design_revisions_idx_project  (non-business table)
+2026-02-19 13:04:36,774  INFO        DROPPED idx_josya_jp_design_revisions_idx_state  (non-business table)
+2026-02-19 13:04:36,775  WARNING     FAILED  uq_josya_jp_design_revisions_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_design_revisions_idx_alias because constraint uq_josya_jp_design_revisions_idx_alias on table chips_db_v3.josya_jp_design_revisions requires it
+HINT:  You can drop constraint uq_josya_jp_design_revisions_idx_alias on table chips_db_v3.josya_jp_design_revisions instead.
+
+2026-02-19 13:04:36,779  INFO        DROPPED idx_josya_jp_designs_idx_access  (non-business table)
+2026-02-19 13:04:36,782  INFO        DROPPED idx_josya_jp_designs_idx_album  (non-business table)
+2026-02-19 13:04:36,785  INFO        DROPPED idx_josya_jp_designs_idx_author  (non-business table)
+2026-02-19 13:04:36,788  INFO        DROPPED idx_josya_jp_designs_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,791  INFO        DROPPED idx_josya_jp_designs_idx_project  (non-business table)
+2026-02-19 13:04:36,794  INFO        DROPPED idx_josya_jp_designs_idx_state  (non-business table)
+2026-02-19 13:04:36,795  WARNING     FAILED  uq_josya_jp_designs_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_designs_idx_alias because constraint uq_josya_jp_designs_idx_alias on table chips_db_v3.josya_jp_designs requires it
+HINT:  You can drop constraint uq_josya_jp_designs_idx_alias on table chips_db_v3.josya_jp_designs instead.
+
+2026-02-19 13:04:36,798  INFO        DROPPED idx_josya_jp_designs_approved_idx_state  (non-business table)
+2026-02-19 13:04:36,802  INFO        DROPPED idx_josya_jp_labels_idx_group  (non-business table)
+2026-02-19 13:04:36,805  INFO        DROPPED idx_josya_jp_labels_idx_project  (non-business table)
+2026-02-19 13:04:36,808  INFO        DROPPED idx_josya_jp_milestones_idx_access  (non-business table)
+2026-02-19 13:04:36,811  INFO        DROPPED idx_josya_jp_milestones_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,814  INFO        DROPPED idx_josya_jp_milestones_idx_createdby  (non-business table)
+2026-02-19 13:04:36,817  INFO        DROPPED idx_josya_jp_milestones_idx_projectid  (non-business table)
+2026-02-19 13:04:36,820  INFO        DROPPED idx_josya_jp_milestones_idx_state  (non-business table)
+2026-02-19 13:04:36,821  WARNING     FAILED  uq_josya_jp_milestones_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_milestones_idx_alias because constraint uq_josya_jp_milestones_idx_alias on table chips_db_v3.josya_jp_milestones requires it
+HINT:  You can drop constraint uq_josya_jp_milestones_idx_alias on table chips_db_v3.josya_jp_milestones instead.
+
+2026-02-19 13:04:36,824  INFO        DROPPED idx_josya_jp_projects_idx_access  (non-business table)
+2026-02-19 13:04:36,826  INFO        DROPPED idx_josya_jp_projects_idx_catid  (non-business table)
+2026-02-19 13:04:36,831  INFO        DROPPED idx_josya_jp_projects_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,835  INFO        DROPPED idx_josya_jp_projects_idx_createdby  (non-business table)
+2026-02-19 13:04:36,839  INFO        DROPPED idx_josya_jp_projects_idx_state  (non-business table)
+2026-02-19 13:04:36,840  WARNING     FAILED  uq_josya_jp_projects_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_projects_idx_alias because constraint uq_josya_jp_projects_idx_alias on table chips_db_v3.josya_jp_projects requires it
+HINT:  You can drop constraint uq_josya_jp_projects_idx_alias on table chips_db_v3.josya_jp_projects instead.
+
+2026-02-19 13:04:36,843  INFO        DROPPED idx_josya_jp_ref_attachments_idx_attachment  (non-business table)
+2026-02-19 13:04:36,847  INFO        DROPPED idx_josya_jp_ref_attachments_idx_item  (non-business table)
+2026-02-19 13:04:36,851  INFO        DROPPED idx_josya_jp_ref_attachments_idx_project  (non-business table)
+2026-02-19 13:04:36,852  WARNING     FAILED  uq_josya_jp_ref_attachments_idx_connection: cannot drop index chips_db_v3.uq_josya_jp_ref_attachments_idx_connection because constraint uq_josya_jp_ref_attachments_idx_connection on table chips_db_v3.josya_jp_ref_attachments requires it
+HINT:  You can drop constraint uq_josya_jp_ref_attachments_idx_connection on table chips_db_v3.josya_jp_ref_attachments instead.
+
+2026-02-19 13:04:36,855  INFO        DROPPED idx_josya_jp_ref_labels_idx_item  (non-business table)
+2026-02-19 13:04:36,859  INFO        DROPPED idx_josya_jp_ref_labels_idx_lbl  (non-business table)
+2026-02-19 13:04:36,863  INFO        DROPPED idx_josya_jp_ref_labels_idx_project  (non-business table)
+2026-02-19 13:04:36,866  INFO        DROPPED idx_josya_jp_ref_observer_idx_project  (non-business table)
+2026-02-19 13:04:36,867  WARNING     FAILED  uq_josya_jp_ref_observer_idx_observing: cannot drop index chips_db_v3.uq_josya_jp_ref_observer_idx_observing because constraint uq_josya_jp_ref_observer_idx_observing on table chips_db_v3.josya_jp_ref_observer requires it
+HINT:  You can drop constraint uq_josya_jp_ref_observer_idx_observing on table chips_db_v3.josya_jp_ref_observer instead.
+
+2026-02-19 13:04:36,871  INFO        DROPPED idx_josya_jp_ref_tasks_idx_parent  (non-business table)
+2026-02-19 13:04:36,874  INFO        DROPPED idx_josya_jp_ref_tasks_idx_project  (non-business table)
+2026-02-19 13:04:36,877  INFO        DROPPED idx_josya_jp_ref_tasks_idx_task  (non-business table)
+2026-02-19 13:04:36,881  INFO        DROPPED idx_josya_jp_ref_users_idx_item  (non-business table)
+2026-02-19 13:04:36,882  WARNING     FAILED  uq_josya_jp_ref_users_idx_user: cannot drop index chips_db_v3.uq_josya_jp_ref_users_idx_user because constraint uq_josya_jp_ref_users_idx_user on table chips_db_v3.josya_jp_ref_users requires it
+HINT:  You can drop constraint uq_josya_jp_ref_users_idx_user on table chips_db_v3.josya_jp_ref_users instead.
+
+2026-02-19 13:04:36,886  INFO        DROPPED idx_josya_jp_replies_idx_access  (non-business table)
+2026-02-19 13:04:36,889  INFO        DROPPED idx_josya_jp_replies_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,892  INFO        DROPPED idx_josya_jp_replies_idx_createdby  (non-business table)
+2026-02-19 13:04:36,896  INFO        DROPPED idx_josya_jp_replies_idx_projectid  (non-business table)
+2026-02-19 13:04:36,899  INFO        DROPPED idx_josya_jp_replies_idx_state  (non-business table)
+2026-02-19 13:04:36,902  INFO        DROPPED idx_josya_jp_replies_idx_topicid  (non-business table)
+2026-02-19 13:04:36,906  INFO        DROPPED idx_josya_jp_repo_dirs_idx_access  (non-business table)
+2026-02-19 13:04:36,909  INFO        DROPPED idx_josya_jp_repo_dirs_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,913  INFO        DROPPED idx_josya_jp_repo_dirs_idx_createdby  (non-business table)
+2026-02-19 13:04:36,916  INFO        DROPPED idx_josya_jp_repo_dirs_idx_nested  (non-business table)
+2026-02-19 13:04:36,919  INFO        DROPPED idx_josya_jp_repo_dirs_idx_parentid  (non-business table)
+2026-02-19 13:04:36,922  INFO        DROPPED idx_josya_jp_repo_dirs_idx_projectid  (non-business table)
+2026-02-19 13:04:36,923  WARNING     FAILED  uq_josya_jp_repo_dirs_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_repo_dirs_idx_alias because constraint uq_josya_jp_repo_dirs_idx_alias on table chips_db_v3.josya_jp_repo_dirs requires it
+HINT:  You can drop constraint uq_josya_jp_repo_dirs_idx_alias on table chips_db_v3.josya_jp_repo_dirs instead.
+
+2026-02-19 13:04:36,926  INFO        DROPPED idx_josya_jp_repo_file_revs_idx_createdby  (non-business table)
+2026-02-19 13:04:36,930  INFO        DROPPED idx_josya_jp_repo_file_revs_idx_projectid  (non-business table)
+2026-02-19 13:04:36,931  WARNING     FAILED  uq_josya_jp_repo_file_revs_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_repo_file_revs_idx_alias because constraint uq_josya_jp_repo_file_revs_idx_alias on table chips_db_v3.josya_jp_repo_file_revs requires it
+HINT:  You can drop constraint uq_josya_jp_repo_file_revs_idx_alias on table chips_db_v3.josya_jp_repo_file_revs instead.
+
+2026-02-19 13:04:36,934  INFO        DROPPED idx_josya_jp_repo_files_idx_access  (non-business table)
+2026-02-19 13:04:36,937  INFO        DROPPED idx_josya_jp_repo_files_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,940  INFO        DROPPED idx_josya_jp_repo_files_idx_createdby  (non-business table)
+2026-02-19 13:04:36,944  INFO        DROPPED idx_josya_jp_repo_files_idx_dirid  (non-business table)
+2026-02-19 13:04:36,947  INFO        DROPPED idx_josya_jp_repo_files_idx_projectid  (non-business table)
+2026-02-19 13:04:36,948  WARNING     FAILED  uq_josya_jp_repo_files_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_repo_files_idx_alias because constraint uq_josya_jp_repo_files_idx_alias on table chips_db_v3.josya_jp_repo_files requires it
+HINT:  You can drop constraint uq_josya_jp_repo_files_idx_alias on table chips_db_v3.josya_jp_repo_files instead.
+
+2026-02-19 13:04:36,951  INFO        DROPPED idx_josya_jp_repo_note_revs_idx_createdby  (non-business table)
+2026-02-19 13:04:36,954  INFO        DROPPED idx_josya_jp_repo_note_revs_idx_projectid  (non-business table)
+2026-02-19 13:04:36,955  WARNING     FAILED  uq_josya_jp_repo_note_revs_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_repo_note_revs_idx_alias because constraint uq_josya_jp_repo_note_revs_idx_alias on table chips_db_v3.josya_jp_repo_note_revs requires it
+HINT:  You can drop constraint uq_josya_jp_repo_note_revs_idx_alias on table chips_db_v3.josya_jp_repo_note_revs instead.
+
+2026-02-19 13:04:36,958  INFO        DROPPED idx_josya_jp_repo_notes_idx_access  (non-business table)
+2026-02-19 13:04:36,962  INFO        DROPPED idx_josya_jp_repo_notes_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,966  INFO        DROPPED idx_josya_jp_repo_notes_idx_createdby  (non-business table)
+2026-02-19 13:04:36,969  INFO        DROPPED idx_josya_jp_repo_notes_idx_dirid  (non-business table)
+2026-02-19 13:04:36,972  INFO        DROPPED idx_josya_jp_repo_notes_idx_projectid  (non-business table)
+2026-02-19 13:04:36,973  WARNING     FAILED  uq_josya_jp_repo_notes_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_repo_notes_idx_alias because constraint uq_josya_jp_repo_notes_idx_alias on table chips_db_v3.josya_jp_repo_notes requires it
+HINT:  You can drop constraint uq_josya_jp_repo_notes_idx_alias on table chips_db_v3.josya_jp_repo_notes instead.
+
+2026-02-19 13:04:36,974  WARNING     FAILED  uq_josya_jp_tags_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_tags_idx_alias because constraint uq_josya_jp_tags_idx_alias on table chips_db_v3.josya_jp_tags requires it
+HINT:  You can drop constraint uq_josya_jp_tags_idx_alias on table chips_db_v3.josya_jp_tags instead.
+
+2026-02-19 13:04:36,978  INFO        DROPPED idx_josya_jp_task_lists_idx_access  (non-business table)
+2026-02-19 13:04:36,981  INFO        DROPPED idx_josya_jp_task_lists_idx_checkedout  (non-business table)
+2026-02-19 13:04:36,984  INFO        DROPPED idx_josya_jp_task_lists_idx_createdby  (non-business table)
+2026-02-19 13:04:36,987  INFO        DROPPED idx_josya_jp_task_lists_idx_milestoneid  (non-business table)
+2026-02-19 13:04:36,990  INFO        DROPPED idx_josya_jp_task_lists_idx_projectid  (non-business table)
+2026-02-19 13:04:36,993  INFO        DROPPED idx_josya_jp_task_lists_idx_state  (non-business table)
+2026-02-19 13:04:36,994  WARNING     FAILED  uq_josya_jp_task_lists_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_task_lists_idx_alias because constraint uq_josya_jp_task_lists_idx_alias on table chips_db_v3.josya_jp_task_lists requires it
+HINT:  You can drop constraint uq_josya_jp_task_lists_idx_alias on table chips_db_v3.josya_jp_task_lists instead.
+
+2026-02-19 13:04:36,998  INFO        DROPPED idx_josya_jp_tasks_idx_access  (non-business table)
+2026-02-19 13:04:37,001  INFO        DROPPED idx_josya_jp_tasks_idx_checkedout  (non-business table)
+2026-02-19 13:04:37,004  INFO        DROPPED idx_josya_jp_tasks_idx_complete  (non-business table)
+2026-02-19 13:04:37,007  INFO        DROPPED idx_josya_jp_tasks_idx_completedby  (non-business table)
+2026-02-19 13:04:37,011  INFO        DROPPED idx_josya_jp_tasks_idx_createdby  (non-business table)
+2026-02-19 13:04:37,014  INFO        DROPPED idx_josya_jp_tasks_idx_listid  (non-business table)
+2026-02-19 13:04:37,018  INFO        DROPPED idx_josya_jp_tasks_idx_milestone  (non-business table)
+2026-02-19 13:04:37,021  INFO        DROPPED idx_josya_jp_tasks_idx_priority  (non-business table)
+2026-02-19 13:04:37,024  INFO        DROPPED idx_josya_jp_tasks_idx_projectid  (non-business table)
+2026-02-19 13:04:37,027  INFO        DROPPED idx_josya_jp_tasks_idx_state  (non-business table)
+2026-02-19 13:04:37,028  WARNING     FAILED  uq_josya_jp_tasks_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_tasks_idx_alias because constraint uq_josya_jp_tasks_idx_alias on table chips_db_v3.josya_jp_tasks requires it
+HINT:  You can drop constraint uq_josya_jp_tasks_idx_alias on table chips_db_v3.josya_jp_tasks instead.
+
+2026-02-19 13:04:37,031  INFO        DROPPED idx_josya_jp_timesheet_idx_access  (non-business table)
+2026-02-19 13:04:37,035  INFO        DROPPED idx_josya_jp_timesheet_idx_billable  (non-business table)
+2026-02-19 13:04:37,038  INFO        DROPPED idx_josya_jp_timesheet_idx_checkedout  (non-business table)
+2026-02-19 13:04:37,040  INFO        DROPPED idx_josya_jp_timesheet_idx_createdby  (non-business table)
+2026-02-19 13:04:37,043  INFO        DROPPED idx_josya_jp_timesheet_idx_project  (non-business table)
+2026-02-19 13:04:37,047  INFO        DROPPED idx_josya_jp_timesheet_idx_state  (non-business table)
+2026-02-19 13:04:37,049  INFO        DROPPED idx_josya_jp_timesheet_idx_task  (non-business table)
+2026-02-19 13:04:37,052  INFO        DROPPED idx_josya_jp_topics_idx_access  (non-business table)
+2026-02-19 13:04:37,055  INFO        DROPPED idx_josya_jp_topics_idx_checkedout  (non-business table)
+2026-02-19 13:04:37,058  INFO        DROPPED idx_josya_jp_topics_idx_createdby  (non-business table)
+2026-02-19 13:04:37,061  INFO        DROPPED idx_josya_jp_topics_idx_projectid  (non-business table)
+2026-02-19 13:04:37,065  INFO        DROPPED idx_josya_jp_topics_idx_state  (non-business table)
+2026-02-19 13:04:37,066  WARNING     FAILED  uq_josya_jp_topics_idx_alias: cannot drop index chips_db_v3.uq_josya_jp_topics_idx_alias because constraint uq_josya_jp_topics_idx_alias on table chips_db_v3.josya_jp_topics requires it
+HINT:  You can drop constraint uq_josya_jp_topics_idx_alias on table chips_db_v3.josya_jp_topics instead.
+
+2026-02-19 13:04:37,068  INFO        DROPPED idx_josya_languages_idx_access  (non-business table)
+2026-02-19 13:04:37,071  INFO        DROPPED idx_josya_languages_idx_ordering  (non-business table)
+2026-02-19 13:04:37,072  WARNING     FAILED  uq_josya_languages_idx_langcode: cannot drop index chips_db_v3.uq_josya_languages_idx_langcode because constraint uq_josya_languages_idx_langcode on table chips_db_v3.josya_languages requires it
+HINT:  You can drop constraint uq_josya_languages_idx_langcode on table chips_db_v3.josya_languages instead.
+
+2026-02-19 13:04:37,073  WARNING     FAILED  uq_josya_languages_idx_sef: cannot drop index chips_db_v3.uq_josya_languages_idx_sef because constraint uq_josya_languages_idx_sef on table chips_db_v3.josya_languages requires it
+HINT:  You can drop constraint uq_josya_languages_idx_sef on table chips_db_v3.josya_languages instead.
+
+2026-02-19 13:04:37,076  INFO        DROPPED idx_josya_menu_idx_alias  (non-business table)
+2026-02-19 13:04:37,080  INFO        DROPPED idx_josya_menu_idx_componentid  (non-business table)
+2026-02-19 13:04:37,084  INFO        DROPPED idx_josya_menu_idx_language  (non-business table)
+2026-02-19 13:04:37,087  INFO        DROPPED idx_josya_menu_idx_left_right  (non-business table)
+2026-02-19 13:04:37,090  INFO        DROPPED idx_josya_menu_idx_menutype  (non-business table)
+2026-02-19 13:04:37,094  INFO        DROPPED idx_josya_menu_idx_path  (non-business table)
+2026-02-19 13:04:37,095  WARNING     FAILED  uq_josya_menu_idx_client_id_parent_id_alias_language: cannot drop index chips_db_v3.uq_josya_menu_idx_client_id_parent_id_alias_language because constraint uq_josya_menu_idx_client_id_parent_id_alias_language on table chips_db_v3.josya_menu requires it
+HINT:  You can drop constraint uq_josya_menu_idx_client_id_parent_id_alias_language on table chips_db_v3.josya_menu instead.
+
+2026-02-19 13:04:37,096  WARNING     FAILED  uq_josya_menu_types_idx_menutype: cannot drop index chips_db_v3.uq_josya_menu_types_idx_menutype because constraint uq_josya_menu_types_idx_menutype on table chips_db_v3.josya_menu_types requires it
+HINT:  You can drop constraint uq_josya_menu_types_idx_menutype on table chips_db_v3.josya_menu_types instead.
+
+2026-02-19 13:04:37,099  INFO        DROPPED idx_josya_messages_useridto_state  (non-business table)
+2026-02-19 13:04:37,100  WARNING     FAILED  uq_josya_messages_cfg_idx_user_var_name: cannot drop index chips_db_v3.uq_josya_messages_cfg_idx_user_var_name because constraint uq_josya_messages_cfg_idx_user_var_name on table chips_db_v3.josya_messages_cfg requires it
+HINT:  You can drop constraint uq_josya_messages_cfg_idx_user_var_name on table chips_db_v3.josya_messages_cfg instead.
+
+2026-02-19 13:04:37,104  INFO        DROPPED idx_josya_modules_idx_language  (non-business table)
+2026-02-19 13:04:37,153  INFO        DROPPED idx_josya_modules_newsfeeds  (non-business table)
+2026-02-19 13:04:37,191  INFO        DROPPED idx_josya_modules_published  (non-business table)
+2026-02-19 13:04:37,201  INFO        DROPPED idx_josya_newsfeeds_idx_access  (non-business table)
+2026-02-19 13:04:37,205  INFO        DROPPED idx_josya_newsfeeds_idx_catid  (non-business table)
+2026-02-19 13:04:37,209  INFO        DROPPED idx_josya_newsfeeds_idx_checkout  (non-business table)
+2026-02-19 13:04:37,213  INFO        DROPPED idx_josya_newsfeeds_idx_createdby  (non-business table)
+2026-02-19 13:04:37,216  INFO        DROPPED idx_josya_newsfeeds_idx_language  (non-business table)
+2026-02-19 13:04:37,237  INFO        DROPPED idx_josya_newsfeeds_idx_state  (non-business table)
+2026-02-19 13:04:37,240  INFO        DROPPED idx_josya_newsfeeds_idx_xreference  (non-business table)
+2026-02-19 13:04:37,244  INFO        DROPPED idx_josya_privacy_consents_idx_user_id  (non-business table)
+2026-02-19 13:04:37,247  INFO        DROPPED idx_josya_redirect_links_idx_link_modifed  (non-business table)
+2026-02-19 13:04:37,250  INFO        DROPPED idx_josya_redirect_links_idx_old_url  (non-business table)
+2026-02-19 13:04:37,253  INFO        DROPPED idx_josya_session_client_id_guest  (non-business table)
+2026-02-19 13:04:37,256  INFO        DROPPED idx_josya_session_time  (non-business table)
+2026-02-19 13:04:37,260  INFO        DROPPED idx_josya_session_userid  (non-business table)
+2026-02-19 13:04:37,263  INFO        DROPPED idx_josya_tags_idx_access  (non-business table)
+2026-02-19 13:04:37,266  INFO        DROPPED idx_josya_tags_idx_alias  (non-business table)
+2026-02-19 13:04:37,269  INFO        DROPPED idx_josya_tags_idx_checkout  (non-business table)
+2026-02-19 13:04:37,272  INFO        DROPPED idx_josya_tags_idx_language  (non-business table)
+2026-02-19 13:04:37,274  INFO        DROPPED idx_josya_tags_idx_left_right  (non-business table)
+2026-02-19 13:04:37,277  INFO        DROPPED idx_josya_tags_idx_path  (non-business table)
+2026-02-19 13:04:37,280  INFO        DROPPED idx_josya_tags_tag_idx  (non-business table)
+2026-02-19 13:04:37,283  INFO        DROPPED idx_josya_template_styles_idx_client_id  (non-business table)
+2026-02-19 13:04:37,285  INFO        DROPPED idx_josya_template_styles_idx_client_id_home  (non-business table)
+2026-02-19 13:04:37,288  INFO        DROPPED idx_josya_template_styles_idx_template  (non-business table)
+2026-02-19 13:04:37,291  INFO        DROPPED idx_josya_ucm_base_idx_ucm_item_id  (non-business table)
+2026-02-19 13:04:37,294  INFO        DROPPED idx_josya_ucm_base_idx_ucm_language_id  (non-business table)
+2026-02-19 13:04:37,298  INFO        DROPPED idx_josya_ucm_base_idx_ucm_type_id  (non-business table)
+2026-02-19 13:04:37,300  INFO        DROPPED idx_josya_ucm_content_idx_access  (non-business table)
+2026-02-19 13:04:37,303  INFO        DROPPED idx_josya_ucm_content_idx_alias  (non-business table)
+2026-02-19 13:04:37,306  INFO        DROPPED idx_josya_ucm_content_idx_content_type  (non-business table)
+2026-02-19 13:04:37,309  INFO        DROPPED idx_josya_ucm_content_idx_core_checked_out_user_id  (non-business table)
+2026-02-19 13:04:37,312  INFO        DROPPED idx_josya_ucm_content_idx_core_created_user_id  (non-business table)
+2026-02-19 13:04:37,315  INFO        DROPPED idx_josya_ucm_content_idx_core_modified_user_id  (non-business table)
+2026-02-19 13:04:37,318  INFO        DROPPED idx_josya_ucm_content_idx_core_type_id  (non-business table)
+2026-02-19 13:04:37,321  INFO        DROPPED idx_josya_ucm_content_idx_created_time  (non-business table)
+2026-02-19 13:04:37,324  INFO        DROPPED idx_josya_ucm_content_idx_language  (non-business table)
+2026-02-19 13:04:37,327  INFO        DROPPED idx_josya_ucm_content_idx_modified_time  (non-business table)
+2026-02-19 13:04:37,330  INFO        DROPPED idx_josya_ucm_content_idx_title  (non-business table)
+2026-02-19 13:04:37,333  INFO        DROPPED idx_josya_ucm_content_tag_idx  (non-business table)
+2026-02-19 13:04:37,335  INFO        DROPPED idx_josya_ucm_history_idx_save_date  (non-business table)
+2026-02-19 13:04:37,338  INFO        DROPPED idx_josya_ucm_history_idx_ucm_item_id  (non-business table)
+2026-02-19 13:04:37,341  INFO        DROPPED idx_josya_user_activity_idx_client_state  (non-business table)
+2026-02-19 13:04:37,344  INFO        DROPPED idx_josya_user_activity_idx_day  (non-business table)
+2026-02-19 13:04:37,347  INFO        DROPPED idx_josya_user_activity_idx_event_by  (non-business table)
+2026-02-19 13:04:37,350  INFO        DROPPED idx_josya_user_activity_items_idx_type_id  (non-business table)
+2026-02-19 13:04:37,352  INFO        DROPPED idx_josya_user_activity_items_idx_xref_id  (non-business table)
+2026-02-19 13:04:37,356  INFO        DROPPED idx_josya_user_keys_user_id  (non-business table)
+2026-02-19 13:04:37,357  WARNING     FAILED  uq_josya_user_keys_series: cannot drop index chips_db_v3.uq_josya_user_keys_series because constraint uq_josya_user_keys_series on table chips_db_v3.josya_user_keys requires it
+HINT:  You can drop constraint uq_josya_user_keys_series on table chips_db_v3.josya_user_keys instead.
+
+2026-02-19 13:04:37,360  INFO        DROPPED idx_josya_user_notes_idx_category_id  (non-business table)
+2026-02-19 13:04:37,364  INFO        DROPPED idx_josya_user_notes_idx_user_id  (non-business table)
+2026-02-19 13:04:37,365  WARNING     FAILED  uq_josya_user_profiles_idx_user_id_profile_key: cannot drop index chips_db_v3.uq_josya_user_profiles_idx_user_id_profile_key because constraint uq_josya_user_profiles_idx_user_id_profile_key on table chips_db_v3.josya_user_profiles requires it
+HINT:  You can drop constraint uq_josya_user_profiles_idx_user_id_profile_key on table chips_db_v3.josya_user_profiles instead.
+
+2026-02-19 13:04:37,368  INFO        DROPPED idx_josya_usergroups_idx_usergroup_adjacency_lookup  (non-business table)
+2026-02-19 13:04:37,372  INFO        DROPPED idx_josya_usergroups_idx_usergroup_nested_set_lookup  (non-business table)
+2026-02-19 13:04:37,376  INFO        DROPPED idx_josya_usergroups_idx_usergroup_title_lookup  (non-business table)
+2026-02-19 13:04:37,377  WARNING     FAILED  uq_josya_usergroups_idx_usergroup_parent_title_lookup: cannot drop index chips_db_v3.uq_josya_usergroups_idx_usergroup_parent_title_lookup because constraint uq_josya_usergroups_idx_usergroup_parent_title_lookup on table chips_db_v3.josya_usergroups requires it
+HINT:  You can drop constraint uq_josya_usergroups_idx_usergroup_parent_title_lookup on table chips_db_v3.josya_usergroups instead.
+
+2026-02-19 13:04:37,380  INFO        DROPPED idx_josya_users_email  (non-business table)
+2026-02-19 13:04:37,383  INFO        DROPPED idx_josya_users_idx_block  (non-business table)
+2026-02-19 13:04:37,387  INFO        DROPPED idx_josya_users_idx_name  (non-business table)
+2026-02-19 13:04:37,388  WARNING     FAILED  uq_josya_users_idx_username: cannot drop index chips_db_v3.uq_josya_users_idx_username because constraint uq_josya_users_idx_username on table chips_db_v3.josya_users requires it
+HINT:  You can drop constraint uq_josya_users_idx_username on table chips_db_v3.josya_users instead.
+
+2026-02-19 13:04:37,389  WARNING     FAILED  uq_josya_viewlevels_idx_assetgroup_title_lookup: cannot drop index chips_db_v3.uq_josya_viewlevels_idx_assetgroup_title_lookup because constraint uq_josya_viewlevels_idx_assetgroup_title_lookup on table chips_db_v3.josya_viewlevels requires it
+HINT:  You can drop constraint uq_josya_viewlevels_idx_assetgroup_title_lookup on table chips_db_v3.josya_viewlevels instead.
+
+2026-02-19 13:04:37,392  INFO        DROPPED idx_josya_zhgooglemaps_infobubbles_idx_catid  (non-business table)
+2026-02-19 13:04:37,395  INFO        DROPPED idx_josya_zhgooglemaps_log_idx_catid  (non-business table)
+2026-02-19 13:04:37,398  INFO        DROPPED idx_josya_zhgooglemaps_log_idx_ext  (non-business table)
+2026-02-19 13:04:37,401  INFO        DROPPED idx_josya_zhgooglemaps_maps_idx_catid  (non-business table)
+2026-02-19 13:04:37,403  INFO        DROPPED idx_josya_zhgooglemaps_maps_idx_override  (non-business table)
+2026-02-19 13:04:37,406  INFO        DROPPED idx_josya_zhgooglemaps_maptypes_idx_catid  (non-business table)
+2026-02-19 13:04:37,409  INFO        DROPPED idx_josya_zhgooglemaps_marker_buffer_idx_catid  (non-business table)
+2026-02-19 13:04:37,412  INFO        DROPPED idx_josya_zhgooglemaps_marker_buffer_idx_createdbyuser  (non-business table)
+2026-02-19 13:04:37,415  INFO        DROPPED idx_josya_zhgooglemaps_marker_buffer_idx_markergroup  (non-business table)
+2026-02-19 13:04:37,417  INFO        DROPPED idx_josya_zhgooglemaps_marker_content_idx_catid  (non-business table)
+2026-02-19 13:04:37,420  INFO        DROPPED idx_josya_zhgooglemaps_marker_rates_idx_markerid  (non-business table)
+2026-02-19 13:04:37,423  INFO        DROPPED idx_josya_zhgooglemaps_markergroups_idx_catid  (non-business table)
+2026-02-19 13:04:37,426  INFO        DROPPED idx_josya_zhgooglemaps_markergroups_idx_userorder  (non-business table)
+2026-02-19 13:04:37,429  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_access  (non-business table)
+2026-02-19 13:04:37,432  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_alias  (non-business table)
+2026-02-19 13:04:37,434  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_articleid  (non-business table)
+2026-02-19 13:04:37,437  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_catid  (non-business table)
+2026-02-19 13:04:37,440  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_contactid  (non-business table)
+2026-02-19 13:04:37,443  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_createdbyuser  (non-business table)
+2026-02-19 13:04:37,446  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_mapid  (non-business table)
+2026-02-19 13:04:37,449  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_markergroup  (non-business table)
+2026-02-19 13:04:37,452  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_tabid  (non-business table)
+2026-02-19 13:04:37,455  INFO        DROPPED idx_josya_zhgooglemaps_markers_idx_userorder  (non-business table)
+2026-02-19 13:04:37,457  INFO        DROPPED idx_josya_zhgooglemaps_paths_idx_catid  (non-business table)
+2026-02-19 13:04:37,461  INFO        DROPPED idx_josya_zhgooglemaps_paths_idx_mapid  (non-business table)
+2026-02-19 13:04:37,464  INFO        DROPPED idx_josya_zhgooglemaps_paths_idx_markergroup  (non-business table)
+2026-02-19 13:04:37,466  INFO        DROPPED idx_josya_zhgooglemaps_routers_idx_catid  (non-business table)
+2026-02-19 13:04:37,470  INFO        DROPPED idx_josya_zhgooglemaps_routers_idx_mapid  (non-business table)
+2026-02-19 13:04:37,472  INFO        DROPPED idx_josya_zhgooglemaps_streetviews_idx_catid  (non-business table)
+2026-02-19 13:04:37,475  INFO        DROPPED idx_josya_zhgooglemaps_text_overrides_idx_catid  (non-business table)
+2026-02-19 13:04:37,478  INFO        DROPPED idx_josya_zhgooglemaps_weathertypes_idx_catid  (non-business table)
+2026-02-19 13:04:37,481  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_client_id_INDEX  (non-business table)
+2026-02-19 13:04:37,484  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_date_due_INDEX  (non-business table)
+2026-02-19 13:04:37,487  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_property_id_INDEX  (non-business table)
+2026-02-19 13:04:37,490  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_reference_number_INDE  (non-business table)
+2026-02-19 13:04:37,493  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_tenant_id_INDEX  (non-business table)
+2026-02-19 13:04:37,496  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_unit_id_INDEX  (non-business table)
+2026-02-19 13:04:37,498  INFO        DROPPED idx_old_sys_pm_clients_invoices_fb_filter_zone_id_INDEX  (non-business table)
+2026-02-19 13:04:37,501  INFO        DROPPED idx_old_sys_pm_clients_invoices_167_repeat_fb_parent_fk_parent_  (non-business table)
+2026-02-19 13:04:37,504  INFO        DROPPED idx_zimport_sys_reports_returns_properties_fb_filter_client_id_  (non-business table)
+2026-02-19 13:04:37,507  INFO        DROPPED idx_zimport_sys_reports_returns_properties_fb_filter_current_st  (non-business table)
+2026-02-19 13:04:37,510  INFO        DROPPED idx_zimport_sys_reports_returns_properties_fb_filter_period_dat  (non-business table)
+2026-02-19 13:04:37,511  WARNING     FAILED  uq_zimport_sys_reports_returns_properties_unique_index: cannot drop index chips_db_v3.uq_zimport_sys_reports_returns_properties_unique_index because constraint uq_zimport_sys_reports_returns_properties_unique_index on table chips_db_v3.zimport_sys_reports_returns_properties requires it
+HINT:  You can drop constraint uq_zimport_sys_reports_returns_properties_unique_index on table chips_db_v3.zimport_sys_reports_returns_properties instead.
+
+2026-02-19 13:04:37,512  WARNING     FAILED  uq_zmigra_promas_returns_invoices_chips_invoice_id: cannot drop index chips_db_v3.uq_zmigra_promas_returns_invoices_chips_invoice_id because constraint uq_zmigra_promas_returns_invoices_chips_invoice_id on table chips_db_v3.zmigra_promas_returns_invoices requires it
+HINT:  You can drop constraint uq_zmigra_promas_returns_invoices_chips_invoice_id on table chips_db_v3.zmigra_promas_returns_invoices instead.
+
+2026-02-19 13:04:37,513  WARNING     FAILED  uq_zmigra_promas_returns_recoveries_chip_recovery_id: cannot drop index chips_db_v3.uq_zmigra_promas_returns_recoveries_chip_recovery_id because constraint uq_zmigra_promas_returns_recoveries_chip_recovery_id on table chips_db_v3.zmigra_promas_returns_recoveries requires it
+HINT:  You can drop constraint uq_zmigra_promas_returns_recoveries_chip_recovery_id on table chips_db_v3.zmigra_promas_returns_recoveries instead.
+
+2026-02-19 13:04:37,513  INFO      
+2026-02-19 13:04:37,513  INFO      --- Step 3: Drop low-value single-column indexes ---
+2026-02-19 13:04:37,518  INFO      Found 26 low-value indexes
+2026-02-19 13:04:37,521  INFO        DROPPED idx_sys_fin_pay_daily_extracts_fb_filter_channel_id_INDEX  (low-value column)
+2026-02-19 13:04:37,524  INFO        DROPPED idx_sys_fin_pay_failed_mpesa_coop_bank_extracts_fb_filter_chann  (low-value column)
+2026-02-19 13:04:37,527  INFO        DROPPED idx_sys_fin_pay_mpesa_coop_bank_extracts_fb_filter_channel_id_I  (low-value column)
+2026-02-19 13:04:37,530  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_filter_is_arrear_id_INDEX  (low-value column)
+2026-02-19 13:04:37,533  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_filter_narration_INDEX  (low-value column)
+2026-02-19 13:04:37,535  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_filter_remarks_id_INDEX  (low-value column)
+2026-02-19 13:04:37,538  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_filter_zm_id_INDEX  (low-value column)
+2026-02-19 13:04:37,541  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_filter_zs_id_INDEX  (low-value column)
+2026-02-19 13:04:37,544  INFO        DROPPED idx_sys_pm_debtors_invoices_fb_prefilter_debtor_type_id_INDEX  (low-value column)
+2026-02-19 13:04:37,548  INFO        DROPPED idx_sys_pm_debtors_invoices_clients_fb_filter_zone_manager_id_I  (low-value column)
+2026-02-19 13:04:37,552  INFO        DROPPED idx_sys_pm_debtors_invoices_clients_fb_filter_zone_supervisor_i  (low-value column)
+2026-02-19 13:04:37,555  INFO        DROPPED idx_sys_pm_landlord_accounts_transaction_fb_filter_amount_type_  (low-value column)
+2026-02-19 13:04:37,557  INFO        DROPPED idx_sys_pm_properties_fb_filter_zone_manager_id_INDEX  (low-value column)
+2026-02-19 13:04:37,561  INFO        DROPPED idx_sys_pm_properties_fb_filter_zone_supervisor_id_INDEX  (low-value column)
+2026-02-19 13:04:37,564  INFO        DROPPED idx_sys_pm_recoveries_fb_filter_narration_INDEX  (low-value column)
+2026-02-19 13:04:37,567  INFO        DROPPED idx_sys_pm_tenants_payments_fb_filter_channel_id_INDEX  (low-value column)
+2026-02-19 13:04:37,570  INFO        DROPPED idx_sys_pm_tenants_payments_fb_filter_narration_INDEX  (low-value column)
+2026-02-19 13:04:37,573  INFO        DROPPED idx_sys_pm_tenants_payments_fb_filter_zone_manager_id_INDEX  (low-value column)
+2026-02-19 13:04:37,576  INFO        DROPPED idx_sys_pm_tenants_payments_fb_filter_zone_supervisor_id_INDEX  (low-value column)
+2026-02-19 13:04:37,579  INFO        DROPPED idx_sys_reports_landlord_accounts_fb_filter_narration_INDEX  (low-value column)
+2026-02-19 13:04:37,582  INFO        DROPPED idx_sys_reports_returns_properties_fb_filter_zone_manager_id_IN  (low-value column)
+2026-02-19 13:04:37,585  INFO        DROPPED idx_sys_reports_returns_properties_fb_filter_zone_supervisor_id  (low-value column)
+2026-02-19 13:04:37,588  INFO        DROPPED idx_sys_reports_stats_returns_workflow_fb_filter_zone_manager_i  (low-value column)
+2026-02-19 13:04:37,590  INFO        DROPPED idx_sys_reports_stats_returns_workflow_fb_filter_zone_superviso  (low-value column)
+2026-02-19 13:04:37,593  INFO        DROPPED idx_sys_reports_stats_units_fb_filter_zone_manager_id_INDEX  (low-value column)
+2026-02-19 13:04:37,597  INFO        DROPPED idx_sys_reports_stats_units_fb_filter_zone_supervisor_id_INDEX  (low-value column)
+2026-02-19 13:04:37,597  INFO      
+2026-02-19 13:04:37,597  INFO      --- Step 4: Clean repeat-subtable indexes (keep only parent_id) ---
+2026-02-19 13:04:37,598  INFO      Found 47 excess repeat-table indexes
+2026-02-19 13:04:37,601  INFO        DROPPED idx_sys_alerts_configurations_repeat_recipients_groups_fb_repea  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,605  INFO        DROPPED idx_sys_alerts_messages_repeat_properties_fb_repeat_el_properti  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,608  INFO        DROPPED idx_sys_alerts_messages_repeat_units_fb_repeat_el_units_INDEX  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,612  INFO        DROPPED idx_sys_alerts_messages_repeat_zone_fb_repeat_el_zone_INDEX  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,613  WARNING     FAILED  uq_sys_eports_returns_batches_configurations_298_repeat_repeat_: cannot drop index chips_db_v3.uq_sys_eports_returns_batches_configurations_298_repeat_repeat_ because constraint uq_sys_eports_returns_batches_configurations_298_repeat_repeat_ on table chips_db_v3.sys_eports_returns_batches_configurations_298_repeat_repeat_prs requires it
+HINT:  You can drop constraint uq_sys_eports_returns_batches_configurations_298_repeat_repeat_ on table chips_db_v3.sys_eports_returns_batches_configurations_298_repeat_repeat_prs instead.
+
+2026-02-19 13:04:37,614  INFO        DROPPED idx_sys_eports_returns_batches_configurations_repeat_prs_fb_rep  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,614  WARNING     FAILED  uq_sys_eports_returns_batches_configurations_repeat_prs_prs: cannot drop index chips_db_v3.uq_sys_eports_returns_batches_configurations_repeat_prs_prs because constraint uq_sys_eports_returns_batches_configurations_repeat_prs_prs on table chips_db_v3.sys_eports_returns_batches_configurations_repeat_prs requires it
+HINT:  You can drop constraint uq_sys_eports_returns_batches_configurations_repeat_prs_prs on table chips_db_v3.sys_eports_returns_batches_configurations_repeat_prs instead.
+
+2026-02-19 13:04:37,618  INFO        DROPPED idx_sys_fin_audit_queries_repeat_group_id_fb_repeat_el_group_id  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,621  INFO        DROPPED idx_sys_fin_audit_queries_repeat_notify_fb_repeat_el_notify_IND  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,624  INFO        DROPPED idx_sys_fin_client_cheques_262_repeat_voucher_id  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,627  INFO        DROPPED idx_sys_fin_client_cheques_vouchers_repeat_cheques_id_fb_repeat  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,630  INFO        DROPPED idx_sys_fin_client_cheques_vouchers_repeat_voucher_id_fb_repeat  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,633  INFO        DROPPED idx_sys_fin_payment_vouchers_264_repeat_repeat_property_id_fb_r  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,636  INFO        DROPPED idx_sys_hr_payroll_calendar_repeat_position_id_fb_repeat_el_pos  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,639  INFO        DROPPED idx_sys_hr_payroll_elements_repeat_staff_positions_id_fb_repeat  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,643  INFO        DROPPED idx_sys_pm_caretakers_repeat_properties_ids_fb_repeat_el_proper  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,646  INFO        DROPPED idx_sys_pm_caretakers_repeat_property_id_fb_repeat_el_property_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,649  INFO        DROPPED idx_sys_pm_caretakers_repeat_zones_id_fb_repeat_el_zones_id_IND  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,652  INFO        DROPPED idx_sys_pm_properties_184_repeat_repeat_services_fb_repeat_el_s  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,655  INFO        DROPPED idx_sys_pm_properties_repair_types_repeat_element_id_fb_repeat_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,657  WARNING     FAILED  uq_sys_pm_tenants_payments_87_repeat_preventdupalloc: cannot drop index chips_db_v3.uq_sys_pm_tenants_payments_87_repeat_preventdupalloc because constraint uq_sys_pm_tenants_payments_87_repeat_preventdupalloc on table chips_db_v3.sys_pm_tenants_payments_87_repeat requires it
+HINT:  You can drop constraint uq_sys_pm_tenants_payments_87_repeat_preventdupalloc on table chips_db_v3.sys_pm_tenants_payments_87_repeat instead.
+
+2026-02-19 13:04:37,661  INFO        DROPPED idx_sys_pm_zones_assignments_repeat_fo_ids_fb_repeat_el_fo_ids_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,664  INFO        DROPPED idx_sys_pm_zones_assignments_repeat_properties_ids_fb_repeat_el  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,667  INFO        DROPPED idx_sys_pm_zones_assignments_repeat_zone_id_fb_repeat_el_zone_i  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,670  INFO        DROPPED idx_sys_pr_tasks_management_repeat_client_id_fb_repeat_el_clien  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,674  INFO        DROPPED idx_sys_pr_tasks_management_repeat_property_id_fb_repeat_el_pro  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,677  INFO        DROPPED idx_sys_pr_tasks_management_repeat_responsible_persons_fb_repea  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,680  INFO        DROPPED idx_sys_pr_tasks_management_repeat_tenant_id_fb_repeat_el_tenan  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,682  INFO        DROPPED idx_sys_pr_tasks_management_repeat_user_group_id_fb_repeat_el_u  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,685  INFO        DROPPED idx_sys_pr_tasks_management_repeat_zone_id_fb_repeat_el_zone_id  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,688  INFO        DROPPED idx_sys_proc_requisitions_repeat_department_id_fb_repeat_el_dep  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,691  INFO        DROPPED idx_sys_reports_returns_batches_repeat_featured_properties_fb_r  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,694  INFO        DROPPED idx_sys_reports_returns_batches_repeat_properties_id_fb_repeat_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,697  INFO        DROPPED idx_sys_reports_returns_batches_repeat_property_report_id_fb_re  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,700  INFO        DROPPED idx_sys_reports_returns_batches_repeat_recoveries_id_fb_repeat_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,703  INFO        DROPPED idx_sys_reports_returns_batches_repeat_returns_id_fb_repeat_el_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,706  INFO        DROPPED idx_sys_reports_returns_batches_repeat_transaction_id_fb_repeat  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,709  INFO        DROPPED idx_sys_set_menus_access_permissions_repeat_groups_fb_repeat_el  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,713  INFO        DROPPED idx_sys_set_menus_access_permissions_repeat_members_id_fb_repea  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,716  INFO        DROPPED idx_sys_set_menus_access_permissions_repeat_menu_items_fb_repea  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,719  INFO        DROPPED idx_sys_set_predefined_remarks_repeat_groups_id_fb_repeat_el_gr  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,722  INFO        DROPPED idx_sys_set_providers_repeat_services_id_fb_repeat_el_services_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,725  INFO        DROPPED idx_sys_set_providers_repeat_zone_areas_fb_repeat_el_zone_areas  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,728  INFO        DROPPED idx_sys_set_providers_repeat_zone_id_fb_repeat_el_zone_id_INDEX  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,732  INFO        DROPPED idx_sys_set_sections_repeat_section_head_staff_id_fb_repeat_el_  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,736  INFO        DROPPED idx_sys_set_sections_repeat_supervisory_staff_id_fb_repeat_el_s  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,739  INFO        DROPPED idx_sys_set_zones_repeat_estates_id_fb_repeat_el_estates_id_IND  (repeat subtable - non parent_id)
+2026-02-19 13:04:37,740  INFO      
+2026-02-19 13:04:37,740  INFO      --- Step 5: Create optimized composite indexes on key tables ---
+2026-02-19 13:04:37,805  INFO        CREATED idx_tenants_invoices_tenant_property ON sys_pm_tenants_invoices(tenant_id, property_id)
+2026-02-19 13:04:37,810  INFO        CREATED idx_tenants_invoices_client_unit ON sys_pm_tenants_invoices(client_id, unit_id)
+2026-02-19 13:04:37,816  INFO        CREATED idx_clients_invoices_client_property ON sys_pm_clients_invoices(client_id, property_id)
+2026-02-19 13:04:37,819  INFO        CREATED idx_clients_invoices_tenant_date_due ON sys_pm_clients_invoices(tenant_id, date_due)
+2026-02-19 13:04:37,823  INFO        CREATED idx_tenants_payments_tenant_date ON sys_pm_tenants_payments(tenant_id, payment_date)
+2026-02-19 13:04:37,828  INFO        CREATED idx_tenants_payments_client_property ON sys_pm_tenants_payments(client_id, property_id)
+2026-02-19 13:04:37,832  INFO        CREATED idx_payments_invoices_payment_invoice ON sys_pm_tenants_payments_invoices(payment_id, invoice_id)
+2026-02-19 13:04:37,837  INFO        CREATED idx_payments_invoices_tenant_lease ON sys_pm_tenants_payments_invoices(tenant_id, lease_id)
+2026-02-19 13:04:37,840  INFO        CREATED idx_clients_returns_client_property ON sys_pm_clients_returns(client_id, property_id)
+2026-02-19 13:04:37,845  INFO        CREATED idx_clients_returns_tenant_return_date ON sys_pm_clients_returns(tenant_id, return_date)
+2026-02-19 13:04:37,849  INFO        CREATED idx_clients_returns_status_client ON sys_pm_clients_returns(current_status_id, client_id)
+2026-02-19 13:04:37,853  INFO        CREATED idx_debtors_invoices_tenant_client ON sys_pm_debtors_invoices(tenant_id, client_id)
+2026-02-19 13:04:37,857  INFO        CREATED idx_debtors_invoices_property_date_due ON sys_pm_debtors_invoices(property_id, date_due)
+2026-02-19 13:04:37,863  INFO        CREATED idx_debtors_invoices_lease_status ON sys_pm_debtors_invoices(lease_id, current_status_id)
+2026-02-19 13:04:37,868  INFO        CREATED idx_tenant_acct_txn_tenant_date ON sys_pm_tenants_accounts_transactions(tenant_id, trans_date_time)
+2026-02-19 13:04:37,872  INFO        CREATED idx_tenant_acct_txn_client_property ON sys_pm_tenants_accounts_transactions(client_id, property_id)
+2026-02-19 13:04:37,877  INFO        CREATED idx_landlord_acct_txn_client_date ON sys_pm_landlord_accounts_transaction(client_id, trans_date_time)
+2026-02-19 13:04:37,881  INFO        CREATED idx_landlord_acct_txn_tenant_unit ON sys_pm_landlord_accounts_transaction(tenant_id, unit_id)
+2026-02-19 13:04:37,882  WARNING     FAILED  idx_returns_batches_client_status: column "client_id" does not exist
+
+2026-02-19 13:04:37,888  INFO        CREATED idx_lease_agreements_property_client ON sys_pm_lease_agreements(property_id, client_id)
+2026-02-19 13:04:37,914  INFO      
+2026-02-19 13:04:37,915  INFO      ============================================================
+2026-02-19 13:04:37,915  INFO      OPTIMIZATION SUMMARY
+2026-02-19 13:04:37,915  INFO      ============================================================
+2026-02-19 13:04:37,916  INFO      Indexes before (non-PK):  1564
+2026-02-19 13:04:37,916  INFO      Dropped:                  569
+2026-02-19 13:04:37,916  INFO      Composite added:          19
+2026-02-19 13:04:37,917  INFO      Indexes after (non-PK):   1015
+2026-02-19 13:04:37,917  INFO      Grand total (incl PKs):   1719
+2026-02-19 13:04:37,917  INFO      ============================================================

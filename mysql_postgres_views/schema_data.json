@@ -1,0 +1,7325 @@
+{
+  "CHACCE": {
+    "mssql_table": "CHACCE",
+    "pg_table": "sys_gl_accounts_entries",
+    "desc": "Stores accounting entries for transactions, including period, account, and amounts.",
+    "mssql_keys": [
+      "PYEARR"
+    ],
+    "mssql_cols": [
+      {
+        "name": "PYEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PMONTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNUM",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BATCHID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SRCCODE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTDR",
+        "type": "float",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCR",
+        "type": "float",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREF",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRET",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKACC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHEQUENO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVNUM",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": ""
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "type",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "accounting_period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "source_ref",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ref_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "posted",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entered_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHACCTS": {
+    "mssql_table": "CHACCTS",
+    "pg_table": "sys_gl_chart_accounts_master",
+    "desc": "Contains account master data for the chart of accounts, including account numbers, names, and balances.",
+    "mssql_keys": [
+      "ACCNTNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "ACCNTNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNAME",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCBANK",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCBRNCH",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CURRAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ISDEFT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "GLCODE",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "GLACCNO",
+        "type": "varchar",
+        "max_len": "30",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_chart_accounts_master_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_code",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "category_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "class_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "financial_statement_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sub_group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "normally",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHBANK": {
+    "mssql_table": "CHBANK",
+    "pg_table": "sys_set_banks",
+    "desc": "Stores information about banks, such as codes and names.",
+    "mssql_keys": [
+      "BANKCODE"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BANKCODE",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKNAME",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_set_banks_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "address",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHBBRA": {
+    "mssql_table": "CHBBRA",
+    "pg_table": "sys_set_banks_branches",
+    "desc": "Contains bank branch details, linking banks to their branches.",
+    "mssql_keys": [
+      "BANKCODE"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BANKCODE",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BRANCODE",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BRANNAME",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_set_banks_branches_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_code",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHBCTD": {
+    "mssql_table": "CHBCTD",
+    "pg_table": "sys_fin_payment_vouchers_264_repeat",
+    "desc": "Holds detailed records of batch transactions, including amounts, units, and payment details.",
+    "mssql_keys": [
+      "BTCHID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "TRANSDAT",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCHID",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYREF",
+        "type": "varchar",
+        "max_len": "200",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "HSECODE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHZONE",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCNO",
+        "type": "varchar",
+        "max_len": "15",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANSDESC",
+        "type": "varchar",
+        "max_len": "200",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYFOR",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYMNTH",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYYEAR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SECURNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANSTYP",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PYMOD",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRNRMKS",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRNPART",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DSPNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PRPBY",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OFFID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SUBYR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SUBMNTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SPSTD",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SPSTDAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PSTDBY",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SVRFY",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SVRFBY",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SVRDAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SHEETCNT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRMKS",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BASEAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SFOID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ZMGRID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SFID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYREF2",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_fin_payment_vouchers_264_repeat_id_seq'::regclass)"
+      },
+      {
+        "name": "parent_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "debit_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "miscallenous_charge",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "is_recovery",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cash_custodian_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "charge_client",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cheque_number_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHBCTH": {
+    "mssql_table": "CHBCTH",
+    "pg_table": "sys_fin_payment_vouchers",
+    "desc": "Stores batch transaction headers, summarizing batch details and status.",
+    "mssql_keys": [
+      "BTCHID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BTCHID",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCHDAT",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCHDES",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BENTRY",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCHAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BPSTAT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BPSTBY",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BPPSTD",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCRBY",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BPDELS",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BPDELBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BPDELD",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCHSRC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTCHAMTC",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTSOURCE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SHEETCNT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_fin_payment_vouchers_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "recepient_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entered_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "origin_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "voucher_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "from_bank_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "source_ref",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "debit_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_bank_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "documents",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "requisition_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_category_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "provider_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "staff_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cash_custodian_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "total_charge",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "is_recovery",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payee_names",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cheque_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "batch_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cheque_leaf_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHBLOCKS": {
+    "mssql_table": "CHBLOCKS",
+    "pg_table": "sys_pm_properties",
+    "desc": "Contains property block information, such as block IDs, descriptions, and rental amounts.",
+    "mssql_keys": [
+      "BLOCKID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKDESC",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BUOM",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "NOUNITS",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOC",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RNTAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYMOD",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BTYPE",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BSTATUS",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "WITHMNTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "WITHYEAR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SELLPRICE",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OCCUPYED",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DISPOSD",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "COMRATE",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LRNUM",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCAL",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "COMMRATE",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LLORDID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OFFID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SFOID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ZMGRID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RTYPED",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ROCCUPY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SELLAMT",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VATABL",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ROTHER",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_properties_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "NO",
+        "default": ""
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lat_long",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "photos_and_documents",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_area_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lr_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "usage_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "acquisition_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "field_officer_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_supervisor_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_manager_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "parent_property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHBUNITS": {
+    "mssql_table": "CHBUNITS",
+    "pg_table": "sys_pm_units",
+    "desc": "Stores details about individual units within blocks, including unit numbers, rent, and status.",
+    "mssql_keys": [
+      "UNITNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITDESC",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "RNTAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYMOD",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITTYP",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DEPOST",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ELECTR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "WATERC",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "USTATUS",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VACDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RTYPE",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VATABL",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VATRATE",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RNTIVAT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CURRTEN",
+        "type": "varchar",
+        "max_len": "80",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCATEGO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCONDT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RTYPED",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ROCCUPY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SELLAMT",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VATABLD",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ROTHER",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_units_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_type_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "usage_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_code",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_uploads",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "occupancy_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_condition_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "category_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "rent_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "vat_able",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "initial_water_meter_reading",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "topology_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "block_owner_tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCBDE": {
+    "mssql_table": "CHCBDE",
+    "pg_table": "sys_gl_ledgers_transactions",
+    "desc": "Holds cashbook entry details for bank and cash transactions, including amounts and references.",
+    "mssql_keys": [
+      "CBODOCNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "CBODOCNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKACC",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "YEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "MONTHH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKSTN",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDATF",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYNO",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SUBLEDG",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTTYPE",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREF",
+        "type": "varchar",
+        "max_len": "250",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREFT",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "400",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCSHDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTBNKDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCSHCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTBNKCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CSHBKNO",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTPOST",
+        "type": "varchar",
+        "max_len": "4",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECSTAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECRMKS",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECDATE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNREAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECONPRD",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "GLACC",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTSRC",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AUDTUSR",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECDATF",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTTIME",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_ledgers_transactions_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "supplier_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "origin_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ledger_type_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "control_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_type",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCBMN": {
+    "mssql_table": "CHCBMN",
+    "pg_table": "sys_gl_accounts_entries",
+    "desc": "Contains monthly cashbook summaries, tracking cash and bank movements.",
+    "mssql_keys": [
+      "BANKACC"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BANKACC",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "YEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "MONTHH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYNO",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTTYPE",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREF",
+        "type": "varchar",
+        "max_len": "15",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREFT",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCSH",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTBNK",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREC",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTPST",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDEL",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDELBY",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AUDTUSR",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": ""
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "type",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "accounting_period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "source_ref",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ref_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "posted",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entered_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCCRST": {
+    "mssql_table": "CHCCRST",
+    "pg_table": "sys_pm_clients_returns",
+    "desc": "Stores receipt status and remarks, including receipt number and date.",
+    "mssql_keys": [
+      "RCNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "RCNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RRMKS",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PSUCC",
+        "type": "varchar",
+        "max_len": "5",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_clients_returns_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ref_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "invoice_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "return_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_type_id",
+        "type": "character varying",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "'0'::character varying"
+      },
+      {
+        "name": "commisionable",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "batch_id",
+        "type": "character varying",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "threshold_percentage",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "abstract_threshold",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "0.00"
+      },
+      {
+        "name": "anomally_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "anomally_orig_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "comm_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "commissionable_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "vat_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "comm_perc",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "vat_per",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "item_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_status_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "approval_status",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "charge_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "paid_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_payment_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_payment_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_payment_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "allocated_total",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "invoice_balance",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "fo_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "is_bill",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "paid_out",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_supervisor_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_manager_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "comm_vat",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "distributions_allocation_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "return_type_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "date_paid_out",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "invoice_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCDC": {
+    "mssql_table": "CHCDC",
+    "pg_table": "sys_set_clients_dependent_charges",
+    "desc": "Links parent and dependent charge IDs for charge relationships.",
+    "mssql_keys": [
+      "PCHRGID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "PCHRGID",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DCHRGID",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_set_clients_dependent_charges_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "title",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "item_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "credit_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCHD": {
+    "mssql_table": "CHCHD",
+    "pg_table": "sys_fin_payment_vouchers_264_repeat",
+    "desc": "Contains cheque payment details, including cheque numbers, amounts, and payees.",
+    "mssql_keys": [
+      "CHQNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "CHQNO",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQACC",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYVOUC",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CODEFT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYEEID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYENAME",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PACCNUM",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PBANK",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PBANKBRA",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "EFTENTNO",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHKSTAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHKBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHKDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VERISTAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VERIBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VERIDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_fin_payment_vouchers_264_repeat_id_seq'::regclass)"
+      },
+      {
+        "name": "parent_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "debit_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "miscallenous_charge",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "is_recovery",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cash_custodian_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "charge_client",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "cheque_number_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCHQ": {
+    "mssql_table": "CHCHQ",
+    "pg_table": "sys_fin_cheque_books",
+    "desc": "Stores cheque information, such as cheque numbers, amounts, and status.",
+    "mssql_keys": [
+      "CHQNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "CHQNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQBKNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQBNK",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQACC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQUSD",
+        "type": "int",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQUSBY",
+        "type": "varchar",
+        "max_len": "25",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYVOUC",
+        "type": "varchar",
+        "max_len": "25",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYEEN",
+        "type": "varchar",
+        "max_len": "70",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYEEID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQUDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQUYR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQUMTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQSTAT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "CANBY",
+        "type": "varchar",
+        "max_len": "25",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CANREAS",
+        "type": "varchar",
+        "max_len": "75",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CANDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TYPCHQ",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQPDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQPOST",
+        "type": "varchar",
+        "max_len": "5",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQRMKS",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHQRECON",
+        "type": "varchar",
+        "max_len": "4",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECNDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECNBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECNSTAT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_fin_cheque_books_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "first_cheque_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "leafs",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCHRS": {
+    "mssql_table": "CHCHRS",
+    "pg_table": "sys_set_invoiceable_items",
+    "desc": "Holds charge master data, including charge IDs, descriptions, and default amounts.",
+    "mssql_keys": [
+      "CHRGID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "CHRGID",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHRDSC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHRSTT",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHRGTYP",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DEFAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "FINACC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SHINSUB",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "POSTSQ",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_set_invoiceable_items_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "item_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "billing_code",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "feature",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payment_priority",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "commissionable",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "default_cycle_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "default_expense_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "advance_payable",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "is_bill",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "fixed_amount",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHCNAM": {
+    "mssql_table": "CHCNAM",
+    "pg_table": "sys_pm_lease_agreements",
+    "desc": "Links tenant names to blocks and units, possibly for alias or historical tracking.",
+    "mssql_keys": [
+      "TENNAME"
+    ],
+    "mssql_cols": [
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OTENNAME",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_lease_agreements_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "date_start",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "date_end",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_status",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ref_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "auto_renewal",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "years",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "initial_water_meter_reading",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "escalation_rate",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "escalation_frequency",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "documents",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "linked_lease_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "override_rent_calc",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHDPAY": {
+    "mssql_table": "CHDPAY",
+    "pg_table": "sys_pm_deposits",
+    "desc": "Tracks deposit payments by tenants, including total paid and number of times.",
+    "mssql_keys": [
+      "BLOCKID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANSDESC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "NOTYMES",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TOTPAY",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_deposits_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "deposit_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "invoice_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "item_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "invoice_balance",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHDPS": {
+    "mssql_table": "CHDPS",
+    "pg_table": "sys_pm_deposits_requests",
+    "desc": "Stores deposit transaction details, including type, tenant, and payment info.",
+    "mssql_keys": [
+      "DEPOSITTYPE"
+    ],
+    "mssql_cols": [
+      {
+        "name": "DEPOSITTYPE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYMOD",
+        "type": "varchar",
+        "max_len": "3",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCNO",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DSPNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DUSED",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PYYR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PYMNTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TSTATUS",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_deposits_requests_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "request_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_total_balance",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "vacating_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_approved",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "total_deposits_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "net_balance",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHFACTS": {
+    "mssql_table": "CHFACTS",
+    "pg_table": "sys_gl_chart_accounts_master",
+    "desc": "Holds financial account master data, including account numbers, descriptions, and balances.",
+    "mssql_keys": [
+      "ACCNUM"
+    ],
+    "mssql_cols": [
+      {
+        "name": "ACCNUM",
+        "type": "nvarchar",
+        "max_len": "30",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCDESC",
+        "type": "nvarchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCSTAT",
+        "type": "nvarchar",
+        "max_len": "15",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CREATDAT",
+        "type": "smalldatetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AUDTUSR",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LASTDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LASTCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_chart_accounts_master_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_code",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "category_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "class_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "financial_statement_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sub_group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "normally",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHFACTV": {
+    "mssql_table": "CHFACTV",
+    "pg_table": "sys_gl_chart_accounts_master",
+    "desc": "Contains detailed account information with status, currency, and grouping.",
+    "mssql_keys": [
+      "ACCNUM"
+    ],
+    "mssql_cols": [
+      {
+        "name": "ACCNUMM",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNUM",
+        "type": "nvarchar",
+        "max_len": "30",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCDESC",
+        "type": "nvarchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCSTAT",
+        "type": "nvarchar",
+        "max_len": "15",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CREATDAT",
+        "type": "smalldatetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AUDTUSR",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LASTDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LASTCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACTCURR",
+        "type": "varchar",
+        "max_len": "5",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BALTYPE",
+        "type": "varchar",
+        "max_len": "6",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "POSTMOD",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCGRP",
+        "type": "varchar",
+        "max_len": "30",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_chart_accounts_master_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_name",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_code",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "category_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "class_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "financial_statement_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sub_group_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "normally",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHGLAC": {
+    "mssql_table": "CHGLAC",
+    "pg_table": "sys_gl_ledgers_transactions",
+    "desc": "Stores general ledger account entries, including period, account, and amounts.",
+    "mssql_keys": [
+      "PYEARR"
+    ],
+    "mssql_cols": [
+      {
+        "name": "PYEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PMONTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNUM",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BATCHID",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKID",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTREF",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRET",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BANKACC",
+        "type": "varchar",
+        "max_len": "25",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHEQUENO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_ledgers_transactions_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "supplier_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "origin_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ledger_type_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "control_account_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_type",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHIACCT": {
+    "mssql_table": "CHIACCT",
+    "pg_table": "sys_gl_accounts_setup",
+    "desc": "Stores mapping of various income and cash accounts for integration or reporting.",
+    "mssql_keys": [
+      "ACCINCO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "ACCINCO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCAINC",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCPINC",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCCSH",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCLAD",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCLIN",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCPCSH",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCVAT",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_accounts_setup_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "retained_earnings_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "income_summary_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "receivable_control_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_control_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_charges_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "vat_control_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "other_income_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "bank_interest_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "accrued_payroll_expense_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payroll_expense_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "net_salaries_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "other_employee_deductions_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "clients_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenants_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "revenues_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "clients_bank_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "petty_cash_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "loans_receivable_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "interests_receivable_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "business_bank_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenants_suspense_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "revenue_vat",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "loans_interests_revenue_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "rent_commission_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "active_fiscal_year_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "returns_payable_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "clients_advance_loans_payable_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "co_op_bank_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "equity_bank_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "mpesa_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "earned_commission_acc_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "clients_vat",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "deposits_payable_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "miscallenous_revenue_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payment_voucher_control_account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHIBALS": {
+    "mssql_table": "CHIBALS",
+    "pg_table": "sys_pm_landlord_accounts_transaction",
+    "desc": "Holds tenant balances, including current balance and transaction descriptions.",
+    "mssql_keys": [
+      "TENANTNAME"
+    ],
+    "mssql_cols": [
+      {
+        "name": "TENANTNAME",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ROOMNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANSDESC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANSDATE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CURRENTBAL",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_landlord_accounts_transaction_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "origin_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_type",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "balance",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "1"
+      },
+      {
+        "name": "invoice_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_internal",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_status",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "period_status_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHIPAYS": {
+    "mssql_table": "CHIPAYS",
+    "pg_table": "sys_pm_tenants_payments",
+    "desc": "Stores payment information for checks, including check number, tenant, and amount.",
+    "mssql_keys": [
+      "CHECKNO"
+    ],
+    "mssql_cols": [
+      {
+        "name": "CHECKNO",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CHECKTY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BLOCKNO",
+        "type": "varchar",
+        "max_len": "10",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "UNITNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TENNAME",
+        "type": "varchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCNO",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RCMARK",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RACTION",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_tenants_payments_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payment_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "invoice_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_details",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "channel_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "receipt_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "recovery_type_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "field_officer_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_supervisor_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_manager_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "extract_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_aid",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHJVD": {
+    "mssql_table": "CHJVD",
+    "pg_table": "sys_gl_transactions_91_repeat",
+    "desc": "Stores journal voucher details, including batch, voucher number, and amounts.",
+    "mssql_keys": [
+      "BATCHID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BATCHID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVNUM",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYNO",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "100",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNUM",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTCURR",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SRCCODE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STDEL",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OPTFIELD1",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OPTFIELD2",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "OPTFIELD3",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_transactions_91_repeat_id_seq'::regclass)"
+      },
+      {
+        "name": "parent_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "account_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entry_type",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHJVDP": {
+    "mssql_table": "CHJVDP",
+    "pg_table": "sys_gl_accounts_entries",
+    "desc": "Contains posted journal voucher details, similar to CHJVD, for posted entries.",
+    "mssql_keys": [
+      "BATCHID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BATCHID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVNUM",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYNO",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDESC",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCNUM",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTCURR",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SRCCODE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STDEL",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": ""
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "type",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "accounting_period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "source_ref",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "ref_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "posted",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entered_by_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHJVH": {
+    "mssql_table": "CHJVH",
+    "pg_table": "sys_gl_transactions",
+    "desc": "Holds journal voucher headers, summarizing voucher details and status.",
+    "mssql_keys": [
+      "BATCHID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BATCHID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVNUM",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVDESC",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVYEAR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVMNTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVDATE",
+        "type": "smalldatetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVCURR",
+        "type": "nvarchar",
+        "max_len": "5",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVENTS",
+        "type": "smallint",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CRTDATE",
+        "type": "smalldatetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CREATEDBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPOST",
+        "type": "smallint",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPDATE",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STDEL",
+        "type": "smallint",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELDATE",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELREAS",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_transactions_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "currency_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "accounting_period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_details",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "1"
+      },
+      {
+        "name": "trans_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entered_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHJVHP": {
+    "mssql_table": "CHJVHP",
+    "pg_table": "sys_gl_transactions",
+    "desc": "Contains posted journal voucher headers, similar to CHJVH, for posted vouchers.",
+    "mssql_keys": [
+      "BATCHID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "BATCHID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVNUM",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVDESC",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVYEAR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVMNTH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVDATE",
+        "type": "smalldatetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVCURR",
+        "type": "nvarchar",
+        "max_len": "5",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "JVENTS",
+        "type": "smallint",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CRTDATE",
+        "type": "smalldatetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CREATEDBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPOST",
+        "type": "smallint",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPDATE",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STDEL",
+        "type": "smallint",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELDATE",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELBY",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DELREAS",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_gl_transactions_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "currency_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "accounting_period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_details",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "branch_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "journal_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "1"
+      },
+      {
+        "name": "trans_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "entered_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHLACC": {
+    "mssql_table": "CHLACC",
+    "pg_table": "sys_pm_landlord_accounts_transaction",
+    "desc": "Stores landlord account transactions, including period, landlord, and amounts.",
+    "mssql_keys": [
+      "YEARR"
+    ],
+    "mssql_cols": [
+      {
+        "name": "YEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "MONTHH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LORDID",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LFNAME",
+        "type": "nvarchar",
+        "max_len": "60",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "HOUSEID",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "GTTCNUM",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "NO",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYID",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYNU",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYDE",
+        "type": "nvarchar",
+        "max_len": "250",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTRYDA",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTDR",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTCR",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMTTOT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ACCSTAT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYREF",
+        "type": "nvarchar",
+        "max_len": "25",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PAYREFT",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "INTRATE",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AUDTUSR",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "ENTPART",
+        "type": "nvarchar",
+        "max_len": "200",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "PVNO",
+        "type": "nvarchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "FINACC",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "VENDORID",
+        "type": "nvarchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECOVD",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "((0))"
+      },
+      {
+        "name": "RECOYR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RECOMN",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RETTRANS",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "RETURNID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_landlord_accounts_transaction_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "origin_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_type",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "balance",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "1"
+      },
+      {
+        "name": "invoice_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_internal",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_status",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "period_status_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHLCAC": {
+    "mssql_table": "CHLCAC",
+    "pg_table": "sys_pm_landlord_accounts_transaction",
+    "desc": "Contains landlord account closing balances by period.",
+    "mssql_keys": [
+      "YEARR"
+    ],
+    "mssql_cols": [
+      {
+        "name": "YEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "MONTHH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LORDID",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SUMDR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SUMCR",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "SUMBL",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CLDAT",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CLBY",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "CLSTAT",
+        "type": "int",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_landlord_accounts_transaction_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "trans_date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "unit_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "lease_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "tenant_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "origin_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "transaction_type_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_type",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "sla_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "balance",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "1"
+      },
+      {
+        "name": "invoice_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount_internal",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "payable_status",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "period_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "period_status_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  },
+  "CHLNTR": {
+    "mssql_table": "CHLNTR",
+    "pg_table": "sys_pm_clients_advances_requisitions",
+    "desc": "Tracks landlord loan transactions, including repayments, interest, and balances.",
+    "mssql_keys": [
+      "LORDID"
+    ],
+    "mssql_cols": [
+      {
+        "name": "LORDID",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LNSERIE",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "LNAMT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "REPDATE",
+        "type": "datetime",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "INTRATE",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "MONTHH",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "YEARR",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "AMOUNT",
+        "type": "money",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "INTRESTAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TOTALAMT",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "BALANC",
+        "type": "decimal",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "REPAYNO",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "STPAID",
+        "type": "int",
+        "max_len": null,
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "DOCNO",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANSNO",
+        "type": "varchar",
+        "max_len": "20",
+        "nullable": "YES",
+        "default": "NULL"
+      },
+      {
+        "name": "TRANTYPE",
+        "type": "varchar",
+        "max_len": "50",
+        "nullable": "YES",
+        "default": "NULL"
+      }
+    ],
+    "pg_cols": [
+      {
+        "name": "id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "NO",
+        "default": "nextval('chips_db_v3.sys_pm_clients_advances_requisitions_id_seq'::regclass)"
+      },
+      {
+        "name": "date_time",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "requisition_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "narration",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "created_by",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "zone_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "client_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "property_id",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_status_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "repayment_months",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "interest_rate",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "principal_start_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "disbursement_date",
+        "type": "timestamp without time zone",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "interest_amount",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "total_amount",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "reference_number",
+        "type": "character varying",
+        "max_len": "255",
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "advance_type_id",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "previous_advance_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "top_up",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "miscallenous_charge_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "charge_amount",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "current_balance",
+        "type": "numeric",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "one_off",
+        "type": "text",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      },
+      {
+        "name": "voucher_id",
+        "type": "integer",
+        "max_len": null,
+        "nullable": "YES",
+        "default": ""
+      }
+    ]
+  }
+}
