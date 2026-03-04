@@ -199,9 +199,9 @@ GO
 --   VENDORID stores the LAN-xxxxx reference code.
 --   LANDSTT: 'Active' (915), 'Inactive' (2), NULL (268).
 
-CREATE OR ALTER VIEW vw_sys_pm_clients AS
+CREATE OR ALTER VIEW [vw_sys_pm_clients_landlords_002] AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY c.LORDID)              AS id,
+    ROW_NUMBER() OVER (ORDER BY c.LORDID)               AS id,
     GETDATE()                                           AS date_time,
     RTRIM(LTRIM(c.LFNAME))                              AS names,
     RTRIM(LTRIM(c.ADDRSS1))                             AS address,
@@ -255,7 +255,7 @@ SELECT
     NULL                                                AS overdraft_penalty
 FROM CHABRINS.dbo.CHLRDS c
 WHERE c.LORDID IS NOT NULL AND RTRIM(LTRIM(c.LORDID)) <> '';
-GO
+
 
 
 -- ============================================================================
@@ -271,7 +271,7 @@ GO
 --   BLOCKNO/UNITNO are used to resolve property_id and unit_id via JOINs.
 --   TSTATUS: 'IN' (active) = status 1, 'OUT' (vacated) = status 2.
 
-CREATE OR ALTER VIEW vw_sys_pm_clients_from_chtenants AS
+CREATE OR ALTER VIEW vw_sys_pm_clients_tenants AS
 SELECT
     ROW_NUMBER() OVER (ORDER BY t.TENNAME, t.BLOCKNO, t.UNITNO)  AS id,
     GETDATE()                                           AS date_time,
@@ -358,12 +358,14 @@ GO
 -- EXTRA TABLE NEEDED: CHOFFICERS (Field Officers)
 --   CHOFFICERS stores field officer IDs used as OFFID, SFOID, ZMGRID in CHBLOCKS.
 
-CREATE OR ALTER VIEW vw_sys_pm_properties AS
+CREATE OR ALTER VIEW [vw_sys_pm_properties_001] AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY b.BLOCKID)             AS id,
-    GETDATE()                                           AS date_time,
+    ROW_NUMBER() OVER (ORDER BY b.BLOCKID)              AS id,
+    NULL                                                AS date_time,
     lr.lord_row_id                                      AS client_id,
     -- JOINED: CHLRDS via LLORDID to get landlord/client sequential id
+    -- NOTE: lord_row_id uses identical ROW_NUMBER logic as vw_sys_pm_clients_landlords_002
+    --       (ORDER BY LORDID, no GROUP BY dedup) so FK will align correctly.
     RTRIM(LTRIM(b.BLOCKID))                             AS reference_number,
     RTRIM(LTRIM(b.BLOCKDESC))                           AS description,
     NULL                                                AS lat_long,
@@ -386,14 +388,14 @@ SELECT
     NULL                                                AS parent_property_id
 FROM CHABRINS.dbo.CHBLOCKS b
 LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(b.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
+    -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
+    -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
+    SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
+           ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
+    FROM CHABRINS.dbo.CHLRDS
+    WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
+) lr ON lr.lordid_clean = RTRIM(LTRIM(b.LLORDID))           -- exact match first
+     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(b.LLORDID)), 'LAN-', '')  -- fallback: strip LAN- prefix from LLORDID
 LEFT JOIN (
     SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
     FROM CHABRINS.dbo.CHOFFICERS
@@ -410,7 +412,7 @@ LEFT JOIN (
     WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
 ) zm ON RTRIM(LTRIM(zm.OFFID)) = RTRIM(LTRIM(b.ZMGRID))
 WHERE b.BLOCKID IS NOT NULL;
-GO
+
 
 
 -- ============================================================================
