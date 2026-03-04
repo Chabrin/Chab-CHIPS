@@ -71,7 +71,6 @@
 
                         <!-- Tabs Content -->
                         <div class="tab-content" id="tenantTabsContent">
-                            <!-- Profile Tab -->
                             <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
                                 <div class="row g-3">
                                     <!-- Personal Information -->
@@ -145,6 +144,44 @@
                                             </div>
                                         </div>
                                     </div>
+
+                                    <!-- Account Balance Card -->
+                                    @if($tenantBalance)
+                                    <div class="col-12">
+                                        <div class="card border-0 shadow-sm">
+                                            <div class="card-header bg-light py-2 d-flex align-items-center gap-2">
+                                                <span class="material-symbols-outlined" style="font-size:18px;">account_balance_wallet</span>
+                                                <span class="fw-semibold small">Tenant Account Balance</span>
+                                                <span class="ms-auto">
+                                                    @if($tenantBalance['is_in_arrears'])
+                                                        <span class="badge bg-danger">In Arrears</span>
+                                                    @else
+                                                        <span class="badge bg-success">Credit</span>
+                                                    @endif
+                                                </span>
+                                            </div>
+                                            <div class="card-body py-3">
+                                                <div class="row text-center">
+                                                    <div class="col-4 border-end">
+                                                        <small class="text-muted d-block mb-1">Total Invoiced</small>
+                                                        <span class="fw-bold">{{ number_format($tenantBalance['total_invoiced'], 2) }}</span>
+                                                    </div>
+                                                    <div class="col-4 border-end">
+                                                        <small class="text-muted d-block mb-1">Total Paid</small>
+                                                        <span class="fw-bold text-success">{{ number_format($tenantBalance['total_paid'], 2) }}</span>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <small class="text-muted d-block mb-1">Balance</small>
+                                                        <span class="fw-bold {{ $tenantBalance['is_in_arrears'] ? 'text-danger' : 'text-success' }}">
+                                                            @if($tenantBalance['is_in_arrears'])({{ $tenantBalance['balance_formatted'] }})@else{{ $tenantBalance['balance_formatted'] }}@endif
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <p class="text-muted small mb-0 mt-2 text-center">As of: {{ $tenantBalance['as_of_date'] }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @endif
                                 </div>
                             </div>
 

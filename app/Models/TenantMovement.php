@@ -29,6 +29,7 @@ class TenantMovement extends Model
         'new_lease_end_date',
         'sla_id',
         'new_lease_id',
+        'move_with_balance',
     ];
 
     protected $casts = [

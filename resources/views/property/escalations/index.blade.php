@@ -10,12 +10,62 @@
                         <h5 class="mb-0">Lease Escalations</h5>
                         @permission('create_lease_escalations')
                         <div class="ms-auto d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#notificationSettingsPanel" aria-expanded="false">
+                                <span class="material-symbols-outlined" style="font-size:18px;">settings</span>
+                                <span class="ms-1">Notification Settings</span>
+                            </button>
                             <a href="{{ route('property.escalations.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">add_circle</span>
                                 <span class="ms-1">New Escalation</span>
                             </a>
                         </div>
                         @endpermission
+                    </div>
+
+                    <!-- Notification Settings Panel (collapsible) -->
+                    <div class="collapse" id="notificationSettingsPanel">
+                        <div class="card-body border-bottom bg-light">
+                            <h6 class="text-muted mb-3">
+                                <span class="material-symbols-outlined" style="font-size:18px; vertical-align:bottom;">notifications</span>
+                                Escalation Notification Settings
+                            </h6>
+                            <p class="text-muted small mb-3">
+                                Configure which roles receive pre-effective-date notifications and which roles can cancel an approved escalation.
+                                Notifications are sent <strong>30 days before</strong> the effective date (or <strong>10 days</strong> if the escalation was created close to the effective date).
+                            </p>
+                            <form id="notificationSettingsForm">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-semibold">Roles to Notify</label>
+                                        <select class="form-select" id="notifyRolesSelect" name="notify_roles[]" multiple size="6">
+                                            @foreach($roles as $role)
+                                                <option value="{{ $role->name }}"
+                                                    {{ in_array($role->name, $settings->notify_roles ?? []) ? 'selected' : '' }}>
+                                                    {{ $role->display_name ?: $role->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="text-muted">Hold Ctrl/Cmd to select multiple</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-semibold">Roles Allowed to Cancel</label>
+                                        <select class="form-select" id="cancelRolesSelect" name="cancel_roles[]" multiple size="6">
+                                            @foreach($roles as $role)
+                                                <option value="{{ $role->name }}"
+                                                    {{ in_array($role->name, $settings->cancel_roles ?? []) ? 'selected' : '' }}>
+                                                    {{ $role->display_name ?: $role->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="text-muted">Either role can cancel (no unanimous vote required)</small>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="saveNotificationSettings()">
+                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">save</span>
+                                    Save Settings
+                                </button>
+                            </form>
+                        </div>
                     </div>
                     <div class="card-body">
                         @if(session('success'))
@@ -46,9 +96,15 @@
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="pending-effective-tab" data-bs-toggle="tab" data-bs-target="#pending-effective-escalations" type="button">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">schedule</span>
+                                    Approved – Pending Effective
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="approved-tab" data-bs-toggle="tab" data-bs-target="#approved-escalations" type="button">
                                     <span class="material-symbols-outlined" style="font-size:18px;">check_circle</span>
-                                    Approved
+                                    Applied
                                 </button>
                             </li>
                         </ul>
@@ -105,7 +161,36 @@
                                 </div>
                             </div>
 
-                            <!-- Approved Tab -->
+                            <!-- Approved – Pending Effective Date Tab -->
+                            <div class="tab-pane fade" id="pending-effective-escalations" role="tabpanel">
+                                <div class="alert alert-info d-flex align-items-center mb-3 py-2" role="alert">
+                                    <span class="material-symbols-outlined me-2">info</span>
+                                    <small>These escalations are fully approved and will be <strong>automatically applied</strong> on their effective date. Authorised roles can cancel before that date.</small>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="pendingEffectiveTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Date</th>
+                                                <th>Landlord</th>
+                                                <th>Property</th>
+                                                <th>Units</th>
+                                                <th>Type</th>
+                                                <th>Value</th>
+                                                <th>Prev. Total</th>
+                                                <th>New Total</th>
+                                                <th>Effective Date</th>
+                                                <th>Notified?</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Approved Tab (Applied) -->
                             <div class="tab-pane fade" id="approved-escalations" role="tabpanel">
                                 <div class="table-responsive custom-scrollbar">
                                     <table id="approvedEscalationsTable" class="display" style="width:100%;">
@@ -121,6 +206,7 @@
                                                 <th>Prev. Total</th>
                                                 <th>New Total</th>
                                                 <th>Effective</th>
+                                                <th>Applied On</th>
                                                 <th>Approved By</th>
                                             </tr>
                                         </thead>
@@ -235,6 +321,42 @@
             <div class="modal-body" id="detailModalBody"></div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Cancel Escalation Modal ─── -->
+<div class="modal fade" id="cancelEscalationModal" tabindex="-1" aria-labelledby="cancelEscalationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cancelEscalationModalLabel">
+                    <span class="material-symbols-outlined text-danger" style="font-size:20px; vertical-align:bottom;">cancel</span>
+                    Cancel Escalation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="cancel_escalation_id">
+                <div class="alert alert-warning d-flex align-items-start gap-2 py-2 mb-3">
+                    <span class="material-symbols-outlined" style="font-size:18px;">warning</span>
+                    <div>
+                        <strong>This escalation will NOT be applied to the lease.</strong>
+                        <div id="cancel_context" class="mt-1"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="cancel_comments" class="form-label">Reason for Cancellation <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="cancel_comments" rows="3" placeholder="Provide a reason..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="cancelConfirmBtn" onclick="submitCancel()">
+                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">cancel</span>
+                    Confirm Cancellation
+                </button>
             </div>
         </div>
     </div>
@@ -390,6 +512,11 @@ $(document).ready(function () {
                         <span class="material-symbols-outlined" style="font-size:16px;">close</span>
                      </button>`;
         }
+        if (data.status === 'approved_pending_effective') {
+            html += `<button class="btn btn-sm btn-outline-danger ms-1" onclick="openCancelModal(${data.id})" title="Cancel Escalation">
+                        <span class="material-symbols-outlined" style="font-size:16px;">cancel</span>
+                     </button>`;
+        }
         return html;
     }
 
@@ -400,10 +527,12 @@ $(document).ready(function () {
     }
 
     function groupActionsBtns(children) {
-        // Collect unique pending IDs for approve/reject, show count
         const pending = children.filter(c => c.status === 'pending_zm' || c.status === 'pending_pm');
-        if (!pending.length) return '';
-        return `<small class="text-muted">${pending.length} unit(s) pending</small>`;
+        const pendingEff = children.filter(c => c.status === 'approved_pending_effective');
+        let out = '';
+        if (pending.length) out += `<small class="text-muted">${pending.length} unit(s) pending approval</small>`;
+        if (pendingEff.length) out += `<small class="text-primary d-block">${pendingEff.length} unit(s) pending effective date</small>`;
+        return out;
     }
 
     // ── Ref-number toggle cell HTML ──────────────────────────────────
@@ -482,13 +611,13 @@ $(document).ready(function () {
 
     attachToggle('#pendingEscalationsTable', pendingTable, false);
 
-    // ── APPROVED TABLE ───────────────────────────────────────────────
+    // ── APPROVED TABLE (Applied) ─────────────────────────────────────
 
     const approvedTable = $('#approvedEscalationsTable').DataTable({
         ajax: {
             url: '{{ route("property.escalations.data") }}',
             dataSrc: function (json) {
-                return groupByRef(json.data);
+                return groupByRef(json.data.filter(d => d.status === 'applied'));
             }
         },
         columns: [
@@ -503,6 +632,10 @@ $(document).ready(function () {
             { data: 'new_total',        render: d => parseFloat(d).toLocaleString() },
             { data: 'effective_date',   render: (d) => fmtDate(d) },
             { data: null, render: (d) => {
+                const applied = d.children[0]?.applied_at;
+                return applied ? fmtDate(applied) : 'N/A';
+            }},
+            { data: null, render: (d) => {
                 const pm = d.children.flatMap(c => c.approvals || []).find(a => a.step === 3 && a.action === 'approved');
                 return pm ? pm.user : 'N/A';
             }}
@@ -516,8 +649,46 @@ $(document).ready(function () {
 
     attachToggle('#approvedEscalationsTable', approvedTable, true);
 
+    // ── PENDING EFFECTIVE TABLE ──────────────────────────────────────
+
+    const pendingEffectiveTable = $('#pendingEffectiveTable').DataTable({
+        ajax: {
+            url: '{{ route("property.escalations.data") }}',
+            dataSrc: function (json) {
+                return groupByRef(json.data.filter(d => d.status === 'approved_pending_effective'));
+            }
+        },
+        columns: [
+            { data: null, render: (d, t, r, m) => m.row + 1 },
+            { data: 'date_time',       render: (d) => fmtDate(d) },
+            { data: 'client_name' },
+            { data: 'property_name' },
+            { data: null,              render: (d) => refCell(d) },
+            { data: 'escalation_type' },
+            { data: null,              render: (d) => fmtValue(d) },
+            { data: 'previous_total',  render: d => parseFloat(d).toLocaleString() },
+            { data: 'new_total',       render: d => parseFloat(d).toLocaleString() },
+            { data: 'effective_date',  render: (d) => fmtDate(d) },
+            { data: null, render: (d) => {
+                const sent = d.children[0]?.notification_sent_at;
+                return sent
+                    ? `<span class="badge bg-success">Yes – ${fmtDate(sent)}</span>`
+                    : `<span class="badge bg-warning text-dark">Not yet</span>`;
+            }},
+            { data: null, render: (d) => groupActionsBtns(d.children) },
+        ],
+        createdRow: function (row) {
+            $(row).addClass('group-parent-row table-light').css('cursor', 'pointer');
+        },
+        order: [[0, 'desc']],
+        pageLength: 25
+    });
+
+    attachToggle('#pendingEffectiveTable', pendingEffectiveTable, false);
+
     // Reload on tab switch
     $('button[data-bs-target="#pending-escalations"]').on('shown.bs.tab', () => pendingTable.ajax.reload());
+    $('button[data-bs-target="#pending-effective-escalations"]').on('shown.bs.tab', () => pendingEffectiveTable.ajax.reload());
     $('button[data-bs-target="#approved-escalations"]').on('shown.bs.tab', () => approvedTable.ajax.reload());
 
     // ── Store escalation data for modals ─────────────────────────────
@@ -525,7 +696,7 @@ $(document).ready(function () {
 
     window.cacheEscalation = function (id) {
         let row = null;
-        [allTable, pendingTable, approvedTable].forEach(table => {
+        [allTable, pendingTable, pendingEffectiveTable, approvedTable].forEach(table => {
             table.rows().every(function () {
                 const d = this.data();
                 if (d && d.children) {
@@ -631,6 +802,7 @@ $(document).ready(function () {
                 toastr.success(res.message || 'Action completed successfully.');
                 allTable.ajax.reload();
                 pendingTable.ajax.reload();
+                pendingEffectiveTable.ajax.reload();
                 approvedTable.ajax.reload();
             },
             error: function (xhr) {
@@ -685,6 +857,72 @@ $(document).ready(function () {
 
         $('#detailModalBody').html(html);
         $('#detailModal').modal('show');
+    };
+    // ── Cancel Escalation ────────────────────────────────────────────
+    window.openCancelModal = function (id) {
+        const data = cacheEscalation(id);
+        if (!data) { toastr.error('Escalation data not found'); return; }
+
+        $('#cancel_escalation_id').val(id);
+        $('#cancel_comments').val('');
+        $('#cancel_context').html(
+            `<strong>${data.client_name}</strong> — ${data.property_name} / ${data.unit_code}<br>
+             <small class="text-muted">Effective: ${data.effective_date ? moment(data.effective_date).format('MMM D, YYYY') : 'N/A'} &nbsp;|&nbsp;
+             ${data.escalation_type === 'Percentage' ? data.escalation_value + '%' : parseFloat(data.escalation_value).toLocaleString()}</small>`
+        );
+        $('#cancelEscalationModal').modal('show');
+    };
+
+    window.submitCancel = function () {
+        const id       = $('#cancel_escalation_id').val();
+        const comments = $('#cancel_comments').val();
+
+        if (!comments.trim()) {
+            toastr.error('Please provide a reason for cancellation.');
+            return;
+        }
+
+        $('#cancelConfirmBtn').prop('disabled', true);
+
+        $.ajax({
+            url: `/property/escalations/${id}/cancel`,
+            method: 'POST',
+            data: { comments, _token: $('meta[name="csrf-token"]').attr('content') },
+            success: function (res) {
+                $('#cancelEscalationModal').modal('hide');
+                toastr.success(res.message || 'Escalation cancelled.');
+                allTable.ajax.reload();
+                pendingEffectiveTable.ajax.reload();
+            },
+            error: function (xhr) {
+                toastr.error(xhr.responseJSON?.error || 'Failed to cancel escalation.');
+            },
+            complete: function () {
+                $('#cancelConfirmBtn').prop('disabled', false);
+            }
+        });
+    };
+
+    // ── Notification Settings ────────────────────────────────────────
+    window.saveNotificationSettings = function () {
+        const notifyRoles = [...$('#notifyRolesSelect').prop('selectedOptions')].map(o => o.value);
+        const cancelRoles = [...$('#cancelRolesSelect').prop('selectedOptions')].map(o => o.value);
+
+        $.ajax({
+            url: '{{ route("property.escalations.notification-settings.save") }}',
+            method: 'POST',
+            data: {
+                notify_roles: notifyRoles,
+                cancel_roles: cancelRoles,
+                _token: $('meta[name="csrf-token"]').attr('content'),
+            },
+            success: function (res) {
+                toastr.success(res.message || 'Settings saved.');
+            },
+            error: function (xhr) {
+                toastr.error(xhr.responseJSON?.error || 'Failed to save settings.');
+            }
+        });
     };
 });
 </script>

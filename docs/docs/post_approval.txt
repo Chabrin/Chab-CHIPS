@@ -1,0 +1,1094 @@
+# POST-APPROVAL RETURNS WORKFLOW DOCUMENTATION
+
+## 📋 TABLE OF CONTENTS
+
+1. [Overview](#overview)
+2. [Complete Workflow Diagram](#complete-workflow-diagram)
+3. [Stage 1: Approval Trigger](#stage-1-approval-trigger)
+4. [Stage 2: Landlord Ledger Credit Entry](#stage-2-landlord-ledger-credit-entry)
+5. [Stage 3: Payment Distribution Generation](#stage-3-payment-distribution-generation)
+6. [Stage 4: Batch Processing](#stage-4-batch-processing)
+7. [Stage 5: GL Posting](#stage-5-gl-posting)
+8. [Stage 6: Payment Voucher Creation](#stage-6-payment-voucher-creation)
+9. [Database Tables Reference](#database-tables-reference)
+10. [Status Transitions](#status-transitions)
+11. [Code Reference](#code-reference)
+
+---
+
+## 🎯 OVERVIEW
+
+This document details the **complete workflow** that occurs **AFTER** a return reaches final approval in the approval chain. It covers what happens from the moment the final approval is granted through to the actual payment voucher generation and GL posting.
+
+### Key Stages:
+
+1. **Approval Trigger** - Final approval granted (determinant='Yes')
+2. **Landlord Ledger Credit** - Return amount credited to landlord account
+3. **Payment Distribution** - Eligible returns selected for payment batch
+4. **Batch Processing** - Returns grouped by property/landlord configuration
+5. **GL Posting** - General ledger entries created
+6. **Payment Voucher** - Bank payment vouchers generated
+
+---
+
+## 🔄 COMPLETE WORKFLOW DIAGRAM
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                    FINAL APPROVAL GRANTED                              │
+│                  (determinant = 'Yes')                                 │
+└───────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ STAGE 1: APPROVAL PROCESSING                                          │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Service: ClientReturnService::processWorkflow($action_data)           │
+│                                                                        │
+│ Actions:                                                               │
+│ 1. Update sys_pm_clients_returns.current_status_id = 5 (Approved)    │
+│ 2. Record approval in sys_workflow_activities                        │
+│ 3. Trigger landlord ledger credit creation                           │
+└───────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ STAGE 2: LANDLORD LEDGER CREDIT ENTRY                                │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Service: LandlordTransService::createFromReturn($return_id)          │
+│                                                                        │
+│ Creates Credit Entry in sys_pm_landlord_accounts_transaction:        │
+│ ├─ amount_type = 'Credit'                                            │
+│ ├─ amount = trans_amount (return total)                              │
+│ ├─ transaction_type_id = 13 (Client Return)                          │
+│ ├─ payable_status = 0 (UNPAYABLE initially)                          │
+│ ├─ current_status_id = 1 (Pending)                                   │
+│ └─ origin_id = '33:return_id:timestamp'                              │
+│                                                                        │
+│ Also Creates Commission Debit (if applicable):                       │
+│ ├─ amount_type = 'Debit'                                             │
+│ ├─ amount = -comm_amount                                             │
+│ ├─ transaction_type_id = 21 (Commission Charge)                      │
+│ └─ GL Entry: Credit rent_commission_account_id                       │
+└───────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ STAGE 3: PAYABLE STATUS UPDATE                                       │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Trigger: Tenant payment on associated invoice                        │
+│                                                                        │
+│ Service: ClientReturnService::updateReturnOnInvoicePayment()         │
+│                                                                        │
+│ Threshold Check Logic:                                               │
+│ ├─ Calculate: payment_threshold = (paid_amount / invoice_total) * 100│
+│ ├─ Check: If payment_threshold >= 85%                                │
+│ │   OR invoice fully cleared                                         │
+│ │   OR previous month return met threshold                           │
+│ │                                                                     │
+│ ├─ UPDATE sys_pm_clients_returns                                     │
+│ │   SET payable_status_id = 1 (Payable)                              │
+│ │   WHERE invoice_id = :invoice_id                                   │
+│ │                                                                     │
+│ └─ UPDATE sys_pm_landlord_accounts_transaction                       │
+│     SET payable_status = 1 (Payable)                                 │
+│     WHERE invoice_id = :invoice_id                                   │
+│       AND transaction_type_id = 13                                   │
+│       AND amount_type = 'Credit'                                     │
+│                                                                        │
+│ Result: Return NOW ELIGIBLE for payment distribution                 │
+└───────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ STAGE 4: PAYMENT DISTRIBUTION BATCH CREATION                         │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Trigger: Monthly batch generation process                            │
+│                                                                        │
+│ Service: ReturnBatchService::createBatch($property_report_id)        │
+│                                                                        │
+│ Tables Involved:                                                      │
+│ ├─ sys_reports_returns_batches                                       │
+│ ├─ sys_reports_returns_properties (property reports)                 │
+│ ├─ sys_reports_returns_batches_repeat_returns_id (returns in batch)  │
+│ └─ sys_reports_returns_batches_283_repeat (bank accounts)            │
+│                                                                        │
+│ Batch Grouping Logic:                                                │
+│ ├─ Group returns by property_id                                      │
+│ ├─ Filter: payable_status_id = 1 (Payable returns only)             │
+│ ├─ Filter: current_status_id != 17 (Not already processed)          │
+│ ├─ Check batch configuration:                                        │
+│ │   - sys_eports_returns_batches_configurations                      │
+│ │   - Group properties by payout account settings                    │
+│ │                                                                     │
+│ └─ Calculate batch totals:                                           │
+│     ├─ gross_amount = SUM(trans_amount)                              │
+│     ├─ total_comm = SUM(comm_amount)                                 │
+│     ├─ total_vat = SUM(comm_vat)                                     │
+│     ├─ total_recoveries = SUM(recovery amounts)                      │
+│     └─ net_amount = gross - comm - vat - recoveries                  │
+└───────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ STAGE 5: BATCH APPROVAL & PROCESSING                                 │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Trigger: Batch approval workflow (determinant='Yes')                 │
+│                                                                        │
+│ Service: ReturnBatchService::processWorkflow($action_data)           │
+│                                                                        │
+│ Sub-Stage 5A: Debit Client Ledger                                    │
+│ ├─ Function: debitClient($action_data)                               │
+│ ├─ Table: sys_pm_landlord_accounts_transaction                       │
+│ ├─ amount_type = 'Debit'                                             │
+│ ├─ amount = -net_amount (negative)                                   │
+│ ├─ transaction_type_id = 18 (Client Period Payment)                  │
+│ ├─ origin_id = '125:batch_id' (Allocations entity)                   │
+│ └─ current_status_id = 6 (Posted)                                    │
+│                                                                        │
+│ Sub-Stage 5B: Balance Properties                                     │
+│ ├─ Function: balanceProperties($action_data)                         │
+│ ├─ For each property in batch:                                       │
+│ │   └─ Update property ledger balance                                │
+│ │                                                                     │
+│ └─ Mark property reports as processed                                │
+│                                                                        │
+│ Sub-Stage 5C: Post to General Ledger                                 │
+│ ├─ Function: postGl($action_data)                                    │
+│ ├─ Service: GLTransService::makeJournalEntry($gl_data)              │
+│ │                                                                     │
+│ │   Journal Entries Created:                                         │
+│ │   ┌─────────────────────────────────────────────────┐             │
+│ │   │ DEBIT: Clients Account (sys_gl_accounts)        │             │
+│ │   │ Amount: net_amount                               │             │
+│ │   │ Narration: "Client Period Payment"              │             │
+│ │   └─────────────────────────────────────────────────┘             │
+│ │   ┌─────────────────────────────────────────────────┐             │
+│ │   │ CREDIT: Clients Payable Account                 │             │
+│ │   │ Amount: -net_amount                              │             │
+│ │   │ Narration: "Client Period Payment"              │             │
+│ │   └─────────────────────────────────────────────────┘             │
+│ │                                                                     │
+│ └─ Result: GL balanced, accounts updated                             │
+│                                                                        │
+│ Sub-Stage 5D: Create Payment Vouchers                                │
+│ ├─ Function: createVoucher($action_data)                             │
+│ ├─ For each bank account in batch configuration:                     │
+│ │   ├─ Calculate split amount (percentage-based)                     │
+│ │   ├─ Create voucher in sys_fin_payment_vouchers                    │
+│ │   ├─ Link voucher to batch                                         │
+│ │   └─ Set voucher bank account                                      │
+│ │                                                                     │
+│ └─ Example: If batch = KSh 1,000,000                                 │
+│     ├─ KCB Account (60%): KSh 600,000                                │
+│     └─ Equity Account (40%): KSh 400,000                             │
+│                                                                        │
+│ Sub-Stage 5E: Process Featured Returns                               │
+│ ├─ Function: processFeaturedItems($batch)                            │
+│ ├─ UPDATE sys_pm_clients_returns                                     │
+│ │   SET current_status_id = 17 (Processed)                           │
+│ │   SET paid_status_id = 2 (Paid)                                    │
+│ │   WHERE id IN (batch returns)                                      │
+│ │                                                                     │
+│ ├─ UPDATE sys_pm_landlord_accounts_transaction                       │
+│ │   SET payable_status = 17 (Processed)                              │
+│ │   WHERE transaction_type_id = 13                                   │
+│ │     AND origin_id IN (batch returns)                               │
+│ │                                                                     │
+│ └─ Result: Returns marked as PAID, ledger updated                    │
+└───────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│ STAGE 6: FINAL STATE                                                 │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Return Status: PROCESSED & PAID                                      │
+│ ├─ sys_pm_clients_returns.current_status_id = 17 (Processed)        │
+│ ├─ sys_pm_clients_returns.paid_status_id = 2 (Paid)                 │
+│ ├─ sys_pm_landlord_accounts_transaction.payable_status = 17         │
+│ │   (Processed)                                                      │
+│ └─ sys_pm_landlord_accounts_transaction.current_status_id = 6        │
+│     (Posted)                                                          │
+│                                                                        │
+│ Vouchers Ready: Payment vouchers generated for bank transfer         │
+│ GL Posted: All accounting entries complete                           │
+│ Audit Trail: Complete history in sys_workflow_activities             │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📌 STAGE 1: APPROVAL TRIGGER
+
+### When It Happens
+
+- Final approval step in workflow chain
+- Approval action has `determinant = 'Yes'` flag
+- Return has passed all required approval levels
+
+### What Happens
+
+**Service:** `ClientReturnService::processWorkflow($action_data)`
+
+**Location:** `libraries/ipms/Domain/Service/ClientReturnService.php:18-77`
+
+**Code Flow:**
+
+```php
+public static function processWorkflow($action_data)
+{
+    $final = $action_data->determinant;
+
+    if($final == 'Yes'){
+        // This is the FINAL approval step
+
+        // 1. Update return status to Approved
+        $params = array('id' => $action_data->trans_id);
+        $values = array('current_status_id' => $action_data->action_id);
+        (new ClientReturnRepository())->updateVals($values, $params);
+
+        // 2. Credit landlord ledger
+        $landlord_service = new LandlordTransService();
+        $landlord_service->createFromReturn($action_data->trans_id);
+
+    } else {
+        // Intermediate approval - continue workflow
+        WorkFlowService::genericProcessWorkflow($action_data);
+    }
+}
+```
+
+### Tables Updated
+
+**sys_pm_clients_returns:**
+
+- `current_status_id` = 5 (Approved)
+
+**sys_workflow_activities:**
+
+- New record created with approval details
+- `action_id` = approved status
+- `actioned_by` = user who approved
+- `actioned_date` = timestamp
+
+---
+
+## 💰 STAGE 2: LANDLORD LEDGER CREDIT ENTRY
+
+### When It Happens
+
+- Immediately after final approval is granted
+- Called by `ClientReturnService::processWorkflow()`
+
+### What Happens
+
+**Service:** `LandlordTransService::createFromReturn($return_id, $posted_status_id = 1)`
+
+**Location:** `libraries/ipms/Domain/Service/LandlordTransService.php:1126-1207`
+
+### Main Credit Entry
+
+Creates a **CREDIT** entry in landlord's ledger representing the return amount owed to the landlord.
+
+```php
+public function createFromReturn($return_id, $posted_status_id = 1)
+{
+    if($return = $this->clientReturnRepository->getById($return_id)){
+
+        $data = new stdClass();
+        $data->date_time = date('Y-m-d H:i:s');
+        $data->trans_date_time = $return->getReturnDate()->format('Y-m-d H:i:s');
+        $data->client_id = $return->getClient()->getId();
+        $data->property_id = $return->getProperty()->getId();
+        $data->origin_id = '33:'.$return->getId().':'.time();
+        $data->transaction_type_id = 13; // Client Return
+        $data->narration = 'Return Payable Unit - '.$unit_code;
+        $data->amount_type = 'Credit';
+        $data->amount = $return->getTransAmount();
+        $data->unit_id = $return->getUnit()->getId();
+        $data->lease_id = $return->getLease()->getId();
+        $data->tenant_id = $return->getTenant()->getId();
+        $data->current_status_id = $posted_status_id;
+        $data->sla_id = $return->getSla()->getId();
+
+        // IMPORTANT: Initially created as UNPAYABLE (payable_status = 0)
+        // This will be updated when tenant pays invoice
+
+        $this->landlordTransRepository->persist($data);
+    }
+}
+```
+
+**Table:** `sys_pm_landlord_accounts_transaction`
+
+**Fields:**
+
+| Field               | Value                    | Notes                                       |
+| ------------------- | ------------------------ | ------------------------------------------- |
+| amount_type         | 'Credit'                 | Money owed TO landlord                      |
+| amount              | trans_amount             | Full return amount                          |
+| transaction_type_id | 13                       | Client Return type                          |
+| payable_status      | 0                        | Initially UNPAYABLE (excluded from balance) |
+| current_status_id   | 1                        | Pending                                     |
+| origin_id           | '33:return_id:timestamp' | Links back to return record                 |
+| client_id           | landlord ID              | Owner of property                           |
+| property_id         | property ID              | Property generating return                  |
+| unit_id             | unit ID                  | Specific unit                               |
+| lease_id            | lease ID                 | Current lease                               |
+| tenant_id           | tenant ID                | Current tenant                              |
+| invoice_id          | invoice ID               | Associated tenant invoice                   |
+| sla_id              | SLA ID                   | Service level agreement                     |
+| trans_date_time     | return_date              | Date of return                              |
+
+### Commission Debit Entry (If Applicable)
+
+If return has commission charges, a **DEBIT** entry is also created:
+
+```php
+if($return->getComm()){
+    if($comm_amount = $return->getComm()){
+        $commission_data->amount = '-'.$comm_amount;
+        $commission_data->amount_type = 'Debit';
+        $commission_data->origin_id = $commission_data->origin_id.':'.time();
+        $commission_data->transaction_type_id = 21; // Commission Charge
+        $commission_data->narration = 'Commission Charge Unit - '.$unit_code;
+
+        $this->landlordTransRepository->persist($commission_data);
+
+        // GL Entry: Credit commission revenue account
+        if($rent_commission_account_id = (new GLAccountsDao())->getGLSettings()->rent_commission_account_id){
+            $journal_items[] = array(
+                'account_id' => $rent_commission_account_id,
+                'narration' => $commission_data->narration,
+                'amount' => '-'.abs($comm_amount),
+                'entry_type' => 'Credit'
+            );
+        }
+    }
+}
+```
+
+**Result:**
+
+- Landlord credited with return amount
+- Commission deducted from landlord
+- GL entries created for commission revenue
+- Return linked to landlord ledger via `origin_id`
+
+---
+
+## 🔄 STAGE 3: PAYMENT DISTRIBUTION GENERATION
+
+### When It Happens
+
+- After tenant makes payment on associated invoice
+- Payment threshold calculation triggered
+- Monthly batch generation process
+
+### Payable Status Update
+
+**Trigger:** `ClientReturnService::updateReturnOnInvoicePayment($invoice_id)`
+
+**Location:** `libraries/ipms/Domain/Service/ClientReturnService.php:523-897`
+
+### Threshold Calculation Logic
+
+```sql
+-- Calculate payment threshold
+SELECT
+    inv.id,
+    inv.total_amount,
+    (inv.total_amount - inv.current_balance) as paid_amount,
+    ROUND(((inv.total_amount - inv.current_balance) / inv.total_amount) * 100, 2) as payment_threshold
+FROM sys_pm_debtors_invoices inv
+WHERE inv.id = :invoice_id
+```
+
+**Payability Rules:**
+
+| Condition                     | Result    | payable_status_id |
+| ----------------------------- | --------- | ----------------- |
+| payment_threshold >= 85%      | PAYABLE   | 1                 |
+| invoice fully cleared         | PAYABLE   | 1                 |
+| previous month return met 85% | PAYABLE   | 3                 |
+| first invoice (no history)    | PAYABLE   | 2                 |
+| payment_threshold < 85%       | UNPAYABLE | 0                 |
+
+### Update Return Payable Status
+
+```php
+// Update return record
+UPDATE sys_pm_clients_returns
+SET payable_status_id = 1,  -- Payable
+    payable_amount = :payable_amount
+WHERE invoice_id = :invoice_id
+```
+
+### Sync Landlord Ledger
+
+```php
+// Update landlord ledger entry
+UPDATE sys_pm_landlord_accounts_transaction
+SET payable_status = 1  -- Include in balance calculation
+WHERE invoice_id = :invoice_id
+  AND transaction_type_id = 13  -- Client Return
+  AND amount_type = 'Credit'
+```
+
+**Result:**
+
+- Return marked as PAYABLE
+- Landlord ledger credit entry included in balance
+- Return now eligible for batch generation
+
+---
+
+## 📦 STAGE 4: BATCH PROCESSING
+
+### When It Happens
+
+- Monthly batch generation initiated
+- After returns are approved and payable
+- Triggered manually or via cron job
+
+### Batch Creation
+
+**Service:** `ReturnBatchService::createBatch($property_report_id)`
+
+**Location:** `libraries/ipms/Domain/Service/ReturnBatchService.php`
+
+### Batch Grouping Logic
+
+Returns are grouped into batches based on:
+
+1. **Property Configuration:** `sys_eports_returns_batches_configurations`
+2. **Bank Account Settings:** Payout account assignments
+3. **Period:** Month/Year of return generation
+4. **Client:** Landlord owner
+
+```sql
+-- Find batch configuration for property
+SELECT
+    bc.id as batch_config_id,
+    bc.configuration_name,
+    pbc.id as parent_batch_config_id
+FROM sys_eports_returns_batches_configurations_298_repeat_repeat_prs properties
+INNER JOIN sys_eports_returns_batches_configurations_298_repeat bc
+    ON bc.id = properties.parent_id
+INNER JOIN sys_eports_returns_batches_configurations pbc
+    ON pbc.id = bc.parent_id
+WHERE properties.prs = :property_id
+```
+
+### Batch Totals Calculation
+
+```sql
+-- Calculate batch totals
+SELECT
+    property_id,
+    COUNT(*) as returns_count,
+    SUM(trans_amount) as gross_amount,
+    SUM(comm_amount) as total_comm,
+    SUM(comm_vat) as total_vat,
+    SUM(CASE WHEN recovery_id IS NOT NULL THEN amount ELSE 0 END) as total_recoveries,
+    (SUM(trans_amount) - SUM(comm_amount) - SUM(comm_vat) - SUM(recoveries)) as net_amount
+FROM sys_pm_clients_returns
+WHERE payable_status_id = 1  -- Payable only
+  AND current_status_id != 17  -- Not already processed
+  AND return_date BETWEEN :start_date AND :end_date
+GROUP BY property_id
+```
+
+### Tables Involved
+
+**sys_reports_returns_batches:**
+
+- Batch header record
+- Contains totals and status
+
+**sys_reports_returns_batches_repeat_returns_id:**
+
+- Junction table linking returns to batch
+
+**sys_reports_returns_batches_repeat_property_report_id:**
+
+- Junction table linking property reports to batch
+
+**sys_reports_returns_batches_283_repeat:**
+
+- Bank account payout configuration
+- Percentage splits per account
+
+---
+
+## 📝 STAGE 5: GL POSTING
+
+### When It Happens
+
+- Batch approval granted (determinant='Yes')
+- Part of `ReturnBatchService::processWorkflow()`
+
+### GL Entry Creation
+
+**Service:** `ReturnBatchService::postGl($action_data)`
+
+**GL Service:** `GLTransService::makeJournalEntry($gl_data)`
+
+### Journal Entries
+
+```php
+$journal_items = array();
+
+// DEBIT: Clients Account (Landlord Receivable)
+if($clients_account_id = (new GLAccountsDao())->getGLSettings()->clients_account_id){
+    $journal_items[] = array(
+        'account_id' => $clients_account_id,
+        'narration' => 'Client Period Payment',
+        'amount' => $action_data->amount,  // net_amount (positive)
+        'entry_type' => 'Debit'
+    );
+}
+
+// CREDIT: Clients Payable Account (Landlord Payable)
+if($clients_payable_account_id = (new GLAccountsDao())->getGLSettings()->clients_payable_account_id){
+    $journal_items[] = array(
+        'account_id' => $clients_payable_account_id,
+        'narration' => 'Client Period Payment',
+        'amount' => '-'.$action_data->amount,  // -net_amount (negative)
+        'entry_type' => 'Credit'
+    );
+}
+
+$gl_data = array(
+    'journal_date' => $action_data->trans_date_time,
+    'entered_by' => JFactory::getUser()->id,
+    'trans_type_id' => $action_data->transaction_type_id,  // 18 = Client Period Payment
+    'trans_details' => $action_data->origin_id,  // '125:batch_id'
+    'journal_items' => $journal_items,
+    'direct_post' => false  // Must balance
+);
+
+GLTransService::makeJournalEntry($gl_data);
+```
+
+**GL Accounts Affected:**
+
+| Account                      | Entry Type | Amount      | Description                     |
+| ---------------------------- | ---------- | ----------- | ------------------------------- |
+| Clients Account (Receivable) | DEBIT      | +net_amount | Reduce amount owed to landlords |
+| Clients Payable Account      | CREDIT     | -net_amount | Reduce liability to landlords   |
+
+**Result:**
+
+- GL entries created in `sys_gl_entries`
+- Accounts balanced
+- Transaction auditable via `trans_details`
+
+---
+
+## 💳 STAGE 6: PAYMENT VOUCHER CREATION
+
+### When It Happens
+
+- After GL posting
+- Part of batch approval process
+
+### Voucher Generation
+
+**Service:** `ReturnBatchService::createVoucher($action_data)`
+
+### Bank Account Splitting
+
+Batch net amount is split across configured bank accounts:
+
+```php
+// Get bank account configuration from batch
+$batch_account_table = "sys_reports_returns_batches_283_repeat";
+if($accounts = $generic_dao->getItems($batch_account_table, $action_data->trans_id)){
+    foreach($accounts as $account){
+        // Create payment voucher for each bank account
+        // Amount = $account->amount (calculated from percentage)
+
+        $voucher_data = array(
+            'voucher_date' => $action_data->trans_date_time,
+            'client_id' => $action_data->client_id,
+            'bank_account_id' => $account->account_id,
+            'amount' => $account->amount,
+            'narration' => 'Client Period Payment',
+            'batch_id' => $action_data->trans_id,
+            'voucher_type' => 'Payment',
+            'current_status_id' => 1  // Pending
+        );
+
+        // Create voucher in sys_fin_payment_vouchers
+    }
+}
+```
+
+**Example:**
+
+```
+Batch Net Amount: KSh 1,000,000
+
+Bank Account Configuration:
+├─ KCB Account (Account ID: 123): 60% = KSh 600,000
+└─ Equity Account (Account ID: 456): 40% = KSh 400,000
+
+Vouchers Created:
+├─ Voucher #1: KSh 600,000 → KCB Account #123
+└─ Voucher #2: KSh 400,000 → Equity Account #456
+```
+
+### Tables Updated
+
+**sys_fin_payment_vouchers:**
+
+- Payment voucher header
+
+**sys_fin_payment_vouchers_264_repeat:**
+
+- Voucher line items
+
+**sys_reports_returns_batches_283_repeat:**
+
+- Links voucher back to batch via `voucher_id`
+
+---
+
+## 🗄️ DATABASE TABLES REFERENCE
+
+### Core Return Tables
+
+#### sys_pm_clients_returns
+
+**Purpose:** Main returns records
+
+| Field                | Type    | Description                                              |
+| -------------------- | ------- | -------------------------------------------------------- |
+| id                   | INT     | Primary key                                              |
+| invoice_id           | INT     | Associated tenant invoice                                |
+| client_id            | INT     | Landlord ID                                              |
+| property_id          | INT     | Property ID                                              |
+| unit_id              | INT     | Unit ID                                                  |
+| lease_id             | INT     | Lease ID                                                 |
+| tenant_id            | INT     | Tenant ID                                                |
+| trans_amount         | DECIMAL | Total return amount                                      |
+| comm_amount          | DECIMAL | Commission amount                                        |
+| payable_amount       | DECIMAL | Net payable to landlord                                  |
+| current_status_id    | INT     | Workflow status                                          |
+| payable_status_id    | INT     | Payability status (0=Unpayable, 1=Payable, 17=Processed) |
+| paid_status_id       | INT     | Payment status (1=Pending, 2=Paid)                       |
+| return_date          | DATE    | Return period date                                       |
+| threshold_percentage | DECIMAL | Payment threshold achieved                               |
+| abstract_threshold   | DECIMAL | Historical average threshold                             |
+
+#### sys_pm_landlord_accounts_transaction
+
+**Purpose:** Landlord ledger (all financial transactions)
+
+| Field               | Type     | Description                                        |
+| ------------------- | -------- | -------------------------------------------------- |
+| id                  | INT      | Primary key                                        |
+| client_id           | INT      | Landlord ID                                        |
+| amount              | DECIMAL  | Transaction amount                                 |
+| amount_type         | VARCHAR  | 'Credit' or 'Debit'                                |
+| transaction_type_id | INT      | 13=Client Return, 18=Period Payment, 21=Commission |
+| payable_status      | INT      | 0=Unpayable, 1=Payable, 17=Processed               |
+| current_status_id   | INT      | 1=Pending, 6=Posted                                |
+| origin_id           | VARCHAR  | References source transaction                      |
+| invoice_id          | INT      | Associated invoice                                 |
+| property_id         | INT      | Property ID                                        |
+| unit_id             | INT      | Unit ID                                            |
+| lease_id            | INT      | Lease ID                                           |
+| tenant_id           | INT      | Tenant ID                                          |
+| trans_date_time     | DATETIME | Transaction date                                   |
+| narration           | TEXT     | Description                                        |
+
+### Workflow Tables
+
+#### sys_workflow_activities
+
+**Purpose:** Approval history audit trail
+
+| Field          | Type     | Description                             |
+| -------------- | -------- | --------------------------------------- |
+| id             | INT      | Primary key                             |
+| entity_type_id | INT      | 33=Returns, 125=Allocations             |
+| entity_id      | INT      | Return or batch ID                      |
+| action_id      | INT      | Workflow action/status                  |
+| actioned_by    | INT      | User who performed action               |
+| actioned_date  | DATETIME | When action occurred                    |
+| determinant    | VARCHAR  | 'Yes'=Final approval, 'No'=Intermediate |
+| comments       | TEXT     | Approval comments                       |
+
+#### sys_set_workflow_settings
+
+**Purpose:** Workflow configuration
+
+| Field            | Type    | Description                  |
+| ---------------- | ------- | ---------------------------- |
+| id               | INT     | Primary key                  |
+| ipms_entity_id   | INT     | Entity type (33=Returns)     |
+| from_position_id | INT     | Current workflow position    |
+| action_id        | INT     | Target status after approval |
+| determinant      | VARCHAR | Marks final approval step    |
+
+### Batch Tables
+
+#### sys_reports_returns_batches
+
+**Purpose:** Payment batch header
+
+| Field                  | Type    | Description                  |
+| ---------------------- | ------- | ---------------------------- |
+| id                     | INT     | Primary key                  |
+| batch_number           | VARCHAR | Format: YYYYMM               |
+| client_id              | INT     | Landlord ID                  |
+| period_id              | INT     | Reporting period             |
+| gross_amount           | DECIMAL | Total before deductions      |
+| total_comm             | DECIMAL | Total commission             |
+| total_vat              | DECIMAL | Total VAT on commission      |
+| total_recoveries       | DECIMAL | Total recovery deductions    |
+| net_amount             | DECIMAL | Final payment amount         |
+| current_status_id      | INT     | Batch status                 |
+| batch_config_id        | INT     | Links to batch configuration |
+| parent_batch_config_id | INT     | Parent configuration         |
+
+#### sys_reports_returns_batches_repeat_returns_id
+
+**Purpose:** Links returns to batch
+
+| Field      | Type | Description |
+| ---------- | ---- | ----------- |
+| parent_id  | INT  | Batch ID    |
+| returns_id | INT  | Return ID   |
+
+#### sys_reports_returns_batches_283_repeat
+
+**Purpose:** Bank account payout configuration
+
+| Field      | Type    | Description                   |
+| ---------- | ------- | ----------------------------- |
+| parent_id  | INT     | Batch ID                      |
+| account_id | INT     | Bank account ID               |
+| amount     | DECIMAL | Amount to pay to this account |
+| percent    | DECIMAL | Percentage of net amount      |
+| voucher_id | INT     | Links to payment voucher      |
+
+### Configuration Tables
+
+#### sys_eports_returns_batches_configurations
+
+**Purpose:** Parent batch configuration
+
+| Field              | Type    | Description               |
+| ------------------ | ------- | ------------------------- |
+| id                 | INT     | Primary key               |
+| configuration_name | VARCHAR | Configuration description |
+| client_id          | INT     | Landlord ID               |
+| created_by         | INT     | User who created          |
+
+#### sys_eports_returns_batches_configurations_298_repeat
+
+**Purpose:** Batch configuration details
+
+| Field              | Type    | Description            |
+| ------------------ | ------- | ---------------------- |
+| id                 | INT     | Primary key            |
+| parent_id          | INT     | Parent config ID       |
+| configuration_name | VARCHAR | Sub-configuration name |
+
+#### sys_eports_returns_batches_configurations_298_repeat_repeat_prs
+
+**Purpose:** Properties assigned to batch configuration
+
+| Field     | Type | Description |
+| --------- | ---- | ----------- |
+| parent_id | INT  | Config ID   |
+| prs       | INT  | Property ID |
+
+### GL Tables
+
+#### sys_gl_entries
+
+**Purpose:** General ledger journal entries
+
+| Field         | Type    | Description         |
+| ------------- | ------- | ------------------- |
+| id            | INT     | Primary key         |
+| journal_date  | DATE    | Entry date          |
+| account_id    | INT     | GL account ID       |
+| amount        | DECIMAL | Entry amount        |
+| entry_type    | VARCHAR | 'Debit' or 'Credit' |
+| narration     | TEXT    | Description         |
+| trans_type_id | INT     | Transaction type    |
+| trans_details | VARCHAR | Reference to source |
+| entered_by    | INT     | User who posted     |
+
+#### sys_gl_accounts
+
+**Purpose:** Chart of accounts
+
+| Field           | Type    | Description                     |
+| --------------- | ------- | ------------------------------- |
+| id              | INT     | Primary key                     |
+| account_name    | VARCHAR | Account name                    |
+| account_number  | VARCHAR | Account code                    |
+| account_type_id | INT     | Asset/Liability/Revenue/Expense |
+| parent_id       | INT     | Parent account                  |
+
+### Voucher Tables
+
+#### sys_fin_payment_vouchers
+
+**Purpose:** Payment voucher header
+
+| Field             | Type    | Description           |
+| ----------------- | ------- | --------------------- |
+| id                | INT     | Primary key           |
+| voucher_number    | VARCHAR | Unique voucher number |
+| voucher_date      | DATE    | Voucher date          |
+| client_id         | INT     | Landlord ID           |
+| amount            | DECIMAL | Total voucher amount  |
+| bank_account_id   | INT     | Payout bank account   |
+| voucher_type      | VARCHAR | 'Payment'             |
+| current_status_id | INT     | Voucher status        |
+| narration         | TEXT    | Description           |
+
+#### sys_fin_payment_vouchers_264_repeat
+
+**Purpose:** Voucher line items
+
+| Field     | Type    | Description      |
+| --------- | ------- | ---------------- |
+| id        | INT     | Primary key      |
+| parent_id | INT     | Voucher ID       |
+| amount    | DECIMAL | Line item amount |
+| narration | TEXT    | Line description |
+
+---
+
+## 🔄 STATUS TRANSITIONS
+
+### Return Status Flow
+
+```
+sys_pm_clients_returns.current_status_id
+
+1 (Pending)
+    → Generated but not approved
+
+5 (Approved)
+    → Final approval granted
+    → Triggers landlord ledger credit
+
+17 (Processed)
+    → Included in payment batch
+    → Payment voucher created
+    → Final state
+```
+
+### Payable Status Flow
+
+```
+sys_pm_clients_returns.payable_status_id
+
+0 (Unpayable)
+    → Tenant paid < 85% of invoice
+    → Excluded from balance calculation
+
+1 (Payable)
+    → Tenant paid ≥ 85% of invoice
+    → Included in balance calculation
+    → Eligible for batch generation
+
+2 (No Past Invoice)
+    → First invoice (no payment history)
+    → Automatically payable
+
+3 (Past Passed Threshold)
+    → Previous month return met 85%
+    → Current return payable even if < 85%
+
+17 (Processed)
+    → Already paid to landlord
+    → Payment complete
+```
+
+### Paid Status Flow
+
+```
+sys_pm_clients_returns.paid_status_id
+
+1 (Pending)
+    → Payable but not yet paid
+
+2 (Paid)
+    → Payment voucher created
+    → Money transferred to landlord
+
+6 (Posted)
+    → GL entries completed
+    → Fully posted to accounts
+```
+
+### Landlord Ledger Status Flow
+
+```
+sys_pm_landlord_accounts_transaction.payable_status
+
+0 (Unpayable)
+    → Excluded from balance calculation
+    → Return not eligible for payment
+
+1 (Payable)
+    → Included in balance calculation
+    → Return eligible for payment
+
+17 (Processed)
+    → Already paid out
+    → Included in balance but marked processed
+```
+
+### Batch Status Flow
+
+```
+sys_reports_returns_batches.current_status_id
+
+1 (Pending)
+    → Batch created but not approved
+
+5 (Approved)
+    → Final approval granted
+    → Triggers GL posting and voucher creation
+
+6 (Posted)
+    → GL entries completed
+
+17 (Processed)
+    → Payment vouchers generated
+    → Final state
+```
+
+---
+
+## 💻 CODE REFERENCE
+
+### Key Services
+
+**ClientReturnService**
+
+- Location: `libraries/ipms/Domain/Service/ClientReturnService.php`
+- Methods:
+  - `processWorkflow($action_data)` - Line 18
+  - `updateReturnOnInvoicePayment($invoice_id)` - Line 523
+  - `updateLandlordLedger($payable_status_id, $invoice_id)` - Line 967
+
+**LandlordTransService**
+
+- Location: `libraries/ipms/Domain/Service/LandlordTransService.php`
+- Methods:
+  - `createFromReturn($return_id, $posted_status_id)` - Line 1126
+  - `recordTransaction($trans_data)` - Line 80
+  - `getBalance($client_id)` - Line 400+
+
+**ReturnBatchService**
+
+- Location: `libraries/ipms/Domain/Service/ReturnBatchService.php`
+- Methods:
+  - `processWorkflow($action_data)` - Line 6
+  - `createBatch($property_report_id)` - Line 100+
+  - `debitClient($action_data)` - Line 200+
+  - `balanceProperties($action_data)` - Line 300+
+  - `postGl($action_data)` - Line 400+
+  - `createVoucher($action_data)` - Line 500+
+  - `processFeaturedItems($batch)` - Line 600+
+
+**WorkFlowService**
+
+- Location: `libraries/ipms/Domain/Service/WorkFlowService.php`
+- Methods:
+  - `genericProcessWorkflow($action_data)` - Line 200+
+
+**GLTransService**
+
+- Location: `libraries/ipms/Domain/Service/GLTransService.php`
+- Methods:
+  - `makeJournalEntry($gl_data)` - Creates GL entries
+  - `createFromLedgerTransaction($trans_id, $type, $nature)` - Links ledger to GL
+
+### Key DAOs
+
+**ClientReturnDao**
+
+- Location: `libraries/ipms/Infrastructure/Persistence/Dao/ClientReturnDao.php`
+- Methods:
+  - `getById($id)`
+  - `getAll($year_month, $property_id, $lease_id, $item_id, $status_id)`
+  - `persist($data)`
+  - `updateVals($values, $params)`
+
+**LandlordTransDao**
+
+- Location: `libraries/ipms/Infrastructure/Persistence/Dao/LandlordTransDao.php`
+- Methods:
+  - `persist($data)`
+  - `getBalance($client_id, $pending, $amount_type)`
+  - `updateVals($values, $params)`
+
+**ReturnBatchDao**
+
+- Location: `libraries/ipms/Infrastructure/Persistence/Dao/ReturnBatchDao.php`
+- Methods:
+  - `getBatchConfigDetails($property_id)`
+  - `getBatchConfigProperties($config_id)`
+  - `getProperties($batch_id)`
+
+---
+
+## 🎯 SUMMARY
+
+### Complete Journey of a Return
+
+1. **Created** - Return generated from tenant invoice
+2. **Pending** - Awaiting approval(s)
+3. **Approved** - Final approval granted (determinant='Yes')
+4. **Landlord Credited** - Credit entry created in landlord ledger
+5. **Becomes Payable** - When tenant pays ≥ 85% of invoice
+6. **Batch Generated** - Grouped with other returns for payment
+7. **Batch Approved** - Batch workflow approval granted
+8. **GL Posted** - Accounting entries created
+9. **Voucher Created** - Payment voucher(s) generated for bank transfer
+10. **Processed & Paid** - Final status, money transferred to landlord
+
+### Key Points
+
+✅ **Approval triggers landlord ledger credit** - Immediately upon final approval
+
+✅ **Payability is separate from approval** - Return must be approved AND invoice must meet payment threshold
+
+✅ **Batch processing groups returns** - Multiple returns paid together per landlord/property configuration
+
+✅ **GL posting is automatic** - Happens during batch approval
+
+✅ **Multiple vouchers per batch** - If landlord has multiple payout accounts
+
+✅ **Complete audit trail** - Every step logged in `sys_workflow_activities`
+
+✅ **Status synchronization** - Return status, landlord ledger status, and batch status all updated together
+
+---
+
+## 📚 RELATED DOCUMENTATION
+
+- [RETURNS_APPROVALS_TRACKING.md](RETURNS_APPROVALS_TRACKING.md) - Approval workflow details
+- [INVOICE_PAYMENT_TO_LANDLORD_LEDGER_FLOW.md](INVOICE_PAYMENT_TO_LANDLORD_LEDGER_FLOW.md) - Payability threshold logic
+- [BatchPaysConfig.txt](BatchPaysConfig.txt) - Batch configuration guide
+- [RETURNS_BATCH_GENERATION_GUIDE.md](RETURNS_BATCH_GENERATION_GUIDE.md) - Batch generation process
+- [THRESHOLD_UPDATE_DOCUMENTATION.md](THRESHOLD_UPDATE_DOCUMENTATION.md) - Threshold calculation details
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** February 3, 2026  
+**Maintained By:** System Documentation Team

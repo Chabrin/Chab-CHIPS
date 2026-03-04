@@ -60,11 +60,49 @@
                                                 <td class="fw-bold" style="width: 40%;">Tenant Name:</td>
                                                 <td>{{ $movement->tenant->names ?? 'N/A' }}</td>
                                             </tr>
+                                        </table>
+
+                                        @if($tenantBalance)
+                                        <div class="card border-0 shadow-sm mt-3">
+                                            <div class="card-header bg-light py-2 d-flex align-items-center gap-2">
+                                                <span class="material-symbols-outlined" style="font-size:18px;">account_balance_wallet</span>
+                                                <span class="fw-semibold small">Tenant Account Balance</span>
+                                                <span class="ms-auto">
+                                                    @if($tenantBalance['is_in_arrears'])
+                                                        <span class="badge bg-danger">In Arrears</span>
+                                                    @else
+                                                        <span class="badge bg-success">Credit</span>
+                                                    @endif
+                                                </span>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row text-center">
+                                                    <div class="col-4 border-end">
+                                                        <small class="text-muted d-block">Total Invoiced</small>
+                                                        <span class="fw-bold">{{ number_format($tenantBalance['total_invoiced'], 2) }}</span>
+                                                    </div>
+                                                    <div class="col-4 border-end">
+                                                        <small class="text-muted d-block">Total Paid</small>
+                                                        <span class="fw-bold text-success">{{ number_format($tenantBalance['total_paid'], 2) }}</span>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <small class="text-muted d-block">Balance</small>
+                                                        <span class="fw-bold {{ $tenantBalance['is_in_arrears'] ? 'text-danger' : 'text-success' }}">
+                                                            @if($tenantBalance['is_in_arrears'])({{ $tenantBalance['balance_formatted'] }})@else{{ $tenantBalance['balance_formatted'] }}@endif
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <p class="text-muted small mb-0 mt-2">As of: {{ $tenantBalance['as_of_date'] }}</p>
+                                            </div>
+                                        </div>
+                                        @else
+                                        <table class="table table-sm mb-0 mt-2">
                                             <tr>
-                                                <td class="fw-bold">Current Balance:</td>
+                                                <td class="fw-bold" style="width: 40%;">Current Balance:</td>
                                                 <td>{{ number_format($movement->current_balance ?? 0, 2) }}</td>
                                             </tr>
                                         </table>
+                                        @endif
                                     </div>
                                 </div>
 

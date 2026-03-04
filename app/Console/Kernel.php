@@ -14,6 +14,7 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
          \App\Console\Commands\DispatchScheduledCommunications::class,
+         \App\Console\Commands\ProcessEscalations::class,
     ];
 
     /**
@@ -33,6 +34,12 @@ class Kernel extends ConsoleKernel
         // Check for expiring leases daily at 8:00 AM
         $schedule->command('leases:check-expiring')
                 ->dailyAt('08:00')
+                ->withoutOverlapping()
+                ->runInBackground();
+
+        // Process lease escalation notifications and auto-apply daily at 7:00 AM
+        $schedule->command('escalations:process')
+                ->dailyAt('07:00')
                 ->withoutOverlapping()
                 ->runInBackground();
     }

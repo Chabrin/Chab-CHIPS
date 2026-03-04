@@ -1,0 +1,1395 @@
+# CLIENT/LANDLORD ADVANCES SYSTEM
+
+## Overview
+
+The Advances system allows property management companies to issue **loans/advances** to landlords/clients. These advances are repaid through **monthly deductions from property returns**. The system handles:
+
+1. Advance issuance with amortization schedules
+2. Interest calculations (simple or compound)
+3. Approval workflows
+4. Automatic monthly repayments (principal + interest)
+5. Deductions from returns
+6. General Ledger postings
+7. Payment voucher generation
+
+---
+
+## 📊 Database Tables
+
+### 1. **`sys_pm_clients_advances_requisitions`** - Main Advances Table
+
+**Purpose:** Stores advance/loan requests and details
+
+| Column               | Type     | Description                                   |
+| -------------------- | -------- | --------------------------------------------- |
+| id                   | INT      | Primary key (advance_id)                      |
+| date_time            | DATETIME | When created                                  |
+| reference_number     | VARCHAR  | Unique advance reference (e.g., ADV-2026-001) |
+| requisition_date     | DATE     | Date of requisition                           |
+| disbursement_date    | DATE     | Date funds disbursed                          |
+| principal_start_date | DATE     | Date principal repayment starts               |
+| client_id            | INT      | Landlord/Client ID                            |
+| property_id          | INT      | Optional property reference                   |
+| zone_id              | INT      | Zone reference                                |
+| amount               | DECIMAL  | Principal loan amount                         |
+| interest_rate        | DECIMAL  | Interest rate percentage                      |
+| interest_amount      | DECIMAL  | Total interest calculated                     |
+| total_amount         | DECIMAL  | Principal + Interest                          |
+| repayment_months     | INT      | Number of months to repay                     |
+| charge_amount        | DECIMAL  | Processing fees/charges                       |
+| current_balance      | DECIMAL  | Outstanding balance (updated monthly)         |
+| narration            | TEXT     | Description/reason for advance                |
+| advance_type_id      | INT      | 1=New, 2=Top-up, 3=Reschedule                 |
+| previous_advance_id  | INT      | If rescheduling, reference to old advance     |
+| created_by           | INT      | User who created                              |
+| current_status_id    | INT      | 1=Pending, 5=Approved, 6=Posted, 2=Cleared    |
+| voucher_id           | INT      | Links to payment voucher generated            |
+
+---
+
+### 2. **`sys_pm_clients_advances_requisitions_89_repeat`** - Amortization Schedule
+
+**Purpose:** Monthly repayment schedule (principal + interest breakdown)
+
+| Column            | Type    | Description                               |
+| ----------------- | ------- | ----------------------------------------- |
+| id                | INT     | Primary key (schedule_id)                 |
+| parent_id         | INT     | Links to advance_id                       |
+| payment_date      | DATE    | Due date for this installment             |
+| payment_type_id   | INT     | 1=Principal Only, 2=Interest Only, 3=Both |
+| principal_amount  | DECIMAL | Principal portion of payment              |
+| interest          | DECIMAL | Interest portion of payment               |
+| total_amount      | DECIMAL | Principal + Interest for this month       |
+| loan_balance      | DECIMAL | Balance after this payment                |
+| current_status_id | INT     | 1=Pending, 2=Cleared, 8=Rescheduled       |
+
+**Example:**
+
+```
+Advance: KSh 100,000 @ 2% interest, 10 months
+
+Schedule:
+Month 1: Principal=10,000, Interest=2,000, Balance=90,000
+Month 2: Principal=10,000, Interest=1,800, Balance=80,000
+Month 3: Principal=10,000, Interest=1,600, Balance=70,000
+...
+Month 10: Principal=10,000, Interest=200, Balance=0
+```
+
+---
+
+### 3. **`sys_reports_landlord_accounts`** - Client Statement (Debit Entry)
+
+**Purpose:** Records advance as debit on client statement
+
+| Column              | Type     | Description                            |
+| ------------------- | -------- | -------------------------------------- |
+| id                  | INT      | Primary key                            |
+| date_time           | DATETIME | Timestamp                              |
+| client_id           | INT      | Landlord/Client ID                     |
+| block_id            | INT      | Property ID (optional)                 |
+| orig_id             | VARCHAR  | Origin reference: "29:advance_id"      |
+| transaction_type_id | INT      | 15=Client Advance                      |
+| narration           | TEXT     | Description                            |
+| debit               | DECIMAL  | Advance amount (principal + interest)  |
+| credit              | DECIMAL  | 0                                      |
+| transaction_date    | DATE     | Disbursement date                      |
+| advance_id          | INT      | Links to advance                       |
+| running_balance     | DECIMAL  | Client's running balance after advance |
+| current_status_id   | INT      | Status                                 |
+
+---
+
+### 4. **`sys_pm_landlord_accounts_transaction`** - Client Ledger
+
+**Purpose:** Client account transactions (debits for advance disbursement, credits for repayments)
+
+| Column              | Type     | Description                                 |
+| ------------------- | -------- | ------------------------------------------- |
+| id                  | INT      | Primary key (transaction_id)                |
+| date_time           | DATETIME | Timestamp                                   |
+| client_id           | INT      | Landlord/Client ID                          |
+| property_id         | INT      | Property reference                          |
+| origin_id           | VARCHAR  | "29:advance_id:schedule_id"                 |
+| transaction_type_id | INT      | 23=Principal Repayment, 24=Interest Payment |
+| narration           | TEXT     | Description                                 |
+| amount              | DECIMAL  | Amount (negative for deductions)            |
+| amount_type         | VARCHAR  | "Debit" or "Credit"                         |
+| lease_id            | INT      | NULL for advances                           |
+| tenant_id           | INT      | NULL for advances                           |
+| current_status_id   | INT      | 6=Posted                                    |
+
+---
+
+### 5. **`sys_pm_recoveries`** - Recoveries/Deductions
+
+**Purpose:** Stores deductions from returns (principal + interest repayments)
+
+| Column            | Type     | Description                                 |
+| ----------------- | -------- | ------------------------------------------- |
+| id                | INT      | Primary key (recovery_id)                   |
+| date_time         | DATETIME | Timestamp                                   |
+| type_id           | INT      | 23=Principal Repayment, 24=Interest Payment |
+| ref_number        | VARCHAR  | Unique reference                            |
+| recovery_date     | DATE     | Date of recovery                            |
+| client_id         | INT      | Landlord/Client ID                          |
+| property_id       | INT      | Property reference                          |
+| origin_id         | VARCHAR  | "29:advance_id:schedule_id:timestamp:rand"  |
+| narration         | TEXT     | Description                                 |
+| amount            | DECIMAL  | Positive amount recovered                   |
+| commisionable     | VARCHAR  | "No" for advances                           |
+| current_status_id | INT      | 5=Approved                                  |
+
+---
+
+### 6. **`sys_fin_payment_vouchers`** - Payment Vouchers
+
+**Purpose:** Payment vouchers for disbursing advances
+
+| Column                  | Type     | Description               |
+| ----------------------- | -------- | ------------------------- |
+| id                      | INT      | Primary key (voucher_id)  |
+| date_time               | DATETIME | Timestamp                 |
+| trans_date_time         | DATE     | Disbursement date         |
+| reference_number        | VARCHAR  | Voucher number            |
+| transaction_category_id | INT      | 6=Client Payment          |
+| narration               | TEXT     | Description               |
+| amount                  | DECIMAL  | Advance principal amount  |
+| payable_amount          | DECIMAL  | Net amount after charges  |
+| total_charge            | DECIMAL  | Processing fees           |
+| payee_names             | VARCHAR  | Client name               |
+| origin_id               | VARCHAR  | "29:advance_id:timestamp" |
+| current_status_id       | INT      | 1=Pending, 5=Approved     |
+| entered_by              | INT      | User who created          |
+
+---
+
+### 7. **`sys_fin_payment_vouchers_264_repeat`** - Voucher Items
+
+**Purpose:** Line items for payment vouchers
+
+| Column              | Type    | Description          |
+| ------------------- | ------- | -------------------- |
+| id                  | INT     | Primary key          |
+| parent_id           | INT     | Links to voucher_id  |
+| transaction_type_id | INT     | 15=Client Advance    |
+| client_id           | INT     | Landlord/Client ID   |
+| property_id         | INT     | Property reference   |
+| narration           | TEXT    | Description          |
+| amount              | DECIMAL | Amount for this item |
+| miscallenous_charge | DECIMAL | Processing fee       |
+| debit_account_id    | INT     | GL debit account     |
+
+---
+
+### 8. **`sys_gl_journal_entries`** & **`sys_gl_journal_items`** - General Ledger
+
+**Purpose:** Journal entries for advances (double-entry accounting)
+
+**On Disbursement:**
+
+- **Debit**: Loans Receivable (Asset)
+- **Debit**: Interests Receivable (Asset)
+- **Credit**: Clients Advance Loans Payable (Liability)
+- **Credit**: Loan Interests Revenue (Revenue)
+
+**On Repayment:**
+
+- **Debit**: Clients Account (Liability - reduce what we owe client)
+- **Credit**: Loans Receivable (Asset - reduce receivable)
+- **Credit**: Interests Receivable (Asset - reduce receivable)
+
+---
+
+## 🔄 Advance Workflow
+
+### Phase 1: Advance Creation & Approval
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                   ADVANCE CREATION WORKFLOW                     │
+└────────────────────────────────────────────────────────────────┘
+
+STEP 1: Create Advance Requisition
+│
+├─> User/Admin creates advance request
+│   - Client selection
+│   - Amount (e.g., KSh 100,000)
+│   - Interest rate (e.g., 2% monthly)
+│   - Repayment months (e.g., 10 months)
+│   - Disbursement date
+│   - Principal start date (when repayment begins)
+│
+└─> System calculates amortization schedule
+    - Calls: LoansAdvancesService::ajaxArmotizeNewLoan()
+    - Generates monthly schedule (principal + interest)
+    - Stores in sys_pm_clients_advances_requisitions_89_repeat
+
+▼
+
+STEP 2: Approval Workflow
+│
+├─> Advance submitted for approval
+│   - Status: Pending (1)
+│   - Task created for approver
+│
+├─> Approver reviews and approves
+│   - Calls: LoansAdvancesService::processWorkflow()
+│   - Status: Approved (5)
+│
+└─> System triggers:
+    1. Client Statement Entry (debit client account)
+    2. General Ledger Posting
+    3. Payment Voucher Generation
+
+▼
+
+STEP 3: Disbursement
+│
+├─> GL Posting (recordGL)
+│   DR: Loans Receivable ............ 100,000
+│   DR: Interests Receivable ........ 10,000
+│       CR: Clients Advance Loans Payable ... 100,000
+│       CR: Loan Interests Revenue ........... 10,000
+│
+├─> Client Statement
+│   - Table: sys_reports_landlord_accounts
+│   - Debit: 110,000 (principal + interest)
+│   - Origin: "29:advance_id"
+│   - Transaction Type: 15 (Client Advance)
+│
+└─> Payment Voucher Created
+    - Table: sys_fin_payment_vouchers
+    - Amount: 100,000
+    - Payee: Client Name
+    - Status: Pending
+    - Links to cheque/bank transfer for actual payment
+```
+
+---
+
+### Phase 2: Monthly Repayments (Automatic via Cron)
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│              MONTHLY REPAYMENT DEDUCTION PROCESS                │
+└────────────────────────────────────────────────────────────────┘
+
+CRON JOB: LoansAdvancesService::recoverLoans()
+Runs: Monthly (typically after invoices are generated)
+
+▼
+
+STEP 1: Identify Matured Schedules
+│
+├─> Query: getAllMatured()
+│   SELECT * FROM sys_pm_clients_advances_requisitions
+│   WHERE MONTH(principal_start_date) <= CURRENT_MONTH
+│   AND YEAR(principal_start_date) <= CURRENT_YEAR
+│   AND current_status_id = 5 (Approved)
+│
+└─> For each advance, get pending schedules
+    Query: getSchedule(advance_id, pending_status)
+
+▼
+
+STEP 2: Process Each Matured Schedule
+│
+├─> For each schedule where payment_date <= TODAY
+│   - Principal amount (e.g., KSh 10,000)
+│   - Interest amount (e.g., KSh 2,000)
+│
+├─> Debit Client Account (Principal)
+│   Table: sys_pm_landlord_accounts_transaction
+│   - amount: -10,000
+│   - transaction_type_id: 23 (Principal Repayment)
+│   - origin_id: "29:advance_id:schedule_id"
+│   - current_status_id: 6 (Posted)
+│
+├─> Create Recovery (Principal)
+│   Table: sys_pm_recoveries
+│   - amount: 10,000 (positive)
+│   - type_id: 23 (Principal Repayment)
+│   - narration: "Loan/Advance Principal Recovery"
+│
+├─> Debit Client Account (Interest)
+│   Table: sys_pm_landlord_accounts_transaction
+│   - amount: -2,000
+│   - transaction_type_id: 24 (Interest Payment)
+│
+├─> Create Recovery (Interest)
+│   Table: sys_pm_recoveries
+│   - amount: 2,000
+│   - type_id: 24 (Interest Payment)
+│   - narration: "Loan/Advance Interest charge"
+│
+└─> Post to General Ledger
+    DR: Clients Account ............. 12,000
+        CR: Loans Receivable ............. 10,000
+        CR: Interests Receivable ......... 2,000
+
+▼
+
+STEP 3: Update Balances & Status
+│
+├─> Update Schedule
+│   - current_status_id: 2 (Cleared)
+│
+├─> Update Advance Balance
+│   - current_balance: old_balance - principal_amount
+│
+└─> Trigger Returns Regeneration
+    - Calls: ClientReturnReportService::preparePropertyReturnsReports()
+    - Regenerates returns with recoveries included
+```
+
+---
+
+### Phase 3: Deduction from Returns
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│         INTEGRATION WITH RETURNS GENERATION PROCESS             │
+└────────────────────────────────────────────────────────────────┘
+
+WHEN: Returns are generated for the month
+
+▼
+
+STEP 1: Calculate Gross Returns
+│
+├─> Sum all invoices paid
+├─> Calculate SLA percentages
+└─> Calculate gross return per property
+
+▼
+
+STEP 2: Fetch Recoveries (Including Advances)
+│
+├─> Query: sys_pm_recoveries
+│   WHERE client_id = landlord_id
+│   AND current_status_id = 5 (Approved)
+│   AND recovery_date matches period
+│
+└─> Includes:
+    - Loan principal repayments (type_id=23)
+    - Loan interest payments (type_id=24)
+    - Other recoveries (repairs, utilities, etc.)
+
+▼
+
+STEP 3: Calculate Net Returns
+│
+├─> Net Return = Gross Return - Total Recoveries
+│   Example:
+│   - Gross: KSh 150,000
+│   - Commission: -15,000
+│   - VAT: -2,400
+│   - Loan Principal: -10,000
+│   - Loan Interest: -2,000
+│   - Other Recoveries: -5,000
+│   ─────────────────────────
+│   Net Return: KSh 115,600
+│
+└─> Update Property Return Report
+    Table: sys_reports_returns_properties
+    - total_recoveries: includes advance repayments
+    - total_net_amount: after all deductions
+
+▼
+
+STEP 4: Batch & Payout
+│
+├─> Group properties into batch
+├─> Configure payout accounts
+└─> Generate payment voucher with net amount
+    (Advance already deducted, landlord receives net)
+```
+
+---
+
+## � Application/Requisition Process
+
+### Who Can Apply
+
+**Initiators:**
+
+- **Admin/Finance Officer** - Primary method (on behalf of client)
+- **Client/Landlord** - Self-service application (if system allows)
+- **Property Manager** - Can recommend/initiate for clients
+
+**Access Control:**
+
+- User must have "Create Advances" permission
+- Client must be active in system
+- Client must have at least one property under management
+
+---
+
+### Eligibility Criteria
+
+Before creating an advance requisition, verify client meets these criteria:
+
+#### 1. **Client Status**
+
+- Active client with valid contract
+- No suspended or terminated status
+- Minimum relationship duration: 3-6 months (configurable)
+
+#### 2. **Financial Standing**
+
+- Minimum average monthly returns: KSh 50,000 (or configured threshold)
+- No negative account balance exceeding 3 months
+- Debt-to-Income ratio < 60%
+
+#### 3. **Outstanding Advances**
+
+- Maximum concurrent advances: 2 active loans
+- Total outstanding balance < 80% of average monthly returns
+- No defaulted advances in last 12 months
+
+#### 4. **Property Performance**
+
+- At least 70% occupancy rate (if applicable)
+- Regular rent collection pattern
+- No properties under dispute
+
+#### 5. **Returns History**
+
+- Minimum 3 consecutive months of returns
+- Average monthly return meets minimum threshold
+- Consistent payment pattern (85% threshold met regularly)
+
+---
+
+### Required Data Fields
+
+#### **Basic Information** (Required)
+
+| Field                    | Type     | Description                 | Validation                                                  |
+| ------------------------ | -------- | --------------------------- | ----------------------------------------------------------- |
+| **client_id**            | Dropdown | Select landlord/client      | REQUIRED. Must be active client                             |
+| **requisition_date**     | Date     | Date of application         | REQUIRED. Default: Today. Cannot be future date             |
+| **amount**               | Decimal  | Principal loan amount       | REQUIRED. Min: 10,000, Max: 5,000,000 or 80% of avg returns |
+| **interest_rate**        | Decimal  | Monthly interest rate %     | REQUIRED. Range: 0.5% - 5% (configurable)                   |
+| **repayment_months**     | Integer  | Number of months            | REQUIRED. Min: 3, Max: 36 months                            |
+| **disbursement_date**    | Date     | When funds will be released | REQUIRED. Must be >= requisition_date, within 30 days       |
+| **principal_start_date** | Date     | When repayment begins       | REQUIRED. Must be >= disbursement_date, typically +1 month  |
+| **narration**            | Text     | Purpose/reason for advance  | REQUIRED. Min 20 characters, Max 500                        |
+
+#### **Optional Information**
+
+| Field                   | Type     | Description                       | Validation                                           |
+| ----------------------- | -------- | --------------------------------- | ---------------------------------------------------- |
+| **property_id**         | Dropdown | Specific property (if applicable) | Optional. Must belong to client                      |
+| **zone_id**             | Dropdown | Zone/region reference             | Optional. Auto-filled from client/property           |
+| **charge_amount**       | Decimal  | Processing fee                    | Optional. Default: 2% of amount or fixed fee         |
+| **advance_type_id**     | Dropdown | New/Top-up/Reschedule             | Default: 1 (New). Determines additional requirements |
+| **previous_advance_id** | Dropdown | Previous loan (if rescheduling)   | Required if advance_type_id = 3 (Reschedule)         |
+
+---
+
+### Field Validation Rules
+
+#### **Amount**
+
+```php
+// Validation logic
+$min_amount = 10000; // KSh 10,000
+$max_amount = min(5000000, $client_avg_returns * 0.8 * 12); // 80% of annual returns
+$existing_balance = getClientOutstandingAdvances($client_id);
+$available_amount = $max_amount - $existing_balance;
+
+if ($amount < $min_amount) {
+    return "Minimum advance amount is KSh 10,000";
+}
+if ($amount > $available_amount) {
+    return "Amount exceeds available limit. Max: KSh " . number_format($available_amount);
+}
+```
+
+#### **Interest Rate**
+
+```php
+// Validation logic
+$min_rate = 0.5; // 0.5% monthly
+$max_rate = 5.0; // 5% monthly
+$default_rate = 2.0; // 2% monthly
+
+if ($interest_rate < $min_rate || $interest_rate > $max_rate) {
+    return "Interest rate must be between {$min_rate}% and {$max_rate}%";
+}
+```
+
+#### **Repayment Months**
+
+```php
+// Validation logic
+$min_months = 3;
+$max_months = 36;
+
+// Business rule: Max repayment should not exceed amount/avg_monthly_return ratio
+$max_affordable_months = floor($amount / ($client_avg_returns * 0.3)); // 30% of returns
+
+if ($repayment_months < $min_months || $repayment_months > min($max_months, $max_affordable_months)) {
+    return "Repayment period must be between {$min_months} and {$max_affordable_months} months";
+}
+```
+
+#### **Date Rules**
+
+```php
+// Disbursement date validation
+if ($disbursement_date < $requisition_date) {
+    return "Disbursement date cannot be before requisition date";
+}
+if ($disbursement_date > date('Y-m-d', strtotime($requisition_date . ' +30 days'))) {
+    return "Disbursement date must be within 30 days of requisition";
+}
+
+// Principal start date validation
+if ($principal_start_date <= $disbursement_date) {
+    return "Principal start date must be after disbursement date";
+}
+
+// Recommended: First day of next month
+$recommended_start = date('Y-m-01', strtotime($disbursement_date . ' +1 month'));
+```
+
+---
+
+### Business Rules & Calculations
+
+#### **1. Processing Fee (charge_amount)**
+
+**Calculation:**
+
+```php
+// Option A: Percentage-based
+$charge_amount = $amount * 0.02; // 2% of principal
+
+// Option B: Flat fee
+$charge_amount = 5000; // KSh 5,000 flat
+
+// Option C: Tiered
+if ($amount < 100000) {
+    $charge_amount = 2000;
+} elseif ($amount < 500000) {
+    $charge_amount = 5000;
+} else {
+    $charge_amount = $amount * 0.015; // 1.5%
+}
+```
+
+#### **2. Total Interest Calculation**
+
+**Preview calculation (before submission):**
+
+```php
+// Simple estimation for preview
+$estimated_interest = ($amount * $interest_rate / 100) * $repayment_months;
+$estimated_total = $amount + $estimated_interest;
+
+// Actual calculation happens via amortization (reducing balance)
+$actual_interest = calculateAmortizationInterest($amount, $interest_rate, $repayment_months, $disbursement_date, $principal_start_date);
+```
+
+#### **3. Maximum Advance Calculation**
+
+**Formula:**
+
+```php
+function getMaxAdvanceAmount($client_id) {
+    // Get last 6 months average returns
+    $avg_monthly_returns = getClientAverageReturns($client_id, 6);
+
+    // Get existing outstanding balance
+    $outstanding_balance = getClientOutstandingAdvances($client_id);
+
+    // Calculate max (80% of annual returns)
+    $max_annual_advance = $avg_monthly_returns * 12 * 0.8;
+
+    // Available = Max - Outstanding
+    $available = $max_annual_advance - $outstanding_balance;
+
+    return max(0, $available);
+}
+```
+
+#### **4. Debt Service Coverage Ratio (DSCR)**
+
+**Calculation:**
+
+```php
+function checkDebtServiceCoverage($client_id, $requested_amount, $repayment_months, $interest_rate) {
+    $avg_monthly_returns = getClientAverageReturns($client_id, 6);
+
+    // Calculate estimated monthly payment
+    $monthly_payment = calculateMonthlyPayment($requested_amount, $interest_rate, $repayment_months);
+
+    // DSCR = Monthly Returns / Monthly Payment
+    $dscr = $avg_monthly_returns / $monthly_payment;
+
+    // Minimum acceptable DSCR: 1.5 (returns should be 1.5x payment)
+    if ($dscr < 1.5) {
+        return [
+            'approved' => false,
+            'message' => 'Insufficient returns to support repayment. DSCR: ' . round($dscr, 2)
+        ];
+    }
+
+    return ['approved' => true, 'dscr' => $dscr];
+}
+```
+
+---
+
+### Application Form Flow
+
+#### **Step 1: Client Selection & Eligibility Check**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Select Client                                           │
+├─────────────────────────────────────────────────────────┤
+│ Client: [John Doe - CLI-2024-001          ▼]           │
+│                                                         │
+│ ✓ Active client                                        │
+│ ✓ Relationship duration: 8 months                      │
+│ ✓ Average monthly returns: KSh 250,000                 │
+│ ✓ No outstanding defaults                              │
+│                                                         │
+│ Outstanding Advances: KSh 50,000                        │
+│ Available Limit: KSh 2,350,000                         │
+│                                                         │
+│                                    [Continue]           │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### **Step 2: Advance Details**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Advance Details                                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ Advance Type: ⦿ New Loan  ○ Top-up  ○ Reschedule      │
+│                                                         │
+│ *Amount (KSh):       [500,000_____________]            │
+│  Min: 10,000  Max: 2,350,000                           │
+│                                                         │
+│ *Interest Rate (%):  [2.0___]  per month               │
+│  Range: 0.5% - 5%                                      │
+│                                                         │
+│ *Repayment Period:   [12___] months                    │
+│  Min: 3  Max: 36                                       │
+│                                                         │
+│ Processing Fee:      KSh 10,000 (auto-calculated)      │
+│                                                         │
+│ ┌─────────────────────────────────────────────────┐   │
+│ │ ESTIMATED SUMMARY                               │   │
+│ │ Principal:          KSh 500,000                 │   │
+│ │ Est. Interest:      KSh 65,000                  │   │
+│ │ Processing Fee:     KSh 10,000                  │   │
+│ │ Total Repayment:    KSh 565,000                 │   │
+│ │ Monthly Payment:    KSh 47,083                  │   │
+│ │ DSCR:               5.3x (Excellent)            │   │
+│ └─────────────────────────────────────────────────┘   │
+│                                                         │
+│                          [Back] [Continue]              │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### **Step 3: Dates & Property**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Dates & Additional Information                          │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ *Requisition Date:       [2026-01-29] (Today)          │
+│                                                         │
+│ *Disbursement Date:      [2026-02-05__________]        │
+│  ℹ️ Date when funds will be released                   │
+│  Must be within 30 days                                │
+│                                                         │
+│ *Principal Start Date:   [2026-03-01__________]        │
+│  ℹ️ Date when repayment begins                         │
+│  Recommended: First day of month after disbursement    │
+│                                                         │
+│ Property (Optional):     [Select Property...    ▼]     │
+│  • Sunshine Apartments                                 │
+│  • Ocean View Plaza                                    │
+│  • Palm Gardens                                        │
+│                                                         │
+│ Zone:                    [Westlands] (auto-filled)     │
+│                                                         │
+│ *Purpose/Narration:                                    │
+│ [Property renovation for Sunshine Apartments_______]   │
+│ [to increase rental income and occupancy rate.____]   │
+│                                                         │
+│                          [Back] [Continue]              │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### **Step 4: Review Amortization Schedule**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Review Amortization Schedule                            │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ Loan: KSh 500,000 @ 2% monthly for 12 months          │
+│                                                         │
+│ ┌─────────────────────────────────────────────────┐   │
+│ │ Month │ Date       │ Principal │ Interest │ Balance│ │
+│ ├───────┼────────────┼───────────┼──────────┼────────┤ │
+│ │ 1     │ 2026-03-01 │ 41,667   │ 10,000   │ 458,333│ │
+│ │ 2     │ 2026-04-01 │ 41,667   │ 9,167    │ 416,666│ │
+│ │ 3     │ 2026-05-01 │ 41,667   │ 8,333    │ 374,999│ │
+│ │ 4     │ 2026-06-01 │ 41,667   │ 7,500    │ 333,332│ │
+│ │ 5     │ 2026-07-01 │ 41,667   │ 6,667    │ 291,665│ │
+│ │ 6     │ 2026-08-01 │ 41,667   │ 5,833    │ 249,998│ │
+│ │ ...   │ ...        │ ...      │ ...      │ ...    │ │
+│ │ 12    │ 2027-02-01 │ 41,667   │ 833      │ 0      │ │
+│ └─────────────────────────────────────────────────┘   │
+│                                                         │
+│ Total Principal: KSh 500,000                           │
+│ Total Interest:  KSh 65,000                            │
+│ Grand Total:     KSh 565,000                           │
+│                                                         │
+│                    [Back] [Submit for Approval]         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Supporting Documents (Optional/Recommended)
+
+While the system may not enforce document upload, these are recommended for approval:
+
+1. **Advance Application Letter** - Formal request from client
+2. **Purpose Documentation** - Invoices, quotations, contracts
+3. **Property Performance Report** - Last 6 months returns
+4. **Bank Statements** - Client's personal/business account (3 months)
+5. **ID/KRA PIN** - Updated identification
+6. **Property Title Deed** - If using property as collateral
+7. **Board Resolution** - If client is a company
+
+---
+
+### Approval Hierarchy
+
+#### **Level 1: Finance Officer/Loan Officer**
+
+- **Role**: Initial review and verification
+- **Checks**:
+    - Eligibility criteria met
+    - Data accuracy and completeness
+    - DSCR calculation verification
+    - Credit history check
+- **Action**: Approve, Reject, or Request More Info
+- **Limit**: Up to KSh 200,000
+
+#### **Level 2: Finance Manager**
+
+- **Role**: Financial assessment
+- **Checks**:
+    - Risk assessment
+    - Cash flow analysis
+    - Total exposure to client
+    - Portfolio risk management
+- **Action**: Approve, Reject, or Escalate
+- **Limit**: Up to KSh 1,000,000
+
+#### **Level 3: General Manager/CFO**
+
+- **Role**: Final approval for large amounts
+- **Checks**:
+    - Strategic alignment
+    - Overall company exposure
+    - Special considerations
+- **Action**: Final Approve or Reject
+- **Limit**: Above KSh 1,000,000 or as required
+
+**Escalation Rules:**
+
+- Any advance > KSh 200,000 requires Manager approval
+- Any advance > KSh 1,000,000 requires GM/CFO approval
+- Rescheduled advances always require Manager+ approval
+- Clients with previous defaults require GM/CFO approval
+
+---
+
+### System Validations
+
+#### **Pre-Submission Checks**
+
+```php
+function validateAdvanceApplication($data) {
+    $errors = [];
+
+    // 1. Client validation
+    if (!isActiveClient($data['client_id'])) {
+        $errors[] = "Client is not active";
+    }
+
+    // 2. Amount validation
+    $max_amount = getMaxAdvanceAmount($data['client_id']);
+    if ($data['amount'] > $max_amount) {
+        $errors[] = "Amount exceeds available limit of KSh " . number_format($max_amount);
+    }
+
+    // 3. DSCR check
+    $dscr_check = checkDebtServiceCoverage(
+        $data['client_id'],
+        $data['amount'],
+        $data['repayment_months'],
+        $data['interest_rate']
+    );
+    if (!$dscr_check['approved']) {
+        $errors[] = $dscr_check['message'];
+    }
+
+    // 4. Outstanding advances check
+    $outstanding_count = getClientActiveAdvancesCount($data['client_id']);
+    if ($outstanding_count >= 2) {
+        $errors[] = "Client already has maximum (2) active advances";
+    }
+
+    // 5. Date sequence validation
+    if ($data['disbursement_date'] < $data['requisition_date']) {
+        $errors[] = "Disbursement date cannot be before requisition date";
+    }
+    if ($data['principal_start_date'] <= $data['disbursement_date']) {
+        $errors[] = "Principal start date must be after disbursement date";
+    }
+
+    // 6. Interest rate validation
+    if ($data['interest_rate'] < 0.5 || $data['interest_rate'] > 5) {
+        $errors[] = "Interest rate must be between 0.5% and 5%";
+    }
+
+    // 7. Rescheduling validation
+    if ($data['advance_type_id'] == 3 && empty($data['previous_advance_id'])) {
+        $errors[] = "Previous advance must be specified for rescheduling";
+    }
+
+    return [
+        'valid' => empty($errors),
+        'errors' => $errors
+    ];
+}
+```
+
+#### **Auto-Calculations on Submit**
+
+```php
+// Generate reference number
+$reference_number = generateAdvanceReference(); // "ADV-2026-001"
+
+// Calculate total interest via amortization
+$amortization = LoansAdvancesService::calculateAmortization([
+    'amount' => $data['amount'],
+    'interest_rate' => $data['interest_rate'],
+    'repayment_months' => $data['repayment_months'],
+    'disbursement_date' => $data['disbursement_date'],
+    'principal_start_date' => $data['principal_start_date']
+]);
+
+$interest_amount = array_sum(array_column($amortization, 'interest'));
+$total_amount = $data['amount'] + $interest_amount;
+$current_balance = $total_amount;
+
+// Calculate processing fee
+$charge_amount = $data['amount'] * 0.02; // 2%
+
+// Auto-fill fields
+$requisition->date_time = date('Y-m-d H:i:s');
+$requisition->created_by = $current_user_id;
+$requisition->current_status_id = 1; // Pending
+$requisition->zone_id = $data['zone_id'] ?? $client->zone_id;
+```
+
+---
+
+### Rejection Reasons & Handling
+
+**Common Rejection Reasons:**
+
+1. Insufficient monthly returns (DSCR < 1.5)
+2. Exceeds maximum advance limit
+3. Existing advance in default
+4. Incomplete documentation
+5. Property performance concerns
+6. Cash flow issues
+7. High debt-to-income ratio
+
+**Rejection Workflow:**
+
+```php
+// On rejection
+$rejection_data = [
+    'advance_id' => $advance_id,
+    'rejected_by' => $approver_id,
+    'rejection_date' => date('Y-m-d H:i:s'),
+    'reason' => $rejection_reason,
+    'comments' => $rejection_comments
+];
+
+// Update status
+$advance->current_status_id = 3; // Cancelled
+
+// Notify client
+sendNotification($client_id, "Advance application rejected: " . $rejection_reason);
+
+// Log in workflow history
+WorkflowService::logRejection($rejection_data);
+```
+
+**Re-application:**
+
+- Client can reapply after 30 days
+- Must address rejection reasons
+- May require additional documentation
+
+---
+
+### Tips for Successful Application
+
+✅ **DO:**
+
+- Ensure client has consistent returns history (6+ months)
+- Request reasonable amount (< 50% of average monthly returns)
+- Choose appropriate repayment period (shorter = less interest)
+- Provide clear purpose/narration
+- Submit during business hours for faster processing
+- Follow up with required documentation
+
+❌ **DON'T:**
+
+- Request amount exceeding available limit
+- Choose unrealistic repayment period
+- Submit for clients with irregular returns
+- Leave narration vague or empty
+- Set disbursement date too far in future
+- Apply when client has pending defaults
+
+---
+
+## �💡 Key Functions
+
+### Advance Creation & Approval
+
+```php
+// Create amortization schedule
+LoansAdvancesService::ajaxArmotizeNewLoan()
+
+// Process approval workflow
+LoansAdvancesService::processWorkflow($action_data)
+
+// Post to GL on approval
+LoansAdvancesService::recordGL($advance_id)
+
+// Create payment voucher
+LoansAdvancesService::recordVoucher($info_data)
+
+// Record in client statement
+ClientStatementReportService::recordFromAdvance($advance_id)
+```
+
+### Monthly Repayment
+
+```php
+// Cron job - recover matured advances
+LoansAdvancesService::recoverLoans()
+
+// Get all matured advances
+LoansAdvancesDao::getAllMatured()
+
+// Get schedule for advance
+LoansAdvancesDao::getSchedule($advance_id, $status_id)
+
+// Create recovery record
+LoansAdvancesService::createRecovery($details)
+
+// Post to GL
+GLTransService::makeJournalEntry($gl_data)
+```
+
+### Deduction from Returns
+
+```php
+// Get unprocessed recoveries for client
+RecoveryService::getUnprocessedRecoveries($client_id, $property_id)
+
+// Record recovery transaction
+RecoveryService::recordTransaction($trans_data, $debit_client)
+
+// Regenerate returns with recoveries
+ClientReturnReportService::preparePropertyReturnsReports($bypass_cron, $client_id, $period)
+```
+
+---
+
+## 📝 SQL Queries
+
+### Get Advance Details
+
+```sql
+SELECT
+    a.id,
+    a.reference_number,
+    a.amount,
+    a.interest_rate,
+    a.interest_amount,
+    a.total_amount,
+    a.current_balance,
+    a.repayment_months,
+    a.disbursement_date,
+    a.principal_start_date,
+    c.names AS client_name,
+    s.status_name AS status
+FROM sys_pm_clients_advances_requisitions a
+INNER JOIN sys_pm_clients c ON c.id = a.client_id
+INNER JOIN sys_set_workflow_statuses s ON s.id = a.current_status_id
+WHERE a.id = 123;
+```
+
+### Get Amortization Schedule
+
+```sql
+SELECT
+    id,
+    payment_date,
+    payment_type_id,
+    principal_amount,
+    interest,
+    total_amount,
+    loan_balance,
+    current_status_id
+FROM sys_pm_clients_advances_requisitions_89_repeat
+WHERE parent_id = 123  -- advance_id
+ORDER BY payment_date ASC;
+```
+
+### Get Matured Advances (For Cron)
+
+```sql
+SELECT *
+FROM sys_pm_clients_advances_requisitions
+WHERE MONTH(principal_start_date) <= MONTH(CURRENT_DATE())
+AND YEAR(principal_start_date) <= YEAR(CURRENT_DATE())
+AND current_status_id = 5  -- Approved
+```
+
+### Get Pending Schedules for Month
+
+```sql
+SELECT *
+FROM sys_pm_clients_advances_requisitions_89_repeat
+WHERE parent_id = 123  -- advance_id
+AND DATE_FORMAT(payment_date, '%Y-%m') = '2026-01'
+AND current_status_id = 1;  -- Pending
+```
+
+### Get All Recoveries for Client (For Returns)
+
+```sql
+SELECT
+    r.id,
+    r.recovery_date,
+    r.type_id,
+    r.amount,
+    r.narration,
+    tt.transaction_type_name
+FROM sys_pm_recoveries r
+INNER JOIN sys_set_transaction_types tt ON tt.id = r.type_id
+WHERE r.client_id = 14  -- client_id
+AND r.current_status_id = 5  -- Approved
+AND DATE_FORMAT(r.recovery_date, '%Y-%m') = '2026-01'
+ORDER BY r.recovery_date ASC;
+```
+
+### Get Client Outstanding Advances
+
+```sql
+SELECT
+    a.id,
+    a.reference_number,
+    a.amount,
+    a.current_balance,
+    a.disbursement_date,
+    COUNT(s.id) as total_schedules,
+    SUM(CASE WHEN s.current_status_id = 2 THEN 1 ELSE 0 END) as paid_schedules,
+    SUM(CASE WHEN s.current_status_id = 1 THEN 1 ELSE 0 END) as pending_schedules
+FROM sys_pm_clients_advances_requisitions a
+LEFT JOIN sys_pm_clients_advances_requisitions_89_repeat s ON s.parent_id = a.id
+WHERE a.client_id = 14
+AND a.current_balance > 0
+AND a.current_status_id = 5  -- Approved
+GROUP BY a.id;
+```
+
+---
+
+## 🎯 Interest Calculation
+
+### Simple Interest (Monthly)
+
+```php
+public static function calculateInterest($principal, $rate, $date)
+{
+    $year = date('Y', strtotime($date));
+    $month = date('m', strtotime($date));
+    $days_in_month = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+
+    // Monthly interest
+    $monthly_interest = round(($principal * $rate) / 100);
+
+    return $monthly_interest;
+}
+```
+
+### Amortization Schedule Logic
+
+**Grace Period (Interest Only):**
+
+- If disbursement before 25th of month AND not same month as principal start
+- Charge interest only for remaining days/months
+
+**Principal Repayment:**
+
+- Equal principal per month: `principal_per_month = total_principal / repayment_months`
+- Interest calculated on reducing balance: `interest = current_balance * rate`
+- Balance reduces each month: `new_balance = old_balance - principal_payment`
+
+**Example:**
+
+```
+Loan: KSh 100,000 @ 2% per month, 10 months
+Disbursement: 2026-01-10
+Principal Start: 2026-02-15
+
+Grace Period:
+  Jan: Interest only = 2,000 (on 100,000)
+
+Principal Repayment (Starting Feb):
+  Month 1: Principal=10,000, Interest=2,000 (on 100,000), Balance=90,000
+  Month 2: Principal=10,000, Interest=1,800 (on 90,000), Balance=80,000
+  Month 3: Principal=10,000, Interest=1,600 (on 80,000), Balance=70,000
+  ...
+  Month 10: Principal=10,000, Interest=200 (on 10,000), Balance=0
+
+Total Interest: 2,000 + (2,000+1,800+1,600+...+200) = 13,000
+```
+
+---
+
+## 🚀 Approval Statuses
+
+| Status ID | Status Name | Description                     |
+| --------- | ----------- | ------------------------------- |
+| 1         | Pending     | Awaiting approval               |
+| 5         | Approved    | Approved and disbursed          |
+| 6         | Posted      | Posted to GL                    |
+| 2         | Cleared     | Fully repaid                    |
+| 3         | Cancelled   | Cancelled before disbursement   |
+| 4         | Suspended   | Temporarily suspended           |
+| 8         | Rescheduled | Old advance replaced by new one |
+
+---
+
+## 📈 Advance Types
+
+| Type ID | Type Name  | Description                            |
+| ------- | ---------- | -------------------------------------- |
+| 1       | New Loan   | Fresh advance                          |
+| 2       | Top-up     | Additional amount on existing loan     |
+| 3       | Reschedule | Refinance existing loan with new terms |
+
+**Rescheduling Process:**
+
+1. Create new advance with `advance_type_id=3` and `previous_advance_id` set
+2. On approval:
+    - Mark all pending schedules of old advance as "Rescheduled" (status 8)
+    - Mark old advance as "Rescheduled" (status 8)
+    - New advance becomes active
+    - New schedule starts from first pending date of old advance
+
+---
+
+## ⚙️ General Ledger Accounts
+
+**GL Settings Required:**
+
+| Account                            | Purpose                                                 | Normal Balance |
+| ---------------------------------- | ------------------------------------------------------- | -------------- |
+| loans_receivable_account_id        | Asset - Amount owed by clients                          | Debit          |
+| interests_receivable_account_id    | Asset - Interest owed by clients                        | Debit          |
+| clients_advance_loans_payable_id   | Liability - Amount we owe clients (before disbursement) | Credit         |
+| loans_interests_revenue_account_id | Revenue - Interest income earned                        | Credit         |
+| clients_account_id                 | Liability - Client control account                      | Credit         |
+| payment_voucher_control_account_id | Asset/Liability - Voucher control                       | Debit          |
+
+---
+
+## 🔐 Workflow Integration
+
+### Task Creation
+
+- **Task Type**: 32 (LOANS/ADVANCE VERIFICATION)
+- **Entity Type**: 29 (Loans)
+- **Narration**: "Loan ref [reference_number] requires approval"
+
+### Approval
+
+- Approver reviews advance request
+- On final approval (`determinant='Yes'`):
+    1. Update status to Approved (5)
+    2. Call `ClientStatementReportService::recordFromAdvance()` - debit client
+    3. Call `LoansAdvancesService::recordGL()` - post to GL
+    4. Generate payment voucher
+    5. Create cheque/bank transfer for disbursement
+
+---
+
+## 🎨 Transaction Types
+
+| Type ID | Type Name                        | Direction       | Used For                      |
+| ------- | -------------------------------- | --------------- | ----------------------------- |
+| 15      | Client Advance                   | Debit           | Initial advance disbursement  |
+| 22      | Loan/Advance Issuance            | GL              | Journal entry on disbursement |
+| 23      | Loan/Advance Principal Repayment | Credit/Recovery | Monthly principal deduction   |
+| 24      | Loan/Advance Interest Payment    | Credit/Recovery | Monthly interest deduction    |
+
+---
+
+## 📊 Payment Voucher Details
+
+**Voucher Type:** 5 (Clients' Loans/Advance/Expense)
+**Transaction Category:** 6 (Client Payment)
+
+**Fields:**
+
+- `payable_amount` = principal amount
+- `total_charge` = processing fees (if any)
+- `amount` = gross amount
+- `narration` = "Advance payment [property_details] - Recovery: [Month-Year]"
+
+**Integration:**
+
+- Voucher links to cheque or bank transfer
+- When cheque cleared/processed, funds disbursed to client
+
+---
+
+## 🔄 Cron Job Schedule
+
+**Function:** `LoansAdvancesService::recoverLoans()`  
+**Frequency:** Monthly (typically 1st or 2nd of month)  
+**Trigger:** `CronService::recoverLoans()` calls `LoansAdvancesService::recoverLoans()`
+
+**Process:**
+
+1. Find all advances with matured schedules
+2. Process each pending schedule
+3. Debit client account
+4. Create recovery records
+5. Post to GL
+6. Mark schedule as cleared
+7. Update advance balance
+8. Trigger returns regeneration
+
+---
+
+## ⚠️ Important Notes
+
+1. **Automatic Deduction**: Advances are **automatically deducted** from returns every month via cron job
+2. **Double-Entry Accounting**: All transactions must balance in GL
+3. **Client Balance Impact**: Advances immediately debit client account (increase what client owes)
+4. **Returns Impact**: Monthly repayments reduce net return amount
+5. **Rescheduling**: Old advance is marked "Rescheduled", new advance created with revised terms
+6. **Grace Period**: If disbursement before 25th of month, interest-only period may apply
+7. **Balance Tracking**: `current_balance` field updated after each repayment
+8. **Recovery Reference**: Uses origin_id pattern "29:advance_id:schedule_id" for traceability
+
+---
+
+## 📚 Related Services
+
+- `LoansAdvancesService` - Main advance processing
+- `RecoveryService` - Handles deductions/recoveries
+- `ClientStatementReportService` - Client account statements
+- `LandlordTransService` - Client ledger transactions
+- `GLTransService` - General ledger postings
+- `PaymentVoucherService` - Payment voucher generation
+- `ChequeService` - Cheque/bank transfer processing
+- `ClientReturnReportService` - Returns generation with recoveries
+
+---
+
+## 🎯 Implementation Checklist for Another System
+
+### Database Setup
+
+- [ ] Create `advances_requisitions` table (main advances)
+- [ ] Create `advances_amortization_schedule` table (monthly schedule)
+- [ ] Create `client_ledger_transactions` table (account movements)
+- [ ] Create `recoveries` table (deductions from returns)
+- [ ] Create `client_statement` table (statement of account)
+- [ ] Create `payment_vouchers` table (payment vouchers)
+- [ ] Create `gl_journal_entries` & `gl_journal_items` tables (accounting)
+
+### Core Functions
+
+- [ ] Advance creation with validation
+- [ ] Amortization schedule calculation (principal + interest)
+- [ ] Interest calculation (simple/compound, grace periods)
+- [ ] Approval workflow with multiple levels
+- [ ] GL posting (double-entry) on disbursement
+- [ ] Client account debit on disbursement
+- [ ] Payment voucher generation
+- [ ] Cheque/bank transfer integration
+
+### Monthly Recovery Process
+
+- [ ] Cron job to identify matured schedules
+- [ ] Debit client account (principal + interest)
+- [ ] Create recovery records (type: principal, interest)
+- [ ] Post to GL (reduce receivables, debit client control)
+- [ ] Update advance balance
+- [ ] Mark schedule as cleared
+- [ ] Trigger returns regeneration with recoveries
+
+### Returns Integration
+
+- [ ] Fetch recoveries when generating returns
+- [ ] Deduct advance repayments from gross returns
+- [ ] Calculate net returns after all deductions
+- [ ] Display recovery breakdown on return reports
+- [ ] Handle scenarios where recoveries > returns (negative returns)
+
+### Reporting
+
+- [ ] Client advance history report
+- [ ] Outstanding advances report
+- [ ] Amortization schedule report
+- [ ] Recovery history report
+- [ ] Client statement with advance transactions
+- [ ] GL reports (receivables aging, interest income)
+
+### Edge Cases
+
+- [ ] Handle rescheduling (mark old advance, create new)
+- [ ] Handle top-ups (add to existing balance)
+- [ ] Handle early repayment (recalculate schedule)
+- [ ] Handle missed payments (penalties, compounding)
+- [ ] Handle client with insufficient returns (carry forward debt)
+- [ ] Handle reversal/cancellation before disbursement
+
+---
+
+**End of Documentation**
+
+This guide provides complete implementation details for building a Client/Landlord Advances system with automatic repayment deductions from property returns.

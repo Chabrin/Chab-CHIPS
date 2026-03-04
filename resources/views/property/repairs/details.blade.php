@@ -131,10 +131,11 @@
                 <div class="card-body">
                     @if($items->count() > 0)
                         <div class="table-responsive">
-                            <table class="table table-bordered table-hover">
+                            <table class="table table-bordered table-hover align-middle">
                                 <thead class="table-light">
                                     <tr>
                                         <th>#</th>
+                                        <th>Scope</th>
                                         <th>Unit</th>
                                         <th>Element</th>
                                         <th>Repair Type</th>
@@ -148,17 +149,16 @@
                                     <tr>
                                         <td>{{ $index + 1 }}</td>
                                         <td>
-                                            @if($item->unit_id)
-                                                {{ \App\Models\Unit::find($item->unit_id)->unit_name ?? '-' }}
+                                            @if(($item->repair_scope ?? ($item->unit_id ? 'unit_specific' : 'general')) === 'general')
+                                                <span class="badge bg-secondary">General</span>
                                             @else
-                                                -
+                                                <span class="badge bg-info text-dark">Unit Specific</span>
                                             @endif
                                         </td>
-                                        <td>
-                                            {{ \App\Models\PropertyElement::find($item->property_element_id)->element_name ?? '-' }}
-                                        </td>
+                                        <td>{{ $item->unit->unit_name ?? '-' }}</td>
+                                        <td>{{ $item->propertyElement->element_name ?? '-' }}</td>
                                         <td>{{ $item->repairType->element_name ?? '-' }}</td>
-                                        <td class="text-end">{{ number_format($item->amount, 2) }}</td>
+                                        <td class="text-end">{{ $item->amount !== null ? number_format($item->amount, 2) : '-' }}</td>
                                         <td>{{ $item->remarks ?? '-' }}</td>
                                         <td>
                                             @if($item->current_status_id == 1)
@@ -172,9 +172,25 @@
                                             @endif
                                         </td>
                                     </tr>
+                                    @if(!empty($item->photos_documents))
+                                    <tr class="table-light">
+                                        <td colspan="8">
+                                            <small class="text-muted me-2">Images for item #{{ $index + 1 }}:</small>
+                                            <div class="d-flex flex-wrap gap-2 mt-1">
+                                                @foreach($item->photos_documents as $photo)
+                                                <a href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($photo) }}" target="_blank" title="View full image">
+                                                    <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($photo) }}"
+                                                         alt="repair image"
+                                                         style="height:80px;width:80px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
+                                                </a>
+                                                @endforeach
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    @endif
                                     @endforeach
                                     <tr class="table-light fw-bold">
-                                        <td colspan="4" class="text-end">Total Amount:</td>
+                                        <td colspan="5" class="text-end">Total Amount:</td>
                                         <td class="text-end">{{ number_format($items->sum('amount'), 2) }}</td>
                                         <td colspan="2"></td>
                                     </tr>

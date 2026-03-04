@@ -1,0 +1,11 @@
+{
+    "total_amount": 13920.0,
+    "commission_amount": 960.0,
+    "commission_percentage": 8.0,
+    "vat_amount": 1920.0,
+    "vat_percentage": 16.0,
+    "commissionable_amount": 12000.0,
+    "payable_amount": 12960.0,
+    "current_balance": 13920.0,
+    "vat_on_commission": 153.6
+}

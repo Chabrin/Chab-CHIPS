@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
 class RepairAndMaintenanceRequestController extends Controller
@@ -114,11 +115,14 @@ class RepairAndMaintenanceRequestController extends Controller
                 'property_id' => 'required|exists:sys_pm_properties,id',
                 'visited_date_time' => 'required|date',
                 'items' => 'required|array|min:1',
+                'items.*.repair_scope' => 'required|in:general,unit_specific',
                 'items.*.unit_id' => 'nullable|exists:sys_pm_units,id',
                 'items.*.element_id' => 'required|exists:sys_pm_properties_elements,id',
                 'items.*.repair_type_id' => 'required|exists:sys_pm_properties_repair_types,id',
-                'items.*.amount' => 'required|numeric|min:0',
+                'items.*.amount' => 'nullable|numeric|min:0',
                 'items.*.remarks' => 'nullable|string',
+                'items.*.images' => 'nullable|array',
+                'items.*.images.*' => 'nullable|image|max:5120',
             ]);
 
             // Generate reference number
@@ -152,15 +156,25 @@ class RepairAndMaintenanceRequestController extends Controller
             }
 
             // Save repair items
-            foreach ($validated['items'] as $item) {
+            foreach ($validated['items'] as $idx => $item) {
+                // Handle image uploads for this item
+                $photos = [];
+                if ($request->hasFile("items.{$idx}.images")) {
+                    foreach ($request->file("items.{$idx}.images") as $img) {
+                        $photos[] = $img->store("repairs/{$repairRequest->id}", 'public');
+                    }
+                }
+
                 RepairRequestItem::create([
                     'parent_id' => $repairRequest->id,
-                    'unit_id' => $item['unit_id'] ?? null,
+                    'repair_scope' => $item['repair_scope'],
+                    'unit_id' => ($item['repair_scope'] === 'unit_specific') ? ($item['unit_id'] ?? null) : null,
                     'property_element_id' => $item['element_id'],
                     'repair_type_id' => $item['repair_type_id'],
-                    'amount' => $item['amount'],
+                    'amount' => $item['amount'] ?? null,
                     'remarks' => $item['remarks'] ?? null,
-                    'current_status_id' => 1, // Pending
+                    'photos_documents' => !empty($photos) ? $photos : null,
+                    'current_status_id' => 1,
                 ]);
             }
 
@@ -211,7 +225,8 @@ class RepairAndMaintenanceRequestController extends Controller
             $items = RepairRequestItem::where('parent_id', $id)
                 ->with([
                     'repairType:id,element_name',
-                    'repairRequest'
+                    'unit:id,unit_name',
+                    'propertyElement:id,element_name',
                 ])
                 ->get();
 
@@ -268,11 +283,14 @@ class RepairAndMaintenanceRequestController extends Controller
                 'visited_date_time' => 'required|date',
                 'zone_id' => 'nullable|integer',
                 'items' => 'required|array|min:1',
+                'items.*.repair_scope' => 'required|in:general,unit_specific',
                 'items.*.unit_id' => 'nullable|exists:sys_pm_units,id',
                 'items.*.element_id' => 'required|exists:sys_pm_properties_elements,id',
                 'items.*.repair_type_id' => 'required|exists:sys_pm_properties_repair_types,id',
-                'items.*.amount' => 'required|numeric|min:0',
+                'items.*.amount' => 'nullable|numeric|min:0',
                 'items.*.remarks' => 'nullable|string',
+                'items.*.images' => 'nullable|array',
+                'items.*.images.*' => 'nullable|image|max:5120',
             ]);
 
             // Update main request
@@ -282,6 +300,17 @@ class RepairAndMaintenanceRequestController extends Controller
                 'property_id' => $validated['property_id'],
                 'client_id' => $validated['client_id'],
             ]);
+
+            // Delete old item images from storage before deleting records
+            RepairRequestItem::where('parent_id', $id)->get()->each(function ($oldItem) {
+                if (!empty($oldItem->photos_documents)) {
+                    foreach ($oldItem->photos_documents as $path) {
+                        if (Storage::disk('public')->exists($path)) {
+                            Storage::disk('public')->delete($path);
+                        }
+                    }
+                }
+            });
 
             // Delete existing elements and items
             RepairRequestElement::where('parent_id', $id)->delete();
@@ -299,14 +328,24 @@ class RepairAndMaintenanceRequestController extends Controller
             }
 
             // Save items
-            foreach ($validated['items'] as $item) {
+            foreach ($validated['items'] as $idx => $item) {
+                // Handle image uploads for this item
+                $photos = [];
+                if ($request->hasFile("items.{$idx}.images")) {
+                    foreach ($request->file("items.{$idx}.images") as $img) {
+                        $photos[] = $img->store("repairs/{$repairRequest->id}", 'public');
+                    }
+                }
+
                 RepairRequestItem::create([
                     'parent_id' => $repairRequest->id,
-                    'unit_id' => $item['unit_id'] ?? null,
+                    'repair_scope' => $item['repair_scope'],
+                    'unit_id' => ($item['repair_scope'] === 'unit_specific') ? ($item['unit_id'] ?? null) : null,
                     'property_element_id' => $item['element_id'],
                     'repair_type_id' => $item['repair_type_id'],
-                    'amount' => $item['amount'],
+                    'amount' => $item['amount'] ?? null,
                     'remarks' => $item['remarks'] ?? null,
+                    'photos_documents' => !empty($photos) ? $photos : null,
                     'current_status_id' => 1,
                 ]);
             }

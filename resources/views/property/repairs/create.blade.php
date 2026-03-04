@@ -20,7 +20,7 @@
                         </div>
                     </div>
                     <div class="card-body">
-                    <form action="{{ route('property.repairs.store') }}" method="POST" id="repairRequestForm">
+                    <form action="{{ route('property.repairs.store') }}" method="POST" id="repairRequestForm" enctype="multipart/form-data">
                         @csrf
                         
                         <div class="row">
@@ -90,8 +90,18 @@
                 </button>
             </div>
             <div class="row">
-                <!-- Unit -->
+                <!-- Repair Scope -->
                 <div class="col-md-3 mb-3">
+                    <label class="form-label">Repair Scope <span class="text-danger">*</span></label>
+                    <select name="items[INDEX][repair_scope]" class="form-select scope-select" required>
+                        <option value="">Select Scope</option>
+                        <option value="general">General (Entire Property)</option>
+                        <option value="unit_specific">Unit Specific</option>
+                    </select>
+                </div>
+
+                <!-- Unit (shown only when Unit Specific) -->
+                <div class="col-md-3 mb-3 unit-field" style="display:none;">
                     <label class="form-label">Unit</label>
                     <select name="items[INDEX][unit_id]" class="form-select unit-select">
                         <option value="">Select Unit</option>
@@ -119,15 +129,23 @@
 
                 <!-- Amount -->
                 <div class="col-md-3 mb-3">
-                    <label class="form-label">Amount <span class="text-danger">*</span></label>
-                    <input type="number" name="items[INDEX][amount]" class="form-control" 
-                           min="0" step="0.01" required>
+                    <label class="form-label">Amount</label>
+                    <input type="number" name="items[INDEX][amount]" class="form-control"
+                           min="0" step="0.01" placeholder="0.00">
                 </div>
 
                 <!-- Remarks -->
-                <div class="col-12 mb-3">
+                <div class="col-md-9 mb-3">
                     <label class="form-label">Remarks</label>
                     <textarea name="items[INDEX][remarks]" class="form-control" rows="2"></textarea>
+                </div>
+
+                <!-- Images -->
+                <div class="col-12 mb-1">
+                    <label class="form-label">Images <span class="text-muted small">(optional, max 5 MB each)</span></label>
+                    <input type="file" name="items[INDEX][images][]" class="form-control image-upload"
+                           accept="image/*" multiple>
+                    <div class="form-text text-muted">Attach photos of the repair area.</div>
                 </div>
             </div>
         </div>
@@ -274,6 +292,10 @@ $(document).ready(function() {
         
         // Initialize Select2 for the new item's selects
         const $newItem = $('#repairItemsContainer .repair-item').last();
+        $newItem.find('.scope-select').select2({
+            placeholder: 'Select Scope',
+            allowClear: false
+        });
         $newItem.find('.unit-select').select2({
             placeholder: 'Select Unit',
             allowClear: true
@@ -304,6 +326,17 @@ $(document).ready(function() {
             updateItemNumbers();
         } else {
             toastr.warning('At least one repair item is required');
+        }
+    });
+
+    // Scope change — toggle unit field
+    $(document).on('change', '.scope-select', function() {
+        const $item = $(this).closest('.repair-item');
+        if ($(this).val() === 'unit_specific') {
+            $item.find('.unit-field').show();
+        } else {
+            $item.find('.unit-field').hide();
+            $item.find('.unit-select').val(null).trigger('change');
         }
     });
 
