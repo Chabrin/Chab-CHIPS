@@ -1131,7 +1131,10 @@ SELECT
     -- JOINED: CHBLOCKS via BLOCKID
     unt.unit_row_id                                     AS unit_id,
     -- JOINED: CHBUNITS via BLOCKID + UNITNO
-    NULL                                                AS lease_id,
+    ten.ten_row_id                                      AS lease_id,
+    -- JOINED: CHTENS via TENNAME+BLOCKNO+UNITNO — same ROW_NUMBER ORDER BY as
+    -- vw_sys_pm_lease_agreements_005 (both ORDER BY TENNAME, BLOCKNO, UNITNO from CHTENS)
+    -- so this row number maps directly to sys_pm_lease_agreements.id
     ten.ten_row_id                                      AS tenant_id,
     -- JOINED: CHTENS via TENNAME + BLOCKNO + UNITNO (same ORDER BY as tenants view)
     lr.lord_row_id                                      AS client_id,
