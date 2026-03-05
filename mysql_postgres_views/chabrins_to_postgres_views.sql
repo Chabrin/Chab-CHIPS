@@ -1244,129 +1244,248 @@ WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
 
 
 -- ============================================================================
--- 20. CLIENT RETURNS: CHRHMS -> sys_pm_clients_returns
+-- 20. CLIENT RETURNS: CHRTXS + CHRHMS -> sys_pm_clients_returns
 -- ============================================================================
--- NOTE: CHRHMS is the returns master table (35,217 rows).
---   Each row is a monthly landlord return for one property.
---   Previous version used CHCCRST (only 4 columns: RCNO, RRMKS, PSUCC, ENTDATE)
---   which had no financial data and no FK resolution at all.
---   CHRHMS has full amounts, commission, approval workflow and payment status.
+-- NOTE: CHRTXS is the returns DETAIL table (1,470,210 rows) — pre-aggregation.
+--   Each row is one charge line within a monthly landlord return, at unit/tenant
+--   level. CHRHMS (35,217) is the property-level HEADER (one row per return).
+--   sys_pm_clients_returns in MySQL (288,196 rows) is at unit/tenant granularity,
+--   with unit_id, tenant_id, lease_id all populated — matching CHRTXS rows.
 --
---   CHRHMS columns → sys_pm_clients_returns fields:
---   RETURNID  → ref_number         LORDID    → client_id
---   BLOCKID   → property_id        RETZON    → zone_id (BLOC letter)
---   TOTALCR   → trans_amount       NETAMT    → payable_amount
---   SUMCOM    → comm_amount        SUMVATBL  → commissionable_amount
---   COMMRATE  → comm_perc          NETBAL    → invoice_balance
---   AMTPAYD   → paid_out           RETSTAT   → current_status_id
---   PAIDST    → paid_status_id     APPST     → approval_status
---   VOUCHERNO → batch_id           PREPDAT   → invoice_date
---   RETTYPE/RETURNT → trans_type_id / return_type_id
---   PAYDAT    → date_paid_out (varchar 30, TRY_CAST to DATETIME)
+--   CHRTXS ENTRYTYP distribution:
+--     RENT CURRENT (786,954) | Commission (135,389) | Water Bill (132,699+36,543)
+--     Service Charge (112,349+41,879) | Advance Payments (76,475)
+--     VAT (51,248) | RENT ARREARS (24,021) | Recoveries (21,315) etc.
+--   Commission lines (ENTRYTYP='Commission') have NULL UNITNO/TENNAME — they
+--   are property-level deduction lines; unit_id/tenant_id will be NULL for them.
 --
---   NOTE: CHRHMS is property-level (not unit/tenant level).
---   unit_id, tenant_id, lease_id stay NULL — these are landlord returns, not
---   tenant charge lines.
+--   FK RESOLUTION:
+--   client_id   → h.LORDID → CHLRDS ROW_NUMBER (same ORDER BY as clients_landlords view)
+--   property_id → x.BLOCKID → CHBLOCKS ROW_NUMBER
+--   unit_id     → x.BLOCKID + x.UNITNO → CHBUNITS ROW_NUMBER
+--   tenant_id   → x.TENNAME + x.BLOCKID + x.UNITNO → CHTENS ROW_NUMBER
+--   lease_id    → same CHTENS ROW_NUMBER (aligns with vw_sys_pm_lease_agreements_005)
+--   zone_id     → h.RETZON (BLOC letter A–G) → zones DISTINCT-first subquery
+--   field/zone officers → CHOFFICERS via CHBLOCKS.OFFID, SFOID, ZMGRID
+--
+--   CHRTXS columns → sys_pm_clients_returns fields:
+--   TRANSNUM    → ref_number (unique per line)
+--   RETNPRD     → date_time (YYYYMM int → DATEFROMPARTS)
+--   SRCDATE     → return_date
+--   ENTRYDESC   → narration
+--   ENTRYTYP    → trans_type_id
+--   TRANSCODE   → return_type_id
+--   RESAMTNT    → trans_amount (gross amount on this line)
+--   AMTPAYBL    → payable_amount (landlord's share)
+--   RESAMTNT - AMTPAYBL → comm_amount (commission deducted from this line)
+--   COMMBL      → commisionable flag (Yes/No)
+--   VATAMT      → vat_amount
+--   h.COMMRATE  → comm_perc (from CHRHMS header)
+--   h.LORDID    → client_id
+--   h.RETZON    → zone_id
+--   h.RETSTAT   → current_status_id
+--   h.PAIDST    → paid_status_id
+--   h.APPST     → approval_status
+--   h.VOUCHERNO → batch_id
+--   h.PREPDAT   → invoice_date
+--   h.PAYDAT    → date_paid_out (varchar 30, TRY_CAST)
 
-CREATE OR ALTER VIEW vw_sys_pm_clients_returns AS
+CREATE OR ALTER VIEW vw_sys_pm_clients_returns_10 AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY r.RETURNID)             AS id,
-    CASE WHEN r.YEARR IS NOT NULL AND r.MONTHH IS NOT NULL
-         THEN DATEFROMPARTS(r.YEARR, r.MONTHH, 1)
+    ROW_NUMBER() OVER (ORDER BY x.RETURNID, x.TRANSNUM) AS id,
+    CASE WHEN x.RETNPRD > 0
+         THEN DATEFROMPARTS(
+                  CAST(LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) AS INT),
+                  CAST(RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2) AS INT),
+                  1)
          ELSE NULL END                                  AS date_time,
-    RTRIM(LTRIM(r.RETURNID))                            AS ref_number,
-    NULL                                                AS invoice_id,
-    r.PREPDAT                                           AS return_date,
-    -- PREPDAT is the preparation/creation date of the return record
-    RTRIM(LTRIM(r.RETDESC))                             AS narration,
+    -- RETNPRD is YYYYMM integer (e.g. 202502 → 2025-02-01)
+    RTRIM(LTRIM(x.TRANSNUM))                            AS ref_number,
+    -- TRANSNUM is the unique transaction number for this detail line
+    inv.inv_row_id                                      AS invoice_id,
+    -- JOINED: CHTNTRS via BLOCKID+UNITNO+TENNAME+TRAYR+TRAMNTH+TRANSTYP
+    -- Row number uses same ORDER BY as vw_sys_pm_debtors_invoices_009 (BATCHID,ENTRYNO)
+    -- so inv_row_id directly maps to sys_pm_debtors_invoices.id. MIN() deduplicates
+    -- the rare combos that have multiple CHTNTRS rows for same period+unit+type.
+    x.SRCDATE                                           AS return_date,
+    -- SRCDATE = the source date of the charge (when the transaction originated)
+    RTRIM(LTRIM(x.ENTRYDESC))                           AS narration,
+    -- ENTRYDESC e.g. "RENT FOR February 2025", "MONTHLY COMMISSION (10%)"
     NULL                                                AS created_by,
-    -- PREPBY is a free-text staff name; cannot reliably JOIN to sys_staff ids
     cnzn.zone_row_id                                    AS zone_id,
-    -- JOINED: CHRHMS.RETZON (BLOC letter) -> vw_sys_set_zones_006 ROW_NUMBER
+    -- JOINED: CHBLOCKS.BLOC (via x.BLOCKID) -> vw_sys_set_zones_006 ROW_NUMBER
+    -- NOTE: uses prop.BLOC not h.RETZON — works for ALL rows, not just those with CHRHMS match
     lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHLRDS via LORDID — same ROW_NUMBER as vw_sys_pm_clients_landlords_002
+    -- JOINED: CHLRDS via prop.LLORDID (CHBLOCKS) — same ROW_NUMBER as vw_sys_pm_clients_landlords_002
+    -- NOTE: uses prop.LLORDID not h.LORDID — works for ALL rows, not just those with CHRHMS match
     prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID
-    NULL                                                AS unit_id,
-    -- CHRHMS is property-level; no unit FK available
-    NULL                                                AS lease_id,
-    NULL                                                AS tenant_id,
-    -- CHRHMS is landlord return; tenant not applicable
-    RTRIM(LTRIM(r.RETTYPE))                             AS trans_type_id,
-    NULL                                                AS commisionable,
-    RTRIM(LTRIM(r.VOUCHERNO))                           AS batch_id,
+    -- JOINED: CHBLOCKS via x.BLOCKID
+    unt.unit_row_id                                     AS unit_id,
+    -- JOINED: CHBUNITS via x.BLOCKID + x.UNITNO (NULL for commission/summary lines)
+    ten.ten_row_id                                      AS lease_id,
+    -- JOINED: CHTENS via TENNAME+BLOCKID+UNITNO — same ROW_NUMBER as lease_agreements view
+    ten.ten_row_id                                      AS tenant_id,
+    -- JOINED: CHTENS via TENNAME + BLOCKID + UNITNO (NULL for commission/summary lines)
+    RTRIM(LTRIM(x.ENTRYTYP))                            AS trans_type_id,
+    -- ENTRYTYP: 'RENT CURRENT', 'Commission', 'Water Bill', 'Service Charge',
+    --           'RENT ARREARS', 'Recoveries', 'VAT', 'House Deposit' etc.
+    RTRIM(LTRIM(x.COMMBL))                              AS commisionable,
+    -- COMMBL: 'Yes' or 'No' — whether this line is subject to commission
+    RTRIM(LTRIM(h.VOUCHERNO))                           AS batch_id,
+    -- From CHRHMS header: payment voucher number for this return
     NULL                                                AS unit_status_id,
     NULL                                                AS threshold_percentage,
     0                                                   AS abstract_threshold,
     NULL                                                AS anomally_type_id,
     NULL                                                AS anomally_orig_id,
-    ISNULL(r.RETSTAT, 2)                                AS current_status_id,
-    -- RETSTAT: 1 = processed/paid, 0 or NULL = pending
-    ISNULL(r.TOTALCR, 0)                                AS trans_amount,
-    -- TOTALCR = total credits (gross collections for the period)
-    ISNULL(r.NETAMT, 0)                                 AS payable_amount,
-    -- NETAMT = net payable to landlord after commission deduction
+    ISNULL(h.RETSTAT, 2)                                AS current_status_id,
+    -- From CHRHMS header: 1 = processed, 0/NULL = pending
+    ISNULL(x.RESAMTNT, 0)                               AS trans_amount,
+    -- RESAMTNT = net/gross amount of this charge line
+    ISNULL(x.AMTPAYBL, 0)                               AS payable_amount,
+    -- AMTPAYBL = landlord's payable share of this line (after comm deduction)
     NULL                                                AS sla_id,
-    ISNULL(r.SUMCOM, 0)                                 AS comm_amount,
-    -- SUMCOM = total commission charged
-    ISNULL(r.SUMVATBL, 0)                               AS commissionable_amount,
-    -- SUMVATBL = commissionable/vatable amount
-    NULL                                                AS vat_amount,
-    CAST(ISNULL(r.COMMRATE, 0) AS VARCHAR(50))          AS comm_perc,
+    ISNULL(x.RESAMTNT, 0) - ISNULL(x.AMTPAYBL, 0)     AS comm_amount,
+    -- comm_amount = gross line amount minus landlord payable = commission on this line
+    CASE WHEN RTRIM(LTRIM(x.COMMBL)) = 'Yes'
+         THEN ISNULL(x.RESAMTNT, 0)
+         ELSE 0 END                                     AS commissionable_amount,
+    -- commissionable_amount = RESAMTNT when the line is subject to commission
+    ISNULL(x.VATAMT, 0)                                 AS vat_amount,
+    CAST(ISNULL(h.COMMRATE, 0) AS VARCHAR(50))          AS comm_perc,
+    -- From CHRHMS header: commission rate % for this return (e.g. 10.00)
     NULL                                                AS vat_per,
     NULL                                                AS item_id,
     NULL                                                AS payable_status_id,
-    ISNULL(r.APPST, 0)                                  AS approval_status,
-    -- APPST: approval status (NULL=not submitted, 0=pending, 1=approved)
+    ISNULL(h.APPST, 0)                                  AS approval_status,
+    -- From CHRHMS header: 0=pending, 1=approved
     NULL                                                AS charge_id,
-    ISNULL(r.PAIDST, 0)                                 AS paid_status_id,
-    -- PAIDST: 1 = paid out to landlord, 0 = not yet paid
+    ISNULL(h.PAIDST, 0)                                 AS paid_status_id,
+    -- From CHRHMS header: 1 = paid out to landlord, 0 = not yet paid
     NULL                                                AS tenant_payment_id,
     NULL                                                AS tenant_payment_date,
     0                                                   AS tenant_payment_amount,
     0                                                   AS allocated_total,
-    ISNULL(r.NETBAL, 0)                                 AS invoice_balance,
-    -- NETBAL = remaining unpaid balance
-    NULL                                                AS fo_id,
+    ISNULL(x.RESAMTDR, 0)                               AS invoice_balance,
+    -- RESAMTDR = residual debit amount on this line (outstanding balance component)
+    fo.off_row_id                                       AS fo_id,
+    -- JOINED: CHOFFICERS via CHBLOCKS.OFFID
     NULL                                                AS is_bill,
-    ISNULL(r.AMTPAYD, 0)                                AS paid_out,
-    -- AMTPAYD = amount actually paid to landlord so far
-    NULL                                                AS zone_supervisor_id,
-    NULL                                                AS zone_manager_id,
+    ISNULL(x.AMTPAYTN, 0)                               AS paid_out,
+    -- AMTPAYTN = amount paid (tenant-side payment amount on this line)
+    sfo.off_row_id                                      AS zone_supervisor_id,
+    -- JOINED: CHOFFICERS via CHBLOCKS.SFOID
+    zm.off_row_id                                       AS zone_manager_id,
+    -- JOINED: CHOFFICERS via CHBLOCKS.ZMGRID
     NULL                                                AS comm_vat,
     NULL                                                AS distributions_allocation_id,
-    RTRIM(LTRIM(r.RETTYPE))                             AS return_type_id,
-    -- RETTYPE values: 'MAINRETURN' (28,031), 'MASTERRETURN' (4,975), 'MINIRETURN' (2,211)
-    TRY_CAST(NULLIF(RTRIM(LTRIM(r.PAYDAT)), '') AS DATETIME)  AS date_paid_out,
-    -- PAYDAT is varchar(30) — TRY_CAST handles malformed/empty date strings
-    r.PREPDAT                                           AS invoice_date
-FROM CHABRINS.dbo.CHRHMS r
+    RTRIM(LTRIM(x.TRANSCODE))                           AS return_type_id,
+    -- TRANSCODE: 'RENT', 'COMMISSION', 'Water Bill', 'Service Charge',
+    --            'House Deposit', 'VAT AMOUNT', 'Recovery' etc.
+    TRY_CAST(NULLIF(RTRIM(LTRIM(h.PAYDAT)), '') AS DATETIME)  AS date_paid_out,
+    -- From CHRHMS header: PAYDAT is varchar(30) — TRY_CAST handles malformed dates
+    h.PREPDAT                                           AS invoice_date
+    -- From CHRHMS header: preparation/creation date of the return
+FROM CHABRINS.dbo.CHRTXS x
+LEFT JOIN CHABRINS.dbo.CHRHMS h ON h.RETURNID = x.RETURNID
+    -- Join CHRHMS header for landlord-level fields (status, dates, comm rate, voucher)
+LEFT JOIN (
+    -- invoice_id: pre-number CHTNTRS with same ORDER BY as vw_sys_pm_debtors_invoices_009
+    -- then GROUP BY the natural join key to collapse duplicates (some BLOCKID+UNITNO+
+    -- TENNAME+period combos have multiple CHTNTRS rows; MIN picks the first/canonical one).
+    -- TRANSCODE on CHRTXS maps to TRANSTYP on CHTNTRS (RENT=RENT, Water Bill=Water Bill etc.)
+    SELECT BLOCKID, UNITNO, TENNAME, TRAYR, TRAMNTH, TRANSTYP,
+           MIN(inv_row_id) AS inv_row_id
+    FROM (
+        SELECT BLOCKID, UNITNO, TENNAME, TRAYR, TRAMNTH, TRANSTYP,
+               ROW_NUMBER() OVER (ORDER BY BATCHID, ENTRYNO) AS inv_row_id
+        FROM CHABRINS.dbo.CHTNTRS
+        WHERE TENNAME IS NOT NULL AND BLOCKID IS NOT NULL AND UNITNO IS NOT NULL
+    ) rn
+    GROUP BY BLOCKID, UNITNO, TENNAME, TRAYR, TRAMNTH, TRANSTYP
+) inv ON inv.BLOCKID  = RTRIM(LTRIM(x.BLOCKID))
+      AND inv.UNITNO  = RTRIM(LTRIM(x.UNITNO))
+      AND inv.TENNAME = x.TENNAME
+      AND inv.TRAYR   = CAST(LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) AS INT)
+      AND inv.TRAMNTH = CAST(RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2) AS INT)
+      AND inv.TRANSTYP = RTRIM(LTRIM(x.TRANSCODE))
+      -- TRANSCODE in CHRTXS mirrors TRANSTYP in CHTNTRS (RENT, Water Bill, Service Charge etc.)
+      -- Commission/VAT/summary lines will not match (NULL invoice_id) — those are
+      -- property-level deductions with no corresponding tenant invoice row.
+LEFT JOIN (
+    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id,
+           LLORDID, BLOC, OFFID, SFOID, ZMGRID
+    FROM CHABRINS.dbo.CHBLOCKS
+    WHERE BLOCKID IS NOT NULL
+) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(x.BLOCKID))
 LEFT JOIN (
     -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
     -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
+    -- Join via prop.LLORDID (CHBLOCKS) — works for ALL rows regardless of CHRHMS match.
+    -- CHBLOCKS.LLORDID typically has no LAN- prefix; OR fallback handles any that do.
     SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
            ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
     FROM CHABRINS.dbo.CHLRDS
     WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-) lr ON lr.lordid_clean = RTRIM(LTRIM(r.LORDID))
-     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(r.LORDID)), 'LAN-', '')
+) lr ON lr.lordid_clean = RTRIM(LTRIM(prop.LLORDID))
+     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', '')
 LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(r.BLOCKID))
+    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
+    FROM CHABRINS.dbo.CHBUNITS
+    WHERE UNITNO IS NOT NULL
+) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(x.BLOCKID))
+     AND RTRIM(LTRIM(unt.UNITNO))  = RTRIM(LTRIM(x.UNITNO))
 LEFT JOIN (
-    -- zone_id via RETZON (zone letter A-G stored directly on CHRHMS row)
-    -- DISTINCT first, then ROW_NUMBER — avoids SQL Server DISTINCT+ROW_NUMBER bug
+    -- tenant_id + lease_id: ROW_NUMBER matches vw_sys_pm_clients_tenants_004 and
+    -- vw_sys_pm_lease_agreements_005 exactly (same ORDER BY TENNAME, BLOCKNO, UNITNO)
+    SELECT TENNAME, BLOCKNO, UNITNO,
+           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
+    FROM CHABRINS.dbo.CHTENS
+    WHERE TENNAME IS NOT NULL AND RTRIM(LTRIM(TENNAME)) <> ''
+) ten ON ten.TENNAME = x.TENNAME
+      AND ten.BLOCKNO = x.BLOCKID
+      AND ten.UNITNO  = x.UNITNO
+LEFT JOIN (
+    -- zone_id: DISTINCT in subquery first, THEN ROW_NUMBER — avoids SQL Server
+    -- executing ROW_NUMBER before DISTINCT (which would return 1842 rows not 7).
     SELECT BLOC, ROW_NUMBER() OVER (ORDER BY BLOC) AS zone_row_id
     FROM (
         SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
         FROM CHABRINS.dbo.CHBLOCKS
         WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
     ) zd
-) cnzn ON cnzn.BLOC = RTRIM(LTRIM(r.RETZON))
-WHERE r.RETURNID IS NOT NULL;
-GO
+) cnzn ON cnzn.BLOC = RTRIM(LTRIM(prop.BLOC))
+-- zone_id uses prop.BLOC (CHBLOCKS) not h.RETZON (CHRHMS) — works for ALL rows with a BLOCKID
+LEFT JOIN (
+    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
+    FROM CHABRINS.dbo.CHOFFICERS
+    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
+) fo  ON RTRIM(LTRIM(fo.OFFID))  = RTRIM(LTRIM(prop.OFFID))
+LEFT JOIN (
+    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
+    FROM CHABRINS.dbo.CHOFFICERS
+    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
+) sfo ON RTRIM(LTRIM(sfo.OFFID)) = RTRIM(LTRIM(prop.SFOID))
+LEFT JOIN (
+    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
+    FROM CHABRINS.dbo.CHOFFICERS
+    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
+) zm  ON RTRIM(LTRIM(zm.OFFID))  = RTRIM(LTRIM(prop.ZMGRID))
+WHERE x.RETURNID IS NOT NULL;
+
+
+/*
+  NOTE: Source changed from CHRHMS to CHRTXS (detail lines) joined to CHRHMS (header).
+  CHRHMS (35,217 rows) is property-level summary — unit_id/tenant_id were always NULL.
+  CHRTXS (1,470,210 rows) is the per-unit pre-aggregation detail that feeds CHRHMS.
+  sys_pm_clients_returns in MySQL has unit_id, tenant_id, lease_id populated —
+  confirming it maps to CHRTXS, not the summary CHRHMS.
+  Commission lines (ENTRYTYP='Commission') have NULL BLOCKID/UNITNO/TENNAME —
+  unit_id/tenant_id will be NULL for those rows (property-level deduction entries).
+  The CHRHMS header join provides: client_id (via LORDID), zone_id (via RETZON),
+  current_status_id (RETSTAT), paid_status_id (PAIDST), approval_status (APPST),
+  batch_id (VOUCHERNO), invoice_date (PREPDAT), comm_perc (COMMRATE), date_paid_out (PAYDAT).
+*/
 
 
 -- ============================================================================
