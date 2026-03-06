@@ -93,9 +93,9 @@ return [
             'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
-            'schema' => env('DB_SCHEMA', 'pension_master'),
+            'schema' => env('DB_SCHEMA', 'chips_db_v3'),
             'prefix_indexes' => true,
-            'search_path' => env('DB_SCHEMA', 'pension_master'),
+            'search_path' => env('DB_SCHEMA', 'chips_db_v3'),
             'sslmode' => 'prefer',
         ],
 
