@@ -135,7 +135,7 @@
                 </div>
 
                 <!-- Remarks -->
-                <div class="col-md-9 mb-3">
+                <div class="col-md-12 mb-3">
                     <label class="form-label">Remarks</label>
                     <textarea name="items[INDEX][remarks]" class="form-control" rows="2"></textarea>
                 </div>
