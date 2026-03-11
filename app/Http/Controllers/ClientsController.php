@@ -32,7 +32,7 @@ class ClientsController extends Controller
     }
 
     public function getCLients(Request $request)
-    {   
+    {
         try {
 
             $can_read = Auth::user()->isAbleTo('read_clients');
@@ -40,7 +40,7 @@ class ClientsController extends Controller
 
             $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date'])
                 ->typeOne();
-            
+
             // Filter by client_type if provided (Landlord or Tenant)
             if ($request->filled('client_type')) {
                 if ($request->client_type === 'Landlord') {
@@ -49,20 +49,20 @@ class ClientsController extends Controller
                     $query->where('reference_number', 'LIKE', 'TEN-%');
                 }
             }
-            
+
             // Search filter
             if ($request->filled('search')) {
                 $search = $request->search;
-                $query->where(function($q) use ($search) {
+                $query->where(function ($q) use ($search) {
                     $q->where('names', 'LIKE', "%{$search}%")
-                      ->orWhere('reference_number', 'LIKE', "%{$search}%")
-                      ->orWhere('mobile_number', 'LIKE', "%{$search}%")
-                      ->orWhere('email_address', 'LIKE', "%{$search}%");
+                        ->orWhere('reference_number', 'LIKE', "%{$search}%")
+                        ->orWhere('mobile_number', 'LIKE', "%{$search}%")
+                        ->orWhere('email_address', 'LIKE', "%{$search}%");
                 });
             }
-            
+
             $clients = $query->orderBy('registered_date', 'desc')
-                ->limit(50) // Limit results for performance
+                //->limit(50) // Limit results for performance
                 ->get()
                 ->map(function ($client) use ($can_read, $can_update) {
                     return [
@@ -513,7 +513,7 @@ class ClientsController extends Controller
             return redirect()->route('property.clients.index')->with('error', 'Failed to load form');
         }
     }
-    
+
     /**
      * Store a newly created client
      */
@@ -523,32 +523,31 @@ class ClientsController extends Controller
         try {
             $validated = $this->validateClientRequest($request);
             Log::info('Validated client data: ' . json_encode($validated));
-            
+
             $referenceNumber = $this->generateClientReferenceNumber();
             Log::info('Generated reference number: ' . $referenceNumber);
-            
+
             $photoPath = $this->handlePhotoUpload($request);
-            
+
             $client = $this->createClient($validated, $referenceNumber, $photoPath);
             //Log::info('Client created with ID: ' . $client->id . ' by User ID: ' . Auth::id());
-            
+
             $this->saveBankAccounts($request, $client->id);
             Log::info('Bank accounts saved for client ID: ' . $client->id);
-            
+
             $this->saveOtherContacts($request, $client->id);
             Log::info('Other contacts saved for client ID: ' . $client->id);
-            
+
             $this->saveDocuments($request, $client->id);
             Log::info('Documents saved for client ID: ' . $client->id);
-            
+
             $this->saveNextOfKin($request, $client->id);
             Log::info('Next of kin saved for client ID: ' . $client->id);
-    
+
             DB::commit();
-    
+
             return redirect()->route('property.clients.show', Crypt::encrypt($client->id))
                 ->with('success', 'Client created successfully with reference number: ' . $referenceNumber);
-    
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return redirect()->back()->withErrors($e->errors())->withInput();
@@ -559,7 +558,7 @@ class ClientsController extends Controller
             return redirect()->back()->with('error', 'Failed to create client: ' . $e->getMessage())->withInput();
         }
     }
-    
+
     /**
      * Validate client request
      */
@@ -589,7 +588,7 @@ class ClientsController extends Controller
             'address' => 'nullable|string',
             'address_2' => 'nullable|string',
             'address_3' => 'nullable|string',
-            
+
             // Bank accounts validation
             'banks' => 'nullable|array',
             'banks.*.bank_id' => 'nullable|integer',
@@ -597,19 +596,19 @@ class ClientsController extends Controller
             'banks.*.account_name' => 'nullable|string|max:255',
             'banks.*.account_number' => 'nullable|string|max:50',
             'banks.*.return_percentage' => 'nullable|numeric',
-            
+
             // Other contacts validation
             'contacts' => 'nullable|array',
             'contacts.*.names' => 'nullable|string|max:255',
             'contacts.*.email' => 'nullable|email|max:255',
             'contacts.*.mobile' => 'nullable|string|max:20',
-            
+
             // Documents validation
             'documents' => 'nullable|array',
             'documents.*.file_type' => 'nullable|string',
             'documents.*.other_file_type' => 'nullable|string|max:255',
             'documents.*.file' => 'nullable|file|max:10240',
-            
+
             // Next of Kin validation
             'next_of_kin' => 'nullable|array',
             'next_of_kin.*.first_name' => 'nullable|string|max:255',
@@ -621,19 +620,19 @@ class ClientsController extends Controller
             'next_of_kin.*.national_id' => 'nullable|string|max:50',
         ]);
     }
-    
+
     /**
      * Generate client reference number based on client type
      */
     private function generateClientReferenceNumber()
     {
         $prefix = "LAN";
-        
+
         // Query for the last client with this specific prefix
         $lastClient = Client::where('reference_number', 'LIKE', "{$prefix}-%")
             ->orderBy('reference_number', 'desc')
             ->first();
-    
+
         if ($lastClient) {
             // Extract the number part after the last hyphen
             $lastNumber = intval(substr($lastClient->reference_number, strrpos($lastClient->reference_number, '-') + 1));
@@ -641,10 +640,10 @@ class ClientsController extends Controller
         } else {
             $newNumber = '0001';
         }
-    
+
         return "{$prefix}-{$newNumber}";
     }
-    
+
     /**
      * Handle photo upload
      */
@@ -655,7 +654,7 @@ class ClientsController extends Controller
         }
         return null;
     }
-    
+
     /**
      * Create the main client record
      */
@@ -689,10 +688,10 @@ class ClientsController extends Controller
             'current_status_id' => '1',
             'created_by' => Auth::id(),
         ];
-    
+
         return Client::create($clientData);
     }
-    
+
     /**
      * Save bank accounts to sys_pm_clients_17_repeat
      */
@@ -701,13 +700,13 @@ class ClientsController extends Controller
         if (!$request->has('banks')) {
             return;
         }
-    
+
         foreach ($request->input('banks') as $bankData) {
             // Skip empty entries
             if (empty($bankData['bank_id']) && empty($bankData['account_number'])) {
                 continue;
             }
-    
+
             ClientBankAccount::create([
                 'parent_id' => $clientId,
                 'bank_id' => $bankData['bank_id'] ?? null,
@@ -718,7 +717,7 @@ class ClientsController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Save other contacts to sys_pm_clients_19_repeat
      */
@@ -727,13 +726,13 @@ class ClientsController extends Controller
         if (!$request->has('contacts')) {
             return;
         }
-    
+
         foreach ($request->input('contacts') as $contactData) {
             // Skip empty entries
             if (empty($contactData['names']) && empty($contactData['email']) && empty($contactData['mobile'])) {
                 continue;
             }
-    
+
             ClientOtherContact::create([
                 'parent_id' => $clientId,
                 'contact_names' => $contactData['names'] ?? null,
@@ -742,7 +741,7 @@ class ClientsController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Save documents to sys_pm_clients_65_repeat
      */
@@ -751,24 +750,24 @@ class ClientsController extends Controller
         if (!$request->has('documents')) {
             return;
         }
-    
+
         foreach ($request->input('documents') as $index => $documentData) {
             // Skip if no file uploaded
             if (!$request->hasFile("documents.{$index}.file")) {
                 continue;
             }
-    
+
             $file = $request->file("documents.{$index}.file");
             if ($file && $file->isValid()) {
                 // Store the file
                 $filePath = $file->store('clients/' . $clientId . '/documents', 'public');
-                
+
                 // Determine file type
                 $fileType = $documentData['file_type'] ?? 'Other';
                 if ($fileType === 'Other' && !empty($documentData['other_file_type'])) {
                     $fileType = $documentData['other_file_type'];
                 }
-    
+
                 ClientDocument::create([
                     'parent_id' => $clientId,
                     'documents' => $filePath,
@@ -777,7 +776,7 @@ class ClientsController extends Controller
             }
         }
     }
-    
+
     /**
      * Save next of kin to sys_pm_clients_66_repeat
      */
@@ -786,20 +785,20 @@ class ClientsController extends Controller
         if (!$request->has('next_of_kin')) {
             return;
         }
-    
+
         foreach ($request->input('next_of_kin') as $kinData) {
             // Skip empty entries
             if (empty($kinData['first_name']) && empty($kinData['last_name']) && empty($kinData['mobile'])) {
                 continue;
             }
-    
+
             // Construct full name
             $fullName = trim(
-                ($kinData['first_name'] ?? '') . ' ' . 
-                ($kinData['second_name'] ?? '') . ' ' . 
-                ($kinData['last_name'] ?? '')
+                ($kinData['first_name'] ?? '') . ' ' .
+                    ($kinData['second_name'] ?? '') . ' ' .
+                    ($kinData['last_name'] ?? '')
             );
-    
+
             ClientNextOfKin::create([
                 'parent_id' => $clientId,
                 'kin_first_name' => $kinData['first_name'] ?? null,
@@ -833,7 +832,7 @@ class ClientsController extends Controller
 
             // dd($client);
 
-            
+
             return view('property.clients.edit', compact('client'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -841,7 +840,7 @@ class ClientsController extends Controller
             return redirect()->route('property.clients.index')->with('error', 'Client not found');
         }
     }
-    
+
     /**
      * Update the specified client
      */
@@ -851,10 +850,10 @@ class ClientsController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
             $client = Client::findOrFail($id);
-            
+
             $validated = $this->validateClientRequest($request);
             Log::info('Validated client update data for ID: ' . $id);
-            
+
             // Handle photo upload
             $photoPath = $this->handlePhotoUpload($request);
             if ($photoPath) {
@@ -865,29 +864,28 @@ class ClientsController extends Controller
             } else {
                 $photoPath = $client->photo; // Keep existing photo
             }
-            
+
             // Update client
             $this->updateClient($client, $validated, $photoPath);
             Log::info('Client updated with ID: ' . $id . ' by User ID: ' . Auth::id());
-            
+
             // Update related records
             $this->updateBankAccounts($request, $client->id);
             Log::info('Bank accounts updated for client ID: ' . $client->id);
-            
+
             $this->updateOtherContacts($request, $client->id);
             Log::info('Other contacts updated for client ID: ' . $client->id);
-            
+
             $this->updateDocuments($request, $client->id);
             Log::info('Documents updated for client ID: ' . $client->id);
-            
+
             $this->updateNextOfKin($request, $client->id);
             Log::info('Next of kin updated for client ID: ' . $client->id);
-    
+
             DB::commit();
-    
+
             return redirect()->route('property.clients.show', $encryptedId)
                 ->with('success', 'Client updated successfully');
-    
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return redirect()->back()->withErrors($e->errors())->withInput();
@@ -898,7 +896,7 @@ class ClientsController extends Controller
             return redirect()->back()->with('error', 'Failed to update client: ' . $e->getMessage())->withInput();
         }
     }
-    
+
     /**
      * Update the main client record
      */
@@ -929,7 +927,7 @@ class ClientsController extends Controller
             'date_time' => $validated['select_time'] ?? $client->date_time,
         ]);
     }
-    
+
     /**
      * Update bank accounts
      */
@@ -937,11 +935,11 @@ class ClientsController extends Controller
     {
         // Delete existing bank accounts
         ClientBankAccount::where('parent_id', $clientId)->delete();
-        
+
         // Save new bank accounts
         $this->saveBankAccounts($request, $clientId);
     }
-    
+
     /**
      * Update other contacts
      */
@@ -949,11 +947,11 @@ class ClientsController extends Controller
     {
         // Delete existing contacts
         ClientOtherContact::where('parent_id', $clientId)->delete();
-        
+
         // Save new contacts
         $this->saveOtherContacts($request, $clientId);
     }
-    
+
     /**
      * Update documents
      */
@@ -962,7 +960,7 @@ class ClientsController extends Controller
         // Only add new documents, don't delete existing ones
         $this->saveDocuments($request, $clientId);
     }
-    
+
     /**
      * Update next of kin
      */
@@ -970,10 +968,8 @@ class ClientsController extends Controller
     {
         // Delete existing next of kin
         ClientNextOfKin::where('parent_id', $clientId)->delete();
-        
+
         // Save new next of kin
         $this->saveNextOfKin($request, $clientId);
     }
-
-    
 }
