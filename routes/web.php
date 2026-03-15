@@ -739,6 +739,18 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/{propertyId}/units', [InspectionsController::class, 'getUnitsByProperty'])->name('property.units');
     Route::get('/property/{propertyId}/all_units', [InspectionsController::class, 'getAllUnitsByProperty'])->name('property.units');
 
+        // Property Merge
+        Route::get('/property/merge', [App\Http\Controllers\PropertyMergeController::class, 'index'])->name('property.merge.index');
+        Route::get('/property/merge/create', [App\Http\Controllers\PropertyMergeController::class, 'create'])->name('property.merge.create');
+        Route::get('/property/merge/{encryptedId}', [App\Http\Controllers\PropertyMergeController::class, 'show'])->name('property.merge.show');
+        Route::get('/ajax/property/merge/list', [App\Http\Controllers\PropertyMergeController::class, 'list'])->name('ajax.property.merge.list');
+        Route::get('/ajax/property/merge/client/{clientId}/properties', [App\Http\Controllers\PropertyMergeController::class, 'getClientProperties'])->name('ajax.property.merge.client.properties');
+        Route::get('/ajax/property/merge/property/{propertyId}/units', [App\Http\Controllers\PropertyMergeController::class, 'getPropertyUnits'])->name('ajax.property.merge.property.units');
+        Route::get('/ajax/property/merge/client/{clientId}/bank-accounts', [App\Http\Controllers\PropertyMergeController::class, 'getClientBankAccounts'])->name('ajax.property.merge.client.bank.accounts');
+        Route::post('/ajax/property/merge/preview', [App\Http\Controllers\PropertyMergeController::class, 'preview'])->name('ajax.property.merge.preview');
+        Route::post('/property/merge/store', [App\Http\Controllers\PropertyMergeController::class, 'store'])->name('property.merge.store');
+        Route::post('/property/merge/{encryptedId}/reverse', [App\Http\Controllers\PropertyMergeController::class, 'reverse'])->name('property.merge.reverse');
+
     ###### PROPERTY MANAGEMENT SECTION END ########
 
     Route::get('/get/tenant/balance', [App\Http\Controllers\TenantsController::class, 'getTenantBalance'])->name('get.tenant.balance');
