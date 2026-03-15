@@ -44,3 +44,6 @@ Thumbs.db
 # a negation rule after these entries, e.g.:
 # !/storage/app/keep-this-file.php
 
+# Migration Tool (standalone mini-project)
+/migration_tool/
+
