@@ -34,6 +34,9 @@ class ClientsController extends Controller
     public function getCLients(Request $request)
     {
         try {
+            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date'])
+                ->typeOne();
+
 
             $can_read = Auth::user()->isAbleTo('read_clients');
             $can_update = Auth::user()->isAbleTo('update_clients');
@@ -78,6 +81,7 @@ class ClientsController extends Controller
                         'can_update' => $can_update,
                     ];
                 });
+            Log::info('Loaded clients: ' . $clients->count());
             return response()->json(['clients' => $clients]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
