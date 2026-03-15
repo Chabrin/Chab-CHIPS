@@ -351,6 +351,7 @@ LEFT JOIN CHABRINS.dbo.CHBLOCKS blk
 WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '';
 
 
+
 /*
   NOTE: Source changed from CHCNAM to CHTENS.
   CHCNAM (4,222 rows) caused a row explosion when joined to CHTENS because
@@ -503,8 +504,8 @@ SELECT
     NULL                                                AS parent_invoice_id,
     NULL                                                AS parent_invoice_rpt_id,
     NULL                                                AS override_period_check,
-    CASE WHEN n.TRAYR > 0 AND n.TRAMNTH > 0
-         THEN DATEFROMPARTS(n.TRAYR, n.TRAMNTH, 1)
+    CASE WHEN n.TRAYR > 0 AND n.TRAMNTH BETWEEN 1 AND 12
+         THEN TRY_CONVERT(DATE, CAST(n.TRAYR AS VARCHAR(4)) + '-' + RIGHT('0' + CAST(n.TRAMNTH AS VARCHAR(2)), 2) + '-01')
          ELSE NULL END                                  AS returns_period
 FROM CHABRINS.dbo.CHTNTRS n
 WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
@@ -1269,9 +1270,7 @@ SELECT
     -- PRE-STAMPED: bank_id via CHBANK (LEFT(BANKACC,2) -> BANKCODE)
     RTRIM(LTRIM(cb.CBODOCNO))                           AS origin_id,
     NULL                                                AS transaction_type_id,
-    CASE WHEN cb.ENTTYPE = 'CSH' THEN 'Cash'
-         WHEN cb.ENTTYPE = 'BNK' THEN 'Bank'
-         ELSE 'General' END                             AS ledger_type_id,
+    RTRIM(LTRIM(cb.ENTTYPE))                             AS ledger_type_id,
     NULL                                                AS control_account_id,
     RTRIM(LTRIM(cb.ENTDESC))                            AS narration,
     CASE WHEN ISNULL(cb.AMTCSHDR, 0) + ISNULL(cb.AMTBNKDR, 0) > 0 THEN 'Debit'

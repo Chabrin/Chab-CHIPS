@@ -386,9 +386,9 @@ SELECT
     NULL                                                AS parent_invoice_id,
     NULL                                                AS parent_invoice_rpt_id,
     NULL                                                AS override_period_check,
-    CASE WHEN n.TRAYR > 0 AND n.TRAMNTH > 0
-         THEN DATEFROMPARTS(n.TRAYR, n.TRAMNTH, 1)
-         ELSE NULL END                                  AS returns_period
+    CASE WHEN ISNULL(n.TRAYR, 0) > 0 AND n.TRAMNTH BETWEEN 1 AND 12
+         THEN TRY_CONVERT(DATE, CAST(n.TRAYR AS VARCHAR(4)) + ''-'' + RIGHT(''0'' + CAST(n.TRAMNTH AS VARCHAR(2)), 2) + ''-01'')
+         ELSE NULL END AS returns_period
 FROM CHABRINS.dbo.CHTNTRS n
 WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
 ';
@@ -400,12 +400,12 @@ EXEC sp_executesql N'
 CREATE OR ALTER VIEW vw_sys_pm_clients_returns_10 AS
 SELECT
     x.return_line_id                                    AS id,
-    CASE WHEN x.RETNPRD > 0
-         THEN DATEFROMPARTS(
-                  CAST(LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) AS INT),
-                  CAST(RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2) AS INT),
-                  1)
-         ELSE NULL END                                  AS date_time,
+    TRY_CONVERT(DATE,
+        CASE WHEN ISNULL(x.RETNPRD, 0) > 0
+             THEN LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) + ''-''
+                  + RIGHT(''0'' + RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2), 2)
+                  + ''-01''
+             ELSE NULL END)                              AS date_time,
     -- RETNPRD is YYYYMM integer (e.g. 202502 → 2025-02-01)
     RTRIM(LTRIM(x.TRANSNUM))                            AS ref_number,
     -- TRANSNUM is the unique transaction number for this detail line
