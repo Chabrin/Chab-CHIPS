@@ -1,0 +1,463 @@
+================================================================================
+  CHIPS LEASE DOCUMENTATION MODULE — INTEGRATION GUIDE
+  Prepared by: Chabrin Agencies
+  Date: March 2026
+================================================================================
+
+This package contains the complete Lease Documentation module built for the
+Chabrin property management system. It covers the full lease lifecycle:
+creation, landlord approval, PDF generation, digital signing (OTP-based),
+advocate/lawyer review, guarantor signing, document vault, print log, and
+automated rent escalation.
+
+The code in this package is LOGIC ONLY. It is not a plug-and-play package.
+The CHIPS developers are expected to wire it into the CHIPS application
+according to the instructions below.
+
+--------------------------------------------------------------------------------
+SECTION 1 — WHAT IS IN THE PACKAGE
+--------------------------------------------------------------------------------
+
+  commands/        9 artisan commands (scheduled tasks)
+  config/          1 file: lease.php (all tunable settings)
+  controllers/     9 HTTP controllers (public portals + internal)
+  enums/           7 PHP enums (workflow states, document types, etc.)
+  exceptions/      8 typed exceptions
+  helpers/         Money.php (BCMath arithmetic), LocaleHelper.php
+  migrations/      44 migration files (all lease-specific tables)
+  models/          16 Eloquent models + 4 model traits (Concerns/)
+  seeders/         LeaseModuleMenuSeeder.php (CHIPS sidebar navigation)
+  services/        20 service classes (all business logic)
+  support/         PhoneFormatter.php, SafeDownloadFilename.php
+  views/           16 Blade templates (signing portals, email templates)
+
+
+--------------------------------------------------------------------------------
+SECTION 2 — COMPOSER DEPENDENCIES
+--------------------------------------------------------------------------------
+
+Add these to your composer.json and run: composer require
+
+  setasign/fpdi                 ^2.5     PDF overlay (stamps text on real PDFs)
+  setasign/fpdf                 ^1.8     Required by FPDI
+  chillerlan/php-qrcode         ^5.0     QR code generation for lease documents
+  intervention/image            ^3.0     Image handling for signatures
+  barryvdh/laravel-dompdf       ^3.0     (OPTIONAL — only if you add HTML-to-PDF
+                                          fallback. Chabrin does not use this.)
+
+Africa's Talking SMS (already in most Laravel apps via Http facade — no extra
+package needed, the SMSService calls the API directly over HTTP).
+
+If you use queued SMS jobs, you will need a queue driver configured
+(Redis or database). The SendSMSJob class is referenced by SMSService.
+
+
+--------------------------------------------------------------------------------
+SECTION 3 — ENVIRONMENT VARIABLES
+--------------------------------------------------------------------------------
+
+Add these to your .env file:
+
+  # Africa's Talking SMS
+  AFRICAS_TALKING_USERNAME=YourUsername
+  AFRICAS_TALKING_API_KEY=YourAPIKey
+  AFRICAS_TALKING_SHORTCODE=YOURCODE
+
+  # OTP Settings (optional — these are the defaults)
+  LEASE_OTP_LENGTH=6
+  LEASE_OTP_EXPIRY=10
+  LEASE_OTP_MAX_ATTEMPTS=3
+  LEASE_OTP_MAX_VERIFY_ATTEMPTS=3
+
+  # Signing Link
+  LEASE_SIGNING_LINK_EXPIRY=336        # 14 days in hours
+
+  # Serial Number Prefix
+  LEASE_SERIAL_PREFIX=LSE
+
+  # Renewal Settings (optional)
+  LEASE_RENEWAL_ESCALATION_RATE=0.10
+  LEASE_RENEWAL_OFFER_DAYS=60
+  LEASE_RENEWAL_ACCEPTANCE_DAYS=30
+  LEASE_RENEWAL_TERM_MONTHS=12
+  LEASE_MAX_ESCALATION=20
+
+  # Lawyer Workflow
+  LEASE_LAWYER_TURNAROUND=7
+  LEASE_LAWYER_REMINDER=5
+
+  # SMS redirect for testing/staging ONLY (remove in production)
+  SMS_REDIRECT_TO=               # e.g. 0722000000 — redirects ALL SMS here
+  MAIL_REDIRECT_TO=              # e.g. dev@yourcompany.com
+
+
+--------------------------------------------------------------------------------
+SECTION 4 — FILE PLACEMENT
+--------------------------------------------------------------------------------
+
+Copy each folder into the corresponding location in the CHIPS Laravel app:
+
+  Package folder          →   CHIPS destination
+  ─────────────────────────────────────────────────────────
+  commands/               →   app/Console/Commands/
+  config/lease.php        →   config/lease.php
+  controllers/            →   app/Http/Controllers/Leases/
+  enums/                  →   app/Enums/
+  exceptions/             →   app/Exceptions/
+  helpers/                →   app/Helpers/
+  migrations/             →   database/migrations/
+  models/                 →   app/Models/
+  models/Concerns/        →   app/Models/Concerns/
+  seeders/                →   database/seeders/
+  services/               →   app/Services/
+  support/                →   app/Support/
+  views/                  →   resources/views/leases/
+
+Update namespaces in each file to match CHIPS's App\ namespace if different.
+
+
+--------------------------------------------------------------------------------
+SECTION 5 — DATABASE INTEGRATION (READ THIS CAREFULLY)
+--------------------------------------------------------------------------------
+
+The 44 migration files create all lease-specific tables from scratch.
+Run them with: php artisan migrate
+
+The core leases table has foreign keys to these tables which CHIPS must provide:
+
+  Column          References          Notes
+  ──────────────────────────────────────────────────────────────────────────────
+  tenant_id       tenants.id          CHIPS must have a tenants table
+  unit_id         units.id            CHIPS must have a units table
+  property_id     properties.id       CHIPS must have a properties table
+  landlord_id     landlords.id        CHIPS must have a landlords table (nullable)
+  created_by      users.id            Standard Laravel users table
+
+IMPORTANT — DATABASE LOGIC IS JUST THE LEASE SIDE:
+The migrations in this package only create the lease-specific tables. They do
+NOT create tenants, properties, units, landlords, or users — those belong to
+CHIPS already. The lease module simply references them via foreign keys.
+
+What CHIPS developers need to check and potentially adjust:
+
+  1. TABLE NAMES
+     If CHIPS uses different table names (e.g. sys_tenants instead of tenants),
+     update the foreign key references in:
+       migrations/2026_01_11_133944_create_leases_table.php
+
+  2. COLUMN NAMES
+     The Lease model references these columns on related models:
+       Tenant:   id, names (full name), mobile_number, email_address,
+                 national_id, preferred_language
+       Property: id, property_name, reference_number
+       Unit:     id, unit_number, rent_amount
+       Landlord: id, names, phone, email
+     If CHIPS uses different column names, update the Lease model relationships
+     and any service that accesses these fields.
+
+  3. ZONES
+     The leases table has a zone column (single char A-G).
+     The zonePerformance() method in LeaseDashboardDataService queries a
+     zones table. If CHIPS has no zones table, either create one or remove
+     that method.
+
+  4. USERS
+     The created_by column references the standard users table. This should
+     work as-is if CHIPS uses the standard Laravel users table.
+
+  5. NO DUPLICATE TABLES
+     Do not run migrations for tables that CHIPS already has. Check each
+     migration filename before running. The lease-specific tables are all
+     prefixed with lease_, otp_, digital_, guarantors, lawyers, etc.
+
+  6. POSTGRESQL vs MySQL
+     This system was built on PostgreSQL. Some migrations use PostgreSQL-
+     specific syntax (e.g. date_trunc, EXTRACT EPOCH). If CHIPS runs MySQL,
+     the following files will need their raw DB queries adjusted:
+       services/LeaseDashboardDataService.php  (revenueTrend method)
+       Any migration using jsonb or PostgreSQL-specific column types
+
+
+--------------------------------------------------------------------------------
+SECTION 6 — ROUTES TO REGISTER
+--------------------------------------------------------------------------------
+
+Add these routes to routes/web.php. Adjust the middleware and prefix to match
+CHIPS's auth setup:
+
+  use App\Http\Controllers\Leases\TenantSigningController;
+  use App\Http\Controllers\Leases\LawyerPortalController;
+  use App\Http\Controllers\Leases\LandlordApprovalController;
+  use App\Http\Controllers\Leases\LandlordPublicApprovalController;
+  use App\Http\Controllers\Leases\GuarantorPortalController;
+  use App\Http\Controllers\Leases\LeaseVerificationController;
+  use App\Http\Controllers\Leases\DownloadLeaseController;
+  use App\Http\Controllers\Leases\LeaseDocumentController;
+  use App\Http\Controllers\Leases\FieldOfficerController;
+
+  // PUBLIC — No auth required (external portals accessed via token links)
+  Route::prefix('leases')->group(function () {
+
+      // Tenant digital signing portal
+      Route::get('/sign/{token}',          [TenantSigningController::class, 'show']);
+      Route::post('/sign/{token}/request-otp', [TenantSigningController::class, 'requestOtp']);
+      Route::post('/sign/{token}/verify',  [TenantSigningController::class, 'verify']);
+      Route::post('/sign/{token}/sign',    [TenantSigningController::class, 'sign']);
+      Route::get('/sign/{token}/preview',  [TenantSigningController::class, 'preview']);
+
+      // Guarantor portal
+      Route::get('/guarantor/{token}',         [GuarantorPortalController::class, 'show']);
+      Route::post('/guarantor/{token}/sign',   [GuarantorPortalController::class, 'sign']);
+
+      // Document verification (QR code scan)
+      Route::get('/verify/{code}',         [LeaseVerificationController::class, 'verify']);
+
+      // Document download (token-protected)
+      Route::get('/download/{token}',      [DownloadLeaseController::class, 'download']);
+  });
+
+  // Landlord public approval (token link sent via SMS/email)
+  Route::prefix('landlord')->group(function () {
+      Route::get('/approve/{token}',       [LandlordPublicApprovalController::class, 'show']);
+      Route::post('/approve/{token}',      [LandlordPublicApprovalController::class, 'submit']);
+  });
+
+  // Lawyer/Advocate portal (token link)
+  Route::prefix('lawyer-portal')->group(function () {
+      Route::get('/{token}',               [LawyerPortalController::class, 'show']);
+      Route::post('/{token}/upload',       [LawyerPortalController::class, 'upload']);
+      Route::post('/{token}/certify',      [LawyerPortalController::class, 'certify']);
+  });
+
+  // INTERNAL — Requires CHIPS authentication middleware
+  Route::middleware(['auth', 'your-chips-middleware'])->prefix('leases')->group(function () {
+
+      // Landlord approvals (internal view)
+      Route::get('/landlord/approvals',    [LandlordApprovalController::class, 'index']);
+      Route::get('/landlord/approvals/{id}', [LandlordApprovalController::class, 'show']);
+
+      // Document management
+      Route::get('/documents',             [LeaseDocumentController::class, 'index']);
+      Route::post('/documents/upload',     [LeaseDocumentController::class, 'upload']);
+      Route::delete('/documents/{id}',     [LeaseDocumentController::class, 'destroy']);
+
+      // Field officer operations
+      Route::post('/field/checkout',       [FieldOfficerController::class, 'checkout']);
+      Route::post('/field/return',         [FieldOfficerController::class, 'return']);
+  });
+
+Note: Adjust route names and exact method names by inspecting each controller
+file. The above is a guide based on the controllers provided.
+
+
+--------------------------------------------------------------------------------
+SECTION 7 — CONFIG FILE
+--------------------------------------------------------------------------------
+
+Copy config/lease.php to your CHIPS config/ folder.
+
+All settings have sensible defaults. You do not need to change anything to get
+started. Tunable values include OTP length/expiry, signing link expiry, serial
+number prefix, renewal escalation rates, and lawyer turnaround expectations.
+
+Reference config values in code as: config('lease.otp.expiry_minutes')
+
+
+--------------------------------------------------------------------------------
+SECTION 8 — SCHEDULED COMMANDS (CRON)
+--------------------------------------------------------------------------------
+
+Register these commands in your scheduler (app/Console/Kernel.php or
+routes/console.php in Laravel 11):
+
+  Command class                           Schedule            Purpose
+  ──────────────────────────────────────────────────────────────────────────────
+  ActivateMatureLeases                    Daily               Moves leases whose
+                                                              start_date has passed
+                                                              to 'active' state
+  SendLeaseExpiryAlertsCommand            Daily               SMS tenants & landlords
+                                                              at 90/60/30 day thresholds
+  ApplyRentEscalationsCommand             Daily               Applies due escalations
+  GenerateRenewalOffersCommand            Daily               Generates renewal offers
+                                                              60 days before expiry
+  AlertExpiredSigningLinksCommand         Daily               Flags expired signing links
+  GenerateLeaseQRCodes                    Daily               Generates missing QR codes
+  PruneLeaseTemplatesCommand              Weekly              Cleans up soft-deleted templates
+  ForceDeleteTrashedLeaseTemplatesCommand Weekly              Permanently removes old templates
+  ApplyDefaultLeasePdfCoordinatesCommand  Run once manually   Only needed when adding new
+                                                              template types
+
+Example (Laravel 11 routes/console.php):
+
+  use Illuminate\Support\Facades\Schedule;
+
+  Schedule::command('leases:activate-mature')->daily();
+  Schedule::command('leases:send-expiry-alerts')->daily();
+  Schedule::command('leases:apply-escalations')->daily();
+  Schedule::command('leases:generate-renewals')->daily();
+  Schedule::command('leases:alert-expired-links')->daily();
+  Schedule::command('leases:generate-qr-codes')->daily();
+  Schedule::command('leases:prune-templates')->weekly();
+  Schedule::command('leases:force-delete-templates')->weekly();
+
+
+--------------------------------------------------------------------------------
+SECTION 9 — SIDEBAR NAVIGATION (CHIPS MENU)
+--------------------------------------------------------------------------------
+
+Run the included seeder to add the Lease Documentation module to the CHIPS
+sidebar automatically:
+
+  php artisan db:seed --class=LeaseModuleMenuSeeder
+
+This inserts one row into cb_modules and 10 rows into cb_sub_modules:
+
+  Parent:  Lease Documentation
+    ├── Dashboard
+    ├── Active Leases
+    ├── New Lease
+    ├── Lease Workflow
+    ├── Documents Vault
+    ├── Digital Signing
+    ├── Lease Templates
+    ├── Advocates
+    ├── Print Log
+    └── Reports
+
+After seeding, assign permissions to roles via the CHIPS admin panel
+(Roles → Edit → Module Access), OR uncomment the $roleIds array inside
+the seeder file with the correct role IDs before running.
+
+The sub_module_url values in the seeder use the /leases/* prefix. If you
+register routes under a different prefix, update the seeder before running.
+
+
+--------------------------------------------------------------------------------
+SECTION 10 — STORAGE SETUP
+--------------------------------------------------------------------------------
+
+The module stores files in Laravel's storage system. Create these folders:
+
+  storage/app/private/tenant-id-documents/     Uploaded tenant ID scans
+  storage/app/private/lease-documents/          Uploaded lease documents
+  storage/app/templates/leases/                 PDF lease template files
+  storage/app/qrcodes/                          Generated QR code images
+  storage/app/signatures/                       Captured signature images
+
+Run: php artisan storage:link  (if not already done in CHIPS)
+
+PDF template files (.pdf) must be placed in storage/app/templates/leases/
+and then registered in the lease_templates table with the correct
+pdf_coordinate_map JSON. The coordinate map tells the overlay engine exactly
+where to stamp each field on each page of the PDF. Contact Chabrin Agencies
+for the coordinate maps for each lease type (commercial, residential major,
+residential micro).
+
+
+--------------------------------------------------------------------------------
+SECTION 11 — DASHBOARD DATA SERVICE
+--------------------------------------------------------------------------------
+
+LeaseDashboardDataService provides ready-to-use data arrays for building
+the lease dashboard. All methods cache for 5 minutes automatically.
+
+  $service = app(\App\Services\LeaseDashboardDataService::class);
+
+  // KPI cards (active leases, revenue, occupancy, etc.)
+  $kpis = $service->kpis();
+  $kpis = $service->kpis(zoneId: 3); // zone-filtered
+
+  // Donut/pie chart — lease status distribution
+  $chart = $service->statusDistribution();
+
+  // Line/bar chart — monthly revenue for past 12 months
+  $trend = $service->revenueTrend(months: 12);
+
+  // Zone performance comparison table
+  $zones = $service->zonePerformance();
+
+  // Advocate workload summary
+  $advocates = $service->advocateWorkload();
+
+  // Call after any workflow state change to clear stale cache
+  $service->invalidate();
+  $service->invalidate(zoneId: 3);
+
+All methods return plain PHP arrays. Pass them directly to your Blade views
+or JSON endpoints. No Filament or framework-specific dependencies.
+
+
+--------------------------------------------------------------------------------
+SECTION 12 — FINANCIAL ARITHMETIC
+--------------------------------------------------------------------------------
+
+Never use native PHP float arithmetic for monetary calculations.
+The helpers/Money.php class uses BCMath for exact decimal arithmetic:
+
+  use App\Helpers\Money;
+
+  Money::add('50000.00', '5000.00')          // '55000.00'
+  Money::subtract('50000.00', '2500.00')     // '47500.00'
+  Money::multiply('50000.00', '1.1')         // '55000.00'
+  Money::escalate('50000.00', '10')          // '55000.00' (10% increase)
+  Money::format('50000.00')                  // 'KES 50,000.00'
+
+Use this for all rent, deposit, arrears, and escalation calculations.
+
+
+--------------------------------------------------------------------------------
+SECTION 13 — SMS SERVICE
+--------------------------------------------------------------------------------
+
+SMSService sends messages through Africa's Talking. It supports:
+  - Synchronous sending (send)
+  - Queue-based async sending (sendQueued)
+  - Localized messages in English and Swahili based on tenant preference
+
+The service will silently skip sending (log a warning) if the API keys are
+not configured — safe for local development without an AT account.
+
+All sensitive data (phone numbers) is masked in logs. Raw phone numbers are
+never written to log files.
+
+
+--------------------------------------------------------------------------------
+SECTION 14 — SECURITY NOTES
+--------------------------------------------------------------------------------
+
+  OTP codes         Hashed with bcrypt before storage. Never stored in plain text.
+  OTP expiry        Enforced server-side (15 min verified window, 10 min code window).
+  File uploads      Magic-byte validation (not just MIME headers). UUID filenames.
+  Private files     Stored outside web root. Never directly accessible via URL.
+  Signing tokens    Cryptographically random. Single-use where applicable.
+  Device fingerprint Collected at OTP request and verified at submission.
+  PII fields        national_id, passport_number, pin_number are AES-256 encrypted
+                    in the Tenant and Landlord models using Laravel's encrypted cast.
+                    Do NOT remove these casts from the models.
+
+
+--------------------------------------------------------------------------------
+SECTION 15 — WHAT THIS MODULE DOES NOT INCLUDE
+--------------------------------------------------------------------------------
+
+The following are NOT in this package and remain in the CHIPS core:
+  - Tenant management (create/edit tenants)
+  - Property and unit management
+  - User accounts and authentication
+  - Role and permission management
+  - Financial reporting (rent collection, arrears, statements)
+  - Maintenance requests
+  - Any other CHIPS module
+
+The Lease module references tenants, properties, units, and users but does
+not own or manage them. CHIPS owns that data; the Lease module reads it.
+
+
+--------------------------------------------------------------------------------
+CONTACT
+--------------------------------------------------------------------------------
+
+For questions about the coordinate maps, PDF templates, or workflow logic,
+contact the Chabrin Agencies technical team.
+
+================================================================================
