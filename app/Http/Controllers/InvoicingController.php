@@ -62,6 +62,13 @@ class InvoicingController extends Controller
         try {
             $query = DebtorInvoice::with(['tenant', 'property', 'unit', 'lease'])
                 ->tenantInvoices();
+            //Log Query
+            Log::info('Initial invoice items query: ' . $query->toSql());
+
+            Log::info('Searching invoice items with filters: ' . json_encode($request->all()));
+            //Log count of total items before filters
+            $totalCount = $query->count();
+            Log::info('Total invoice items before filters: ' . $totalCount);
 
             // Apply filters
             if ($request->filled('status_id')) {

@@ -157,7 +157,7 @@ SELECT
     CASE WHEN RTRIM(LTRIM(c.LANDSTT)) = 'Active' THEN 1
          ELSE 2 END                                     AS client_status_id,
     NULL                                                AS lead_id,
-    NULL                                                AS type_id,
+    1                                                   AS type_id,
     RTRIM(LTRIM(c.LORDID))                              AS client_id,
     NULL                                                AS second_name,
     NULL                                                AS last_name,
@@ -263,7 +263,7 @@ SELECT
     CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN' THEN 1
          ELSE 2 END                                     AS client_status_id,
     NULL                                                AS lead_id,
-    RTRIM(LTRIM(t.TYPLEAS))                             AS type_id,
+    2                                                   AS type_id,
     RTRIM(LTRIM(t.TENANTID))                            AS client_id,
     NULL                                                AS second_name,
     NULL                                                AS last_name,
@@ -466,7 +466,7 @@ SELECT
     -- ENTRYBY is a free-text staff name; cannot reliably JOIN to sys_staff ids
     RTRIM(LTRIM(n.INVONUM))                             AS reference_number,
     RTRIM(LTRIM(n.TRANSDESC))                           AS narration,
-    RTRIM(LTRIM(n.TRANSTYP))                            AS debtor_type_id,
+    2                                                   AS debtor_type_id,
     ISNULL(n.TRANSAMT, 0)                               AS total_amount,
     RTRIM(LTRIM(n.TRANSDESC))                           AS trans_details,
     CASE WHEN RTRIM(LTRIM(n.DELSTAT)) = 'Del' THEN 2
@@ -560,13 +560,8 @@ WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
 CREATE OR ALTER VIEW vw_sys_pm_clients_returns_10 AS
 SELECT
     x.return_line_id                                    AS id,
-    CASE WHEN x.RETNPRD > 0
-         THEN DATEFROMPARTS(
-                  CAST(LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) AS INT),
-                  CAST(RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2) AS INT),
-                  1)
-         ELSE NULL END                                  AS date_time,
-    -- RETNPRD is YYYYMM integer (e.g. 202502 → 2025-02-01)
+    x.RETNPRD                                           AS date_time,
+    -- RETNPRD is YYYYMM integer (e.g. 202502) — convert to date post-migration
     RTRIM(LTRIM(x.TRANSNUM))                            AS ref_number,
     -- TRANSNUM is the unique transaction number for this detail line
     x.invoice_id                                        AS invoice_id,
