@@ -37,6 +37,8 @@ Tables modified -- Primary IDs (views _001 to _10 + FK lookup tables):
   CHCHRS      -> item_id         (ORDER BY CHRGID)                    -- _008 invoiceable items
   CHTNTRS     -> invoice_id      (ORDER BY BATCHID, ENTRYNO)          -- _009 debtors invoices
   CHRTXS      -> return_line_id  (ORDER BY RETURNID, TRANSNUM)        -- _10  client returns
+  CHTPAYS     -> payment_id      (ORDER BY BATCHID, ENTRYID, RCNO, TENNAME, BLOCKID, UNITNO) -- _011 tenant payments
+  CHTACC      -> acc_id          (ORDER BY TRANSDATE, TENNAME, BLOCKID, UNITNO, RCNO, INVONUM, CR only) -- _012 payment-invoice allocs
   CHOFFICERS  -> officer_id      (ORDER BY OFFID)                     -- FK: field officers
   CHSTFF      -> staff_id        (ORDER BY EMPNUMB)                   -- FK: staff
   CHBANK      -> bank_id         (ORDER BY BANKCODE)                  -- FK: banks
@@ -49,7 +51,7 @@ Lookup tables created:
   _mig_zones       (zone_id, bloc)                -- from DISTINCT CHBLOCKS.BLOC
   _mig_zone_areas  (zone_area_id, blocal, bloc)   -- from DISTINCT CHBLOCKS.BLOCAL
 
-FK columns stamped (39 operations across 20 tables):
+FK columns stamped (57 operations across 22 tables):
   CHBLOCKS    : client_id, field_officer_id, zone_supervisor_id, zone_manager_id
   CHBUNITS    : property_id, client_id
   CHTENS      : property_id, unit_id
@@ -64,6 +66,11 @@ FK columns stamped (39 operations across 20 tables):
   CHRTXS      : property_id, client_id, zone_id, field_officer_id,
                 zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
                 return_id, invoice_id
+  CHTPAYS     : property_id, client_id, zone_id, field_officer_id,
+                zone_supervisor_id, zone_manager_id, unit_id, tenant_id
+  CHTACC      : property_id, client_id, zone_id, field_officer_id,
+                zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
+                invoice_id, payment_id
   CHDPAY      : property_id, client_id, unit_id, tenant_id
   CHDPS       : property_id, client_id, unit_id, tenant_id
   CHIPAYS     : property_id, client_id, unit_id, tenant_id
@@ -76,6 +83,7 @@ FK columns stamped (39 operations across 20 tables):
 """
 
 import pyodbc
+import re
 import sys
 import time
 
@@ -85,6 +93,10 @@ import time
 MSSQL_SERVER   = r'localhost\SQL2017'
 MSSQL_DATABASE = 'CHABRINS'
 MSSQL_DRIVER   = '{SQL Server}'  # or '{ODBC Driver 17 for SQL Server}'
+
+# Rows per mini-transaction for large-table batching.
+# Keeps each transaction small so the log never fills.
+BATCH = 50_000
 
 # ===============================================================================
 # TABLE DEFINITIONS
@@ -195,6 +207,21 @@ TABLES = [
         'where':    'RETURNID IS NOT NULL',
         'desc':     'FK -- returns master/headers',
     },
+    # -- Payment transaction tables (_011, _012) --------------------------------
+    {
+        'table':    'CHTPAYS',
+        'id_col':   'payment_id',
+        'order_by': 'ISNULL(BATCHID, 0), ISNULL(ENTRYID, 0), ISNULL(RCNO, 0), TENNAME, BLOCKID, UNITNO',
+        'where':    'TENNAME IS NOT NULL AND BLOCKID IS NOT NULL',
+        'desc':     '_011 -- sys_pm_tenants_payments (primary payment table)',
+    },
+    {
+        'table':    'CHTACC',
+        'id_col':   'acc_id',
+        'order_by': 'TRANSDATE, TENNAME, BLOCKID, UNITNO, ISNULL(RCNO, 0), INVONUM',
+        'where':    "DRCR = 'CR' AND RCNO IS NOT NULL AND INVONUM IS NOT NULL",
+        'desc':     '_012 -- sys_pm_tenants_payments_invoices (payment-to-invoice allocations)',
+    },
 ]
 
 
@@ -258,6 +285,39 @@ def fmt_elapsed(start):
     return f"{elapsed / 60:.1f}m"
 
 
+def set_recovery_simple(conn):
+    """
+    Switch CHABRINS to SIMPLE recovery so the transaction log can be
+    reused after each CHECKPOINT instead of growing unboundedly.
+    Call this before any large batch operation.
+    SIMPLE recovery is safe for a migration workload (no log backups needed).
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(f"ALTER DATABASE [{MSSQL_DATABASE}] SET RECOVERY SIMPLE WITH NO_WAIT")
+        conn.commit()
+        cur.execute("CHECKPOINT")
+        conn.commit()
+        print(f"  [log]  {MSSQL_DATABASE} recovery -> SIMPLE  (log reuse enabled)")
+    except Exception as e:
+        print(f"  [warn] Could not set SIMPLE recovery: {e}")
+    finally:
+        cur.close()
+
+
+def set_recovery_full(conn):
+    """Restore FULL recovery model after stamping is complete."""
+    cur = conn.cursor()
+    try:
+        cur.execute(f"ALTER DATABASE [{MSSQL_DATABASE}] SET RECOVERY FULL WITH NO_WAIT")
+        conn.commit()
+        print(f"  [log]  {MSSQL_DATABASE} recovery -> FULL   (restored)")
+    except Exception as e:
+        print(f"  [warn] Could not restore FULL recovery: {e}")
+    finally:
+        cur.close()
+
+
 # ===============================================================================
 # MAIN LOGIC
 # ===============================================================================
@@ -282,8 +342,13 @@ def add_id_column(conn, entry):
         conn.commit()
         print(f"  [add]  Column {col_name} added to {table}")
 
-    # -- 2. Reset all IDs to NULL (idempotent re-run) --------------------------
-    cur.execute(f"UPDATE [{table}] SET [{col_name}] = NULL")
+    # -- 2. Reset all IDs to NULL in batches (avoids one giant log entry) ------
+    while True:
+        cur.execute(f"UPDATE TOP({BATCH}) [{table}] SET [{col_name}] = NULL WHERE [{col_name}] IS NOT NULL")
+        conn.commit()
+        if cur.rowcount == 0:
+            break
+    cur.execute("CHECKPOINT")
     conn.commit()
 
     # -- 3. Populate ID using CTE + ROW_NUMBER ---------------------------------
@@ -303,6 +368,8 @@ def add_id_column(conn, entry):
     t0 = time.time()
     cur.execute(sql)
     rows_updated = cur.rowcount
+    conn.commit()
+    cur.execute("CHECKPOINT")  # Free log space immediately after large sequential write
     conn.commit()
     print(f"  [fill] {rows_updated:>10,} rows numbered in {fmt_elapsed(t0)}  ({desc})")
 
@@ -564,19 +631,79 @@ def stamp_all_fk_columns(conn):
                 pass
 
     def _stamp(tbl, cols, sql, desc):
+        """
+        Stamp FK integer values onto [tbl].[cols] using [sql].
+
+        Batching strategy (minimises transaction-log usage):
+          - NULL reset runs in TOP(BATCH) loops so each commit is small.
+          - INNER JOIN stamps loop with TOP(BATCH) + WHERE col IS NULL;
+            each mini-transaction commits and checkpoints, keeping the log
+            from ever growing beyond a single batch.
+          - LEFT JOIN stamps run as a single pass (they target small tables
+            and may legitimately produce NULLs, so NULL-check batching
+            would loop infinitely).
+        """
         nonlocal total_ops, total_err
         cols_str = ', '.join(cols)
         print(f"\n  {tbl}.{cols_str}  --  {desc}")
         try:
             for c in cols:
                 _ensure_col(tbl, c)
-            set_null = ', '.join(f'[{c}] = NULL' for c in cols)
-            cur.execute(f"UPDATE [{tbl}] SET {set_null}")
+
+            # --- NULL reset in batches ----------------------------------------
+            set_null   = ', '.join(f'[{c}] = NULL' for c in cols)
+            null_check = f'[{cols[0]}] IS NOT NULL'
+            while True:
+                cur.execute(f"UPDATE TOP({BATCH}) [{tbl}] SET {set_null} WHERE {null_check}")
+                conn.commit()
+                if cur.rowcount == 0:
+                    break
+            cur.execute("CHECKPOINT")
             conn.commit()
+
+            # --- Main stamp ---------------------------------------------------
             t0 = time.time()
-            cur.execute(sql)
-            rows = cur.rowcount
-            conn.commit()
+            sql_up = sql.upper()
+            use_inner = 'INNER JOIN' in sql_up and 'LEFT JOIN' not in sql_up
+
+            if use_inner:
+                # Batched mode: each commit handles BATCH rows; loop until done.
+                # After the NULL reset above, every target col is NULL.
+                # INNER JOIN rows that get updated flip from NULL -> value and
+                # leave the next batch's candidate set.  Rows with no JOIN match
+                # stay NULL but are excluded by INNER JOIN, so @@ROWCOUNT = 0
+                # once all matchable rows are done -- loop terminates cleanly.
+                null_cond = f"t.[{cols[0]}] IS NULL"
+                batched = re.sub(
+                    r'(?i)\bUPDATE\s+t\b',
+                    f'UPDATE TOP({BATCH}) t',
+                    sql.strip(), count=1
+                )
+                if re.search(r'(?i)\bWHERE\b', batched):
+                    batched = batched.rstrip() + f'\n  AND {null_cond}'
+                else:
+                    batched = batched.rstrip() + f'\nWHERE {null_cond}'
+
+                total_rows = 0
+                while True:
+                    cur.execute(batched)
+                    n = cur.rowcount
+                    conn.commit()
+                    total_rows += n
+                    if n == 0:
+                        break
+                    cur.execute("CHECKPOINT")
+                    conn.commit()
+                rows = total_rows
+
+            else:
+                # LEFT JOIN or mixed: single pass (these are small tables).
+                cur.execute(sql)
+                rows = cur.rowcount
+                conn.commit()
+                cur.execute("CHECKPOINT")
+                conn.commit()
+
             print(f"    {rows:>10,} rows stamped  ({fmt_elapsed(t0)})")
             for c in cols:
                 _ensure_idx(tbl, c)
@@ -820,6 +947,43 @@ def stamp_all_fk_columns(conn):
     _stamp_unit('CHIPAYS', 'BLOCKNO')
     _stamp_tenant('CHIPAYS', 'TENNAME', 'BLOCKNO')
 
+    # --- CHTPAYS (view _011: sys_pm_tenants_payments) -------------------------
+    _stamp_block_chain('CHTPAYS', 'BLOCKID', with_officers=True)
+    _stamp_unit('CHTPAYS', 'BLOCKID')
+    _stamp_tenant('CHTPAYS', 'TENNAME', 'BLOCKID')
+
+    # --- CHTACC (view _012: sys_pm_tenants_payments_invoices) ------------------
+    # CHTACC has two differently-named money columns: TRANAMT (DR) and TRANSAMT (CR).
+    # We only add/stamp integer FK columns here -- no conflict with money cols.
+    _stamp_block_chain('CHTACC', 'BLOCKID', with_officers=True)
+    _stamp_unit('CHTACC', 'BLOCKID')
+    _stamp_tenant('CHTACC', 'TENNAME', 'BLOCKID')
+
+    # CHTACC.invoice_id <- CHTNTRS via INVONUM match
+    _stamp('CHTACC', ['invoice_id'], """
+        UPDATE t SET t.[invoice_id] = ref.[invoice_id]
+        FROM [CHTACC] t
+        INNER JOIN [CHTNTRS] ref
+          ON RTRIM(LTRIM(ref.INVONUM)) = RTRIM(LTRIM(t.INVONUM))
+        WHERE ref.[invoice_id] IS NOT NULL
+          AND t.INVONUM IS NOT NULL
+    """, 'INVONUM -> CHTNTRS.INVONUM -> invoice_id')
+
+    # CHTACC.payment_id <- CHTPAYS via RCNO match
+    # NOTE: CHTPAYS must already have payment_id stamped (done in TABLES phase above).
+    #       RCNO is not unique in CHTPAYS; use MIN(payment_id) for ties.
+    _stamp('CHTACC', ['payment_id'], """
+        UPDATE t SET t.[payment_id] = ref.min_payment_id
+        FROM [CHTACC] t
+        INNER JOIN (
+            SELECT RCNO, MIN(payment_id) AS min_payment_id
+            FROM [CHTPAYS]
+            WHERE payment_id IS NOT NULL AND RCNO IS NOT NULL
+            GROUP BY RCNO
+        ) ref ON ref.RCNO = t.RCNO
+        WHERE t.RCNO IS NOT NULL
+    """, 'RCNO -> CHTPAYS.RCNO -> payment_id (MIN for rare RCNO ties)')
+
     # --- CHBCTD (voucher details) ---------------------------------------------
     _stamp('CHBCTD', ['voucher_id'], """
         UPDATE t SET t.[voucher_id] = ref.[voucher_id]
@@ -971,6 +1135,24 @@ def print_fk_summary(conn):
         ('CHIPAYS',   'client_id'),
         ('CHIPAYS',   'unit_id'),
         ('CHIPAYS',   'tenant_id'),
+        ('CHTPAYS',   'property_id'),
+        ('CHTPAYS',   'client_id'),
+        ('CHTPAYS',   'zone_id'),
+        ('CHTPAYS',   'field_officer_id'),
+        ('CHTPAYS',   'zone_supervisor_id'),
+        ('CHTPAYS',   'zone_manager_id'),
+        ('CHTPAYS',   'unit_id'),
+        ('CHTPAYS',   'tenant_id'),
+        ('CHTACC',    'property_id'),
+        ('CHTACC',    'client_id'),
+        ('CHTACC',    'zone_id'),
+        ('CHTACC',    'field_officer_id'),
+        ('CHTACC',    'zone_supervisor_id'),
+        ('CHTACC',    'zone_manager_id'),
+        ('CHTACC',    'unit_id'),
+        ('CHTACC',    'tenant_id'),
+        ('CHTACC',    'invoice_id'),
+        ('CHTACC',    'payment_id'),
         ('CHBCTD',    'voucher_id'),
         ('CHBCTD',    'property_id'),
         ('CHCHD',     'voucher_id'),
@@ -1014,7 +1196,9 @@ def main():
 
     try:
         conn = connect()
-        print(f"  Connected to {MSSQL_DATABASE} via Windows Auth\n")
+        print(f"  Connected to {MSSQL_DATABASE} via Windows Auth")
+        set_recovery_simple(conn)
+        print()
     except Exception as e:
         print(f"  FAILED to connect: {e}")
         print(f"\n  Troubleshooting:")
@@ -1062,6 +1246,9 @@ def main():
     except Exception as e:
         print(f"  [ERROR] FK stamping: {e}")
         errors += 1
+
+    # -- Restore recovery model before summary --------------------------------
+    set_recovery_full(conn)
 
     # -- Summary ---------------------------------------------------------------
     print_summary(conn)
