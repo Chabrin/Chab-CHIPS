@@ -1027,144 +1027,168 @@ GO
 
 
 -- ============================================================================
--- 18. TENANT PAYMENTS: CHTPAYS -> sys_pm_tenants_payments
+-- 18. ALLOCATED PAYMENTS: CHTPAYS -> sys_pm_tenants_payments_allocated
 -- ============================================================================
--- SOURCE: CHTPAYS (1,435,222 rows) — the real payment transaction table.
--- REPLACED: old view sourced from CHIPAYS (12,874 rows — cheque summary only).
+-- SOURCE: CHTPAYS (1,435,222 rows) — payments received and allocated to tenants.
+-- TARGET: sys_pm_tenants_payments_allocated (new clean DDL, id auto-generated).
 --
--- Joins CHRCS on RCNO for receipt cancellation status.
--- All FK integer IDs are PRE-STAMPED by generate_migration_ids.py:
---   CHTPAYS.payment_id        ORDER BY BATCHID, ENTRYID, RCNO, TENNAME, BLOCKID, UNITNO
---   CHTPAYS.property_id       via CHBLOCKS (BLOCKID)
---   CHTPAYS.client_id         via CHBLOCKS -> CHLRDS (LLORDID)
---   CHTPAYS.zone_id           via CHBLOCKS.BLOC -> _mig_zones
---   CHTPAYS.field_officer_id  via CHBLOCKS -> CHOFFICERS (OFFID)
---   CHTPAYS.zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
---   CHTPAYS.zone_manager_id   via CHBLOCKS -> CHOFFICERS (ZMGRID)
---   CHTPAYS.unit_id           via CHBUNITS (BLOCKID + UNITNO)
---   CHTPAYS.tenant_id         via CHTENS (TENNAME + BLOCKID + UNITNO)
+-- Simple straight mapping — no joins. Text name columns (TENNAME, BLOCKID,
+-- UNITNO) dropped in favour of pre-stamped integer FKs.
+-- PDTOLL, TSTATUS, ADSH, PAYDATF dropped (empty/zero in all rows).
 --
--- NOTE: invoice_id is intentionally NULL on the payment header row;
---       per-allocation payment-to-invoice links live in view #18b below.
+-- All FK integer IDs PRE-STAMPED by generate_migration_ids.py:
+--   property_id, client_id, zone_id, unit_id, tenant_id,
+--   field_officer_id, zone_supervisor_id, zone_manager_id
 
-CREATE OR ALTER VIEW vw_sys_pm_tenants_payments_011 AS
+CREATE OR ALTER VIEW vw_sys_pm_tenants_payments_allocated_011 AS
 SELECT
-    p.payment_id                                        AS id,
-    -- PRE-STAMPED: payment_id ORDER BY BATCHID, ENTRYID, RCNO, TENNAME, BLOCKID, UNITNO
     p.TRANSDAT                                          AS date_time,
-    -- TRANSDAT = system entry timestamp (when the record was committed)
     p.PAYDATE                                           AS payment_date,
-    -- PAYDATE = tenant's actual payment date
-    RTRIM(LTRIM(ISNULL(NULLIF(p.SECURCD, ''), p.REFNUM))) AS reference,
-    -- SECURCD = MPESA/bank/security reference code; fallback to REFNUM if blank
-    RTRIM(LTRIM(p.TRANSDESC))                           AS narration,
-    NULL                                                AS created_by,
-    -- CHTPAYS has no entry-by staff field; stamp not possible
-    p.zone_id                                           AS zone_id,
-    -- PRE-STAMPED: zone_id via CHBLOCKS.BLOC -> _mig_zones
-    p.client_id                                         AS client_id,
-    -- PRE-STAMPED: client_id via BLOCKID -> CHBLOCKS -> CHLRDS chain
-    p.property_id                                       AS property_id,
-    -- PRE-STAMPED: property_id via CHBLOCKS (BLOCKID)
-    p.unit_id                                           AS unit_id,
-    -- PRE-STAMPED: unit_id via CHBUNITS (BLOCKID + UNITNO)
-    p.tenant_id                                         AS lease_id,
-    -- PRE-STAMPED: tenant_id via CHTENS — same sequence as lease_agreements id
-    p.tenant_id                                         AS tenant_id,
-    -- PRE-STAMPED: tenant_id via CHTENS (TENNAME + BLOCKID + UNITNO)
-    CASE WHEN EXISTS (
-              SELECT 1 FROM CHABRINS.dbo.CHRCS
-              WHERE RCNO = p.RCNO AND RCSTATUS = 'CANCELLED'
-         ) THEN 3 ELSE 1 END                            AS current_status_id,
-    -- EXISTS subquery avoids CHRCS fanout (CHRCS can have multiple rows per RCNO)
-    ISNULL(p.RCAMT, 0)                                  AS amount,
-    NULL                                                AS invoice_id,
-    -- invoice_id intentionally NULL: see vw_sys_pm_tenants_payments_invoices_012 for allocations
-    RTRIM(LTRIM(ISNULL(NULLIF(p.PAYFOR, ''), p.TRANSDESC))) AS trans_details,
-    -- PAYFOR = payment category (RENT, WATER, etc.); fallback to TRANSDESC
-    NULL                                                AS sla_id,
-    NULL                                                AS channel_id,
-    -- PYMOD/PAYMOD could map to channel_id via post-migration lookup table
+    p.BATCHID                                           AS batch_id,
+    p.ENTRYID                                           AS entry_id,
     CAST(p.RCNO AS VARCHAR(50))                         AS receipt_number,
-    -- RCNO = receipt number; links to CHRCS and CHTACC
-    NULL                                                AS recovery_type_id,
+    ISNULL(p.RCAMT, 0)                                  AS amount,
+    p.TRANSDESC                                         AS narration,
+    p.PAYFOR                                            AS pay_for,
+    p.TRAMNTH                                           AS payment_month,
+    p.TRAYR                                             AS payment_year,
+    p.PYMOD                                             AS payment_mode,
+    p.PAYMOD                                            AS payment_channel,
+    p.SECURCD                                           AS security_code,
+    p.REFNUM                                            AS reference_number,
+    p.ENTRYREF                                          AS entry_ref,
+    ISNULL(p.TRANAMT, 0)                                AS trans_amount,
+    p.TRANTYP                                           AS trans_type,
+    p.TRANRMK                                           AS trans_remarks,
+    p.TRANPART                                          AS trans_part,
+    p.RMONTH                                            AS receipt_month,
+    p.RYEAR                                             AS receipt_year,
+    p.RECOVD                                            AS is_recovery,
+    p.INRACC                                            AS is_in_account,
+    p.property_id                                       AS property_id,
+    p.client_id                                         AS client_id,
+    p.unit_id                                           AS unit_id,
+    p.tenant_id                                         AS tenant_id,
+    p.zone_id                                           AS zone_id,
     p.field_officer_id                                  AS field_officer_id,
-    -- PRE-STAMPED: field_officer_id via CHBLOCKS -> CHOFFICERS (OFFID)
     p.zone_supervisor_id                                AS zone_supervisor_id,
-    -- PRE-STAMPED: zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
     p.zone_manager_id                                   AS zone_manager_id,
-    -- PRE-STAMPED: zone_manager_id via CHBLOCKS -> CHOFFICERS (ZMGRID)
-    NULL                                                AS extract_id,
-    RTRIM(LTRIM(p.ENTRYREF))                            AS tenant_aid
-    -- ENTRYREF = entry reference string (batch/channel identifier)
+    1                                                   AS current_status_id
+    -- NOTE: cancelled receipts (CHRCS) are updated post-migration
+    -- see Post_Migration_Scripts.sql
 FROM CHABRINS.dbo.CHTPAYS p
 WHERE p.TENNAME IS NOT NULL
-  AND p.BLOCKID IS NOT NULL
-  AND p.payment_id IS NOT NULL;
+  AND p.BLOCKID IS NOT NULL;
 GO
 
 
 -- ============================================================================
--- 18b. TENANT PAYMENT INVOICE ALLOCATIONS: CHTACC -> sys_pm_tenants_payments_invoices
+-- 18b. UNALLOCATED PAYMENTS: CHBCTD -> sys_pm_tenants_payments_unallocated
 -- ============================================================================
--- SOURCE: CHTACC (2,598,893 rows total; CR rows only used here).
+-- SOURCE: CHBCTD (1,472,942 rows) — raw bank batch detail lines (pre-posting).
+-- TARGET: sys_pm_tenants_payments_unallocated (new clean DDL, id auto-generated).
 --
--- CHTACC is the allocation ledger: each CR row records one payment (RCNO)
--- applied to one invoice (INVONUM).  One payment can cover many invoices
--- (bulk receipt split) and one invoice can be covered by many payments
--- (partial/instalment payments) — both patterns are fully represented as
--- individual rows in this view.
+-- Simple straight mapping — no joins. Text name columns (TENNAME, BLOCKID,
+-- UNITNO, OFFID, SFOID, ZMGRID, PRPBY, PSTDBY, SVRFBY) dropped.
+-- DSPNO, SFID, ENTRYREF2 dropped (empty in all/most rows).
+--
+-- PRE-STAMPED FK columns: voucher_id, property_id
+
+CREATE OR ALTER VIEW vw_sys_pm_tenants_payments_unallocated_012 AS
+SELECT
+    d.TRANSDAT                                          AS date_time,
+    d.BTCHID                                            AS batch_id,
+    d.ENTRYID                                           AS entry_id,
+    d.ENTRYREF                                          AS entry_ref,
+    d.HSECODE                                           AS house_code,
+    d.ENTDAT                                            AS entry_date,
+    d.CHZONE                                            AS zone_code,
+    d.RCNO                                              AS receipt_number,
+    ISNULL(d.RCAMT, 0)                                  AS amount,
+    d.TRANSDESC                                         AS narration,
+    d.PAYFOR                                            AS pay_for,
+    d.PAYMNTH                                           AS pay_month,
+    d.PAYYEAR                                           AS pay_year,
+    d.SECURNO                                           AS security_code,
+    d.TRANSTYP                                          AS trans_type,
+    d.PYMOD                                             AS payment_mode,
+    d.TRNRMKS                                           AS trans_remarks,
+    d.TRNPART                                           AS trans_part,
+    d.ACCNO                                             AS gl_account,
+    d.BANKC                                             AS bank_code,
+    d.SUBYR                                             AS sub_year,
+    d.SUBMNTH                                           AS sub_month,
+    ISNULL(d.SPSTD, 0)                                  AS is_posted,
+    d.SPSTDAT                                           AS posted_date,
+    ISNULL(d.SVRFY, 0)                                  AS is_verified,
+    d.SVRDAT                                            AS verified_date,
+    ISNULL(d.BASEAMT, 0)                                AS base_amount,
+    d.SHEETCNT                                          AS sheet_count,
+    d.ENTRMKS                                           AS entry_remarks,
+    d.voucher_id                                        AS voucher_id,
+    d.property_id                                       AS property_id,
+    1                                                   AS current_status_id
+FROM CHABRINS.dbo.CHBCTD d
+WHERE d.BTCHID IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 18c. TENANT ACCOUNT LEDGER: CHTACC -> sys_pm_tenants_accounts_transactions
+-- ============================================================================
+-- SOURCE: CHTACC (2,598,893 rows — DR: 1,162,255 + CR: 1,436,637).
+--
+-- Full tenant DR/CR ledger. Preserves every original column except TENNAME,
+-- BLOCKID, and UNITNO which are replaced by pre-stamped integer FK equivalents.
+--
+-- DRCR = 'DR' → invoice / charge posting (TRANAMT populated, TRANSAMT = 0)
+-- DRCR = 'CR' → payment / receipt posting (TRANSAMT populated, TRANAMT = 0)
+--
+-- NOTE: id is NOT included in this view — PostgreSQL auto-generates it
+--   via BIGSERIAL / IDENTITY on the destination table.
 --
 -- All FK integer IDs are PRE-STAMPED by generate_migration_ids.py:
---   CHTACC.acc_id             ORDER BY TRANSDATE, TENNAME, BLOCKID, UNITNO, RCNO, INVONUM (CR only)
---   CHTACC.invoice_id         via INVONUM -> CHTNTRS.invoice_id  (pre-stamped integer FK)
---   payment_id                resolved at runtime via composite key join to CHTPAYS
---                             (RCNO + TENNAME + BLOCKID + UNITNO) — NOT from pre-stamped
---                             CHTACC.payment_id (which used RCNO alone and caused
---                             cross-tenant collisions).
---   CHTACC.property_id        via CHBLOCKS (BLOCKID)
---   CHTACC.client_id          via CHBLOCKS -> CHLRDS chain
---   CHTACC.zone_id            via CHBLOCKS.BLOC -> _mig_zones
---   CHTACC.field_officer_id   via CHBLOCKS -> CHOFFICERS (OFFID)
---   CHTACC.zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
---   CHTACC.zone_manager_id    via CHBLOCKS -> CHOFFICERS (ZMGRID)
---   CHTACC.unit_id            via CHBUNITS (BLOCKID + UNITNO)
---   CHTACC.tenant_id          via CHTENS (TENNAME + BLOCKID + UNITNO)
---
--- CHTACC column notes:
---   DRCR='DR'  -> invoice/charge line: TRANAMT populated, TRANSAMT=0
---   DRCR='CR'  -> payment/receipt line: TRANSAMT populated (amount_allocated), TRANAMT=0
---   INVONUM    -> links to CHTNTRS for original invoice amount and BALAMT
---
--- WHY composite key for payment_id — not pre-stamped a.payment_id:
---   RCNO is NOT globally unique in CHTPAYS; the same receipt number can exist
---   for different tenants/properties.  Stamping CHTACC.payment_id via RCNO alone
---   caused cross-tenant collisions (e.g. payment_id=69859 for tenant 85652/property 324
---   was also assigned to allocation rows for tenant 21311/property 755).
---   The INNER JOIN on (RCNO + TENNAME + BLOCKID + UNITNO) prevents this.
+--   CHTACC.property_id         via CHBLOCKS (BLOCKID)
+--   CHTACC.client_id           via CHBLOCKS -> CHLRDS chain
+--   CHTACC.zone_id             via CHBLOCKS.BLOC -> _mig_zones
+--   CHTACC.field_officer_id    via CHBLOCKS -> CHOFFICERS (OFFID)
+--   CHTACC.zone_supervisor_id  via CHBLOCKS -> CHOFFICERS (SFOID)
+--   CHTACC.zone_manager_id     via CHBLOCKS -> CHOFFICERS (ZMGRID)
+--   CHTACC.unit_id             via CHBUNITS (BLOCKID + UNITNO)
+--   CHTACC.tenant_id           via CHTENS   (TENNAME + BLOCKID + UNITNO)
+--   CHTACC.invoice_id          via INVONUM  -> CHTNTRS.invoice_id
+--   CHTACC.payment_id          via RCNO     -> CHTPAYS.payment_id (CR rows only; NULL on DR)
 
-CREATE OR ALTER VIEW vw_sys_pm_tenants_payments_invoices_012 AS
+CREATE OR ALTER VIEW vw_sys_pm_tenants_accounts_transactions_013 AS
 SELECT
-    a.acc_id                                            AS id,
-    -- PRE-STAMPED: acc_id ORDER BY TRANSDATE, TENNAME, BLOCKID, UNITNO, RCNO, INVONUM (CR rows only)
     a.TRANSDATE                                         AS date_time,
-    -- TRANSDATE = date this payment was allocated against the invoice
+    -- TRANSDATE = date the transaction was posted to the tenant account
+    RTRIM(LTRIM(a.TRANSDESC))                           AS narration,
+    -- TRANSDESC = free-text description (e.g. "RENT FOR May 2025", "Payment")
+    RTRIM(LTRIM(a.PAYFOR))                              AS pay_for,
+    -- PAYFOR = charge category (RENT, Water Bill, Service Charge, etc.)
+    RTRIM(LTRIM(a.DRCR))                                AS dr_cr,
+    -- DR = invoice/charge posted; CR = payment/receipt applied
+    ISNULL(a.TRANAMT, 0)                                AS debit_amount,
+    -- TRANAMT = amount on DR rows (invoice/charge face value); 0 on CR rows
+    ISNULL(a.TRANSAMT, 0)                               AS credit_amount,
+    -- TRANSAMT = amount on CR rows (payment allocated); 0 on DR rows
+    a.RCNO                                              AS receipt_number,
+    -- RCNO = receipt number for CR rows; NULL on DR rows; links to CHRCS/CHTPAYS
+    RTRIM(LTRIM(a.PYMOD))                               AS payment_mode,
+    -- PYMOD = payment mode code (CA=Cash, PO=PostOffice, REC=Receipt)
+    RTRIM(LTRIM(a.ENTRYREF))                            AS entry_ref,
+    -- ENTRYREF = entry reference / batch channel identifier
+    RTRIM(LTRIM(a.ENTRYBY))                             AS entry_by,
+    -- ENTRYBY = free-text staff name who created the entry
+    RTRIM(LTRIM(a.DELSTAT))                             AS del_status,
+    -- DELSTAT = deletion status flag ('Del' = soft-deleted)
+    RTRIM(LTRIM(a.INVONUM))                             AS invoice_number,
+    -- INVONUM = invoice reference string linking to CHTNTRS
     a.invoice_id                                        AS invoice_id,
-    -- PRE-STAMPED: invoice_id via INVONUM -> CHTNTRS.INVONUM -> CHTNTRS.invoice_id
-    tp.payment_id                                       AS payment_id,
-    -- Resolved via RCNO + TENNAME + BLOCKID + UNITNO composite key (see header note).
-    -- Using tp.payment_id instead of pre-stamped a.payment_id avoids cross-tenant
-    -- RCNO collisions that produce phantom duplicate payment linkages.
-    0                                                   AS prev_unallocated_balance,
-    -- Running balance history not stored in CHTACC; 0 = safe default
-    ISNULL(n.TRANSAMT, 0)                               AS invoice_amount,
-    -- From CHTNTRS: original invoice face amount
-    ISNULL(a.TRANSAMT, 0)                               AS amount_allocated,
-    -- CHTACC.TRANSAMT = the portion of this payment applied to this invoice
-    0                                                   AS new_unallocated_balance,
-    -- Running balance history not stored in CHTACC; 0 = safe default
-    ISNULL(n.BALAMT, 0)                                 AS new_invoice_balance,
-    -- From CHTNTRS: current outstanding balance on the invoice (closest approximation)
+    -- PRE-STAMPED: invoice_id via INVONUM -> CHTNTRS.invoice_id
+    a.payment_id                                        AS payment_id,
+    -- PRE-STAMPED: payment_id via RCNO -> CHTPAYS.payment_id (NULL on DR rows)
     a.zone_id                                           AS zone_id,
     -- PRE-STAMPED: zone_id via CHBLOCKS.BLOC -> _mig_zones
     a.property_id                                       AS property_id,
@@ -1173,7 +1197,6 @@ SELECT
     -- PRE-STAMPED: unit_id via CHBUNITS (BLOCKID + UNITNO)
     a.tenant_id                                         AS lease_id,
     -- PRE-STAMPED: tenant_id via CHTENS — same sequence as lease_agreements id
-    a.TRANSDATE                                         AS trans_date_time,
     a.client_id                                         AS client_id,
     -- PRE-STAMPED: client_id via BLOCKID -> CHBLOCKS -> CHLRDS chain
     a.tenant_id                                         AS tenant_id,
@@ -1183,24 +1206,45 @@ SELECT
     -- PRE-STAMPED: field_officer_id via CHBLOCKS -> CHOFFICERS (OFFID)
     a.zone_supervisor_id                                AS zone_supervisor_id,
     -- PRE-STAMPED: zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
-    a.zone_manager_id                                   AS zone_manager_id
+    a.zone_manager_id                                   AS zone_manager_id,
     -- PRE-STAMPED: zone_manager_id via CHBLOCKS -> CHOFFICERS (ZMGRID)
+    CASE WHEN RTRIM(LTRIM(a.DELSTAT)) = 'Del' THEN 2
+         ELSE 1 END                                     AS current_status_id
+    -- Active (1) unless soft-deleted (2)
 FROM CHABRINS.dbo.CHTACC a
-INNER JOIN CHABRINS.dbo.CHTPAYS tp
-    ON  tp.RCNO = a.RCNO
-    AND RTRIM(LTRIM(ISNULL(tp.TENNAME, ''))) = RTRIM(LTRIM(ISNULL(a.TENNAME, '')))
-    AND RTRIM(LTRIM(ISNULL(tp.BLOCKID, ''))) = RTRIM(LTRIM(ISNULL(a.BLOCKID, '')))
-    AND RTRIM(LTRIM(ISNULL(tp.UNITNO,  ''))) = RTRIM(LTRIM(ISNULL(a.UNITNO,  '')))
-    -- Composite-key match: guarantees the payment belongs to the same
-    -- tenant/property/unit as this allocation row.  INNER JOIN also
-    -- implicitly filters out any CHTACC row whose RCNO has no matching
-    -- payment record (replaces the old AND a.payment_id IS NOT NULL guard).
-LEFT JOIN CHABRINS.dbo.CHTNTRS n ON n.invoice_id = a.invoice_id
-    -- Join to get invoice_amount (TRANSAMT) and new_invoice_balance (BALAMT)
-WHERE a.DRCR = 'CR'
-  AND a.RCNO IS NOT NULL
-  AND a.acc_id IS NOT NULL
-  AND a.invoice_id IS NOT NULL;
+WHERE a.DRCR IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 18d. RECEIPT BOOK: CHRCS -> cb_receipts
+-- ============================================================================
+-- SOURCE: CHRCS (1,969,089 rows) — receipt register.
+-- TARGET: cb_receipts (new clean DDL, id auto-generated).
+--
+-- Simple straight mapping — all columns lowercase, no joins.
+-- RCSTATUS: OK (1,824,410), CANCELLED (144,678), 0 (1).
+-- Post-migration: UPDATE sys_pm_tenants_payments_allocated SET current_status_id=2
+--   WHERE receipt_number IN (SELECT rcno FROM cb_receipts WHERE rcstatus='CANCELLED')
+
+CREATE OR ALTER VIEW vw_cb_receipts_014 AS
+SELECT
+    r.RCNO                                              AS rcno,
+    r.RCOF                                              AS rcof,
+    r.SUBDATE                                           AS subdate,
+    r.SUBMTH                                            AS submth,
+    r.SUBYR                                             AS subyr,
+    ISNULL(r.SUBAMT, 0)                                 AS subamt,
+    r.DPSNO                                             AS dpsno,
+    r.RUSED                                             AS rused,
+    r.HOUSE                                             AS house,
+    r.ACCNO                                             AS accno,
+    r.ACCBANK                                           AS accbank,
+    r.RCSTATUS                                          AS rcstatus,
+    r.CANBY                                             AS canby,
+    r.CANREASON                                         AS canreason,
+    r.CANDATE                                           AS candate
+FROM CHABRINS.dbo.CHRCS r;
 GO
 
 
@@ -1654,8 +1698,9 @@ GO
     24. vw_sys_pm_deposits_requests                   (CHDPS)
     25. vw_sys_pm_tenants_payments_011               (CHTPAYS + CHRCS join)
     26. vw_sys_pm_tenants_payments_invoices_012       (CHTACC CR rows + CHTNTRS join)
-    27. vw_sys_pm_clients_returns                     (CHCCRST)
-    28. ** CHRHMS migration needed **                         (Returns master - NOT IN CSV)
+    27. vw_sys_pm_tenants_accounts_transactions_013  (CHTACC full ledger — DR + CR)
+    28. vw_sys_pm_clients_returns                     (CHCCRST)
+    29. ** CHRHMS migration needed **                         (Returns master - NOT IN CSV)
 
   Phase 7 — Landlord Accounts:
     29. vw_sys_pm_landlord_accounts_transaction_FROM_CHLACC   (CHLACC)

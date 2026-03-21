@@ -2,27 +2,29 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use App\Models\Unit;
+use App\Exports\ClientInvoicesExport;
+use App\Exports\TenantInvoicesExport;
+use App\Exports\TenantStatementExport;
 use App\Models\Client;
-use App\Models\Deposit;
-use App\Models\Property;
-use Illuminate\Http\Request;
 use App\Models\DebtorInvoice;
+use App\Models\Deposit;
 use App\Models\InvoiceableItem;
-use App\Models\LeaseAgreement;
 use App\Models\InvoiceLineItem;
 use App\Models\InvoiceWorkflow;
+use App\Models\LeaseAgreement;
+use App\Models\Property;
+use App\Models\TenantAccountTransaction;
+use App\Models\Unit;
 use App\Services\ErrorDispatcher;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Exports\TenantInvoicesExport;
-use App\Exports\ClientInvoicesExport;
-use App\Exports\TenantStatementExport;
 use Illuminate\Support\Facades\Validator;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Maatwebsite\Excel\Facades\Excel;
 
 class InvoicingController extends Controller
 {
@@ -257,12 +259,98 @@ class InvoicingController extends Controller
     }
 
     /**
-     * Search tenant invoices (AJAX)
+     * Get properties for statement search (AJAX)
+     */
+    public function getPropertiesForStatements(Request $request)
+    {
+        try {
+            $query = Property::select('id', 'property_name', 'reference_number');
+            //->where('current_status_id', 1);
+
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('property_name', 'ILIKE', "%{$search}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$search}%");
+                });
+            }
+
+            $properties = $query->orderBy('property_name')->limit(50)->get();
+
+            return response()->json([
+                'success' => true,
+                'properties' => $properties
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading properties for statements: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load properties'], 500);
+        }
+    }
+
+    /**
+     * Get tenants by property (AJAX)
+     */
+    public function getTenantsByProperty(Request $request)
+    {
+        try {
+            if (!$request->filled('property_id')) {
+                return response()->json(['success' => false, 'message' => 'Property ID is required'], 400);
+            }
+
+            $query = LeaseAgreement::where('property_id', $request->property_id)
+                ->whereNotNull('tenant_id')
+                ->with(['tenant:id,names,mobile_number,national_id,reference_number,email_address', 'unit:id,unit_code'])
+                ->select('id', 'tenant_id', 'property_id', 'unit_id', 'ref_number');
+
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->whereHas('tenant', function ($q) use ($search) {
+                    $q->where('names', 'ILIKE', "%{$search}%")
+                        ->orWhere('mobile_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('national_id', 'ILIKE', "%{$search}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$search}%");
+                });
+            }
+
+            $tenants = $query->get()
+                ->filter(fn($lease) => $lease->tenant !== null)
+                ->map(function ($lease) {
+                    return [
+                        'id' => $lease->tenant->id,
+                        'encrypted_id' => \Illuminate\Support\Facades\Crypt::encrypt($lease->tenant->id),
+                        'names' => $lease->tenant->names,
+                        'mobile_number' => $lease->tenant->mobile_number,
+                        'national_id' => $lease->tenant->national_id,
+                        'reference_number' => $lease->tenant->reference_number,
+                        'email_address' => $lease->tenant->email_address,
+                        'unit_code' => $lease->unit->unit_code ?? 'N/A',
+                        'lease_ref' => $lease->ref_number,
+                    ];
+                })
+                ->unique('id')
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'tenants' => $tenants,
+                'count' => $tenants->count()
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenants by property: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load tenants'], 500);
+        }
+    }
+
+    /**
+     * Search tenant invoices (AJAX) — uses sys_pm_tenants_accounts_transactions ledger
      */
     public function searchTenantInvoices(Request $request)
     {
+
+        Log::info('Searching tenant statements with filters: ' . json_encode($request->all()));
         try {
-            // Validate tenant_id is provided
             if (!$request->filled('tenant_id')) {
                 return response()->json([
                     'success' => false,
@@ -270,96 +358,55 @@ class InvoicingController extends Controller
                 ], 400);
             }
 
-            // Decrypt tenant_id if it's encrypted
             try {
-                $tenantId = \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
+                $tenantId = (int) Crypt::decrypt($request->tenant_id);
             } catch (\Exception $e) {
-                $tenantId = $request->tenant_id;
+                $tenantId = (int) $request->tenant_id;
             }
 
-            // Handle date filtering
             $dateType = $request->input('date_type', 'range');
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
 
-            // Get invoices (Debit entries)
-            $invoicesQuery = DebtorInvoice::where('tenant_id', $tenantId);
-
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $invoicesQuery->whereDate('date_due', '>=', $dateFrom)
-                    ->whereDate('date_due', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $invoicesQuery->whereDate('date_due', '<=', $dateTo);
+            $query = TenantAccountTransaction::where('tenant_id', $tenantId)
+                ->where('current_status_id', 1);
+            if ($request->filled('property_id')) {
+                $query->where('property_id', $request->property_id);
             }
 
-            $invoices = $invoicesQuery->orderBy('id', 'asc')->get();
-
-            // Get payments (Credit entries)
-            $paymentsQuery = DB::table('sys_pm_tenants_payments')
-                ->where('tenant_id', $tenantId);
-
             if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $paymentsQuery->whereDate('payment_date', '>=', $dateFrom)
-                    ->whereDate('payment_date', '<=', $dateTo);
+                $query->whereDate('date_time', '>=', $dateFrom)
+                    ->whereDate('date_time', '<=', $dateTo);
             } elseif ($dateType === 'end' && $dateTo) {
-                $paymentsQuery->whereDate('payment_date', '<=', $dateTo);
+                $query->whereDate('date_time', '<=', $dateTo);
             }
 
-            $payments = $paymentsQuery->orderBy('payment_date', 'asc')->get();
+            $transactions = $query->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
 
-            // Combine invoices and payments into statement entries
             $statementEntries = [];
-
-            // Add invoices as debit entries
-            foreach ($invoices as $invoice) {
-                $statementEntries[] = [
-                    'date' => $invoice->date_due,
-                    'reference' => $invoice->reference_number ?? '-',
-                    'narration' => $invoice->narration ?? 'Invoice',
-                    'debit' => $invoice->total_amount,
-                    'credit' => 0,
-                    'type' => 'invoice',
-                    'sort_date' => $invoice->date_due,
-                    'sort_id' => $invoice->id,
-                ];
-            }
-
-            // Add payments as credit entries
-            foreach ($payments as $payment) {
-                $statementEntries[] = [
-                    'date' => $payment->payment_date,
-                    'reference' => $payment->reference ?? '-',
-                    'narration' => $payment->narration ?? 'Payment',
-                    'debit' => 0,
-                    'credit' => $payment->amount,
-                    'type' => 'payment',
-                    'sort_date' => $payment->payment_date,
-                    'sort_id' => $payment->id,
-                ];
-            }
-
-            // Sort by date first (most recent first), then by ID for invoices
-            usort($statementEntries, function ($a, $b) {
-                $dateCompare = strtotime($b['sort_date']) - strtotime($a['sort_date']); // Reversed for descending
-                if ($dateCompare !== 0) {
-                    return $dateCompare;
-                }
-                // If same date, sort invoices by ID (newest first)
-                if ($a['type'] === 'invoice' && $b['type'] === 'invoice') {
-                    return $b['sort_id'] - $a['sort_id']; // Reversed for descending
-                }
-                return 0;
-            });
-
-            // Calculate running balance
             $balance = 0;
-            foreach ($statementEntries as &$entry) {
-                $balance += $entry['credit'] - $entry['debit'];
-                $entry['balance'] = $balance;
-                $entry['date_formatted'] = date('d-m-Y', strtotime($entry['date']));
-                $entry['debit_formatted'] = $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '-';
-                $entry['credit_formatted'] = $entry['credit'] > 0 ? number_format($entry['credit'], 2) : '-';
-                $entry['balance_formatted'] = number_format($entry['balance'], 2);
+
+            foreach ($transactions as $txn) {
+                $isDebit = strtoupper($txn->dr_cr) === 'DR';
+                $debit = abs($txn->debit_amount ?? 0);
+                $credit = abs($txn->credit_amount ?? 0);
+                $balance += $credit - $debit;
+
+                $statementEntries[] = [
+                    'date' => $txn->date_time,
+                    'reference' => $txn->invoice_number ?? '-',
+                    'narration' => $txn->narration ?? ($isDebit ? 'Invoice' : 'Payment'),
+                    'debit' => $debit,
+                    'credit' => $credit,
+                    'type' => $isDebit ? 'invoice' : 'payment',
+                    'balance' => $balance,
+                    'date_formatted' => $txn->date_time ? date('d-m-Y', strtotime($txn->date_time)) : '-',
+                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '-',
+                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
+                    'balance_formatted' => number_format($balance, 2),
+                ];
             }
 
             return response()->json([
@@ -384,9 +431,9 @@ class InvoicingController extends Controller
         try {
             // Decrypt tenant_id if encrypted
             try {
-                $tenantId = \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
+                $tenantId = (int) \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
             } catch (\Exception $e) {
-                $tenantId = $request->tenant_id;
+                $tenantId = (int) $request->tenant_id;
             }
 
             // Get tenant details
@@ -396,96 +443,68 @@ class InvoicingController extends Controller
                 return redirect()->back()->with('error', 'Tenant not found');
             }
 
-            // Get property and unit names from the first invoice with proper joins
-            $firstInvoice = DB::table('sys_pm_debtors_invoices as inv')
-                ->leftJoin('sys_pm_properties as prop', 'inv.property_id', '=', 'prop.id')
-                ->leftJoin('sys_pm_units as unit', 'inv.unit_id', '=', 'unit.id')
-                ->where('inv.tenant_id', $tenantId)
-                ->select('prop.property_name', 'unit.unit_code')
+            // Get property info from the first transaction
+            $firstTxn = TenantAccountTransaction::where('tenant_id', $tenantId)
+                ->whereNotNull('property_id')
                 ->first();
+
+            $propertyName = 'N/A';
+            $unitName = 'N/A';
+            if ($firstTxn) {
+                $property = Property::find($firstTxn->property_id);
+                $unit = $firstTxn->unit_id ? Unit::find($firstTxn->unit_id) : null;
+                $propertyName = $property->property_name ?? 'N/A';
+                $unitName = $unit->unit_code ?? 'N/A';
+            }
 
             $tenantInfo = [
                 'tenant_name' => $tenant->names ?? 'N/A',
-                'property_name' => $firstInvoice->property_name ?? 'N/A',
-                'unit_name' => $firstInvoice->unit_code ?? 'N/A',
+                'property_name' => $propertyName,
+                'unit_name' => $unitName,
             ];
 
-            // Get statement data (reuse logic from searchTenantInvoices)
+            // Get statement data using TenantAccountTransaction
             $dateType = $request->input('date_type', 'range');
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
 
-            // Get invoices (Debit entries)
-            $invoicesQuery = DebtorInvoice::where('tenant_id', $tenantId);
+            $query = TenantAccountTransaction::where('tenant_id', $tenantId)
+                ->where('current_status_id', 1);
 
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $invoicesQuery->whereDate('date_due', '>=', $dateFrom)
-                    ->whereDate('date_due', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $invoicesQuery->whereDate('date_due', '<=', $dateTo);
+            if ($request->filled('property_id')) {
+                $query->where('property_id', $request->property_id);
             }
 
-            $invoices = $invoicesQuery->orderBy('id', 'asc')->get();
-
-            // Get payments (Credit entries)
-            $paymentsQuery = DB::table('sys_pm_tenants_payments')
-                ->where('tenant_id', $tenantId);
-
             if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $paymentsQuery->whereDate('payment_date', '>=', $dateFrom)
-                    ->whereDate('payment_date', '<=', $dateTo);
+                $query->whereDate('date_time', '>=', $dateFrom)
+                    ->whereDate('date_time', '<=', $dateTo);
             } elseif ($dateType === 'end' && $dateTo) {
-                $paymentsQuery->whereDate('payment_date', '<=', $dateTo);
+                $query->whereDate('date_time', '<=', $dateTo);
             }
 
-            $payments = $paymentsQuery->orderBy('payment_date', 'asc')->get();
+            $transactions = $query->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
 
-            // Combine into statement entries
+            // Build statement entries (oldest first)
             $statementEntries = [];
-
-            foreach ($invoices as $invoice) {
-                $statementEntries[] = [
-                    'date' => $invoice->date_due,
-                    'reference' => $invoice->reference_number ?? '-',
-                    'narration' => $invoice->narration ?? 'Invoice',
-                    'debit' => $invoice->total_amount,
-                    'credit' => 0,
-                    'type' => 'invoice',
-                    'sort_date' => $invoice->date_due,
-                    'sort_id' => $invoice->id,
-                ];
-            }
-
-            foreach ($payments as $payment) {
-                $statementEntries[] = [
-                    'date' => $payment->payment_date,
-                    'reference' => $payment->reference ?? '-',
-                    'narration' => $payment->narration ?? 'Payment',
-                    'debit' => 0,
-                    'credit' => $payment->amount,
-                    'type' => 'payment',
-                    'sort_date' => $payment->payment_date,
-                    'sort_id' => $payment->id,
-                ];
-            }
-
-            // Sort by date first (most recent first), then by ID for invoices  
-            usort($statementEntries, function ($a, $b) {
-                $dateCompare = strtotime($b['sort_date']) - strtotime($a['sort_date']); // Reversed for descending
-                if ($dateCompare !== 0) {
-                    return $dateCompare;
-                }
-                if ($a['type'] === 'invoice' && $b['type'] === 'invoice') {
-                    return $b['sort_id'] - $a['sort_id']; // Reversed for descending
-                }
-                return 0;
-            });
-
-            // Calculate running balance
             $balance = 0;
-            foreach ($statementEntries as &$entry) {
-                $balance += $entry['credit'] - $entry['debit'];
-                $entry['balance'] = $balance;
+
+            foreach ($transactions as $txn) {
+                $isDebit = strtoupper($txn->dr_cr) === 'DR';
+                $debit = abs($txn->debit_amount ?? 0);
+                $credit = abs($txn->credit_amount ?? 0);
+                $balance += $credit - $debit;
+
+                $statementEntries[] = [
+                    'date' => $txn->date_time,
+                    'reference' => $txn->invoice_number ?? '-',
+                    'narration' => $txn->narration ?? ($isDebit ? 'Invoice' : 'Payment'),
+                    'debit' => $debit,
+                    'credit' => $credit,
+                    'type' => $isDebit ? 'invoice' : 'payment',
+                    'balance' => $balance,
+                ];
             }
 
             $fileName = 'Tenant_Statement_' . ($tenant->reference_number ?? $tenantId) . '_' . date('Y-m-d') . '.xlsx';
@@ -506,9 +525,9 @@ class InvoicingController extends Controller
         try {
             // Decrypt tenant_id if encrypted
             try {
-                $tenantId = \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
+                $tenantId = (int) \Illuminate\Support\Facades\Crypt::decrypt($request->tenant_id);
             } catch (\Exception $e) {
-                $tenantId = $request->tenant_id;
+                $tenantId = (int) $request->tenant_id;
             }
 
             // Get tenant details with relationships
@@ -518,102 +537,74 @@ class InvoicingController extends Controller
                 return redirect()->back()->with('error', 'Tenant not found');
             }
 
-            // Get property and unit names from the first invoice with proper joins
-            $firstInvoice = DB::table('sys_pm_debtors_invoices as inv')
-                ->leftJoin('sys_pm_properties as prop', 'inv.property_id', '=', 'prop.id')
-                ->leftJoin('sys_pm_units as unit', 'inv.unit_id', '=', 'unit.id')
-                ->where('inv.tenant_id', $tenantId)
-                ->select('prop.property_name', 'unit.unit_code')
+            // Get property info from the first transaction
+            $firstTxn = TenantAccountTransaction::where('tenant_id', $tenantId)
+                ->whereNotNull('property_id')
                 ->first();
+
+            $propertyName = 'N/A';
+            $unitName = 'N/A';
+            if ($firstTxn) {
+                $property = Property::find($firstTxn->property_id);
+                $unit = $firstTxn->unit_id ? Unit::find($firstTxn->unit_id) : null;
+                $propertyName = $property->property_name ?? 'N/A';
+                $unitName = $unit->unit_code ?? 'N/A';
+            }
 
             $tenantInfo = [
                 'tenant_name' => $tenant->names ?? 'N/A',
                 'tenant_email' => $tenant->email_address ?? 'N/A',
                 'tenant_phone' => $tenant->mobile_number ?? 'N/A',
-                'property_name' => $firstInvoice->property_name ?? 'N/A',
-                'unit_name' => $firstInvoice->unit_code ?? 'N/A',
+                'property_name' => $propertyName,
+                'unit_name' => $unitName,
             ];
 
-            // Get statement data
+            // Get statement data using TenantAccountTransaction
             $dateType = $request->input('date_type', 'range');
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
 
-            // Get invoices (Debit entries)
-            $invoicesQuery = DebtorInvoice::where('tenant_id', $tenantId);
+            $query = TenantAccountTransaction::where('tenant_id', $tenantId)
+                ->where('current_status_id', 1);
 
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $invoicesQuery->whereDate('date_due', '>=', $dateFrom)
-                    ->whereDate('date_due', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $invoicesQuery->whereDate('date_due', '<=', $dateTo);
+            if ($request->filled('property_id')) {
+                $query->where('property_id', $request->property_id);
             }
 
-            $invoices = $invoicesQuery->orderBy('id', 'asc')->get();
-
-            // Get payments (Credit entries)
-            $paymentsQuery = DB::table('sys_pm_tenants_payments')
-                ->where('tenant_id', $tenantId);
-
             if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $paymentsQuery->whereDate('payment_date', '>=', $dateFrom)
-                    ->whereDate('payment_date', '<=', $dateTo);
+                $query->whereDate('date_time', '>=', $dateFrom)
+                    ->whereDate('date_time', '<=', $dateTo);
             } elseif ($dateType === 'end' && $dateTo) {
-                $paymentsQuery->whereDate('payment_date', '<=', $dateTo);
+                $query->whereDate('date_time', '<=', $dateTo);
             }
 
-            $payments = $paymentsQuery->orderBy('payment_date', 'asc')->get();
+            $transactions = $query->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
 
-            // Combine into statement entries
+            // Build statement entries (oldest first)
             $statementEntries = [];
-
-            foreach ($invoices as $invoice) {
-                $statementEntries[] = [
-                    'date' => $invoice->date_due,
-                    'reference' => $invoice->reference_number ?? '-',
-                    'narration' => $invoice->narration ?? 'Invoice',
-                    'debit' => $invoice->total_amount,
-                    'credit' => 0,
-                    'type' => 'invoice',
-                    'sort_date' => $invoice->date_due,
-                    'sort_id' => $invoice->id,
-                ];
-            }
-
-            foreach ($payments as $payment) {
-                $statementEntries[] = [
-                    'date' => $payment->payment_date,
-                    'reference' => $payment->reference ?? '-',
-                    'narration' => $payment->narration ?? 'Payment',
-                    'debit' => 0,
-                    'credit' => $payment->amount,
-                    'type' => 'payment',
-                    'sort_date' => $payment->payment_date,
-                    'sort_id' => $payment->id,
-                ];
-            }
-
-            // Sort by date first (most recent first), then by ID for invoices
-            usort($statementEntries, function ($a, $b) {
-                $dateCompare = strtotime($b['sort_date']) - strtotime($a['sort_date']); // Reversed for descending
-                if ($dateCompare !== 0) {
-                    return $dateCompare;
-                }
-                if ($a['type'] === 'invoice' && $b['type'] === 'invoice') {
-                    return $b['sort_id'] - $a['sort_id']; // Reversed for descending
-                }
-                return 0;
-            });
-
-            // Calculate running balance and format
             $balance = 0;
-            foreach ($statementEntries as &$entry) {
-                $balance += $entry['credit'] - $entry['debit'];
-                $entry['balance'] = $balance;
-                $entry['date_formatted'] = $this->formatOrdinalDate($entry['date']);
-                $entry['debit_formatted'] = $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '-';
-                $entry['credit_formatted'] = $entry['credit'] > 0 ? number_format($entry['credit'], 2) : '-';
-                $entry['balance_formatted'] = number_format($entry['balance'], 2);
+
+            foreach ($transactions as $txn) {
+                $isDebit = strtoupper($txn->dr_cr) === 'DR';
+                $debit = abs($txn->debit_amount ?? 0);
+                $credit = abs($txn->credit_amount ?? 0);
+                $balance += $credit - $debit;
+
+                $statementEntries[] = [
+                    'date' => $txn->date_time,
+                    'reference' => $txn->invoice_number ?? '-',
+                    'narration' => $txn->narration ?? ($isDebit ? 'Invoice' : 'Payment'),
+                    'debit' => $debit,
+                    'credit' => $credit,
+                    'type' => $isDebit ? 'invoice' : 'payment',
+                    'balance' => $balance,
+                    'date_formatted' => $txn->date_time ? date('d-m-Y', strtotime($txn->date_time)) : '-',
+                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '-',
+                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
+                    'balance_formatted' => number_format($balance, 2),
+                ];
             }
 
             $data = [
