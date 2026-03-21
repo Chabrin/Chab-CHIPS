@@ -91,7 +91,7 @@
                         <form id="searchForm">
                             <!-- Row 1: Property search + Property select -->
                             <div class="row mb-2">
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label for="property_search_input" class="form-label">Search Property</label>
                                     <div class="input-group">
                                         <input type="text" class="form-control" id="property_search_input"
@@ -101,9 +101,9 @@
                                             <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display: none;"></span>
                                         </button>
                                     </div>
-                                    <small class="text-muted">Search property first, then search tenant</small>
+                                    <small class="text-muted">Search property first, then select tenant</small>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label for="property_select" class="form-label">Select Property</label>
                                     <select class="form-select" id="property_select" disabled>
                                         <option value="">-- Select Property --</option>
@@ -112,7 +112,7 @@
                                 </div>
                             </div>
 
-                            <!-- Row 2: Tenant select (Select2) -->
+                            <!-- Row 2: Tenant select -->
                             <div class="row mb-2">
                                 <div class="col-md-6">
                                     <label for="tenant_select" class="form-label">Select Tenant <span class="text-danger">*</span></label>

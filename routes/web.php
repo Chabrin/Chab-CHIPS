@@ -551,6 +551,11 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Parameterized route AFTER specific routes
     Route::post('/ajax/tenant/payments/{id}/allocate', [App\Http\Controllers\TenantPaymentsController::class, 'allocatePayment'])->name('ajax.tenant.payments.allocate');
 
+    // Allocated Payments
+    Route::post('/ajax/payments/allocated/search', [App\Http\Controllers\TenantPaymentsController::class, 'searchAllocatedPayments'])->name('ajax.payments.allocated.search');
+    Route::get('/ajax/payments/allocated/export', [App\Http\Controllers\TenantPaymentsController::class, 'exportAllocatedPayments'])->name('ajax.payments.allocated.export');
+    Route::get('/ajax/payments/properties', [App\Http\Controllers\TenantPaymentsController::class, 'getPropertiesForPayments'])->name('ajax.payments.properties');
+
     // Client Invoices
     Route::get('/client/invoices', [App\Http\Controllers\InvoicingController::class, 'clientInvoices'])->name('invoices.client.index');
     Route::get('/client/invoices/create', [App\Http\Controllers\InvoicingController::class, 'createClientInvoice'])->name('invoices.client.create');
