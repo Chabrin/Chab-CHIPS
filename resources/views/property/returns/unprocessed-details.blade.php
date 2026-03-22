@@ -184,10 +184,11 @@
                                         <th>Unit</th>
                                         <th>Description</th>
                                         <th>Dr/Cr</th>
-                                        <th class="text-end">Landlord Amt</th>
+                                        <th class="text-end">Amt</th>
                                         <th class="text-end">Net</th>
                                         <th class="text-end">VAT</th>
-                                        <th>Ref</th>
+                                        <th class="text-end">Pay %</th>
+                                        <th>Period</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -255,7 +256,14 @@
                     className: 'text-end'
                 },
                 {
-                    data: 'transaction_ref'
+                    data: 'pay_percentage',
+                    className: 'text-end',
+                    render: function(d) {
+                        return d ? d + '%' : '-';
+                    }
+                },
+                {
+                    data: 'return_period'
                 }
             ],
             paging: true,
