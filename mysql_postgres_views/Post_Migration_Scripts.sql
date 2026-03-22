@@ -102,3 +102,9 @@ WHERE date_time        != BTRIM(date_time)
    OR verified_date    != BTRIM(verified_date)
    OR sheet_count      != BTRIM(sheet_count)
    OR entry_remarks    != BTRIM(entry_remarks);
+
+
+
+   SELECT setval(pg_get_serial_sequence('cb_returns_summary', 'id'), (SELECT MAX(id) FROM cb_returns_summary));
+SELECT setval(pg_get_serial_sequence('cb_returns_clients', 'id'), (SELECT MAX(id) FROM cb_returns_clients));
+SELECT setval(pg_get_serial_sequence('cb_landlord_account', 'id'), (SELECT MAX(id) FROM cb_landlord_account));

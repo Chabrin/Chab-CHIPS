@@ -19,7 +19,9 @@
 --   _007  vw_sys_set_zone_areas_007
 --   _008  vw_sys_set_invoiceable_items_008
 --   _009  vw_sys_pm_debtors_invoices_009
---   _010  vw_sys_pm_clients_returns_10
+--   _015  vw_cb_returns_summary_015
+--   _016  vw_cb_returns_clients_016
+--   _017  vw_cb_landlord_account_017
 --   _011  vw_sys_pm_tenants_payments_allocated_011
 --   _012  vw_sys_pm_tenants_payments_unallocated_012
 --   _013  vw_sys_pm_tenants_accounts_transactions_013
@@ -398,99 +400,167 @@ WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
 ';
 
 -- ============================================================================
--- _010  vw_sys_pm_clients_returns_10
+-- _015  vw_cb_returns_summary_015  (CHRHMS -> cb_returns_summary, 35,217 rows)
 -- ============================================================================
+-- Return header/summary: one row per property per period.
+-- Workflow: prepared -> checked -> finalized -> approved -> paid.
 EXEC sp_executesql N'
-CREATE OR ALTER VIEW vw_sys_pm_clients_returns_10 AS
+CREATE OR ALTER VIEW vw_cb_returns_summary_015 AS
+SELECT
+    h.return_id                                         AS id,
+    RTRIM(LTRIM(h.RETURNID))                            AS return_code,
+    RTRIM(LTRIM(h.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(h.BLOCKID))                             AS property_code,
+    h.YEARR                                             AS year,
+    h.MONTHH                                            AS month,
+    RTRIM(LTRIM(h.RETDESC))                             AS return_description,
+    RTRIM(LTRIM(h.RETNPRD))                             AS return_period,
+    RTRIM(LTRIM(h.RETTYPE))                             AS return_type,
+    ISNULL(h.COMMRATE, 0)                               AS commission_rate,
+    ISNULL(h.TOTALCR, 0)                                AS total_credit,
+    ISNULL(h.SUMCOM, 0)                                 AS commission_total,
+    ISNULL(h.SUMVATBL, 0)                               AS vatable_total,
+    ISNULL(h.TOTALCOM, 0)                               AS commission_amount,
+    ISNULL(h.TOTALDR, 0)                                AS total_debit,
+    ISNULL(h.NETAMT, 0)                                 AS net_amount,
+    ISNULL(h.TRXAMT, 0)                                 AS transaction_amount,
+    ISNULL(h.NETBAL, 0)                                 AS net_balance,
+    RTRIM(LTRIM(h.PREPBY))                              AS prepared_by,
+    ISNULL(h.PREPST, 0)                                 AS prepared_status,
+    h.PREPDAT                                           AS prepared_date,
+    RTRIM(LTRIM(h.CHKBY))                               AS checked_by,
+    ISNULL(h.CHKST, 0)                                  AS checked_status,
+    h.CHKDAT                                            AS checked_date,
+    ISNULL(h.SAVDST, 0)                                 AS saved_status,
+    ISNULL(h.FINAST, 0)                                 AS finalized_status,
+    RTRIM(LTRIM(h.FINABY))                              AS finalized_by,
+    h.FINADAT                                           AS finalized_date,
+    RTRIM(LTRIM(h.APPBY))                               AS approved_by,
+    ISNULL(h.APPST, 0)                                  AS approved_status,
+    h.APPDAT                                            AS approved_date,
+    ISNULL(h.PAIDST, 0)                                 AS paid_status,
+    RTRIM(LTRIM(h.VOUCHERNO))                           AS voucher_number,
+    RTRIM(LTRIM(h.RETRMKS))                             AS remarks,
+    RTRIM(LTRIM(h.RETRMKS2))                            AS remarks_2,
+    h.REBYRR                                            AS rebate_year,
+    h.REBMNTH                                           AS rebate_month,
+    RTRIM(LTRIM(h.RETURNT))                             AS return_tag,
+    ISNULL(h.RETSTAT, 0)                                AS return_status,
+    RTRIM(LTRIM(h.CHQNO))                               AS cheque_number,
+    RTRIM(LTRIM(h.BANKACC))                             AS bank_account,
+    ISNULL(h.AMTPAYD, 0)                                AS amount_paid,
+    ISNULL(h.AMTOVD, 0)                                 AS amount_overdraft,
+    RTRIM(LTRIM(h.PAYDAT))                              AS payment_date,
+    RTRIM(LTRIM(h.RETZON))                              AS return_zone,
+    h.AUTH2M                                            AS auth_2m,
+    h.AUTHUN                                            AS auth_un,
+    ISNULL(h.OVDPER, 0)                                 AS overdraft_percentage,
+    h.return_id                                         AS return_id
+FROM CHABRINS.dbo.CHRHMS h
+WHERE h.RETURNID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _016  vw_cb_returns_clients_016  (CHRTXS -> cb_returns_clients, 1,470,210 rows)
+-- ============================================================================
+-- Return detail lines: per unit, per tenant, per charge type within a return.
+-- Join to cb_returns_summary via return_code (RETURNID).
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_returns_clients_016 AS
 SELECT
     x.return_line_id                                    AS id,
-    x.RETNPRD                                           AS date_time,
-    -- RETNPRD is YYYYMM integer (e.g. 202502) — convert to date post-migration
-    RTRIM(LTRIM(x.TRANSNUM))                            AS ref_number,
-    -- TRANSNUM is the unique transaction number for this detail line
-    x.invoice_id                                        AS invoice_id,
-    -- PRE-STAMPED: invoice_id via CHTNTRS composite key (period+type+block+unit+tenant)
-    x.SRCDATE                                           AS return_date,
-    -- SRCDATE = the source date of the charge (when the transaction originated)
+    RTRIM(LTRIM(x.RETURNID))                            AS return_code,
+    x.RETNPRD                                           AS return_period,
+    RTRIM(LTRIM(x.TRANSNUM))                            AS transaction_number,
+    RTRIM(LTRIM(x.TRANSDAT))                            AS transaction_date,
+    x.TRANSDATF                                         AS transaction_date_num,
+    RTRIM(LTRIM(x.ENTRYDE))                             AS entry_description,
+    RTRIM(LTRIM(x.ENTRYTYP))                            AS entry_type,
+    RTRIM(LTRIM(x.TRANSCODE))                           AS transaction_code,
     RTRIM(LTRIM(x.ENTRYDESC))                           AS narration,
-    -- ENTRYDESC e.g. "RENT FOR February 2025", "MONTHLY COMMISSION (10%)"
-    NULL                                                AS created_by,
-    x.zone_id                                           AS zone_id,
-    -- PRE-STAMPED: zone_id via CHBLOCKS.BLOC -> _mig_zones
-    x.client_id                                         AS client_id,
-    -- PRE-STAMPED: client_id via CHBLOCKS -> CHLRDS chain
-    x.property_id                                       AS property_id,
-    -- PRE-STAMPED: property_id via CHBLOCKS (BLOCKID)
-    x.unit_id                                           AS unit_id,
-    -- PRE-STAMPED: unit_id via CHBUNITS (BLOCKID + UNITNO)
-    x.tenant_id                                         AS lease_id,
-    -- PRE-STAMPED: tenant_id via CHTENS — same as lease_agreements id
-    x.tenant_id                                         AS tenant_id,
-    -- PRE-STAMPED: tenant_id via CHTENS (TENNAME + BLOCKID + UNITNO)
-    RTRIM(LTRIM(x.ENTRYTYP))                            AS trans_type_id,
-    -- ENTRYTYP: ''RENT CURRENT'', ''Commission'', ''Water Bill'', ''Service Charge'',
-    --           ''RENT ARREARS'', ''Recoveries'', ''VAT'', ''House Deposit'' etc.
-    RTRIM(LTRIM(x.COMMBL))                              AS commisionable,
-    -- COMMBL: ''Yes'' or ''No'' — whether this line is subject to commission
-    RTRIM(LTRIM(h.VOUCHERNO))                           AS batch_id,
-    -- From CHRHMS header: payment voucher number for this return
-    NULL                                                AS unit_status_id,
-    x.PAYPERC                                           AS threshold_percentage,
-    0                                                   AS abstract_threshold,
-    NULL                                                AS anomally_type_id,
-    NULL                                                AS anomally_orig_id,
-    ISNULL(h.RETSTAT, 2)                                AS current_status_id,
-    -- From CHRHMS header: 1 = processed, 0/NULL = pending
-    ISNULL(x.RESAMTNT, 0)                               AS trans_amount,
-    -- RESAMTNT = net/gross amount of this charge line
-    ISNULL(x.AMTPAYBL, 0)                               AS payable_amount,
-    -- AMTPAYBL = landlord''s payable share of this line (after comm deduction)
-    NULL                                                AS sla_id,
-    ISNULL(x.RESAMTNT, 0) - ISNULL(x.AMTPAYBL, 0)     AS comm_amount,
-    -- comm_amount = gross line amount minus landlord payable = commission on this line
-    CASE WHEN RTRIM(LTRIM(x.COMMBL)) = ''Yes''
-         THEN ISNULL(x.RESAMTNT, 0)
-         ELSE 0 END                                     AS commissionable_amount,
-    -- commissionable_amount = RESAMTNT when the line is subject to commission
+    RTRIM(LTRIM(x.TRANSREF))                            AS transaction_ref,
+    x.SRCDATE                                           AS source_date,
+    RTRIM(LTRIM(x.BLOCKID))                             AS property_code,
+    RTRIM(LTRIM(x.UNITNO))                              AS unit_code,
+    x.UNITID                                            AS unit_seq_id,
+    RTRIM(LTRIM(x.DRCR))                                AS dr_cr,
+    RTRIM(LTRIM(x.TENNAME))                             AS tenant_name,
+    RTRIM(LTRIM(x.TENSTAT))                             AS tenant_status,
+    RTRIM(LTRIM(x.ENTAMTT))                             AS amount_text,
+    ISNULL(x.AMTPAYBL, 0)                               AS amount_payable_landlord,
+    ISNULL(x.AMTPAYTN, 0)                               AS amount_payable_tenant,
+    ISNULL(x.RESAMTDR, 0)                               AS residual_debit,
+    ISNULL(x.RESAMTCR, 0)                               AS residual_credit,
+    ISNULL(x.RESAMTNT, 0)                               AS net_amount,
+    RTRIM(LTRIM(x.TREMARKS))                            AS remarks,
+    RTRIM(LTRIM(x.TRANSSRC))                            AS transaction_source,
+    x.DEDPNT                                            AS deduction_point,
+    RTRIM(LTRIM(x.VATABL))                              AS is_vatable,
+    RTRIM(LTRIM(x.COMMBL))                              AS is_commissionable,
+    RTRIM(LTRIM(x.DEDPNT2))                             AS deduction_point_2,
+    x.PPERIOD                                           AS payment_period,
+    RTRIM(LTRIM(x.CHQNO))                               AS cheque_number,
+    RTRIM(LTRIM(x.BANKACC))                             AS bank_account,
     ISNULL(x.VATAMT, 0)                                 AS vat_amount,
-    CAST(ISNULL(h.COMMRATE, 0) AS VARCHAR(50))          AS comm_perc,
-    -- From CHRHMS header: commission rate % for this return (e.g. 10.00)
-    NULL                                                AS vat_per,
-    NULL                                                AS item_id,
-    NULL                                                AS payable_status_id,
-    ISNULL(h.APPST, 0)                                  AS approval_status,
-    -- From CHRHMS header: 0=pending, 1=approved
-    NULL                                                AS charge_id,
-    ISNULL(h.PAIDST, 0)                                 AS paid_status_id,
-    -- From CHRHMS header: 1 = paid out to landlord, 0 = not yet paid
-    NULL                                                AS tenant_payment_id,
-    NULL                                                AS tenant_payment_date,
-    0                                                   AS tenant_payment_amount,
-    0                                                   AS allocated_total,
-    ISNULL(x.RESAMTDR, 0)                               AS invoice_balance,
-    -- RESAMTDR = residual debit amount on this line (outstanding balance component)
-    x.field_officer_id                                  AS fo_id,
-    -- PRE-STAMPED: field_officer_id via CHBLOCKS -> CHOFFICERS (OFFID)
-    NULL                                                AS is_bill,
-    ISNULL(x.AMTPAYTN, 0)                               AS paid_out,
-    -- AMTPAYTN = amount paid (tenant-side payment amount on this line)
+    x.AUTH2M                                            AS auth_2m,
+    x.AUTHUN                                            AS auth_un,
+    RTRIM(LTRIM(x.PAYPERC))                             AS pay_percentage,
+    x.return_line_id                                    AS return_line_id,
+    x.property_id                                       AS property_id,
+    x.client_id                                         AS client_id,
+    x.zone_id                                           AS zone_id,
+    x.field_officer_id                                  AS field_officer_id,
     x.zone_supervisor_id                                AS zone_supervisor_id,
-    -- PRE-STAMPED: zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
     x.zone_manager_id                                   AS zone_manager_id,
-    -- PRE-STAMPED: zone_manager_id via CHBLOCKS -> CHOFFICERS (ZMGRID)
-    NULL                                                AS comm_vat,
-    NULL                                                AS distributions_allocation_id,
-    RTRIM(LTRIM(x.TRANSCODE))                           AS return_type_id,
-    -- TRANSCODE: ''RENT'', ''COMMISSION'', ''Water Bill'', ''Service Charge'',
-    --            ''House Deposit'', ''VAT AMOUNT'', ''Recovery'' etc.
-    TRY_CAST(NULLIF(RTRIM(LTRIM(h.PAYDAT)), '''') AS DATETIME)  AS date_paid_out,
-    -- From CHRHMS header: PAYDAT is varchar(30) — TRY_CAST handles malformed dates
-    h.PREPDAT                                           AS invoice_date
-    -- From CHRHMS header: preparation/creation date of the return
+    x.unit_id                                           AS unit_id,
+    x.tenant_id                                         AS tenant_id,
+    x.return_id                                         AS return_id,
+    x.invoice_id                                        AS invoice_id
 FROM CHABRINS.dbo.CHRTXS x
-LEFT JOIN CHABRINS.dbo.CHRHMS h ON h.RETURNID = x.RETURNID
-    -- Join CHRHMS header for landlord-level fields (status, dates, comm rate, voucher)
 WHERE x.RETURNID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _017  vw_cb_landlord_account_017  (CHLACC -> cb_landlord_account, 128,423 rows)
+-- ============================================================================
+-- Landlord account ledger: debit/credit entries for landlord accounts.
+-- Links to cb_returns_summary via return_code (RETURNID) when entry
+-- originates from a return. Direct charges have NULL return_code.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_landlord_account_017 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY l.YEARR, l.MONTHH, l.LORDID, l.ENTRYNU)  AS id,
+    l.YEARR                                             AS year,
+    l.MONTHH                                            AS month,
+    RTRIM(LTRIM(l.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(l.LFNAME))                              AS landlord_name,
+    RTRIM(LTRIM(l.HOUSEID))                             AS property_code,
+    RTRIM(LTRIM(l.GTTCNUM))                             AS transaction_number,
+    RTRIM(LTRIM(l.ENTRYID))                             AS entry_type_code,
+    l.ENTRYNU                                           AS entry_sequence,
+    RTRIM(LTRIM(l.ENTRYDE))                             AS entry_description,
+    l.ENTRYDA                                           AS entry_date,
+    ISNULL(l.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(l.AMTCR, 0)                                  AS credit_amount,
+    ISNULL(l.AMTTOT, 0)                                 AS total_amount,
+    l.ACCSTAT                                           AS account_status,
+    RTRIM(LTRIM(l.PAYREF))                              AS payment_ref,
+    RTRIM(LTRIM(l.PAYREFT))                             AS payment_ref_type,
+    ISNULL(l.INTRATE, 0)                                AS interest_rate,
+    RTRIM(LTRIM(l.AUDTUSR))                             AS audit_user,
+    RTRIM(LTRIM(l.ENTPART))                             AS entry_particulars,
+    RTRIM(LTRIM(l.PVNO))                                AS pv_number,
+    RTRIM(LTRIM(l.FINACC))                              AS gl_account,
+    RTRIM(LTRIM(l.VENDORID))                            AS vendor_id,
+    ISNULL(l.RECOVD, 0)                                 AS is_recovered,
+    l.RECOYR                                            AS recovery_year,
+    l.RECOMN                                            AS recovery_month,
+    RTRIM(LTRIM(l.RETTRANS))                            AS return_transaction,
+    RTRIM(LTRIM(l.RETURNID))                            AS return_code,
+    l.client_id                                         AS client_id,
+    l.property_id                                       AS property_id
+FROM CHABRINS.dbo.CHLACC l
+WHERE l.LORDID IS NOT NULL;
 ';
 
 -- ============================================================================
