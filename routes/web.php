@@ -572,6 +572,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/returns/batches/{id}', [App\Http\Controllers\ClientReturnsController::class, 'getBatchDetails'])->name('ajax.returns.batches.details.ajax');
     Route::get('/ajax/returns/batches/{id}/returns', [App\Http\Controllers\ClientReturnsController::class, 'getBatchReturnsData'])->name('ajax.returns.batches.returns');
 
+    // Unprocessed Returns
+    Route::get('/returns/{id}/details', [App\Http\Controllers\ClientReturnsController::class, 'showUnprocessedReturnDetails'])->name('returns.details');
+    Route::get('/ajax/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnUnitsData'])->name('ajax.returns.units');
+    Route::get('/ajax/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnSummaryData'])->name('ajax.returns.summary');
+    Route::get('/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedExcel'])->name('returns.excel');
+
     // Returns Approval Routes
     Route::get('/ajax/returns/batches/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getBatchApprovals'])->name('ajax.returns.batches.approvals');
     Route::post('/ajax/returns/batches/{id}/approvals/comment', [App\Http\Controllers\ReturnsApprovalController::class, 'addApprovalComment'])->name('ajax.returns.batches.approvals.comment');

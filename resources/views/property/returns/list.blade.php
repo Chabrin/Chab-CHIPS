@@ -6,32 +6,66 @@
         <div class="row">
             <div class="col-sm-12">
                 <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Client Returns Batches</h5>
-                        <div class="ms-auto d-flex gap-2">
-                            <a href="{{ route('returns.generate.index') }}" class="btn btn-primary btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Generate Returns</span>
-                            </a>
-                        </div>
+                    <div class="card-header card-no-border d-flex align-items-center justify-content-between">
+                        <h5 class="mb-0">Returns List (Unpaid)</h5>
                     </div>
                     <div class="card-body">
+                        <!-- Filters -->
+                        <div class="row mb-3 align-items-end">
+                            <div class="col-md-2">
+                                <label for="year_select" class="form-label mb-1">Year</label>
+                                <select class="form-control form-control-sm" id="year_select">
+                                    @foreach($years as $yr)
+                                    <option value="{{ $yr }}" {{ $yr == $currentYear ? 'selected' : '' }}>{{ $yr }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="month_select" class="form-label mb-1">Month</label>
+                                <select class="form-control form-control-sm" id="month_select">
+                                    <option value="1" {{ $currentMonth == 1 ? 'selected' : '' }}>January</option>
+                                    <option value="2" {{ $currentMonth == 2 ? 'selected' : '' }}>February</option>
+                                    <option value="3" {{ $currentMonth == 3 ? 'selected' : '' }}>March</option>
+                                    <option value="4" {{ $currentMonth == 4 ? 'selected' : '' }}>April</option>
+                                    <option value="5" {{ $currentMonth == 5 ? 'selected' : '' }}>May</option>
+                                    <option value="6" {{ $currentMonth == 6 ? 'selected' : '' }}>June</option>
+                                    <option value="7" {{ $currentMonth == 7 ? 'selected' : '' }}>July</option>
+                                    <option value="8" {{ $currentMonth == 8 ? 'selected' : '' }}>August</option>
+                                    <option value="9" {{ $currentMonth == 9 ? 'selected' : '' }}>September</option>
+                                    <option value="10" {{ $currentMonth == 10 ? 'selected' : '' }}>October</option>
+                                    <option value="11" {{ $currentMonth == 11 ? 'selected' : '' }}>November</option>
+                                    <option value="12" {{ $currentMonth == 12 ? 'selected' : '' }}>December</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex gap-2 align-items-end">
+                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
+                                    <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
+                                    <span class="material-symbols-outlined" id="search_icon">search</span>
+                                    <span class="ms-1">Search</span>
+                                </button>
+                            </div>
+                            <div class="col-md-5 d-flex justify-content-end align-items-end">
+                                <small class="text-muted" id="result_info" style="display:none;">Found <strong id="result_count">0</strong> records</small>
+                            </div>
+                        </div>
+
                         <div class="table-responsive custom-scrollbar">
-                            <table class="table" id="basic-1">
+                            <table class="display" id="returns-table" style="width:100%;">
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Batch Number</th>
                                         <th>Property</th>
-                                        <th>Returns Count</th>
-                                        <th>Total Payable</th>
-                                        <th>Approvals</th>
+                                        <th>Landlord</th>
+                                        <th>Description</th>
+                                        <th>Type</th>
+                                        <th class="text-end">Credit</th>
+                                        <th class="text-end">Debit</th>
+                                        <th class="text-end">Net</th>
+                                        <th>Status</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <!-- Loaded via Ajax -->
-                                </tbody>
+                                <tbody></tbody>
                             </table>
                         </div>
                     </div>
@@ -40,88 +74,115 @@
         </div>
     </div>
 </div>
-
 @endsection
 
 @section('scripts')
 <script>
     $(document).ready(function() {
-        let batchesTable;
-
-        // Load batches via Ajax
-        function loadBatches() {
-            if ($.fn.DataTable.isDataTable('#basic-1')) {
-                $('#basic-1').DataTable().clear().destroy();
-            }
-
-            batchesTable = $('#basic-1').DataTable({
-                processing: true,
-                ajax: {
-                    url: '/ajax/returns/batches/data',
-                    dataSrc: 'data'
-                },
-                columns: [{
-                        data: null,
-                        render: function(data, type, row, meta) {
-                            return meta.row + 1;
-                        }
-                    },
-                    {
-                        data: 'batch_number'
-                    },
-                    {
-                        data: 'property_name',
-                        render: function(data, type, row) {
-                            if (row.encrypted_id) {
-                                return `<a href="/returns/batches/${row.encrypted_id}/details" class="property-link">${data}</a>`;
-                            }
-                            return data;
-                        }
-                    },
-                    {
-                        data: 'returns_count'
-                    },
-                    {
-                        data: 'total_payable_amount',
-                        render: function(data, type, row) {
-                            return `<strong>${data}</strong>`;
-                        }
-                    },
-                    {
-                        data: 'approval_status',
-                        render: function(data, type, row) {
-                            if (data == 1) {
-                                return '<span class="badge badge-light-success">Approved</span>';
-                            } else if (data == 0) {
-                                return 'Pending';
-                            } else if (data == 2) {
-                                return '<span class="badge badge-light-danger">Rejected</span>';
-                            } else if (data == 101) {
-                                return '<span class="badge badge-light-success">InProgress</span>';
-                            } else if (data == 102) {
-                                return '<span class="badge badge-light-success">Approved</span>';
-                            } else {
-                                return 'Unknown';
-                            }
-                        }
-                    },
-                    {
-                        data: null,
-                        orderable: false,
-                        render: function(data, type, row) {
-                            return `<a href="/returns/batches/${row.encrypted_id}/details" class="d-flex align-items-center text-decoration-none" title="View Details">
-                               Details
-                            </a>`;
-                        }
+        var table = $('#returns-table').DataTable({
+            data: [],
+            columns: [{
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(d, t, r, m) {
+                        return m.row + 1;
                     }
-                ],
-                order: [
-                    [1, 'desc']
-                ]
+                },
+                {
+                    data: 'property_code'
+                },
+                {
+                    data: 'landlord_code'
+                },
+                {
+                    data: 'return_description',
+                    render: function(d) {
+                        return '<small>' + (d || '-') + '</small>';
+                    }
+                },
+                {
+                    data: 'return_type'
+                },
+                {
+                    data: 'total_credit',
+                    className: 'text-end'
+                },
+                {
+                    data: 'total_debit',
+                    className: 'text-end'
+                },
+                {
+                    data: 'net_amount',
+                    className: 'text-end fw-bold'
+                },
+                {
+                    data: 'approved_status',
+                    render: function(d) {
+                        if (d == 1) return '<span class="badge badge-light-success">Approved</span>';
+                        return '<span class="badge badge-light-danger">Pending</span>';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(d, t, r) {
+                        return '<a href="/returns/' + r.encrypted_id + '/details" title="View Details" style="color:#7366ff;">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span></a>';
+                    }
+                }
+            ],
+            paging: true,
+            info: true,
+            lengthChange: true,
+            searching: true,
+            ordering: true,
+            order: [
+                [1, 'asc']
+            ],
+            pageLength: 50
+        });
+
+        function loadData() {
+            var year = $('#year_select').val();
+            var month = $('#month_select').val();
+
+            $('#search_spinner').show();
+            $('#search_icon').hide();
+            $('#search_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '{{ route("ajax.returns.batches.data") }}',
+                type: 'GET',
+                data: {
+                    year: year,
+                    month: month
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#result_info').show();
+                        $('#result_count').text(response.count);
+                        table.clear();
+                        table.rows.add(response.data);
+                        table.draw();
+                    }
+                },
+                error: function(xhr) {
+                    var msg = 'Failed to load data.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    alert(msg);
+                },
+                complete: function() {
+                    $('#search_spinner').hide();
+                    $('#search_icon').show();
+                    $('#search_btn').prop('disabled', false);
+                }
             });
         }
 
-        loadBatches();
+        $('#search_btn').on('click', loadData);
+        loadData();
     });
 </script>
 @endsection

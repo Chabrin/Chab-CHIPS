@@ -82,4 +82,9 @@ class ReturnSummary extends Model
     {
         return $query->where('paid_status', 1);
     }
+
+    public function scopeUnpaid($query)
+    {
+        return $query->where('paid_status', 0);
+    }
 }

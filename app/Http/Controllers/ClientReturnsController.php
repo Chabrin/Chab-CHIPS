@@ -17,12 +17,16 @@ use App\Jobs\UpdateAbstractThresholdsJob;
 class ClientReturnsController extends Controller
 {
     /**
-     * Display the client returns batches listing page
+     * Display the unpaid returns listing page
      */
     public function index()
     {
         try {
-            return view('property.returns.list');
+            $currentYear = (int) date('Y');
+            $currentMonth = (int) date('m');
+            $years = range($currentYear, $currentYear - 4);
+
+            return view('property.returns.list', compact('currentYear', 'currentMonth', 'years'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading returns list page: ' . $e->getMessage());
@@ -31,12 +35,13 @@ class ClientReturnsController extends Controller
     }
 
     /**
-     * Get returns batches data for DataTable (AJAX)
+     * Get unpaid returns data for DataTable (AJAX)
      */
     public function getBatchesData(Request $request)
     {
         try {
-            // Get logged-in user's ID
+            $year = $request->input('year', date('Y'));
+            $month = $request->input('month', date('m'));
             $userId = auth()->id();
 
             // Check if user is top management
@@ -46,98 +51,275 @@ class ClientReturnsController extends Controller
                 ->where('r.name', 'top_management')
                 ->exists();
 
-            // Check if user is clerical officer or accountant
-            $isRoleBasedApprover = DB::table('cb_role_user as ru')
-                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                ->where('ru.user_id', $userId)
-                ->whereIn('r.name', ['clerical_officers', 'accountants'])
-                ->exists();
+            $query = ReturnSummary::unpaid()
+                ->where('year', $year)
+                ->where('month', $month);
 
-            $query = ClientReturnsBatch::with(['property', 'generatedBy'])
-                ->active();
-
-            // If user is top management, show all batches (no filtering)
+            // Role-based filtering: non-top-management only see their properties
             if (!$isTopManagement) {
-                $query->where(function ($q) use ($userId, $isRoleBasedApprover) {
-                    // Property-based access (Field Officer, Zone Manager, Zone Supervisor)
-                    $q->whereHas('property', function ($propQuery) use ($userId) {
-                        $propQuery->where(function ($query) use ($userId) {
-                            $query->where('field_officer_id', $userId)
+                $query->whereIn('property_code', function ($sub) use ($userId) {
+                    $sub->select('reference_number')
+                        ->from('sys_pm_properties')
+                        ->where(function ($q) use ($userId) {
+                            $q->where('field_officer_id', $userId)
                                 ->orWhere('zone_manager_id', $userId)
                                 ->orWhere('zone_supervisor_id', $userId);
                         });
-                    });
-
-                    // If user is clerical officer or accountant, also show batches they're assigned to approve
-                    if ($isRoleBasedApprover) {
-                        $q->orWhereHas('approvalItem', function ($approvalQuery) use ($userId) {
-                            $approvalQuery->whereHas('itemApprovers', function ($approverQuery) use ($userId) {
-                                $approverQuery->where('approver_id', $userId);
-                            });
-                        });
-                    }
                 });
             }
 
-            $query->orderByRaw('CASE WHEN approval_status = 101 THEN 0 ELSE 1 END') // In progress (101) first
-                ->orderBy('generated_at', 'desc');
-
-            // Apply filters if provided
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-
-            if ($request->filled('approval_status')) {
-                $query->where('approval_status', $request->approval_status);
-            }
-
-            if ($request->filled('batch_number')) {
-                $query->where('batch_number', 'LIKE', '%' . $request->batch_number . '%');
-            }
-
-            if ($request->filled('date_from')) {
-                $query->whereDate('generated_at', '>=', $request->date_from);
-            }
-
-            if ($request->filled('date_to')) {
-                $query->whereDate('generated_at', '<=', $request->date_to);
-            }
-
-            $batches = $query->get();
+            $returns = $query->orderBy('property_code')
+                ->orderBy('landlord_code')
+                ->get();
 
             return response()->json([
                 'success' => true,
-                'data' => $batches->map(function ($batch) {
+                'count' => $returns->count(),
+                'data' => $returns->map(function ($r) {
                     return [
-                        'id' => $batch->id,
-                        'encrypted_id' => encrypt($batch->id),
-                        'batch_number' => $batch->batch_number,
-                        'batch_id' => $batch->batch_id,
-                        'property_name' => $batch->property->property_name ?? 'N/A',
-                        'property_id' => $batch->property_id,
-                        'encrypted_property_id' => $batch->property_id ? encrypt($batch->property_id) : null,
-                        'returns_count' => $batch->returns_count,
-                        'total_trans_amount' => number_format($batch->total_trans_amount, 2),
-                        'total_comm_amount' => number_format($batch->total_comm_amount, 2),
-                        'total_payable_amount' => number_format($batch->total_payable_amount, 2),
-                        'approval_status' => $batch->approval_status,
-                        'approval_status_name' => $batch->approval_status_name,
-                        'approval_status_badge' => $batch->approval_status_badge,
-                        'generated_by_name' => $batch->generatedBy->name ?? 'N/A',
-                        'generated_at' => $batch->generated_at ? $batch->generated_at->format('d-m-Y H:i') : 'N/A',
-                        'approved_by_name' => $batch->approvedBy->name ?? '-',
-                        'approved_at' => $batch->approved_at ? $batch->approved_at->format('d-m-Y H:i') : '-',
-                        'remarks' => $batch->remarks ?? '-'
+                        'id' => $r->id,
+                        'encrypted_id' => encrypt($r->id),
+                        'return_code' => $r->return_code,
+                        'landlord_code' => $r->landlord_code,
+                        'property_code' => $r->property_code ?? '-',
+                        'return_description' => $r->return_description ?? '-',
+                        'return_type' => $r->return_type ?? '-',
+                        'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
+                        'commission_rate' => number_format($r->commission_rate ?? 0, 2),
+                        'total_credit' => number_format($r->total_credit ?? 0, 2),
+                        'total_debit' => number_format($r->total_debit ?? 0, 2),
+                        'commission_amount' => number_format($r->commission_amount ?? 0, 2),
+                        'net_amount' => number_format($r->net_amount ?? 0, 2),
+                        'prepared_by' => $r->prepared_by ?? '-',
+                        'approved_status' => $r->approved_status,
+                        'prepared_status' => $r->prepared_status,
                     ];
                 })
             ]);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error fetching returns batches data: ' . $e->getMessage());
+            Log::error('Error fetching returns list data: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch returns batches data'
+                'message' => 'Failed to fetch returns list data'
             ], 500);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // UNPROCESSED RETURNS — separate from processed returns
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Show unprocessed return details page
+     */
+    public function showUnprocessedReturnDetails($id)
+    {
+        try {
+            $id = decrypt($id);
+            $return = ReturnSummary::findOrFail($id);
+
+            // Verify it's unpaid
+            if ($return->paid_status == 1) {
+                return redirect()->route('processed.returns.details', encrypt($return->id));
+            }
+
+            $allReturns = ReturnSummary::unpaid()
+                ->where('landlord_code', $return->landlord_code)
+                ->where('property_code', $return->property_code)
+                ->where('year', $return->year)
+                ->where('month', $return->month)
+                ->orderByRaw("CASE WHEN return_type = 'MAINRETURN' THEN 0 ELSE 1 END")
+                ->orderBy('return_type')
+                ->get(['id', 'return_code', 'return_type']);
+
+            $lineTotals = ReturnClient::where('return_code', $return->return_code)
+                ->selectRaw("
+                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
+                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
+                ")
+                ->first();
+
+            return view('property.returns.unprocessed-details', compact('return', 'lineTotals', 'allReturns'));
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading unprocessed return details: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load return details');
+        }
+    }
+
+    /**
+     * Get unprocessed return summary data via AJAX (for tab switching)
+     */
+    public function getUnprocessedReturnSummaryData($id)
+    {
+        try {
+            $id = decrypt($id);
+            $return = ReturnSummary::findOrFail($id);
+
+            $lineTotals = ReturnClient::where('return_code', $return->return_code)
+                ->selectRaw("
+                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
+                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
+                ")
+                ->first();
+
+            return response()->json([
+                'success' => true,
+                'return' => [
+                    'id' => encrypt($return->id),
+                    'return_code' => $return->return_code,
+                    'property_code' => $return->property_code ?? '-',
+                    'landlord_code' => $return->landlord_code,
+                    'period' => str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year,
+                    'return_type' => $return->return_type ?? '-',
+                    'commission_rate' => number_format($return->commission_rate ?? 0, 2),
+                    'commission_total' => number_format($return->commission_total ?? 0, 2),
+                    'approved_status' => $return->approved_status,
+                    'prepared_by' => $return->prepared_by ?? '-',
+                    'remarks' => trim(($return->remarks ?? '') . ' ' . ($return->remarks_2 ?? '')),
+                ],
+                'lineTotals' => [
+                    'rent_total' => number_format($lineTotals->rent_total ?? 0, 2),
+                    'add_back' => number_format($lineTotals->add_back ?? 0, 2),
+                    'add_back_raw' => (float) ($lineTotals->add_back ?? 0),
+                    'total_cr' => number_format($lineTotals->total_cr ?? 0, 2),
+                    'deductions' => number_format($lineTotals->deductions ?? 0, 2),
+                    'deductions_raw' => (float) ($lineTotals->deductions ?? 0),
+                    'commission' => number_format($lineTotals->commission ?? 0, 2),
+                    'vat' => number_format($lineTotals->vat ?? 0, 2),
+                    'total_dr' => number_format($lineTotals->total_dr ?? 0, 2),
+                    'net_amount' => number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2),
+                ],
+                'unitsUrl' => route('ajax.returns.units', encrypt($return->id)),
+                'excelUrl' => route('returns.excel', encrypt($return->id)),
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching unprocessed return summary: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load return data'], 500);
+        }
+    }
+
+    /**
+     * Get unit details for an unprocessed return (AJAX)
+     */
+    public function getUnprocessedReturnUnitsData($id)
+    {
+        try {
+            $id = decrypt($id);
+            $return = ReturnSummary::findOrFail($id);
+
+            $details = ReturnClient::where('return_code', $return->return_code)
+                ->orderBy('entry_type')
+                ->orderBy('unit_code')
+                ->orderBy('tenant_name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $details->map(function ($d) {
+                    return [
+                        'entry_type' => $d->entry_type ?? '-',
+                        'tenant_name' => $d->tenant_name ?? '-',
+                        'unit_code' => $d->unit_code ?? '-',
+                        'entry_description' => $d->entry_description ?? '-',
+                        'dr_cr' => $d->dr_cr ?? '-',
+                        'amount_payable_landlord' => number_format($d->amount_payable_landlord ?? 0, 2),
+                        'net_amount' => number_format($d->net_amount ?? 0, 2),
+                        'vat_amount' => number_format($d->vat_amount ?? 0, 2),
+                        'transaction_ref' => $d->transaction_ref ?? '-',
+                    ];
+                })
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching unprocessed return units: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load detail lines'], 500);
+        }
+    }
+
+    /**
+     * Download Excel for an unprocessed return
+     */
+    public function downloadUnprocessedExcel($id)
+    {
+        try {
+            $id = decrypt($id);
+            $return = ReturnSummary::findOrFail($id);
+
+            $lines = ReturnClient::where('return_code', $return->return_code)
+                ->orderBy('entry_type')
+                ->orderBy('unit_code')
+                ->orderBy('tenant_name')
+                ->get();
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Return Details');
+
+            // Header info
+            $sheet->setCellValue('A1', 'Return Code');
+            $sheet->setCellValue('B1', $return->return_code);
+            $sheet->setCellValue('A2', 'Property');
+            $sheet->setCellValue('B2', $return->property_code);
+            $sheet->setCellValue('A3', 'Landlord');
+            $sheet->setCellValue('B3', $return->landlord_code);
+            $sheet->setCellValue('A4', 'Period');
+            $sheet->setCellValue('B4', str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year);
+            $sheet->setCellValue('A5', 'Type');
+            $sheet->setCellValue('B5', $return->return_type);
+            $sheet->setCellValue('A6', 'Status');
+            $sheet->setCellValue('B6', 'UNPAID');
+
+            // Column headers
+            $row = 8;
+            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'VAT', 'Ref'];
+            foreach ($headers as $col => $header) {
+                $sheet->setCellValueByColumnAndRow($col + 1, $row, $header);
+            }
+            $sheet->getStyle('A8:J8')->getFont()->setBold(true);
+
+            // Data rows
+            $row = 9;
+            $num = 1;
+            foreach ($lines as $line) {
+                $sheet->setCellValueByColumnAndRow(1, $row, $num++);
+                $sheet->setCellValueByColumnAndRow(2, $row, $line->entry_type);
+                $sheet->setCellValueByColumnAndRow(3, $row, $line->tenant_name);
+                $sheet->setCellValueByColumnAndRow(4, $row, $line->unit_code);
+                $sheet->setCellValueByColumnAndRow(5, $row, $line->entry_description);
+                $sheet->setCellValueByColumnAndRow(6, $row, $line->dr_cr);
+                $sheet->setCellValueByColumnAndRow(7, $row, $line->amount_payable_landlord);
+                $sheet->setCellValueByColumnAndRow(8, $row, $line->net_amount);
+                $sheet->setCellValueByColumnAndRow(9, $row, $line->vat_amount);
+                $sheet->setCellValueByColumnAndRow(10, $row, $line->transaction_ref);
+                $row++;
+            }
+
+            foreach (range('A', 'J') as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+
+            $filename = 'Unprocessed_Return_' . $return->return_code . '.xlsx';
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+
+            return response()->streamDownload(function () use ($writer) {
+                $writer->save('php://output');
+            }, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error downloading unprocessed return excel: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to download excel');
         }
     }
 
@@ -260,7 +442,6 @@ class ClientReturnsController extends Controller
             ], 500);
         }
     }
-
     /**
      * Get invoice history for a lease (AJAX)
      */
