@@ -15,38 +15,47 @@
                     <div class="card-body py-2 px-3" style="font-size:0.80rem;">
                         <!-- Return Header Info -->
                         <div class="row mb-1 gx-2">
-                            <div class="col-md-2 mb-1">
+                            <div class="col-6 col-sm-4 col-md-2 mb-1">
                                 <label class="text-muted" style="font-size:0.80rem;">Return Code</label>
                                 <div class="fw-bold">{{ $return->return_code }}</div>
                             </div>
-                            <div class="col-md-2 mb-1">
+                            <div class="col-6 col-sm-4 col-md-2 mb-1">
                                 <label class="text-muted" style="font-size:0.80rem;">Property</label>
                                 <div class="fw-bold">{{ $return->property_code ?? '-' }}</div>
                             </div>
-                            <div class="col-md-2 mb-1">
+                            <div class="col-6 col-sm-4 col-md-2 mb-1">
                                 <label class="text-muted" style="font-size:0.80rem;">Landlord</label>
                                 <div class="fw-bold">{{ $return->landlord_code }}</div>
                             </div>
-                            <div class="col-md-2 mb-1">
+                            <div class="col-6 col-sm-4 col-md-2 mb-1">
                                 <label class="text-muted" style="font-size:0.80rem;">Period</label>
                                 <div class="fw-bold">{{ str_pad($return->month, 2, '0', STR_PAD_LEFT) }}/{{ $return->year }}</div>
                             </div>
-                            <div class="col-md-2 mb-1">
+                            <div class="col-6 col-sm-4 col-md-2 mb-1">
                                 <label class="text-muted" style="font-size:0.80rem;">Type</label>
                                 <div class="fw-bold">{{ $return->return_type ?? '-' }}</div>
                             </div>
-                            <div class="col-md-2 mb-1">
+                            <div class="col-6 col-sm-4 col-md-2 mb-1">
                                 <label class="text-muted" style="font-size:0.80rem;">Commission %</label>
                                 <div class="fw-bold">{{ number_format($return->commission_rate ?? 0, 2) }}%</div>
                             </div>
                         </div>
 
                         <!-- Financial Summary -->
+                        <style>
+                            .summary-table tbody tr:nth-child(odd) {
+                                background-color: #f8f9fa;
+                            }
+
+                            .summary-table tbody tr:nth-child(even) {
+                                background-color: #fff;
+                            }
+                        </style>
                         <div class="row mb-1 gx-2">
                             <div class="col-md-6">
-                                <table class="table table-bordered table-sm mb-0" style="font-size:0.72rem;">
+                                <table class="table table-borderless table-sm mb-0 summary-table" style="font-size:0.72rem;">
                                     <tbody>
-                                        <tr class="table-light">
+                                        <tr>
                                             <td class="py-1 fw-bold" width="50%" colspan="2">Credits</td>
                                         </tr>
                                         <tr>
@@ -59,17 +68,17 @@
                                             <td class="text-end py-1">{{ number_format($lineTotals->add_back ?? 0, 2) }}</td>
                                         </tr>
                                         @endif
-                                        <tr class="table-success">
+                                        <tr>
                                             <td class="py-1 fw-bold ps-3">Total Credits</td>
-                                            <td class="text-end py-1 fw-bold">{{ number_format($lineTotals->total_cr ?? 0, 2) }}</td>
+                                            <td class="text-end py-1 fw-bold text-primary">{{ number_format($lineTotals->total_cr ?? 0, 2) }}</td>
                                         </tr>
-                                        <tr class="table-light">
+                                        <tr>
                                             <td class="py-1 fw-bold" colspan="2">Debits</td>
                                         </tr>
                                         @if(($lineTotals->deductions ?? 0) > 0)
                                         <tr>
                                             <td class="text-muted py-1 ps-3">Deductions Before Commission</td>
-                                            <td class="text-end py-1 text-danger">{{ number_format($lineTotals->deductions ?? 0, 2) }}</td>
+                                            <td class="text-end py-1">{{ number_format($lineTotals->deductions ?? 0, 2) }}</td>
                                         </tr>
                                         @endif
                                         <tr>
@@ -78,25 +87,25 @@
                                         </tr>
                                         <tr>
                                             <td class="text-muted py-1 ps-3">Commission @ {{ number_format($return->commission_rate ?? 0, 2) }}%</td>
-                                            <td class="text-end py-1 text-danger">{{ number_format($lineTotals->commission ?? 0, 2) }}</td>
+                                            <td class="text-end py-1">{{ number_format($lineTotals->commission ?? 0, 2) }}</td>
                                         </tr>
                                         <tr>
                                             <td class="text-muted py-1 ps-3">VAT on Commission</td>
-                                            <td class="text-end py-1 text-danger">{{ number_format($lineTotals->vat ?? 0, 2) }}</td>
+                                            <td class="text-end py-1">{{ number_format($lineTotals->vat ?? 0, 2) }}</td>
                                         </tr>
-                                        <tr class="table-danger">
+                                        <tr>
                                             <td class="py-1 fw-bold ps-3">Total Debits</td>
                                             <td class="text-end py-1 fw-bold text-danger">{{ number_format($lineTotals->total_dr ?? 0, 2) }}</td>
                                         </tr>
-                                        <tr class="table-primary">
+                                        <tr>
                                             <td class="fw-bold py-1">Net Amount (Credits − Debits)</td>
-                                            <td class="text-end py-1 fw-bold">{{ number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2) }}</td>
+                                            <td class="text-end py-1 fw-bold text-primary">{{ number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2) }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
                             <div class="col-md-6">
-                                <table class="table table-bordered table-sm mb-0" style="font-size:0.72rem;">
+                                <table class="table table-borderless table-sm mb-0 summary-table" style="font-size:0.72rem;">
                                     <tbody>
                                         <tr>
                                             <td class="text-muted py-1" width="50%">Amount Paid</td>
