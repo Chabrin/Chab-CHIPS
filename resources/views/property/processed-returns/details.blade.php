@@ -52,31 +52,18 @@
                         </ul>
                         @endif
                         <!-- Return Header Info -->
-                        <div class="row mb-1 gx-2">
-                            <div class="col-6 col-sm-4 col-md-2 mb-1">
-                                <label class="text-muted" style="font-size:0.80rem;">Return Code</label>
-                                <div class="fw-bold" id="hdr-return-code">{{ $return->return_code }}</div>
-                            </div>
-                            <div class="col-6 col-sm-4 col-md-2 mb-1">
-                                <label class="text-muted" style="font-size:0.80rem;">Property</label>
-                                <div class="fw-bold" id="hdr-property">{{ $return->property_code ?? '-' }}</div>
-                            </div>
-                            <div class="col-6 col-sm-4 col-md-2 mb-1">
-                                <label class="text-muted" style="font-size:0.80rem;">Landlord</label>
-                                <div class="fw-bold" id="hdr-landlord">{{ $return->landlord_code }}</div>
-                            </div>
-                            <div class="col-6 col-sm-4 col-md-2 mb-1">
-                                <label class="text-muted" style="font-size:0.80rem;">Period</label>
-                                <div class="fw-bold" id="hdr-period">{{ str_pad($return->month, 2, '0', STR_PAD_LEFT) }}/{{ $return->year }}</div>
-                            </div>
-                            <div class="col-6 col-sm-4 col-md-2 mb-1">
-                                <label class="text-muted" style="font-size:0.80rem;">Type</label>
-                                <div class="fw-bold" id="hdr-type">{{ $return->return_type ?? '-' }}</div>
-                            </div>
-                            <div class="col-6 col-sm-4 col-md-2 mb-1">
-                                <label class="text-muted" style="font-size:0.80rem;">Commission %</label>
-                                <div class="fw-bold" id="hdr-commission-rate">{{ number_format($return->commission_rate ?? 0, 2) }}%</div>
-                            </div>
+                        <div class="mb-1" id="header-info" style="font-size:0.72rem;color:#666;">
+                            <span class="text-muted">Return Code:</span> <strong id="hdr-return-code">{{ $return->return_code }}</strong>
+                            <span class="mx-1 text-muted">|</span>
+                            <span class="text-muted">Property:</span> <strong id="hdr-property">{{ $return->property_code ?? '-' }}</strong>
+                            <span class="mx-1 text-muted">|</span>
+                            <span class="text-muted">Landlord:</span> <strong id="hdr-landlord">{{ $return->landlord_code }}</strong>
+                            <span class="mx-1 text-muted">|</span>
+                            <span class="text-muted">Period:</span> <strong id="hdr-period">{{ str_pad($return->month, 2, '0', STR_PAD_LEFT) }}/{{ $return->year }}</strong>
+                            <span class="mx-1 text-muted">|</span>
+                            <span class="text-muted">Type:</span> <strong id="hdr-type">{{ $return->return_type ?? '-' }}</strong>
+                            <span class="mx-1 text-muted">|</span>
+                            <span class="text-muted">Commission:</span> <strong id="hdr-commission-rate">{{ number_format($return->commission_rate ?? 0, 2) }}%</strong>
                         </div>
 
                         <!-- Financial Summary -->
