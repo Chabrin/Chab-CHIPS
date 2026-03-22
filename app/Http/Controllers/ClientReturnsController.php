@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ClientReturnsBatch;
+use App\Models\ReturnSummary;
+use App\Models\ReturnClient;
 use App\Jobs\UpdateAbstractThresholdsJob;
 
 class ClientReturnsController extends Controller
@@ -937,7 +939,15 @@ class ClientReturnsController extends Controller
     public function processedReturns()
     {
         try {
-            return view('property.processed-returns.index');
+            $currentYear = (int) date('Y');
+            $currentMonth = (int) date('m');
+            $years = ReturnSummary::paid()
+                ->select('year')
+                ->distinct()
+                ->orderBy('year', 'desc')
+                ->pluck('year');
+
+            return view('property.processed-returns.index', compact('currentYear', 'currentMonth', 'years'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading processed returns page: ' . $e->getMessage());
@@ -951,120 +961,38 @@ class ClientReturnsController extends Controller
     public function getProcessedReturnsData(Request $request)
     {
         try {
-            $query = DB::table('sys_reports_returns_properties as rp')
-                ->select([
-                    'rp.id as report_id',
-                    'rp.date_time',
-                    'rp.period_date',
-                    'rp.batch_id',
-                    'rp.master_report_id',
-                    DB::raw("DATE_FORMAT(rp.period_date, '%b %Y') as period_name"),
-                    DB::raw("DATE_FORMAT(rp.period_date, '%Y-%m') as period_month"),
-                    'period.period_start',
-                    'period.period_end',
-                    'c.id as client_id',
-                    DB::raw("CONCAT_WS(' ', c.names, c.second_name, c.last_name) as client_name"),
-                    'c.email_address as client_email',
-                    'c.mobile_number as client_phone',
-                    'c.pin_number as client_kra_pin',
-                    'p.id as property_id',
-                    DB::raw("CONCAT_WS(' - ', p.reference_number, p.property_name) as property"),
-                    'p.reference_number as property_code',
-                    'p.property_name',
-                    'p.description as property_location',
-                    'sla.reference_number as sla_reference',
-                    'sla.commission_percentage as commission_rate',
-                    'sla.vat_per as vat_rate',
-                    'rt.type_name as return_type',
-                    'rp.total_gross as total_gross_amount',
-                    'rp.total_commissionable',
-                    'rp.total_commission',
-                    'rp.vat_on_commission',
-                    'rp.total_units_vat as total_vat',
-                    'rp.total_recoveries',
-                    'rp.total_net_amount',
-                    'rp.other_incomes',
-                    'rp.other_commissionable_income',
-                    'rp.total_commissionable_less_vat',
-                    'rp.bal_after_comm',
-                    'rp.bal_after_vat_on_comm',
-                    'rp.total_income',
-                    'ws.status_name as current_status',
-                    'ws.id as status_id',
-                    'staff.full_names as field_officer',
-                    'rp.zone_id',
-                    'rp.batch_config_id',
-                    'rp.parent_batch_config_id',
-                    'rp.voucher_id',
-                    'rp.voucher_date',
-                    'rp.processed_date',
-                    'rp.current_status_id'
-                ])
-                ->join('sys_pm_clients as c', 'c.id', '=', 'rp.client_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'rp.property_id')
-                ->leftJoin('sys_gl_periods as period', 'period.id', '=', 'rp.period_id')
-                ->leftJoin('sys_set_workflow_statuses as ws', 'ws.id', '=', 'rp.current_status_id')
-                ->leftJoin('sys_pm_clients_returns_types as rt', 'rt.id', '=', 'rp.return_type_id')
-                ->leftJoin('sys_pm_service_agreements as sla', DB::raw('CAST(sla.id AS CHAR) COLLATE utf8mb4_unicode_ci'), '=', 'rp.sla_id')
-                ->leftJoin('sys_staff as staff', 'staff.id', '=', 'rp.field_officer_id')
-                ->whereIn('rp.current_status_id', [5, 17])
-                ->orderBy('rp.period_date', 'desc')
-                ->orderBy('c.names', 'asc')
-                ->orderBy(DB::raw("COALESCE(p.property_name, 'ZZZZ')"), 'asc');
+            $year = $request->input('year', date('Y'));
+            $month = $request->input('month', date('m'));
 
-            // Apply filters
-            if ($request->filled('period_id')) {
-                $query->where('rp.period_id', $request->period_id);
-            }
-
-            if ($request->filled('client_id')) {
-                $query->where('rp.client_id', $request->client_id);
-            }
-
-            if ($request->filled('property_id')) {
-                $query->where('rp.property_id', $request->property_id);
-            }
-
-            if ($request->filled('status')) {
-                $query->where('rp.current_status_id', $request->status);
-            }
-
-            if ($request->filled('date_from')) {
-                $query->whereDate('rp.date_time', '>=', $request->date_from);
-            }
-
-            if ($request->filled('date_to')) {
-                $query->whereDate('rp.date_time', '<=', $request->date_to);
-            }
-
-            $returns = $query->get();
-
-            // Status mapping
-            $statusMap = [
-                1 => 'Pending',
-                5 => 'Approved',
-                17 => 'Processed',
-            ];
+            $returns = ReturnSummary::paid()
+                ->where('year', $year)
+                ->where('month', $month)
+                ->orderBy('property_code')
+                ->orderBy('landlord_code')
+                ->get();
 
             return response()->json([
                 'success' => true,
-                'data' => $returns->map(function ($return) use ($statusMap) {
+                'count' => $returns->count(),
+                'data' => $returns->map(function ($r) {
                     return [
-                        'id' => $return->report_id,
-                        'encrypted_id' => encrypt($return->report_id),
-                        'date' => date('d-M-Y', strtotime($return->date_time)),
-                        'period' => $return->period_name,
-                        'client_name' => $return->client_name ?? '-',
-                        'property' => $return->property ?? '-',
-                        'sla_reference' => $return->sla_reference ?? '-',
-                        'return_type' => $return->return_type ?? '-',
-                        'gross_amount' => number_format($return->total_gross_amount ?? 0, 2),
-                        'commission' => number_format($return->total_commission ?? 0, 2),
-                        'vat' => number_format($return->vat_on_commission ?? 0, 2),
-                        'recoveries' => number_format($return->total_recoveries ?? 0, 2),
-                        'net_amount' => number_format($return->total_net_amount ?? 0, 2),
-                        'status' => $statusMap[$return->current_status_id] ?? 'Unknown',
-                        'batch_reference' => '-',
+                        'id' => $r->id,
+                        'encrypted_id' => encrypt($r->id),
+                        'return_code' => $r->return_code,
+                        'landlord_code' => $r->landlord_code,
+                        'property_code' => $r->property_code ?? '-',
+                        'return_description' => $r->return_description ?? '-',
+                        'return_type' => $r->return_type ?? '-',
+                        'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
+                        'commission_rate' => number_format($r->commission_rate ?? 0, 2),
+                        'total_credit' => number_format($r->total_credit ?? 0, 2),
+                        'total_debit' => number_format($r->total_debit ?? 0, 2),
+                        'commission_amount' => number_format($r->commission_amount ?? 0, 2),
+                        'net_amount' => number_format($r->net_amount ?? 0, 2),
+                        'amount_paid' => number_format($r->amount_paid ?? 0, 2),
+                        'voucher_number' => $r->voucher_number ?? '-',
+                        'payment_date' => $r->payment_date ?? '-',
+                        'prepared_by' => $r->prepared_by ?? '-',
                     ];
                 })
             ]);
@@ -1086,39 +1014,22 @@ class ClientReturnsController extends Controller
         try {
             $id = decrypt($id);
 
-            $return = DB::table('sys_reports_returns_properties as rp')
-                ->select([
-                    'rp.*',
-                    DB::raw("DATE_FORMAT(rp.period_date, '%b %Y') as period_name"),
-                    'c.names as client_name',
-                    'c.email_address as client_email',
-                    'c.mobile_number as client_phone',
-                    'c.pin_number as client_kra_pin',
-                    DB::raw("CONCAT_WS(' - ', p.reference_number, p.property_name) as property"),
-                    'p.reference_number as property_code',
-                    'p.property_name',
-                    'p.description as property_location',
-                    'sla.reference_number as sla_reference',
-                    'sla.commission_percentage as commission_rate',
-                    'sla.vat_per as vat_rate',
-                    'rt.type_name as return_type',
-                    'staff.full_names as field_officer',
-                    'ws.status_name as current_status',
-                ])
-                ->join('sys_pm_clients as c', 'c.id', '=', 'rp.client_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'rp.property_id')
-                ->leftJoin('sys_pm_service_agreements as sla', DB::raw('CAST(sla.id AS CHAR) COLLATE utf8mb4_unicode_ci'), '=', 'rp.sla_id')
-                ->leftJoin('sys_pm_clients_returns_types as rt', 'rt.id', '=', 'rp.return_type_id')
-                ->leftJoin('sys_staff as staff', 'staff.id', '=', 'rp.field_officer_id')
-                ->leftJoin('sys_set_workflow_statuses as ws', 'ws.id', '=', 'rp.current_status_id')
-                ->where('rp.id', $id)
+            $return = ReturnSummary::findOrFail($id);
+
+            // Compute totals from detail lines so summary matches the detail table
+            $lineTotals = ReturnClient::where('return_code', $return->return_code)
+                ->selectRaw("
+                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
+                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
+                ")
                 ->first();
 
-            if (!$return) {
-                return redirect()->back()->with('error', 'Return not found');
-            }
-
-            return view('property.processed-returns.details', compact('return'));
+            return view('property.processed-returns.details', compact('return', 'lineTotals'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading return details: ' . $e->getMessage());
@@ -1134,50 +1045,30 @@ class ClientReturnsController extends Controller
         try {
             $id = decrypt($id);
 
-            $units = DB::table('sys_reports_returns_items as ri')
-                ->select([
-                    'ri.unit_code as room_no',
-                    DB::raw("MAX(t.names) as tenant_name"),
-                    DB::raw("MAX(l.ref_number) as lease_reference"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Unit Rent' THEN ri.trans_amount ELSE 0 END) as monthly_rent"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Service Charge' THEN ri.trans_amount ELSE 0 END) as service_charge"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Water Bill' THEN ri.trans_amount ELSE 0 END) as water_bill"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Electricity Bill' THEN ri.trans_amount ELSE 0 END) as elec_bill"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Rent Deposit' THEN ri.trans_amount ELSE 0 END) as rent_deposit"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Water Deposit' THEN ri.trans_amount ELSE 0 END) as water_deposit"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Electricity Deposit' THEN ri.trans_amount ELSE 0 END) as elec_deposit"),
-                    DB::raw("SUM(ri.trans_amount) as total_charges"),
-                    DB::raw("SUM(ri.vat_amount) as total_vat"),
-                    DB::raw("SUM(ri.comm_amount) as total_commission"),
-                    DB::raw("SUM(ri.comm_vat) as total_commission_vat"),
-                    DB::raw("SUM(ri.payable_amount) as net_payable"),
-                    DB::raw("COUNT(*) as charge_count"),
-                    DB::raw("GROUP_CONCAT(DISTINCT ri.item_name ORDER BY ri.item_name SEPARATOR ', ') as charge_types")
-                ])
-                ->join('sys_pm_units as u', 'u.id', '=', 'ri.unit_id')
-                ->leftJoin('sys_pm_lease_agreements as l', 'l.id', '=', 'ri.lease_id')
-                ->leftJoin('sys_pm_clients as t', 't.id', '=', 'l.tenant_id')
-                ->where('ri.property_report_id', $id)
-                ->groupBy('ri.unit_code')
-                ->orderBy('ri.unit_code', 'asc')
+            $return = ReturnSummary::findOrFail($id);
+
+            $lines = ReturnClient::where('return_code', $return->return_code)
+                ->orderBy('entry_type')
+                ->orderBy('unit_code')
+                ->orderBy('tenant_name')
                 ->get();
 
             return response()->json([
                 'success' => true,
-                'data' => $units->map(function ($unit) {
+                'count' => $lines->count(),
+                'data' => $lines->map(function ($l) {
                     return [
-                        'room_no' => $unit->room_no ?? '-',
-                        'tenant_name' => $unit->tenant_name ?? '-',
-                        'lease_reference' => $unit->lease_reference ?? '-',
-                        'monthly_rent' => number_format($unit->monthly_rent ?? 0, 2),
-                        'service_charge' => number_format($unit->service_charge ?? 0, 2),
-                        'water_bill' => number_format($unit->water_bill ?? 0, 2),
-                        'elec_bill' => number_format($unit->elec_bill ?? 0, 2),
-                        'deposits' => number_format(($unit->rent_deposit ?? 0) + ($unit->water_deposit ?? 0) + ($unit->elec_deposit ?? 0), 2),
-                        'total_charges' => number_format($unit->total_charges ?? 0, 2),
-                        'commission' => number_format($unit->total_commission ?? 0, 2),
-                        'vat' => number_format($unit->total_commission_vat ?? 0, 2),
-                        'net_payable' => number_format($unit->net_payable ?? 0, 2),
+                        'id' => $l->id,
+                        'entry_type' => $l->entry_type ?? '-',
+                        'tenant_name' => $l->tenant_name ?? '-',
+                        'unit_code' => $l->unit_code ?? '-',
+                        'narration' => $l->narration ?? '-',
+                        'dr_cr' => $l->dr_cr ?? '-',
+                        'amount_payable_landlord' => number_format($l->amount_payable_landlord ?? 0, 2),
+                        'net_amount' => number_format($l->net_amount ?? 0, 2),
+                        'vat_amount' => number_format($l->vat_amount ?? 0, 2),
+                        'transaction_ref' => $l->transaction_ref ?? '-',
+                        'entry_description' => $l->entry_description ?? '-',
                     ];
                 })
             ]);
@@ -1337,129 +1228,72 @@ class ClientReturnsController extends Controller
         try {
             $id = decrypt($id);
 
-            // Get return details
-            $return = DB::table('sys_reports_returns_properties as rp')
-                ->select([
-                    'rp.*',
-                    DB::raw("DATE_FORMAT(rp.period_date, '%b %Y') as period_name"),
-                    DB::raw("CONCAT_WS(' ', c.names, c.second_name, c.last_name) as client_name"),
-                    DB::raw("CONCAT_WS(' - ', p.reference_number, p.property_name) as property"),
-                ])
-                ->join('sys_pm_clients as c', 'c.id', '=', 'rp.client_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'rp.property_id')
-                ->where('rp.id', $id)
-                ->first();
+            $return = ReturnSummary::findOrFail($id);
 
-            if (!$return) {
-                return response()->json(['success' => false, 'message' => 'Return not found'], 404);
-            }
-
-            // Get unit details
-            $units = DB::table('sys_reports_returns_items as ri')
-                ->select([
-                    'ri.unit_code as room_no',
-                    DB::raw("MAX(t.names) as tenant_name"),
-                    DB::raw("MAX(l.ref_number) as lease_reference"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Unit Rent' THEN ri.trans_amount ELSE 0 END) as monthly_rent"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Service Charge' THEN ri.trans_amount ELSE 0 END) as service_charge"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Water Bill' THEN ri.trans_amount ELSE 0 END) as water_bill"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Electricity Bill' THEN ri.trans_amount ELSE 0 END) as elec_bill"),
-                    DB::raw("SUM(ri.trans_amount) as total_charges"),
-                    DB::raw("SUM(ri.vat_amount) as total_vat"),
-                    DB::raw("SUM(ri.comm_amount) as total_commission"),
-                    DB::raw("SUM(ri.comm_vat) as total_commission_vat"),
-                    DB::raw("SUM(ri.payable_amount) as net_payable"),
-                ])
-                ->join('sys_pm_units as u', 'u.id', '=', 'ri.unit_id')
-                ->leftJoin('sys_pm_lease_agreements as l', 'l.id', '=', 'ri.lease_id')
-                ->leftJoin('sys_pm_clients as t', 't.id', '=', 'l.tenant_id')
-                ->where('ri.property_report_id', $id)
-                ->groupBy('ri.unit_code')
-                ->orderBy('ri.unit_code', 'asc')
+            $lines = ReturnClient::where('return_code', $return->return_code)
+                ->orderBy('entry_type')
+                ->orderBy('unit_code')
+                ->orderBy('tenant_name')
                 ->get();
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Return Summary');
+            $sheet->setTitle('Return Details');
 
             // Header
-            $sheet->setCellValue('A1', 'PROPERTY RETURN REPORT');
-            $sheet->mergeCells('A1:L1');
-            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-            $sheet->getStyle('A1')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+            $sheet->setCellValue('A1', 'RETURN DETAILS — ' . $return->return_code);
+            $sheet->mergeCells('A1:J1');
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             // Return Info
             $row = 3;
-            $sheet->setCellValue('A' . $row, 'Client:')->setCellValue('B' . $row, $return->client_name);
+            $sheet->setCellValue('A' . $row, 'Property:')->setCellValue('B' . $row, $return->property_code ?? '-');
+            $sheet->setCellValue('D' . $row, 'Landlord:')->setCellValue('E' . $row, $return->landlord_code);
             $row++;
-            $sheet->setCellValue('A' . $row, 'Property:')->setCellValue('B' . $row, $return->property);
+            $sheet->setCellValue('A' . $row, 'Period:')->setCellValue('B' . $row, str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year);
+            $sheet->setCellValue('D' . $row, 'Type:')->setCellValue('E' . $row, $return->return_type ?? '-');
             $row++;
-            $sheet->setCellValue('A' . $row, 'Period:')->setCellValue('B' . $row, $return->period_name);
+            $sheet->setCellValue('A' . $row, 'Net Amount:')->setCellValue('B' . $row, $return->net_amount ?? 0);
+            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->setCellValue('D' . $row, 'Amount Paid:')->setCellValue('E' . $row, $return->amount_paid ?? 0);
+            $sheet->getStyle('E' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
             $row += 2;
 
-            // Financial Summary
-            $sheet->setCellValue('A' . $row, 'FINANCIAL SUMMARY');
-            $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+            // Detail lines header
+            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'VAT', 'Ref'];
+            $col = 'A';
+            foreach ($headers as $header) {
+                $sheet->setCellValue($col . $row, $header);
+                $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                $col++;
+            }
             $row++;
-            $sheet->setCellValue('A' . $row, 'Gross Returns')->setCellValue('B' . $row, $return->total_gross ?? 0);
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $row++;
-            $sheet->setCellValue('A' . $row, 'Less: Commission')->setCellValue('B' . $row, $return->total_commission ?? 0);
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $row++;
-            $sheet->setCellValue('A' . $row, 'Less: VAT')->setCellValue('B' . $row, $return->vat_on_commission ?? 0);
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $row++;
-            $sheet->setCellValue('A' . $row, 'Less: Recoveries')->setCellValue('B' . $row, $return->total_recoveries ?? 0);
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $row++;
-            $sheet->setCellValue('A' . $row, 'NET PAYABLE')->setCellValue('B' . $row, $return->total_net_amount ?? 0);
-            $sheet->getStyle('A' . $row . ':B' . $row)->getFont()->setBold(true);
-            $sheet->getStyle('B' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            $row += 2;
 
-            // Units breakdown
-            if ($units->count() > 0) {
-                $sheet->setCellValue('A' . $row, 'UNIT BREAKDOWN');
-                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
-                $row++;
+            $i = 1;
+            foreach ($lines as $l) {
+                $sheet->setCellValue('A' . $row, $i++)
+                    ->setCellValue('B' . $row, $l->entry_type ?? '-')
+                    ->setCellValue('C' . $row, $l->tenant_name ?? '-')
+                    ->setCellValue('D' . $row, $l->unit_code ?? '-')
+                    ->setCellValue('E' . $row, $l->entry_description ?? '-')
+                    ->setCellValue('F' . $row, $l->dr_cr ?? '-')
+                    ->setCellValue('G' . $row, $l->amount_payable_landlord ?? 0)
+                    ->setCellValue('H' . $row, $l->net_amount ?? 0)
+                    ->setCellValue('I' . $row, $l->vat_amount ?? 0)
+                    ->setCellValue('J' . $row, $l->transaction_ref ?? '-');
 
-                $headers = ['Tenant', 'Lease Ref', 'Rent', 'Service', 'Water', 'Elec', 'Total', 'VAT', 'Comm', 'Comm VAT', 'Net'];
-                $col = 'A';
-                foreach ($headers as $header) {
-                    $sheet->setCellValue($col . $row, $header);
-                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
-                    $col++;
+                foreach (['G', 'H', 'I'] as $c) {
+                    $sheet->getStyle($c . $row)->getNumberFormat()->setFormatCode('#,##0.00');
                 }
                 $row++;
-
-                foreach ($units as $unit) {
-                    $sheet->setCellValue('A' . $row, $unit->tenant_name ?? '-')
-                        ->setCellValue('B' . $row, $unit->lease_reference ?? '-')
-                        ->setCellValue('C' . $row, $unit->monthly_rent ?? 0)
-                        ->setCellValue('D' . $row, $unit->service_charge ?? 0)
-                        ->setCellValue('E' . $row, $unit->water_bill ?? 0)
-                        ->setCellValue('F' . $row, $unit->elec_bill ?? 0)
-                        ->setCellValue('G' . $row, $unit->total_charges ?? 0)
-                        ->setCellValue('H' . $row, $unit->total_vat ?? 0)
-                        ->setCellValue('I' . $row, $unit->total_commission ?? 0)
-                        ->setCellValue('J' . $row, $unit->total_commission_vat ?? 0)
-                        ->setCellValue('K' . $row, $unit->net_payable ?? 0);
-
-                    foreach (range('C', 'K') as $col) {
-                        $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-                    }
-                    $row++;
-                }
             }
 
-            // Auto-size columns
-            foreach (range('A', 'L') as $col) {
+            foreach (range('A', 'J') as $col) {
                 $sheet->getColumnDimension($col)->setAutoSize(true);
             }
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-            $filename = 'return_' . $id . '_' . date('Y-m-d') . '.xlsx';
+            $filename = 'return_' . $return->return_code . '_' . date('Y-m-d') . '.xlsx';
 
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             header('Content-Disposition: attachment;filename="' . $filename . '"');
@@ -1467,12 +1301,6 @@ class ClientReturnsController extends Controller
 
             $writer->save('php://output');
             exit;
-
-            // This will be implemented with PhpSpreadsheet
-            return response()->json([
-                'success' => false,
-                'message' => 'Excel generation will be implemented'
-            ]);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error generating Excel: ' . $e->getMessage());
