@@ -1016,6 +1016,15 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
+            // Fetch all returns for same landlord, property, year, month (including current)
+            $allReturns = ReturnSummary::where('landlord_code', $return->landlord_code)
+                ->where('property_code', $return->property_code)
+                ->where('year', $return->year)
+                ->where('month', $return->month)
+                ->orderByRaw("CASE WHEN return_type = 'MAINRETURN' THEN 0 ELSE 1 END")
+                ->orderBy('return_type')
+                ->get(['id', 'return_code', 'return_type']);
+
             // Compute totals from detail lines so summary matches the detail table
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
@@ -1029,11 +1038,70 @@ class ClientReturnsController extends Controller
                 ")
                 ->first();
 
-            return view('property.processed-returns.details', compact('return', 'lineTotals'));
+            return view('property.processed-returns.details', compact('return', 'lineTotals', 'allReturns'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading return details: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to load return details');
+        }
+    }
+
+    /**
+     * Get return summary data via AJAX (for switching between related returns)
+     */
+    public function getReturnSummaryData($id)
+    {
+        try {
+            $id = decrypt($id);
+            $return = ReturnSummary::findOrFail($id);
+
+            $lineTotals = ReturnClient::where('return_code', $return->return_code)
+                ->selectRaw("
+                    SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
+                    SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
+                ")
+                ->first();
+
+            return response()->json([
+                'success' => true,
+                'return' => [
+                    'id' => encrypt($return->id),
+                    'return_code' => $return->return_code,
+                    'property_code' => $return->property_code ?? '-',
+                    'landlord_code' => $return->landlord_code,
+                    'period' => str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year,
+                    'return_type' => $return->return_type ?? '-',
+                    'commission_rate' => number_format($return->commission_rate ?? 0, 2),
+                    'commission_total' => number_format($return->commission_total ?? 0, 2),
+                    'amount_paid' => number_format($return->amount_paid ?? 0, 2),
+                    'voucher_number' => $return->voucher_number ?? '-',
+                    'cheque_number' => $return->cheque_number ?? '-',
+                    'payment_date' => $return->payment_date ?? '-',
+                    'remarks' => trim(($return->remarks ?? '') . ' ' . ($return->remarks_2 ?? '')),
+                ],
+                'lineTotals' => [
+                    'rent_total' => number_format($lineTotals->rent_total ?? 0, 2),
+                    'add_back' => number_format($lineTotals->add_back ?? 0, 2),
+                    'add_back_raw' => (float) ($lineTotals->add_back ?? 0),
+                    'total_cr' => number_format($lineTotals->total_cr ?? 0, 2),
+                    'deductions' => number_format($lineTotals->deductions ?? 0, 2),
+                    'deductions_raw' => (float) ($lineTotals->deductions ?? 0),
+                    'commission' => number_format($lineTotals->commission ?? 0, 2),
+                    'vat' => number_format($lineTotals->vat ?? 0, 2),
+                    'total_dr' => number_format($lineTotals->total_dr ?? 0, 2),
+                    'net_amount' => number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2),
+                ],
+                'unitsUrl' => route('ajax.processed.returns.units', encrypt($return->id)),
+                'excelUrl' => route('processed.returns.excel', encrypt($return->id)),
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching return summary: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load return data'], 500);
         }
     }
 

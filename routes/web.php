@@ -595,6 +595,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/processed/returns/data', [App\Http\Controllers\ClientReturnsController::class, 'getProcessedReturnsData'])->name('ajax.processed.returns.data');
     Route::get('/processed/returns/{id}/details', [App\Http\Controllers\ClientReturnsController::class, 'showReturnDetails'])->name('processed.returns.details');
     Route::get('/ajax/processed/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getReturnUnitsData'])->name('ajax.processed.returns.units');
+    Route::get('/ajax/processed/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getReturnSummaryData'])->name('ajax.processed.returns.summary');
     Route::get('/processed/returns/{id}/pdf', [App\Http\Controllers\ClientReturnsController::class, 'downloadPdf'])->name('processed.returns.pdf');
     Route::get('/processed/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadExcel'])->name('processed.returns.excel');
 
