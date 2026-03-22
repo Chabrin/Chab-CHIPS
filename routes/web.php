@@ -605,6 +605,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/processed/returns/{id}/pdf', [App\Http\Controllers\ClientReturnsController::class, 'downloadPdf'])->name('processed.returns.pdf');
     Route::get('/processed/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadExcel'])->name('processed.returns.excel');
 
+    // Landlord Account Statement
+    Route::get('/landlord/account/statement', [App\Http\Controllers\LandlordController::class, 'accountStatement'])->name('landlord.account.statement');
+    Route::get('/ajax/landlord/properties', [App\Http\Controllers\LandlordController::class, 'getProperties'])->name('ajax.landlord.properties');
+    Route::get('/ajax/landlord/landlords-by-property', [App\Http\Controllers\LandlordController::class, 'getLandlordsByProperty'])->name('ajax.landlord.landlords.by.property');
+    Route::post('/ajax/landlord/statement/search', [App\Http\Controllers\LandlordController::class, 'searchStatement'])->name('ajax.landlord.statement.search');
+    Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
+    Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
+
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
 

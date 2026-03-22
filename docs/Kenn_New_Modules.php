@@ -84,7 +84,10 @@ deleted_at, deleted_reason) VALUES('Client Returns', NULL,
 #Sub Modules for Client Returns
 Returns List - /returns/list
 Payout Accounts - /payout/accounts
-Processed Returns  - /processed/returns
+Processed Returns - /processed/returns
 
 Permissions
 client_advances ------ Client Trans
+
+22nd March 2026
+New Sub Module --> Under Client Trans: /landlord/account/statement
