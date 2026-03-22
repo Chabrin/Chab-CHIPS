@@ -1397,10 +1397,10 @@ class InvoicingController extends Controller
             ]);
 
             $billingMonth = $validated['billing_month'];
-            $billingDate = $billingMonth . '-01'; // Set to 1st of the month
+            $billingDate = $billingMonth . '-01';
             $billingDateFormatted = date('Y-m-d', strtotime($billingDate));
 
-            // Check if this month has already been generated using the tracking table
+            // Check if this month has already been generated
             $alreadyGenerated = DB::table('sys_pm_generated_invoice_months')
                 ->where('month_year', $billingMonth)
                 ->exists();
@@ -1419,7 +1419,7 @@ class InvoicingController extends Controller
 
             $vatOnCommRate = $vatOnCommission->vat_on_commission ?? 0;
 
-            // Execute the invoice generation query
+            // PostgreSQL invoice generation query
             $sql = "
                 INSERT INTO sys_pm_debtors_invoices(
                     date_time,
@@ -1457,7 +1457,7 @@ class InvoicingController extends Controller
                 )
                 SELECT
                     NOW() AS date_time,
-                    ? AS date_due,
+                    ?::date AS date_due,
                     l.zone_id,
                     l.property_id,
                     l.unit_id,
@@ -1468,22 +1468,20 @@ class InvoicingController extends Controller
                     ? AS created_by,
                     CONCAT(
                         'INV',
-                        DATE_FORMAT(?, '%Y'),
-                        DATE_FORMAT(?, '%c'),
+                        TO_CHAR(?::date, 'YYYY'),
+                        TO_CHAR(?::date, 'FMMM'),
                         u.unit_code,
                         '-',
                         i.item_name,
                         ' for ',
-                        DATE_FORMAT(?, '%M %Y'),
-                        ' - ',
-                        li.cycle_id,
+                        TO_CHAR(?::date, 'Month YYYY'),
                         '-',
                         l.id
                     ) AS reference_number,
                     CONCAT('Tenant Invoice - ', i.item_name) AS narration,
                     2 AS debtor_type_id,
-                    li.amount AS total_amount,
-                    CONCAT('18:', l.id, ':', UNIX_TIMESTAMP()) AS trans_details,
+                    u.rent_amount AS total_amount,
+                    CONCAT('18:', l.id, ':', EXTRACT(EPOCH FROM NOW())::bigint) AS trans_details,
                     1 AS current_status_id,
                     'No' AS processed,
                     CASE 
@@ -1491,12 +1489,12 @@ class InvoicingController extends Controller
                             CASE
                                 WHEN u.vat_able = 'Yes' THEN
                                     ROUND(
-                                        (li.amount - ROUND(li.amount * 0.16, 2)) 
+                                        (u.rent_amount - ROUND(u.rent_amount * 0.16, 2)) 
                                         * (sla.commission_percentage / 100), 
                                         2
                                     )
                                 ELSE
-                                    ROUND(li.amount * (sla.commission_percentage / 100), 2)
+                                    ROUND(u.rent_amount * (sla.commission_percentage / 100), 2)
                             END
                         ELSE 0.00
                     END AS comm_ammount,
@@ -1506,7 +1504,7 @@ class InvoicingController extends Controller
                     END AS comm_per,
                     CASE
                         WHEN u.vat_able = 'Yes' THEN
-                            ROUND(li.amount * 0.16, 2)
+                            ROUND(u.rent_amount * 0.16, 2)
                         ELSE 0.00
                     END AS vat_ammount,
                     16.00 AS vat_per,
@@ -1514,9 +1512,9 @@ class InvoicingController extends Controller
                         WHEN i.commissionable = 'Yes' THEN
                             CASE
                                 WHEN u.vat_able = 'Yes' THEN
-                                    li.amount - ROUND(li.amount * 0.16, 2)
+                                    u.rent_amount - ROUND(u.rent_amount * 0.16, 2)
                                 ELSE
-                                    li.amount
+                                    u.rent_amount
                             END
                         ELSE 0.00
                     END AS commisionable_amount,
@@ -1525,22 +1523,22 @@ class InvoicingController extends Controller
                             CASE
                                 WHEN u.vat_able = 'Yes' THEN
                                     ROUND(
-                                        li.amount - 
+                                        u.rent_amount - 
                                         ROUND(
-                                            (li.amount - ROUND(li.amount * 0.16, 2)) 
+                                            (u.rent_amount - ROUND(u.rent_amount * 0.16, 2)) 
                                             * (sla.commission_percentage / 100), 
                                             2
                                         ), 
                                         2
                                     )
                                 ELSE
-                                    ROUND(li.amount - ROUND(li.amount * (sla.commission_percentage / 100), 2), 2)
+                                    ROUND(u.rent_amount - ROUND(u.rent_amount * (sla.commission_percentage / 100), 2), 2)
                             END
-                        ELSE li.amount
+                        ELSE u.rent_amount
                     END AS payable_amount,
-                    li.item_id AS item_type_id,
-                    li.cycle_id AS cycle_id,
-                    li.amount AS current_balance,
+                    i.id AS item_type_id,
+                    2 AS cycle_id,
+                    u.rent_amount AS current_balance,
                     u.occupancy_status_id,
                     p.field_officer_id,
                     p.zone_supervisor_id,
@@ -1551,12 +1549,12 @@ class InvoicingController extends Controller
                                 CASE
                                     WHEN u.vat_able = 'Yes' THEN
                                         ROUND(
-                                            (li.amount - ROUND(li.amount * 0.16, 2)) 
+                                            (u.rent_amount - ROUND(u.rent_amount * 0.16, 2)) 
                                             * (sla.commission_percentage / 100), 
                                             2
                                         ) * (? / 100)
                                     ELSE
-                                        ROUND(li.amount * (sla.commission_percentage / 100), 2) 
+                                        ROUND(u.rent_amount * (sla.commission_percentage / 100), 2) 
                                         * (? / 100)
                                 END,
                                 2
@@ -1565,31 +1563,20 @@ class InvoicingController extends Controller
                     END AS vat_on_commission,
                     1 AS override_period_check
                 FROM sys_pm_lease_agreements l
-                INNER JOIN sys_pm_lease_agreements_27_repeat li 
-                    ON li.parent_id = l.id
                 INNER JOIN sys_pm_units u 
                     ON u.id = l.unit_id
                 INNER JOIN sys_pm_properties p 
                     ON p.id = l.property_id
-                INNER JOIN sys_pm_service_agreements sla 
+                LEFT JOIN sys_pm_service_agreements sla 
                     ON sla.id = l.sla_id
-                INNER JOIN sys_set_invoiceable_items i 
-                    ON i.id = li.item_id
+                CROSS JOIN sys_set_invoiceable_items i
                 WHERE
-                    (l.current_status_id = 5 OR l.current_status_id = 21)
-                    AND l.date_end >= CURDATE()
-                    AND l.date_start IS NOT NULL
-                    AND l.date_start <= ?
-                    AND li.amount > 0
-                    AND (
-                        li.cycle_id = 2
-                        OR 
-                        (li.cycle_id = 1 AND li.cycle_one_invoiced IS NULL)
-                    )
-                ORDER BY l.id, li.item_id
+                    i.item_name = 'Unit Rent'
+                    AND l.lease_status = 'Active'
+                    AND u.rent_amount > 0
+                ORDER BY l.id
             ";
 
-            // Wrap everything in a DB transaction
             DB::beginTransaction();
 
             try {
@@ -1599,32 +1586,16 @@ class InvoicingController extends Controller
                     Auth::id(),                          // created_by
                     $billingDateFormatted,              // for reference year (YYYY)
                     $billingDateFormatted,              // for reference month number (M)
-                    $billingDateFormatted,              // for reference month name (MMMM YYYY)
-                    $vatOnCommRate,                      // vat_on_commission rate (first occurrence)
-                    $vatOnCommRate,                      // vat_on_commission rate (second occurrence)
-                    $billingDateFormatted               // lease start check
+                    $billingDateFormatted,              // for reference month name (Month YYYY)
+                    $vatOnCommRate,                      // vat_on_commission rate (first)
+                    $vatOnCommRate,                      // vat_on_commission rate (second)
                 ]);
 
                 // Get count of inserted records
                 $generatedCount = DB::table('sys_pm_debtors_invoices')
                     ->where('created_by', Auth::id())
-                    ->where('date_time', '>=', DB::raw('DATE_SUB(NOW(), INTERVAL 5 SECOND)'))
+                    ->where('date_time', '>=', DB::raw("NOW() - INTERVAL '5 seconds'"))
                     ->count();
-
-                // Flag cycle_id=1 items as invoiced to prevent re-invoicing
-                DB::update("
-                    UPDATE sys_pm_lease_agreements_27_repeat li
-                    INNER JOIN sys_pm_lease_agreements l ON l.id = li.parent_id
-                    SET li.cycle_one_invoiced = 1,
-                        li.cycle_one_invoiced_date = CURDATE()
-                    WHERE li.cycle_id = 1
-                    AND li.cycle_one_invoiced IS NULL
-                    AND (l.current_status_id = 5 OR l.current_status_id = 21)
-                    AND l.date_end >= CURDATE()
-                    AND l.date_start IS NOT NULL
-                    AND l.date_start <= ?
-                    AND li.amount > 0
-                ", [$billingDateFormatted]);
 
                 // Save the generated month to the tracking table
                 DB::table('sys_pm_generated_invoice_months')->insert([
@@ -1635,7 +1606,6 @@ class InvoicingController extends Controller
                     'notes' => "Generated {$generatedCount} invoices"
                 ]);
 
-                // Commit the transaction only if everything succeeds
                 DB::commit();
 
                 return response()->json([
@@ -1644,7 +1614,6 @@ class InvoicingController extends Controller
                     'count' => $generatedCount
                 ]);
             } catch (\PDOException $e) {
-                // Rollback on database errors (including constraint violations)
                 DB::rollBack();
                 ErrorDispatcher::dispatch($e);
                 Log::error('Database error during invoice generation: ' . $e->getMessage());
@@ -1653,7 +1622,6 @@ class InvoicingController extends Controller
                     'message' => 'Database error: ' . $e->getMessage()
                 ], 500);
             } catch (\Illuminate\Database\QueryException $e) {
-                // Rollback on query errors
                 DB::rollBack();
                 ErrorDispatcher::dispatch($e);
                 Log::error('Query error during invoice generation: ' . $e->getMessage());
@@ -1662,7 +1630,6 @@ class InvoicingController extends Controller
                     'message' => 'Query error: ' . $e->getMessage()
                 ], 500);
             } catch (\Exception $e) {
-                // Rollback on any other error
                 DB::rollBack();
                 ErrorDispatcher::dispatch($e);
                 Log::error('Error during invoice generation: ' . $e->getMessage());

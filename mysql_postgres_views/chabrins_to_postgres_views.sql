@@ -329,9 +329,8 @@ SELECT
     RTRIM(LTRIM(t.BLOCKNO)) + '-' + RTRIM(LTRIM(t.UNITNO)) + '-' + LEFT(RTRIM(LTRIM(t.TENNAME)), 20)  AS ref_number,
     NULL                                                AS created_by_id,
     NULL                                                AS sla_id,
-    -- NOTE: No SLA/service-agreement table exists in CHABRINS.
-    -- sla_id must be assigned manually post-migration by matching
-    -- sys_pm_service_agreements.property_id to the migrated property.
+    -- NOTE: sla_id populated post-migration from sys_pm_service_agreements
+    -- (view _018) by matching on property_id.
     blk.zone_id                                         AS zone_id,
     -- PRE-STAMPED: zone_id from CHBLOCKS via BLOC -> _mig_zones
     CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN'  THEN 1
@@ -361,6 +360,59 @@ WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '';
   client_id resolved via CHBLOCKS.LLORDID -> CHLRDS.LORDID chain.
   property_id, unit_id, tenant_id resolved via direct JOINs.
 */
+
+
+-- ============================================================================
+-- SERVICE LEVEL AGREEMENTS (SLA): CHBLOCKS -> sys_pm_service_agreements
+-- ============================================================================
+-- SOURCE: CHBLOCKS (1,842 rows) — one SLA per property.
+--   CHABRINS has NO dedicated SLA table, but CHBLOCKS stores commission rate
+--   (COMRATE) and VAT applicability (VATABL) per property/block.
+--   QRYCOMMS (10,009 rows) has monthly commission history but CHBLOCKS.COMRATE
+--   holds the current/latest rate directly.
+--
+-- TARGET: sys_pm_service_agreements (20 columns)
+--   Maps one SLA per property with commission_percentage from CHBLOCKS.COMRATE.
+--
+-- FK RESOLUTION:
+--   client_id    → PRE-STAMPED on CHBLOCKS via LLORDID -> CHLRDS chain
+--   property_id  → PRE-STAMPED on CHBLOCKS
+--   zone_id      → PRE-STAMPED on CHBLOCKS via BLOC -> _mig_zones
+--
+-- POST-MIGRATION: After loading this, update sys_pm_lease_agreements.sla_id:
+--   UPDATE sys_pm_lease_agreements l
+--   SET sla_id = s.id
+--   FROM sys_pm_service_agreements s
+--   WHERE s.property_id = l.property_id;
+
+CREATE OR ALTER VIEW vw_sys_pm_service_agreements_018 AS
+SELECT
+    GETDATE()                                           AS date_time,
+    b.client_id                                         AS client_d,
+    -- PRE-STAMPED: client_id from CHLRDS via LLORDID
+    NULL                                                AS zone_area_id,
+    b.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id
+    ISNULL(b.COMRATE, 0)                                AS commission_percentage,
+    CASE WHEN RTRIM(LTRIM(b.VATABL)) = 'Yes' THEN 'Yes'
+         ELSE 'No' END                                  AS vat,
+    NULL                                                AS date_start,
+    NULL                                                AS date_end,
+    b.zone_id                                           AS zone_id,
+    -- PRE-STAMPED: zone_id from _mig_zones via BLOC
+    NULL                                                AS [select],
+    'SLA-' + RTRIM(LTRIM(b.BLOCKID))                    AS reference_number,
+    NULL                                                AS created_by_id,
+    NULL                                                AS sla_documents,
+    NULL                                                AS landlord_payment_date,
+    CASE WHEN b.BSTATUS = 1 THEN 1 ELSE 2 END          AS current_status_id,
+    'No'                                                AS auto_renewal,
+    NULL                                                AS years,
+    16.00                                               AS vat_per,
+    0                                                   AS flat_rate_vat
+FROM CHABRINS.dbo.CHBLOCKS b
+WHERE b.BLOCKID IS NOT NULL;
+GO
 
 
 -- ============================================================================

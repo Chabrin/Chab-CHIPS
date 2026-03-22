@@ -26,6 +26,7 @@
 --   _012  vw_sys_pm_tenants_payments_unallocated_012
 --   _013  vw_sys_pm_tenants_accounts_transactions_013
 --   _014  vw_cb_receipts_014
+--   _018  vw_sys_pm_service_agreements_018
 -- ============================================================================
 
 USE CHABRINS;
@@ -728,5 +729,46 @@ SELECT
     r.CANREASON                                         AS canreason,
     r.CANDATE                                           AS candate
 FROM CHABRINS.dbo.CHRCS r;
+';
+
+-- ============================================================================
+-- _018  vw_sys_pm_service_agreements_018
+-- ============================================================================
+-- SOURCE: CHBLOCKS (1,842 rows) — one SLA per property.
+--   CHABRINS has NO dedicated SLA table, but CHBLOCKS stores commission rate
+--   (COMRATE) and VAT applicability (VATABL) per property/block.
+--   QRYCOMMS (10,009 rows) has monthly commission history but CHBLOCKS.COMRATE
+--   holds the current/latest rate directly.
+-- TARGET: sys_pm_service_agreements (20 columns, id auto-increment)
+-- POST-MIGRATION: After loading, update sys_pm_lease_agreements.sla_id:
+--   UPDATE sys_pm_lease_agreements l
+--   SET sla_id = s.id
+--   FROM sys_pm_service_agreements s
+--   WHERE s.property_id = l.property_id;
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_pm_service_agreements_018 AS
+SELECT
+    GETDATE()                                           AS date_time,
+    b.client_id                                         AS client_d,
+    NULL                                                AS zone_area_id,
+    b.property_id                                       AS property_id,
+    ISNULL(b.COMRATE, 0)                                AS commission_percentage,
+    CASE WHEN RTRIM(LTRIM(b.VATABL)) = ''Yes'' THEN ''Yes''
+         ELSE ''No'' END                                  AS vat,
+    NULL                                                AS date_start,
+    NULL                                                AS date_end,
+    b.zone_id                                           AS zone_id,
+    NULL                                                AS [select],
+    ''SLA-'' + RTRIM(LTRIM(b.BLOCKID))                    AS reference_number,
+    NULL                                                AS created_by_id,
+    NULL                                                AS sla_documents,
+    NULL                                                AS landlord_payment_date,
+    CASE WHEN b.BSTATUS = 1 THEN 1 ELSE 2 END          AS current_status_id,
+    ''No''                                                AS auto_renewal,
+    NULL                                                AS years,
+    16.00                                               AS vat_per,
+    0                                                   AS flat_rate_vat
+FROM CHABRINS.dbo.CHBLOCKS b
+WHERE b.BLOCKID IS NOT NULL;
 ';
 

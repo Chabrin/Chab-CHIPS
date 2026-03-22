@@ -108,3 +108,13 @@ WHERE date_time        != BTRIM(date_time)
    SELECT setval(pg_get_serial_sequence('cb_returns_summary', 'id'), (SELECT MAX(id) FROM cb_returns_summary));
 SELECT setval(pg_get_serial_sequence('cb_returns_clients', 'id'), (SELECT MAX(id) FROM cb_returns_clients));
 SELECT setval(pg_get_serial_sequence('cb_landlord_account', 'id'), (SELECT MAX(id) FROM cb_landlord_account));
+
+
+
+UPDATE sys_pm_lease_agreements l
+SET sla_id = s.id
+FROM sys_pm_service_agreements s
+WHERE s.property_id = l.property_id;
+
+
+INSERT INTO sys_set_invoiceable_items (date_time, item_name, billing_code, feature, payment_priority, commissionable, default_cycle_id, current_status_id, default_expense_account_id, advance_payable, is_bill, fixed_amount, amount) VALUES('2026-03-22 13:35:37.090', 'Unit Rent', '0037', '', '', 'Yes', 2, 5, '', 'Yes', NULL, 'Yes', NULL);
