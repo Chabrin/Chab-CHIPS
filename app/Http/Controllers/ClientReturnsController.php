@@ -90,6 +90,7 @@ class ClientReturnsController extends Controller
                         'total_debit' => number_format($r->total_debit ?? 0, 2),
                         'commission_amount' => number_format($r->commission_amount ?? 0, 2),
                         'net_amount' => number_format($r->net_amount ?? 0, 2),
+                        'payable_units' => ($r->payable_units ?? 0) . '/' . ($r->total_units ?? 0),
                         'prepared_by' => $r->prepared_by ?? '-',
                         'approved_status' => $r->approved_status,
                         'prepared_status' => $r->prepared_status,
@@ -136,10 +137,13 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
                     SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
                     SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
                 ")
@@ -165,10 +169,13 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
                     SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
                     SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
                 ")
@@ -188,6 +195,10 @@ class ClientReturnsController extends Controller
                     'approved_status' => $return->approved_status,
                     'prepared_by' => $return->prepared_by ?? '-',
                     'remarks' => trim(($return->remarks ?? '') . ' ' . ($return->remarks_2 ?? '')),
+                    'payable_units' => $return->payable_units ?? 0,
+                    'total_units' => $return->total_units ?? 0,
+                    'payable_amount' => number_format($return->payable_amount ?? 0, 2),
+                    'non_payable_amount' => number_format($return->non_payable_amount ?? 0, 2),
                 ],
                 'lineTotals' => [
                     'rent_total' => number_format($lineTotals->rent_total ?? 0, 2),
@@ -537,8 +548,8 @@ class ClientReturnsController extends Controller
     /**
      * Process returns generation
      * 3 raw SQL queries wrapped in a transaction:
-     * 1) INSERT rent/commission/VAT lines into cb_returns_clients
-     * 2) UPDATE pay_percentage from previous month invoice balances
+     * 1) INSERT rent lines into cb_returns_clients (with commission_amount & vat_amount)
+     * 2) UPDATE pay_percentage + net_amount + zero commission/vat for non-payable
      * 3) INSERT aggregated summaries into cb_returns_summary
      */
     public function processGenerate(Request $request)
@@ -562,6 +573,9 @@ class ClientReturnsController extends Controller
             $returnMonthNum = (int) $returnMonthNum;
             $monthName = date('F', mktime(0, 0, 0, $returnMonthNum, 1, $returnYear));
             $prevDate = date('Y-m', strtotime($returnsMonth . '-01 -1 month'));
+            $monthStart = $returnsMonth . '-01';
+            $nextMonthStart = date('Y-m-d', strtotime($monthStart . ' +1 month'));
+            $prevMonthStart = $prevDate . '-01';
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
 
@@ -582,7 +596,7 @@ class ClientReturnsController extends Controller
             // ═══════════════════════════════════════════════════════════════════
             $totalInvoices = DB::selectOne("
                 SELECT COUNT(*) as cnt FROM sys_pm_debtors_invoices i
-                WHERE TO_CHAR(i.date_due, 'YYYY-MM') = ?
+                WHERE i.date_due >= ?::date AND i.date_due < ?::date
                   AND i.current_status_id = 1
                   AND i.debtor_type_id = '2'
                   AND i.property_id IS NOT NULL
@@ -590,7 +604,7 @@ class ClientReturnsController extends Controller
                   AND i.lease_id IS NOT NULL
                   AND i.tenant_id IS NOT NULL
                   {$propertyFilter}
-            ", array_merge([$returnsMonth], $propBindings))->cnt;
+            ", array_merge([$monthStart, $nextMonthStart], $propBindings))->cnt;
 
             if ($totalInvoices == 0) {
                 DB::rollBack();
@@ -651,7 +665,7 @@ class ClientReturnsController extends Controller
 
             // Common WHERE clause for invoice selection
             $invoiceWhere = "
-                TO_CHAR(i.date_due, 'YYYY-MM') = ?
+                i.date_due >= ?::date AND i.date_due < ?::date
                 AND i.current_status_id = 1
                 AND i.debtor_type_id = '2'
                 AND i.property_id IS NOT NULL
@@ -671,7 +685,7 @@ class ClientReturnsController extends Controller
                 LEFT JOIN sys_pm_clients c ON c.id = s.client_d
             ";
 
-            // Approved-return exclusion — skip properties that already have approved returns
+            // Approved-return exclusion
             $notApproved = "
                 AND NOT EXISTS (
                     SELECT 1 FROM cb_returns_summary rs
@@ -680,18 +694,18 @@ class ClientReturnsController extends Controller
                 )
             ";
 
-            // Base bindings for each section: [returnsMonth, ...propBindings, returnPeriod]
-            $baseBindings = array_merge([$returnsMonth], $propBindings, [$returnPeriod]);
+            $baseBindings = array_merge([$monthStart, $nextMonthStart], $propBindings, [$returnPeriod]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 1A: INSERT RENT CURRENT LINES (one per invoice/tenant)
+            // QUERY 1: INSERT RENT LINES (one per invoice/tenant)
             // ═══════════════════════════════════════════════════════════════════
             $rentInserted = DB::affectingStatement("
                 INSERT INTO cb_returns_clients (
                     return_code, return_period, transaction_number, transaction_date,
                     entry_description, entry_type, dr_cr,
                     property_code, unit_code, tenant_name,
-                    net_amount, amount_payable_landlord, vat_amount,
+                    net_amount, amount_payable_landlord,
+                    vat_amount, commission_amount,
                     property_id, client_id, zone_id, field_officer_id,
                     zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
                     return_id, invoice_id, narration, transaction_ref,
@@ -710,7 +724,8 @@ class ClientReturnsController extends Controller
                     t.names,
                     i.total_amount,
                     i.total_amount,
-                    0,
+                    ROUND(ROUND(i.total_amount * COALESCE(s.commission_percentage, 0) / 100, 2) * COALESCE(s.vat_per, 16) / 100, 2),
+                    ROUND(i.total_amount * COALESCE(s.commission_percentage, 0) / 100, 2),
                     i.property_id,
                     COALESCE(s.client_d, 0),
                     i.zone_id,
@@ -732,7 +747,7 @@ class ClientReturnsController extends Controller
                 $baseBindings
             ));
 
-            Log::info("Query 1A: Rent lines inserted", ['count' => $rentInserted]);
+            Log::info("Query 1: Rent lines inserted", ['count' => $rentInserted]);
 
             if ($rentInserted == 0) {
                 DB::rollBack();
@@ -743,147 +758,94 @@ class ClientReturnsController extends Controller
             }
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 1B: INSERT COMMISSION LINES (one per property)
-            // ═══════════════════════════════════════════════════════════════════
-            DB::affectingStatement("
-                INSERT INTO cb_returns_clients (
-                    return_code, return_period, transaction_number, transaction_date,
-                    entry_description, entry_type, dr_cr,
-                    property_code,
-                    net_amount, amount_payable_landlord, vat_amount,
-                    property_id, client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id,
-                    return_id, narration, is_commissionable
-                )
-                SELECT
-                    'R1' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number,
-                    ?::integer,
-                    '',
-                    ?,
-                    'COMMISSION',
-                    'Commission',
-                    'DR',
-                    p.reference_number,
-                    ROUND(SUM(i.total_amount) * COALESCE(s.commission_percentage, 0) / 100, 2),
-                    ROUND(SUM(i.total_amount) * COALESCE(s.commission_percentage, 0) / 100, 2),
-                    0,
-                    i.property_id,
-                    COALESCE(s.client_d, 0),
-                    MIN(i.zone_id),
-                    MIN(i.field_officer_id),
-                    MIN(i.zone_supervisor_id),
-                    MIN(i.zone_manager_id),
-                    ? + DENSE_RANK() OVER (ORDER BY i.property_id) - 1,
-                    'Commission ' || COALESCE(s.commission_percentage, 0) || '% for {$monthName} {$returnYear}',
-                    'No'
-                {$invoiceJoins}
-                WHERE {$invoiceWhere}
-                {$notApproved}
-                GROUP BY i.property_id, p.reference_number, s.client_d, s.commission_percentage, c.reference_number
-            ", array_merge(
-                [$returnPeriod, $returnPeriod, $transactionDate, $baseReturnId],
-                $baseBindings
-            ));
-
-            // ═══════════════════════════════════════════════════════════════════
-            // QUERY 1C: INSERT VAT LINES (one per property)
-            // ═══════════════════════════════════════════════════════════════════
-            DB::affectingStatement("
-                INSERT INTO cb_returns_clients (
-                    return_code, return_period, transaction_number, transaction_date,
-                    entry_description, entry_type, dr_cr,
-                    property_code,
-                    net_amount, amount_payable_landlord, vat_amount,
-                    property_id, client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id,
-                    return_id, narration, is_commissionable, is_vatable
-                )
-                SELECT
-                    'R1' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number,
-                    ?::integer,
-                    '',
-                    ?,
-                    'VAT AMOUNT',
-                    'VAT',
-                    'DR',
-                    p.reference_number,
-                    ROUND(ROUND(SUM(i.total_amount) * COALESCE(s.commission_percentage, 0) / 100, 2) * COALESCE(s.vat_per, 16) / 100, 2),
-                    ROUND(ROUND(SUM(i.total_amount) * COALESCE(s.commission_percentage, 0) / 100, 2) * COALESCE(s.vat_per, 16) / 100, 2),
-                    ROUND(ROUND(SUM(i.total_amount) * COALESCE(s.commission_percentage, 0) / 100, 2) * COALESCE(s.vat_per, 16) / 100, 2),
-                    i.property_id,
-                    COALESCE(s.client_d, 0),
-                    MIN(i.zone_id),
-                    MIN(i.field_officer_id),
-                    MIN(i.zone_supervisor_id),
-                    MIN(i.zone_manager_id),
-                    ? + DENSE_RANK() OVER (ORDER BY i.property_id) - 1,
-                    'VAT on Commission for {$monthName} {$returnYear}',
-                    'No',
-                    'Yes'
-                {$invoiceJoins}
-                WHERE {$invoiceWhere}
-                {$notApproved}
-                GROUP BY i.property_id, p.reference_number, s.client_d, s.commission_percentage, s.vat_per, c.reference_number
-            ", array_merge(
-                [$returnPeriod, $returnPeriod, $transactionDate, $baseReturnId],
-                $baseBindings
-            ));
-
-            // ═══════════════════════════════════════════════════════════════════
-            // QUERY 2: UPDATE PAY PERCENTAGES
+            // QUERY 2: UPDATE PAY PERCENTAGE, PAYABLE STATUS & NET AMOUNT
+            // Sets threshold from prev-month invoice, then zeroes net_amount
+            // for non-payable tenants (<85%) in a single UPDATE
             // ═══════════════════════════════════════════════════════════════════
             DB::statement("
                 UPDATE cb_returns_clients rc
-                SET pay_percentage = sub.pct
+                SET pay_percentage = sub.pct,
+                    current_balance = sub.prev_balance,
+                    total_amount = sub.prev_total,
+                    threshold_percentage = sub.pct_num,
+                    payable_status = sub.pay_status,
+                    net_amount = CASE WHEN sub.pay_status IN (1, 2, 3) THEN rc.amount_payable_landlord ELSE 0 END,
+                    commission_amount = CASE WHEN sub.pay_status IN (1, 2, 3) THEN rc.commission_amount ELSE 0 END,
+                    vat_amount = CASE WHEN sub.pay_status IN (1, 2, 3) THEN rc.vat_amount ELSE 0 END
                 FROM (
                     SELECT
-                        pi.tenant_id,
+                        rc2.id AS rc_id,
+                        COALESCE(pi.current_balance, 0) AS prev_balance,
+                        COALESCE(pi.total_amount, 0) AS prev_total,
                         CASE
-                            WHEN pi.total_amount > 0 AND pi.current_balance <= 0 THEN '100'
-                            WHEN pi.total_amount > 0 AND pi.current_balance >= pi.total_amount THEN '0'
-                            WHEN pi.total_amount > 0 THEN
-                                ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2)::text
+                            WHEN pi.id IS NOT NULL THEN
+                                CASE
+                                    WHEN pi.total_amount > 0 AND pi.current_balance <= 0 THEN 100.00
+                                    WHEN pi.total_amount > 0 AND pi.current_balance >= pi.total_amount THEN 0.00
+                                    WHEN pi.total_amount > 0 THEN ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2)
+                                    ELSE 0.00
+                                END
+                            WHEN NOT EXISTS (
+                                SELECT 1 FROM sys_pm_debtors_invoices older
+                                WHERE older.tenant_id = rc2.tenant_id
+                                  AND older.date_due < ?::date
+                                  AND older.current_status_id = 1
+                                  AND older.debtor_type_id = '2'
+                            ) THEN 100.00
+                            ELSE 0.00
+                        END AS pct_num,
+                        CASE
+                            WHEN pi.id IS NOT NULL THEN
+                                CASE
+                                    WHEN pi.total_amount > 0 AND pi.current_balance <= 0 THEN '100'
+                                    WHEN pi.total_amount > 0 AND pi.current_balance >= pi.total_amount THEN '0'
+                                    WHEN pi.total_amount > 0 THEN ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2)::text
+                                    ELSE '0'
+                                END
+                            WHEN NOT EXISTS (
+                                SELECT 1 FROM sys_pm_debtors_invoices older
+                                WHERE older.tenant_id = rc2.tenant_id
+                                  AND older.date_due < ?::date
+                                  AND older.current_status_id = 1
+                                  AND older.debtor_type_id = '2'
+                            ) THEN '100'
                             ELSE '0'
-                        END AS pct
-                    FROM sys_pm_debtors_invoices pi
-                    WHERE TO_CHAR(pi.date_due, 'YYYY-MM') = ?
-                      AND pi.current_status_id = 1
-                      AND pi.debtor_type_id = '2'
+                        END AS pct,
+                        CASE
+                            WHEN pi.id IS NOT NULL AND (
+                                (pi.total_amount > 0 AND pi.current_balance <= 0)
+                                OR (pi.total_amount > 0 AND ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2) >= 85)
+                            ) THEN 1
+                            WHEN pi.id IS NULL AND NOT EXISTS (
+                                SELECT 1 FROM sys_pm_debtors_invoices older
+                                WHERE older.tenant_id = rc2.tenant_id
+                                  AND older.date_due < ?::date
+                                  AND older.current_status_id = 1
+                                  AND older.debtor_type_id = '2'
+                            ) THEN 2
+                            ELSE 0
+                        END AS pay_status
+                    FROM cb_returns_clients rc2
+                    LEFT JOIN LATERAL (
+                        SELECT pi2.id, pi2.current_balance, pi2.total_amount
+                        FROM sys_pm_debtors_invoices pi2
+                        WHERE pi2.tenant_id = rc2.tenant_id
+                          AND pi2.date_due >= ?::date AND pi2.date_due < ?::date
+                          AND pi2.current_status_id = 1
+                          AND pi2.debtor_type_id = '2'
+                        ORDER BY pi2.id DESC LIMIT 1
+                    ) pi ON true
+                    WHERE rc2.return_period = ?
+                      AND rc2.entry_type = 'RENT CURRENT'
+                      {$propertyFilterSummary}
                 ) sub
-                WHERE rc.return_period = ?
-                  AND rc.entry_type = 'RENT CURRENT'
-                  AND rc.tenant_id = sub.tenant_id
-                  {$propertyFilterSummary}
-            ", array_merge([$prevDate, $returnPeriod], $propBindings));
+                WHERE rc.id = sub.rc_id
+            ", array_merge(
+                [$monthStart, $monthStart, $monthStart, $prevMonthStart, $monthStart, $returnPeriod],
+                $propBindings
+            ));
 
-            // For tenants with no previous invoice at all (first invoice ever), set 100%
-            DB::statement("
-                UPDATE cb_returns_clients rc
-                SET pay_percentage = '100'
-                WHERE rc.return_period = ?
-                  AND rc.entry_type = 'RENT CURRENT'
-                  AND (rc.pay_percentage IS NULL OR rc.pay_percentage = '')
-                  AND NOT EXISTS (
-                      SELECT 1 FROM sys_pm_debtors_invoices older
-                      WHERE older.tenant_id = rc.tenant_id
-                        AND TO_CHAR(older.date_due, 'YYYY-MM') < ?
-                        AND older.current_status_id = 1
-                        AND older.debtor_type_id = '2'
-                  )
-                  {$propertyFilterSummary}
-            ", array_merge([$returnPeriod, $returnsMonth], $propBindings));
-
-            // For remaining tenants (have older invoices but didn't pay last month), set 0%
-            DB::statement("
-                UPDATE cb_returns_clients rc
-                SET pay_percentage = '0'
-                WHERE rc.return_period = ?
-                  AND rc.entry_type = 'RENT CURRENT'
-                  AND (rc.pay_percentage IS NULL OR rc.pay_percentage = '')
-                  {$propertyFilterSummary}
-            ", array_merge([$returnPeriod], $propBindings));
-
-            Log::info("Query 2: Updated pay percentages");
+            Log::info("Query 2: Updated pay percentages, net_amount, commission and vat");
 
             // ═══════════════════════════════════════════════════════════════════
             // QUERY 3: INSERT SUMMARIES INTO cb_returns_summary
@@ -896,7 +858,8 @@ class ClientReturnsController extends Controller
                     commission_amount, total_debit, net_amount,
                     transaction_amount, net_balance,
                     prepared_by, prepared_status, prepared_date,
-                    approved_status, paid_status, return_id
+                    approved_status, paid_status, return_id,
+                    payable_amount, non_payable_amount, payable_units, total_units
                 )
                 SELECT
                     rc.return_code,
@@ -908,27 +871,21 @@ class ClientReturnsController extends Controller
                     ? AS year,
                     ? AS month,
                     COALESCE(
-                        (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.reference_number = rc.property_code LIMIT 1),
+                        (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.id = rc.property_id LIMIT 1),
                         rc.property_code
                     ) || '-{$monthName} {$returnYear}' AS return_description,
                     ? AS return_period,
                     'MAINRETURN' AS return_type,
-                    CASE WHEN SUM(CASE WHEN rc.entry_type = 'Commission' THEN rc.net_amount ELSE 0 END) > 0
-                         AND SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.net_amount ELSE 0 END) > 0
-                        THEN ROUND(
-                            SUM(CASE WHEN rc.entry_type = 'Commission' THEN rc.net_amount ELSE 0 END)
-                            / SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.net_amount ELSE 0 END)
-                            * 100, 2
-                        )
+                    CASE WHEN SUM(rc.commission_amount) > 0 AND SUM(rc.net_amount) > 0
+                        THEN ROUND(SUM(rc.commission_amount) / SUM(rc.net_amount) * 100, 2)
                         ELSE 0
                     END AS commission_rate,
-                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS total_credit,
-                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS commission_total,
+                    SUM(rc.net_amount) AS total_credit,
+                    SUM(rc.net_amount) AS commission_total,
                     0 AS vatable_total,
-                    SUM(CASE WHEN rc.entry_type = 'Commission' THEN rc.net_amount ELSE 0 END) AS commission_amount,
-                    SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
-                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
-                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS net_amount,
+                    SUM(rc.commission_amount) AS commission_amount,
+                    SUM(rc.commission_amount) + SUM(rc.vat_amount) AS total_debit,
+                    SUM(rc.net_amount) - SUM(rc.commission_amount) - SUM(rc.vat_amount) AS net_amount,
                     0 AS transaction_amount,
                     0 AS net_balance,
                     ? AS prepared_by,
@@ -936,14 +893,18 @@ class ClientReturnsController extends Controller
                     NOW() AS prepared_date,
                     0 AS approved_status,
                     0 AS paid_status,
-                    rc.return_id
+                    rc.return_id,
+                    SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.net_amount ELSE 0 END) AS payable_amount,
+                    SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND (rc.payable_status = 0 OR rc.payable_status IS NULL) THEN rc.amount_payable_landlord ELSE 0 END) AS non_payable_amount,
+                    COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.unit_id END) AS payable_units,
+                    COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
                 FROM cb_returns_clients rc
                 WHERE rc.return_period = ?
                   AND NOT EXISTS (
                       SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code
                   )
                   {$propertyFilterSummary}
-                GROUP BY rc.return_code, rc.property_code, rc.client_id, rc.return_id
+                GROUP BY rc.return_code, rc.property_code, rc.property_id, rc.client_id, rc.return_id
             ";
 
             $summaryCount = DB::affectingStatement($q3, array_merge(
@@ -1079,10 +1040,13 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
                     SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
                     SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
                 ")
@@ -1108,10 +1072,13 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END) as total_dr,
+                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
-                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END) as commission,
-                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END) as vat,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat,
                     SUM(CASE WHEN entry_type = 'Deductions Before Commission' THEN net_amount ELSE 0 END) as deductions,
                     SUM(CASE WHEN entry_type = 'Add Back Deductions' THEN net_amount ELSE 0 END) as add_back
                 ")

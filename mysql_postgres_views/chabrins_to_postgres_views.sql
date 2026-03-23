@@ -1364,148 +1364,168 @@ GO
 
 
 -- ============================================================================
--- 24. LANDLORD ACCOUNT TRANSACTIONS: CHLACC -> sys_pm_landlord_accounts_transaction
+-- 24. LANDLORD ACCOUNT TRANSACTIONS: CHLACC + CHIBALS + CHLCAC -> sys_pm_landlord_accounts_transaction
 -- ============================================================================
--- NOTE: Also fed by CHIBALS and CHLCAC.
---   CHLACC  = Full landlord transaction ledger (primary)
---   CHIBALS = Tenant balance records
---   CHLCAC  = Closing balance summaries
--- Strategy: Use CHLACC as primary. CHIBALS and CHLCAC are supplementary.
---
--- EXTRA TABLE NEEDED: CHLRDS (Landlords) — NOT IN CSV MAPPING
---   client_id must be resolved from CHLRDS.LORDID
+-- Combined view: UNION ALL of three CHABRINS sources into one view.
+--   Part A: CHLACC  = Full landlord transaction ledger (primary, pre-stamped FKs)
+--   Part B: CHIBALS = Tenant balance records (JOINed FKs)
+--   Part C: CHLCAC  = Closing balance summaries (JOINed FKs)
+-- ROW_NUMBER is applied over the combined result set, ordered by source (A,B,C)
+-- then by the original sort columns within each source.
 
-CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction_FROM_CHLACC AS
+CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY l.YEARR, l.MONTHH, l.LORDID, l.ENTRYNU)  AS id,
-    GETDATE()                                           AS date_time,
-    l.ENTRYDA                                           AS trans_date_time,
-    l.client_id                                         AS client_id,
-    -- PRE-STAMPED: client_id via CHLRDS (LORDID, strip LAN- prefix)
-    l.property_id                                       AS property_id,
-    -- PRE-STAMPED: property_id via CHBLOCKS (HOUSEID -> BLOCKID)
-    NULL                                                AS unit_id,
-    NULL                                                AS lease_id,
-    NULL                                                AS tenant_id,
-    RTRIM(LTRIM(l.ENTRYID))                             AS origin_id,
-    NULL                                                AS transaction_type_id,
-    RTRIM(LTRIM(l.ENTRYDE))                             AS narration,
-    CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN 'Debit'
-         ELSE 'Credit' END                              AS amount_type,
-    CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN l.AMTDR
-         ELSE l.AMTCR END                               AS amount,
-    NULL                                                AS sla_id,
-    CAST(ISNULL(l.AMTTOT, 0) AS VARCHAR(50))            AS balance,
-    CASE WHEN l.ACCSTAT = 1 THEN 1 ELSE 2 END          AS current_status_id,
-    NULL                                                AS invoice_id,
-    CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN l.AMTDR
-         ELSE l.AMTCR END                               AS amount_internal,
-    NULL                                                AS payable_status,
-    l.YEARR * 100 + l.MONTHH                            AS period_id,
-    NULL                                                AS period_status_id,
-    NULL                                                AS zone_id
-FROM CHABRINS.dbo.CHLACC l
-WHERE l.LORDID IS NOT NULL;
-GO
+    ROW_NUMBER() OVER (ORDER BY src, sort1, sort2, sort3, sort4)  AS id,
+    date_time, trans_date_time, client_id, property_id, unit_id,
+    lease_id, tenant_id, origin_id, transaction_type_id, narration,
+    amount_type, amount, sla_id, balance, current_status_id,
+    invoice_id, amount_internal, payable_status, period_id,
+    period_status_id, zone_id
+FROM (
+    -- ── Part A: CHLACC (primary landlord ledger, pre-stamped FKs) ──
+    SELECT
+        'A'                                                 AS src,
+        CAST(l.YEARR AS VARCHAR(20))                         AS sort1,
+        CAST(l.MONTHH AS VARCHAR(20))                        AS sort2,
+        l.LORDID                                            AS sort3,
+        CAST(l.ENTRYNU AS VARCHAR(50))                       AS sort4,
+        GETDATE()                                           AS date_time,
+        l.ENTRYDA                                           AS trans_date_time,
+        l.client_id                                         AS client_id,
+        -- PRE-STAMPED: client_id via CHLRDS (LORDID, strip LAN- prefix)
+        l.property_id                                       AS property_id,
+        -- PRE-STAMPED: property_id via CHBLOCKS (HOUSEID -> BLOCKID)
+        NULL                                                AS unit_id,
+        NULL                                                AS lease_id,
+        NULL                                                AS tenant_id,
+        RTRIM(LTRIM(l.ENTRYID))                             AS origin_id,
+        NULL                                                AS transaction_type_id,
+        RTRIM(LTRIM(l.ENTRYDE))                             AS narration,
+        CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN 'Debit'
+             ELSE 'Credit' END                              AS amount_type,
+        CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN l.AMTDR
+             ELSE l.AMTCR END                               AS amount,
+        NULL                                                AS sla_id,
+        CAST(ISNULL(l.AMTTOT, 0) AS VARCHAR(50))            AS balance,
+        CASE WHEN l.ACCSTAT = 1 THEN 1 ELSE 2 END          AS current_status_id,
+        NULL                                                AS invoice_id,
+        CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN l.AMTDR
+             ELSE l.AMTCR END                               AS amount_internal,
+        NULL                                                AS payable_status,
+        l.YEARR * 100 + l.MONTHH                            AS period_id,
+        NULL                                                AS period_status_id,
+        NULL                                                AS zone_id
+    FROM CHABRINS.dbo.CHLACC l
+    WHERE l.LORDID IS NOT NULL
 
+    UNION ALL
 
-CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction_FROM_CHIBALS AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY ib.TENANTNAME, ib.BLOCKNO, ib.ROOMNO)  AS id,
-    GETDATE()                                           AS date_time,
-    CAST(ib.TRANSDATE AS DATETIME)                      AS trans_date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKNO -> LLORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKNO
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKNO + ROOMNO
-    NULL                                                AS lease_id,
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENANTNAME + BLOCKNO + ROOMNO
-    'BAL-' + ib.BLOCKNO + '-' + ib.ROOMNO               AS origin_id,
-    NULL                                                AS transaction_type_id,
-    RTRIM(LTRIM(ib.TRANSDESC))                          AS narration,
-    CASE WHEN ISNULL(ib.CURRENTBAL, 0) >= 0 THEN 'Debit' ELSE 'Credit' END  AS amount_type,
-    ABS(ISNULL(ib.CURRENTBAL, 0))                       AS amount,
-    NULL                                                AS sla_id,
-    CAST(ISNULL(ib.CURRENTBAL, 0) AS VARCHAR(50))       AS balance,
-    1                                                   AS current_status_id,
-    NULL                                                AS invoice_id,
-    ABS(ISNULL(ib.CURRENTBAL, 0))                       AS amount_internal,
-    NULL                                                AS payable_status,
-    NULL                                                AS period_id,
-    NULL                                                AS period_status_id,
-    NULL                                                AS zone_id
-FROM CHABRINS.dbo.CHIBALS ib
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(ib.BLOCKNO))
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(ib.BLOCKNO))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(ib.ROOMNO))
-LEFT JOIN (
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL
-) ten ON ten.TENNAME = ib.TENANTNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(ib.BLOCKNO))
-     AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(ib.ROOMNO))
-WHERE ib.TENANTNAME IS NOT NULL;
-GO
+    -- ── Part B: CHIBALS (tenant balance records, JOINed FKs) ──
+    SELECT
+        'B'                                                 AS src,
+        NULL                                                AS sort1,
+        NULL                                                AS sort2,
+        ib.TENANTNAME                                       AS sort3,
+        ib.BLOCKNO + '-' + ib.ROOMNO                        AS sort4,
+        GETDATE()                                           AS date_time,
+        TRY_CAST(ib.TRANSDATE AS DATETIME)                  AS trans_date_time,
+        lr.lord_row_id                                      AS client_id,
+        -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKNO -> LLORDID
+        prop.prop_row_id                                    AS property_id,
+        -- JOINED: CHBLOCKS via BLOCKNO
+        unt.unit_row_id                                     AS unit_id,
+        -- JOINED: CHBUNITS via BLOCKNO + ROOMNO
+        NULL                                                AS lease_id,
+        ten.ten_row_id                                      AS tenant_id,
+        -- JOINED: CHTENS via TENANTNAME + BLOCKNO + ROOMNO
+        'BAL-' + ib.BLOCKNO + '-' + ib.ROOMNO               AS origin_id,
+        NULL                                                AS transaction_type_id,
+        RTRIM(LTRIM(ib.TRANSDESC))                          AS narration,
+        CASE WHEN ISNULL(ib.CURRENTBAL, 0) >= 0 THEN 'Debit' ELSE 'Credit' END  AS amount_type,
+        ABS(ISNULL(ib.CURRENTBAL, 0))                       AS amount,
+        NULL                                                AS sla_id,
+        CAST(ISNULL(ib.CURRENTBAL, 0) AS VARCHAR(50))       AS balance,
+        1                                                   AS current_status_id,
+        NULL                                                AS invoice_id,
+        ABS(ISNULL(ib.CURRENTBAL, 0))                       AS amount_internal,
+        NULL                                                AS payable_status,
+        NULL                                                AS period_id,
+        NULL                                                AS period_status_id,
+        NULL                                                AS zone_id
+    FROM CHABRINS.dbo.CHIBALS ib
+    LEFT JOIN (
+        SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
+        FROM CHABRINS.dbo.CHBLOCKS
+        WHERE BLOCKID IS NOT NULL
+    ) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(ib.BLOCKNO))
+    LEFT JOIN (
+        SELECT lordid_clean, lord_row_id FROM (
+            SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
+                   ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
+            FROM CHABRINS.dbo.CHLRDS
+            WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
+            GROUP BY RTRIM(LTRIM(LORDID))
+        ) lrd
+    ) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
+    LEFT JOIN (
+        SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
+        FROM CHABRINS.dbo.CHBUNITS
+        WHERE UNITNO IS NOT NULL
+    ) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(ib.BLOCKNO))
+         AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(ib.ROOMNO))
+    LEFT JOIN (
+        SELECT TENNAME, BLOCKNO, UNITNO,
+               ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
+        FROM CHABRINS.dbo.CHTENS
+        WHERE TENNAME IS NOT NULL
+    ) ten ON ten.TENNAME = ib.TENANTNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(ib.BLOCKNO))
+         AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(ib.ROOMNO))
+    WHERE ib.TENANTNAME IS NOT NULL
 
+    UNION ALL
 
-CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction_FROM_CHLCAC AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY c.YEARR, c.MONTHH, c.LORDID)  AS id,
-    GETDATE()                                           AS date_time,
-    c.CLDAT                                             AS trans_date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHLRDS via LORDID to get landlord/client sequential id
-    NULL                                                AS property_id,
-    NULL                                                AS unit_id,
-    NULL                                                AS lease_id,
-    NULL                                                AS tenant_id,
-    'CLOSE-' + CAST(c.YEARR AS VARCHAR) + '-' + CAST(c.MONTHH AS VARCHAR)  AS origin_id,
-    NULL                                                AS transaction_type_id,
-    'Period closing balance'                            AS narration,
-    CASE WHEN ISNULL(c.SUMBL, 0) >= 0 THEN 'Debit' ELSE 'Credit' END  AS amount_type,
-    ABS(ISNULL(c.SUMBL, 0))                             AS amount,
-    NULL                                                AS sla_id,
-    CAST(ISNULL(c.SUMBL, 0) AS VARCHAR(50))             AS balance,
-    CASE WHEN c.CLSTAT = 1 THEN 1 ELSE 2 END           AS current_status_id,
-    NULL                                                AS invoice_id,
-    ABS(ISNULL(c.SUMBL, 0))                             AS amount_internal,
-    NULL                                                AS payable_status,
-    c.YEARR * 100 + c.MONTHH                            AS period_id,
-    NULL                                                AS period_status_id,
-    NULL                                                AS zone_id
-FROM CHABRINS.dbo.CHLCAC c
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(c.LORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
--- NOTE: CHLCAC.LORDID format is 'LAN-00024', CHLRDS.LORDID format is '00024'
-WHERE c.LORDID IS NOT NULL;
+    -- ── Part C: CHLCAC (period closing balance summaries) ──
+    SELECT
+        'C'                                                 AS src,
+        CAST(c.YEARR AS VARCHAR(20))                         AS sort1,
+        CAST(c.MONTHH AS VARCHAR(20))                        AS sort2,
+        c.LORDID                                            AS sort3,
+        NULL                                                AS sort4,
+        GETDATE()                                           AS date_time,
+        c.CLDAT                                             AS trans_date_time,
+        lr2.lord_row_id                                     AS client_id,
+        -- JOINED: CHLRDS via LORDID to get landlord/client sequential id
+        NULL                                                AS property_id,
+        NULL                                                AS unit_id,
+        NULL                                                AS lease_id,
+        NULL                                                AS tenant_id,
+        'CLOSE-' + CAST(c.YEARR AS VARCHAR) + '-' + CAST(c.MONTHH AS VARCHAR)  AS origin_id,
+        NULL                                                AS transaction_type_id,
+        'Period closing balance'                            AS narration,
+        CASE WHEN ISNULL(c.SUMBL, 0) >= 0 THEN 'Debit' ELSE 'Credit' END  AS amount_type,
+        ABS(ISNULL(c.SUMBL, 0))                             AS amount,
+        NULL                                                AS sla_id,
+        CAST(ISNULL(c.SUMBL, 0) AS VARCHAR(50))             AS balance,
+        CASE WHEN c.CLSTAT = 1 THEN 1 ELSE 2 END           AS current_status_id,
+        NULL                                                AS invoice_id,
+        ABS(ISNULL(c.SUMBL, 0))                             AS amount_internal,
+        NULL                                                AS payable_status,
+        c.YEARR * 100 + c.MONTHH                            AS period_id,
+        NULL                                                AS period_status_id,
+        NULL                                                AS zone_id
+    FROM CHABRINS.dbo.CHLCAC c
+    LEFT JOIN (
+        SELECT lordid_clean, lord_row_id FROM (
+            SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
+                   ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
+            FROM CHABRINS.dbo.CHLRDS
+            WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
+            GROUP BY RTRIM(LTRIM(LORDID))
+        ) lrd
+    ) lr2 ON lr2.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(c.LORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
+    -- NOTE: CHLCAC.LORDID format is 'LAN-00024', CHLRDS.LORDID format is '00024'
+    WHERE c.LORDID IS NOT NULL
+) combined;
 GO
 
 
@@ -1602,10 +1622,8 @@ GO
     28. vw_cb_receipts_014                            (CHRCS)
 
   Phase 7 — Landlord Accounts:
-    29. vw_sys_pm_landlord_accounts_transaction_FROM_CHLACC   (CHLACC)
-    30. vw_sys_pm_landlord_accounts_transaction_FROM_CHIBALS  (CHIBALS)
-    31. vw_sys_pm_landlord_accounts_transaction_FROM_CHLCAC   (CHLCAC)
-    32. vw_sys_pm_clients_advances_requisitions       (CHLNTR)
+    29. vw_sys_pm_landlord_accounts_transaction        (CHLACC + CHIBALS + CHLCAC combined)
+    30. vw_sys_pm_clients_advances_requisitions        (CHLNTR)
 
   Phase 8 — Post-Migration FK Resolution:
     - Run UPDATE scripts to resolve text-based FK references to integer IDs
@@ -1631,6 +1649,7 @@ GO
   CHSTFF        | varies    | Staff/employee master                    | Maps to sys_staff
   CHTYPES       | varies    | Unit type lookup codes                   | CHBUNITS.UNITTYP
   CHTAXES       | 1         | Tax rates (VAT 16%)                      | Various VAT calculations
+
 
   NOTE: CHLRDS is now mapped via view #6 (vw_sys_pm_clients).
         CHTENS is now mapped via view #6b (vw_sys_pm_clients_from_chtenants).

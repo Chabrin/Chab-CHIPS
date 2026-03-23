@@ -61,6 +61,7 @@
                                         <th class="text-end">Credit</th>
                                         <th class="text-end">Debit</th>
                                         <th class="text-end">Net</th>
+                                        <th>Units</th>
                                         <th>Status</th>
                                         <th>Action</th>
                                     </tr>
@@ -115,6 +116,17 @@
                 {
                     data: 'net_amount',
                     className: 'text-end fw-bold'
+                },
+                {
+                    data: 'payable_units',
+                    render: function(d) {
+                        if (!d) return '-';
+                        var parts = d.split('/');
+                        if (parts.length === 2 && parts[0] !== parts[1]) {
+                            return '<span class="text-warning" title="Some units below threshold">' + d + '</span>';
+                        }
+                        return '<span class="text-success">' + d + '</span>';
+                    }
                 },
                 {
                     data: 'approved_status',

@@ -147,6 +147,21 @@
                                                 <span class="badge badge-light-danger">Unpaid</span>
                                             </td>
                                         </tr>
+                                        <tr>
+                                            <td colspan="2" class="py-1 fw-bold" style="border-top:1px solid #dee2e6;">Threshold Summary</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted py-1">Payable Units</td>
+                                            <td class="text-end py-1" id="val-payable-units">{{ ($return->payable_units ?? 0) }} / {{ ($return->total_units ?? 0) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted py-1">Payable Amount</td>
+                                            <td class="text-end py-1 text-success" id="val-payable-amount">{{ number_format($return->payable_amount ?? 0, 2) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted py-1">Withheld Amount</td>
+                                            <td class="text-end py-1 text-danger" id="val-non-payable-amount">{{ number_format($return->non_payable_amount ?? 0, 2) }}</td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -247,7 +262,10 @@
                 {
                     data: 'net_amount',
                     className: 'text-end',
-                    render: function(d) {
+                    render: function(d, t, r) {
+                        if (r.entry_type === 'RENT CURRENT' && (d === '0.00' || d === '0')) {
+                            return '<strong class="text-danger">' + d + '</strong>';
+                        }
                         return '<strong>' + d + '</strong>';
                     }
                 },
@@ -259,7 +277,10 @@
                     data: 'pay_percentage',
                     className: 'text-end',
                     render: function(d) {
-                        return d ? d + '%' : '-';
+                        if (!d || d === '' || d === '0') return '<span class="text-danger">0%</span>';
+                        var num = parseFloat(d);
+                        if (num >= 85) return '<span class="text-success">' + d + '%</span>';
+                        return '<span class="text-danger">' + d + '%</span>';
                     }
                 },
                 {
@@ -328,6 +349,11 @@
                 '<span class="badge badge-light-warning">Pending Approval</span>';
             $('#val-status').html(statusBadge);
             $('#val-prepared-by').text(r.prepared_by);
+
+            // Update threshold summary
+            $('#val-payable-units').text((r.payable_units || 0) + ' / ' + (r.total_units || 0));
+            $('#val-payable-amount').text(r.payable_amount || '0.00');
+            $('#val-non-payable-amount').text(r.non_payable_amount || '0.00');
 
             var remarks = (r.remarks || '').trim();
             if (remarks) {
