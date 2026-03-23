@@ -599,7 +599,7 @@ class ClientReturnsController extends Controller
             // ═══════════════════════════════════════════════════════════════════
             $totalInvoices = DB::selectOne("
                 SELECT COUNT(*) as cnt FROM sys_pm_debtors_invoices i
-                WHERE i.date_due >= ?::date AND i.date_due < ?::date
+                WHERE i.date_due = ?::date
                   AND i.current_status_id = 1
                   AND i.debtor_type_id = '2'
                   AND i.property_id IS NOT NULL
@@ -607,7 +607,7 @@ class ClientReturnsController extends Controller
                   AND i.lease_id IS NOT NULL
                   AND i.tenant_id IS NOT NULL
                   {$propertyFilter}
-            ", array_merge([$monthStart, $nextMonthStart], $propBindings))->cnt;
+            ", array_merge([$monthStart], $propBindings))->cnt;
 
             if ($totalInvoices == 0) {
                 DB::rollBack();
@@ -668,7 +668,7 @@ class ClientReturnsController extends Controller
 
             // Common WHERE clause for invoice selection
             $invoiceWhere = "
-                i.date_due >= ?::date AND i.date_due < ?::date
+                i.date_due = ?::date
                 AND i.current_status_id = 1
                 AND i.debtor_type_id = '2'
                 AND i.property_id IS NOT NULL
@@ -697,7 +697,7 @@ class ClientReturnsController extends Controller
                 )
             ";
 
-            $baseBindings = array_merge([$monthStart, $nextMonthStart], $propBindings, [$returnPeriod]);
+            $baseBindings = array_merge([$monthStart], $propBindings, [$returnPeriod]);
 
             // ═══════════════════════════════════════════════════════════════════
             // QUERY 1: INSERT RENT LINES (one per invoice/tenant)
