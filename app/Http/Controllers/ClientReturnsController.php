@@ -294,11 +294,11 @@ class ClientReturnsController extends Controller
 
             // Column headers
             $row = 8;
-            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'VAT', 'Ref'];
+            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'Commission', 'VAT', 'Pay %', 'Payable', 'Ref'];
             foreach ($headers as $col => $header) {
                 $sheet->setCellValueByColumnAndRow($col + 1, $row, $header);
             }
-            $sheet->getStyle('A8:J8')->getFont()->setBold(true);
+            $sheet->getStyle('A8:M8')->getFont()->setBold(true);
 
             // Data rows
             $row = 9;
@@ -312,12 +312,15 @@ class ClientReturnsController extends Controller
                 $sheet->setCellValueByColumnAndRow(6, $row, $line->dr_cr);
                 $sheet->setCellValueByColumnAndRow(7, $row, $line->amount_payable_landlord);
                 $sheet->setCellValueByColumnAndRow(8, $row, $line->net_amount);
-                $sheet->setCellValueByColumnAndRow(9, $row, $line->vat_amount);
-                $sheet->setCellValueByColumnAndRow(10, $row, $line->transaction_ref);
+                $sheet->setCellValueByColumnAndRow(9, $row, $line->commission_amount);
+                $sheet->setCellValueByColumnAndRow(10, $row, $line->vat_amount);
+                $sheet->setCellValueByColumnAndRow(11, $row, $line->pay_percentage ? $line->pay_percentage . '%' : '');
+                $sheet->setCellValueByColumnAndRow(12, $row, $line->payable_status ? 'Yes' : 'No');
+                $sheet->setCellValueByColumnAndRow(13, $row, $line->transaction_ref);
                 $row++;
             }
 
-            foreach (range('A', 'J') as $col) {
+            foreach (range('A', 'M') as $col) {
                 $sheet->getColumnDimension($col)->setAutoSize(true);
             }
 
@@ -1345,7 +1348,7 @@ class ClientReturnsController extends Controller
             $row += 2;
 
             // Detail lines header
-            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'VAT', 'Ref'];
+            $headers = ['#', 'Entry Type', 'Tenant', 'Unit', 'Description', 'Dr/Cr', 'Landlord Amt', 'Net', 'Commission', 'VAT', 'Pay %', 'Payable', 'Ref'];
             $col = 'A';
             foreach ($headers as $header) {
                 $sheet->setCellValue($col . $row, $header);
@@ -1364,16 +1367,19 @@ class ClientReturnsController extends Controller
                     ->setCellValue('F' . $row, $l->dr_cr ?? '-')
                     ->setCellValue('G' . $row, $l->amount_payable_landlord ?? 0)
                     ->setCellValue('H' . $row, $l->net_amount ?? 0)
-                    ->setCellValue('I' . $row, $l->vat_amount ?? 0)
-                    ->setCellValue('J' . $row, $l->transaction_ref ?? '-');
+                    ->setCellValue('I' . $row, $l->commission_amount ?? 0)
+                    ->setCellValue('J' . $row, $l->vat_amount ?? 0)
+                    ->setCellValue('K' . $row, $l->pay_percentage ? $l->pay_percentage . '%' : '')
+                    ->setCellValue('L' . $row, $l->payable_status ? 'Yes' : 'No')
+                    ->setCellValue('M' . $row, $l->transaction_ref ?? '-');
 
-                foreach (['G', 'H', 'I'] as $c) {
+                foreach (['G', 'H', 'I', 'J'] as $c) {
                     $sheet->getStyle($c . $row)->getNumberFormat()->setFormatCode('#,##0.00');
                 }
                 $row++;
             }
 
-            foreach (range('A', 'J') as $col) {
+            foreach (range('A', 'M') as $col) {
                 $sheet->getColumnDimension($col)->setAutoSize(true);
             }
 
