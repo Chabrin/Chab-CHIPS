@@ -62,6 +62,7 @@ class ReturnClient extends Model
     ];
 
     protected $casts = [
+        'payable_status' => 'integer',
         'net_amount' => 'decimal:2',
         'amount_payable_landlord' => 'decimal:2',
         'amount_payable_tenant' => 'decimal:2',

@@ -258,7 +258,7 @@ class ClientReturnsController extends Controller
                         'vat_amount' => number_format($d->vat_amount ?? 0, 2),
                         'pay_percentage' => $d->pay_percentage ?? '',
                         'return_period' => $d->return_period ?? '-',
-                        'payable_status' => $d->payable_status,
+                        'payable_status' => (int) $d->payable_status,
                         'payable_status_reason' => $d->payable_status_reason ?? '',
                     ];
                 })

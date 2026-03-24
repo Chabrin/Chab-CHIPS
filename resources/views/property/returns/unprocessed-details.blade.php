@@ -480,10 +480,11 @@
                     data: 'pay_percentage',
                     className: 'text-end',
                     render: function(d) {
-                        if (!d || d === '' || d === '0') return '<span class="text-danger">0%</span>';
+                        if (!d || d === '' || d === '0') return '<span class="text-danger">0.00%</span>';
                         var num = parseFloat(d);
-                        if (num >= 85) return '<span class="text-success">' + d + '%</span>';
-                        return '<span class="text-danger">' + d + '%</span>';
+                        var fmt = num.toFixed(2) + '%';
+                        if (num >= 85) return '<span class="text-success">' + fmt + '</span>';
+                        return '<span class="text-danger">' + fmt + '</span>';
                     }
                 },
                 {
@@ -494,8 +495,8 @@
                     className: 'text-center',
                     orderable: false,
                     render: function(d, t, r) {
-                        var payable = (d === 1 || d === 2 || d === 3);
-                        if (payable) {
+                        var ps = parseInt(d, 10);
+                        if (ps === 1) {
                             return '<span class="material-symbols-outlined text-success" style="font-size:14px;vertical-align:middle;" title="Payable">check_circle</span>';
                         }
                         var reason = r.payable_status_reason ? '<br><small class="text-muted" style="font-size:0.62rem;">' + escapeAttr(r.payable_status_reason) + '</small>' : '';
@@ -508,7 +509,7 @@
                     orderable: false,
                     searchable: false,
                     render: function(d, t, r) {
-                        if (!isEditable || r.dr_cr !== 'CR') return '';
+                        if (!isEditable || r.dr_cr !== 'CR' || parseInt(r.payable_status) !== 1) return '';
                         return '<span class="material-symbols-outlined btn-recovery" ' +
                             'style="font-size:16px;cursor:pointer;vertical-align:middle;color:#0d6efd;" ' +
                             'data-line-id="' + d + '" ' +
