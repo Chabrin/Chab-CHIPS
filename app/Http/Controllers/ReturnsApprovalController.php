@@ -70,6 +70,8 @@ class ReturnsApprovalController extends Controller
             $userApproverLevel = null;
             $isFirstLevel = false;
             $availableRejectLevels = [];
+            $waitingForPrevious = false;
+            $waitingMessage = null;
 
             foreach ($approvers as $approver) {
                 if ($approver->approver_id == $currentUserId) {
@@ -102,6 +104,15 @@ class ReturnsApprovalController extends Controller
                                 }
                             }
                         }
+                    } elseif (
+                        $userApproverLevel > $approvalItem->current_level
+                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
+                        && $approver->approval_status == 'Pending'
+                    ) {
+                        $waitingForPrevious = true;
+                        $pendingApprover = collect($approvers)->firstWhere('approver_level', $approvalItem->current_level);
+                        $pendingName = $pendingApprover->approver_name ?? ('Level ' . $approvalItem->current_level);
+                        $waitingMessage = 'Waiting for Level ' . $approvalItem->current_level . ' (' . $pendingName . ') to approve before you can action.';
                     }
                     break;
                 }
@@ -145,7 +156,9 @@ class ReturnsApprovalController extends Controller
                     'available_reject_levels' => $availableRejectLevels,
                     'user_level' => $userApproverLevel,
                     'is_first_level' => $isFirstLevel,
-                    'current_user_id' => $currentUserId
+                    'current_user_id' => $currentUserId,
+                    'waiting_for_previous' => $waitingForPrevious,
+                    'waiting_message' => $waitingMessage
                 ]
             ]);
         } catch (Exception $e) {
@@ -386,13 +399,23 @@ class ReturnsApprovalController extends Controller
                             'updated_at' => now()
                         ]);
 
-                    // If this is level 1 (first approval), update batch status to in progress
-                    if ($itemApprover->approver_level == 1) {
-                        DB::table('sys_pm_clients_returns_batches')
-                            ->where('id', $batch->id)
-                            ->update([
-                                'approval_status' => 101 // In progress
-                            ]);
+                    // Update batch status to in progress
+                    DB::table('sys_pm_clients_returns_batches')
+                        ->where('id', $batch->id)
+                        ->update([
+                            'approval_status' => 101 // In progress
+                        ]);
+
+                    // Mark all return summaries under this batch as InProgress (2)
+                    $propertyRef = DB::table('sys_pm_properties')
+                        ->where('id', $batch->property_id)
+                        ->value('reference_number');
+                    if ($propertyRef) {
+                        DB::table('cb_returns_summary')
+                            ->where('property_code', $propertyRef)
+                            ->where('return_period', $batch->batch_id)
+                            ->where('approved_status', 0)
+                            ->update(['approved_status' => 2]);
                     }
 
                     // Add next level approver automatically
@@ -463,6 +486,8 @@ class ReturnsApprovalController extends Controller
             $canReject = false;
             $userApproverLevel = null;
             $availableRejectLevels = [];
+            $waitingForPrevious = false;
+            $waitingMessage = null;
 
             foreach ($approvers as $approver) {
                 if ($approver->approver_id == $currentUserId) {
@@ -485,6 +510,15 @@ class ReturnsApprovalController extends Controller
                                 }
                             }
                         }
+                    } elseif (
+                        $userApproverLevel > $approvalItem->current_level
+                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
+                        && $approver->approval_status == 'Pending'
+                    ) {
+                        $waitingForPrevious = true;
+                        $pendingApprover = collect($approvers)->firstWhere('approver_level', $approvalItem->current_level);
+                        $pendingName = $pendingApprover->approver_name ?? ('Level ' . $approvalItem->current_level);
+                        $waitingMessage = 'Waiting for Level ' . $approvalItem->current_level . ' (' . $pendingName . ') to approve before you can action.';
                     }
                     break;
                 }
@@ -524,7 +558,9 @@ class ReturnsApprovalController extends Controller
                     'can_reject' => $canReject,
                     'available_reject_levels' => $availableRejectLevels,
                     'user_level' => $userApproverLevel,
-                    'current_user_id' => $currentUserId
+                    'current_user_id' => $currentUserId,
+                    'waiting_for_previous' => $waitingForPrevious,
+                    'waiting_message' => $waitingMessage
                 ]
             ]);
         } catch (Exception $e) {
@@ -621,6 +657,10 @@ class ReturnsApprovalController extends Controller
                 } else {
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update(['current_level' => $itemApprover->approver_level + 1, 'status' => 'InProgress', 'updated_at' => now()]);
+
+                    // Mark return summary as InProgress (2)
+                    DB::table('cb_returns_summary')->where('id', $returnSummary->id)
+                        ->update(['approved_status' => 2]);
 
                     $property = DB::table('sys_pm_properties')
                         ->where('reference_number', $returnSummary->property_code)->first(['id']);

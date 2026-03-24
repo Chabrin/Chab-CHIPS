@@ -722,7 +722,8 @@ SELECT
     NULL                                                AS reset_token,
     NULL                                                AS reset_token_expires_at,
     ''''                                                  AS otep,
-    0                                                   AS [requireReset]
+    0                                                   AS [requireReset],
+    o.officer_id                                        AS officer_id
 FROM CHABRINS.dbo.CHOFFICERS o
 WHERE o.officer_id IS NOT NULL;
 ';

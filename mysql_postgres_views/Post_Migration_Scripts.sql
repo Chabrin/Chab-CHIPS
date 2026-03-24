@@ -117,4 +117,19 @@ FROM sys_pm_service_agreements s
 WHERE s.property_id = l.property_id;
 
 
-INSERT INTO sys_set_invoiceable_items (date_time, item_name, billing_code, feature, payment_priority, commissionable, default_cycle_id, current_status_id, default_expense_account_id, advance_payable, is_bill, fixed_amount, amount) VALUES('2026-03-22 13:35:37.090', 'Unit Rent', '0037', '', '', 'Yes', 2, 5, '', 'Yes', NULL, 'Yes', NULL);
+INSERT INTO sys_set_invoiceable_items
+ (date_time, item_name, billing_code, feature, payment_priority, commissionable,
+  default_cycle_id, current_status_id, default_expense_account_id, advance_payable,
+   is_bill, fixed_amount, amount) VALUES('2026-03-22 13:35:37.090', 'Unit Rent', 
+   '0037', '', '', 'Yes', 2, 5, '', 'Yes', NULL, 'Yes', NULL);
+
+
+   INSERT INTO josya_users (id, "name", username, email, "password", block, 
+   "sendEmail", "registerDate", "lastvisitDate", activation, params, 
+   "lastResetTime", "resetCount", "otpKey", reset_token, 
+   reset_token_expires_at, otep, "requireReset") 
+   VALUES(1597, 'Kenneth Korir', 'kenneth', 'kennethkorir26@gmail.com',
+    '$2y$12$i5DCIlg1wO9KrQerpL0UDuws7SnJnSOZ2W0Xcrdlz/z8pAMVjhJuq', 0, 0,
+     '2022-09-04 02:03:57.000', '2025-02-24 15:41:54.000', '1', 
+     '{"update_cache_list":1}',
+    NULL, 0, '', NULL, NULL, '', 0);

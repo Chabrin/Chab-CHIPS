@@ -54,9 +54,9 @@
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Property</th>
+                                        <th>Code</th>
                                         <th>Landlord</th>
-                                        <th>Description</th>
+                                        <th>Property</th>
                                         <th>Type</th>
                                         <th class="text-end">Credit</th>
                                         <th class="text-end">Debit</th>
@@ -97,7 +97,7 @@
                     data: 'landlord_code'
                 },
                 {
-                    data: 'return_description',
+                    data: 'property_name',
                     render: function(d) {
                         return '<small>' + (d || '-') + '</small>';
                     }
@@ -132,6 +132,7 @@
                     data: 'approved_status',
                     render: function(d) {
                         if (d == 1) return '<span class="badge badge-light-success">Approved</span>';
+                        if (d == 2) return '<span class="badge badge-light-warning">InProgress</span>';
                         return '<span class="badge badge-light-danger">Pending</span>';
                     }
                 },
@@ -151,6 +152,7 @@
             searching: true,
             ordering: true,
             order: [
+                [9, 'desc'],
                 [1, 'asc']
             ],
             pageLength: 50

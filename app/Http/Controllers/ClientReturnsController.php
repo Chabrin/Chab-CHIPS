@@ -44,19 +44,19 @@ class ClientReturnsController extends Controller
             $month = $request->input('month', date('m'));
             $userId = auth()->id();
 
-            // Check if user is top management
-            $isTopManagement = DB::table('cb_role_user as ru')
+            // Check if user has a global role (sees all returns, no property filter)
+            $hasGlobalRole = DB::table('cb_role_user as ru')
                 ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
                 ->where('ru.user_id', $userId)
-                ->where('r.name', 'top_management')
+                ->whereIn('r.name', ['top_management', 'clerical_officers', 'accountants'])
                 ->exists();
 
             $query = ReturnSummary::unpaid()
                 ->where('year', $year)
                 ->where('month', $month);
 
-            // Role-based filtering: non-top-management only see their properties
-            if (!$isTopManagement) {
+            // Role-based filtering: property-level staff only see their properties
+            if (!$hasGlobalRole) {
                 $query->whereIn('property_code', function ($sub) use ($userId) {
                     $sub->select('reference_number')
                         ->from('sys_pm_properties')
@@ -68,21 +68,27 @@ class ClientReturnsController extends Controller
                 });
             }
 
+            // Get property names in one lookup
             $returns = $query->orderBy('property_code')
                 ->orderBy('landlord_code')
                 ->get();
 
+            $propertyCodes = $returns->pluck('property_code')->unique()->filter();
+            $propertyNames = DB::table('sys_pm_properties')
+                ->whereIn('reference_number', $propertyCodes)
+                ->pluck('property_name', 'reference_number');
+
             return response()->json([
                 'success' => true,
                 'count' => $returns->count(),
-                'data' => $returns->map(function ($r) {
+                'data' => $returns->map(function ($r) use ($propertyNames) {
                     return [
                         'id' => $r->id,
                         'encrypted_id' => encrypt($r->id),
                         'return_code' => $r->return_code,
                         'landlord_code' => $r->landlord_code,
                         'property_code' => $r->property_code ?? '-',
-                        'return_description' => $r->return_description ?? '-',
+                        'property_name' => $propertyNames[$r->property_code] ?? '-',
                         'return_type' => $r->return_type ?? '-',
                         'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
                         'commission_rate' => number_format($r->commission_rate ?? 0, 2),
