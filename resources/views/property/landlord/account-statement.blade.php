@@ -346,6 +346,12 @@
                         width: '100%',
                         minimumResultsForSearch: 0
                     });
+
+                    // Auto-select if only one landlord for this property
+                    if (response.landlords.length === 1) {
+                        var firstOpt = $('#landlord_select option:not([value=""])').first();
+                        $('#landlord_select').val(firstOpt.val()).trigger('change');
+                    }
                 },
                 error: function() {
                     toastr.error('Error loading landlords');

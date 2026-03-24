@@ -64,27 +64,34 @@ class LandlordController extends Controller
         try {
             $propertyId = $request->input('property_id');
 
-            // Get distinct landlords from cb_landlord_account for this property
-            $landlordIds = LandlordAccount::where('property_id', $propertyId)
-                ->whereNotNull('client_id')
-                ->select('client_id')
-                ->distinct()
-                ->pluck('client_id');
+            $clientQuery = Client::select(
+                'sys_pm_clients.id',
+                'sys_pm_clients.names',
+                'sys_pm_clients.mobile_number',
+                'sys_pm_clients.email_address',
+                'sys_pm_clients.national_id',
+                'sys_pm_clients.reference_number'
+            )
+                ->join('sys_pm_properties', 'sys_pm_properties.client_id', '=', 'sys_pm_clients.id')
+                ->where('sys_pm_properties.id', $propertyId)
+                ->orderBy('sys_pm_clients.names');
 
-            $landlords = Client::whereIn('id', $landlordIds)
-                ->select('id', 'names', 'mobile_number', 'email_address', 'national_id', 'reference_number')
-                ->orderBy('names')
-                ->get()
-                ->map(function ($l) {
-                    return [
-                        'encrypted_id' => encrypt($l->id),
-                        'names' => $l->names ?? 'N/A',
-                        'mobile_number' => $l->mobile_number,
-                        'email_address' => $l->email_address,
-                        'national_id' => $l->national_id,
-                        'reference_number' => $l->reference_number,
-                    ];
-                });
+            // Log::info('[getLandlordsByProperty] raw SQL', [
+            //     'sql'         => $clientQuery->toSql(),
+            //     'bindings'    => $clientQuery->getBindings(),
+            //     'property_id' => $propertyId,
+            // ]);
+
+            $landlords = $clientQuery->get()->map(function ($l) {
+                return [
+                    'encrypted_id'     => encrypt($l->id),
+                    'names'            => $l->names ?? 'N/A',
+                    'mobile_number'    => $l->mobile_number,
+                    'email_address'    => $l->email_address,
+                    'national_id'      => $l->national_id,
+                    'reference_number' => $l->reference_number,
+                ];
+            });
 
             return response()->json(['success' => true, 'landlords' => $landlords]);
         } catch (Exception $e) {
