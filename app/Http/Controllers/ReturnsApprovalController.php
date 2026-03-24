@@ -996,7 +996,7 @@ class ReturnsApprovalController extends Controller
      * Generate a payment voucher for an approved return summary.
      *
      * Creates a header in cb_payment_vouchers_headers_new and
-     * one line per return-client entry in cb_payment_vouchers_lines_new.
+     * property-level summary lines in cb_payment_vouchers_lines_new.
      * Updates cb_returns_summary.voucher_number.
      *
      * Voucher number format: PV{YYYY}{MM}{sequence}
@@ -1016,6 +1016,11 @@ class ReturnsApprovalController extends Controller
         $landlordName = DB::table('cb_landlord_account')
             ->where('landlord_code', $return->landlord_code)
             ->value('landlord_name') ?? $return->landlord_code;
+
+        // Resolve property name
+        $propertyName = DB::table('sys_pm_properties')
+            ->where('reference_number', $return->property_code)
+            ->value('property_name') ?? $return->property_code;
 
         // Create voucher header
         $header = PaymentVoucherHeader::create([
@@ -1037,31 +1042,25 @@ class ReturnsApprovalController extends Controller
             'is_printed'       => 0,
         ]);
 
-        // Create voucher lines from return client entries
-        $lines = ReturnClient::where('return_code', $return->return_code)->get();
-        $entryNo = 0;
-
-        foreach ($lines as $line) {
-            $entryNo++;
-            PaymentVoucherLine::create([
-                'voucher_number'       => $voucherNumber,
-                'entry_number'         => $entryNo,
-                'entry_year'           => $year,
-                'entry_month'          => $month,
-                'property_code'        => $line->property_code,
-                'dr_cr'                => 'DR',
-                'entry_id'             => $line->transaction_number,
-                'entry_description'    => $line->entry_description ?? $line->narration,
-                'is_approved'          => 'Yes',
-                'amount'               => abs($line->net_amount ?? 0),
-                'gl_account'           => $return->landlord_code,
-                'payee_name'           => $landlordName,
-                'property_description' => $line->unit_code,
-            ]);
-        }
+        // Single line: final net amount from the return summary
+        PaymentVoucherLine::create([
+            'voucher_number'       => $voucherNumber,
+            'entry_number'         => 1,
+            'entry_year'           => $year,
+            'entry_month'          => $month,
+            'property_code'        => $return->property_code,
+            'dr_cr'                => 'DR',
+            'entry_id'             => $return->return_code,
+            'entry_description'    => 'Net Payable - ' . $propertyName,
+            'is_approved'          => 'Yes',
+            'amount'               => abs($return->net_amount ?? 0),
+            'gl_account'           => $return->landlord_code,
+            'payee_name'           => $landlordName,
+            'property_description' => $propertyName,
+        ]);
 
         // Update header with line count
-        $header->update(['entry_count' => $entryNo]);
+        $header->update(['entry_count' => 1]);
 
         // Stamp voucher number on the return summary
         $return->update(['voucher_number' => $voucherNumber]);
@@ -1071,7 +1070,7 @@ class ReturnsApprovalController extends Controller
             'return_code'    => $return->return_code,
             'landlord'       => $return->landlord_code,
             'net_amount'     => $return->net_amount,
-            'lines'          => $entryNo,
+            'lines'          => 1,
         ]);
 
         return $voucherNumber;

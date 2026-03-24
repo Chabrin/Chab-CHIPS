@@ -190,7 +190,7 @@ create table cb_payment_vouchers_lines_new (
     cheque_type             varchar(20),                -- CHQTYP
     property_code           varchar(20),                -- BLOCKID
     dr_cr                   varchar(2),                 -- DRCR: DR
-    entry_id                varchar(20),                -- ENTID
+    entry_id                varchar(50),                -- ENTID
     entry_description       varchar(250),               -- ENTDESC
     is_approved             varchar(3),                 -- PVAPPR: Yes/No
     amount                  numeric(18,2) default 0,    -- AMOUNT
