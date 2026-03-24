@@ -344,7 +344,7 @@ class InvoicingController extends Controller
     }
 
     /**
-     * Search tenant invoices (AJAX) — uses sys_pm_tenants_accounts_transactions ledger
+     * Search tenant invoices (AJAX) — uses sys_pm_tenants_accounts_trans ledger
      */
     public function searchTenantInvoices(Request $request)
     {
@@ -360,13 +360,21 @@ class InvoicingController extends Controller
 
             try {
                 $tenantId = (int) Crypt::decrypt($request->tenant_id);
+                Log::info('[STATEMENT] tenant_id decrypted: ' . $tenantId);
             } catch (\Exception $e) {
                 $tenantId = (int) $request->tenant_id;
+                Log::info('[STATEMENT] tenant_id used as-is (not encrypted): ' . $tenantId);
             }
 
             $dateType = $request->input('date_type', 'range');
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
+
+            Log::info('[STATEMENT] Params — tenant_id: ' . $tenantId
+                . ' | property_id: ' . ($request->property_id ?? 'none')
+                . ' | date_type: ' . $dateType
+                . ' | date_from: ' . ($dateFrom ?? 'none')
+                . ' | date_to: ' . ($dateTo ?? 'none'));
 
             $query = TenantAccountTransaction::where('tenant_id', $tenantId)
                 ->where('current_status_id', 1);
@@ -381,9 +389,30 @@ class InvoicingController extends Controller
                 $query->whereDate('date_time', '<=', $dateTo);
             }
 
+            // Log the raw SQL before executing
+            Log::info('[STATEMENT] SQL: ' . $query->toSql());
+            Log::info('[STATEMENT] Bindings: ' . json_encode($query->getBindings()));
+
+            // Log total rows for this tenant regardless of date filter (helps diagnose empty results)
+            $totalForTenant = TenantAccountTransaction::where('tenant_id', $tenantId)->count();
+            $totalActive    = TenantAccountTransaction::where('tenant_id', $tenantId)->where('current_status_id', 1)->count();
+            Log::info('[STATEMENT] Rows in table for tenant_id=' . $tenantId . ' — total: ' . $totalForTenant . ' | active (status=1): ' . $totalActive);
+
+            // Log actual property_ids stored for this tenant — reveals if stamping used wrong IDs or NULLs
+            $propertyIds = TenantAccountTransaction::where('tenant_id', $tenantId)
+                ->selectRaw('property_id, count(*) as cnt')
+                ->groupBy('property_id')
+                ->orderByRaw('count(*) desc')
+                ->limit(10)
+                ->pluck('cnt', 'property_id')
+                ->toArray();
+            Log::info('[STATEMENT] property_id distribution for tenant_id=' . $tenantId . ': ' . json_encode($propertyIds));
+
             $transactions = $query->orderBy('date_time', 'asc')
                 ->orderBy('id', 'asc')
                 ->get();
+
+            Log::info('[STATEMENT] Result count: ' . $transactions->count());
 
             $statementEntries = [];
             $balance = 0;

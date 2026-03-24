@@ -37,7 +37,7 @@
     - CHOFFICERS: Field officers/staff    — maps to sys_staff or sys_set_system_users
     - CHTNTRS  : Tenant invoices/transactions (1,156,397 rows) — maps to sys_pm_debtors_invoices
     - CHTPAYS  : Tenant payments detail   (1,435,222 rows)   — maps to sys_pm_tenants_payments
-    - CHTACC   : Tenant account ledger    — maps to sys_pm_tenants_accounts_transactions
+    - CHTACC   : Tenant account ledger    — maps to sys_pm_tenants_accounts_trans
     - CHRHMS   : Returns master           — maps to sys_pm_clients_returns_master or returns_batches
     - CHSTFF   : Staff/employees          — maps to sys_staff
     - CHTAXES  : Tax rates (VAT)          — single row, VAT 16%
@@ -1034,7 +1034,7 @@ GO
 
 
 -- ============================================================================
--- 18c. TENANT ACCOUNT LEDGER: CHTACC -> sys_pm_tenants_accounts_transactions
+-- 18c. TENANT ACCOUNT LEDGER: CHTACC -> sys_pm_tenants_accounts_trans
 -- ============================================================================
 -- SOURCE: CHTACC (2,598,893 rows — DR: 1,162,255 + CR: 1,436,637).
 --
@@ -1452,7 +1452,7 @@ GO
     24. vw_sys_pm_deposits_requests                   (CHDPS)
     25. vw_sys_pm_tenants_payments_011               (CHTPAYS + CHRCS join)
     26. vw_sys_pm_tenants_payments_invoices_012       (CHTACC CR rows + CHTNTRS join)
-    27. vw_sys_pm_tenants_accounts_transactions_013  (CHTACC full ledger — DR + CR)
+    27. vw_sys_pm_tenants_accounts_transactions_013  (CHTACC full ledger — DR + CR)  → pg: sys_pm_tenants_accounts_trans
     28. vw_cb_receipts_014                            (CHRCS)
 
   Phase 7 — Landlord Accounts:
@@ -1479,7 +1479,7 @@ GO
   CHRHMS        | varies    | Returns master with full workflow        | CHCCRST (complete returns data)
   CHTNTRS       | 1,156,397 | Tenant invoice transactions              | Maps to sys_pm_debtors_invoices
   CHTPAYS       | 1,435,222 | Tenant payment details                   | Maps to sys_pm_tenants_payments
-  CHTACC        | varies    | Tenant account ledger                    | Maps to sys_pm_tenants_accounts_transactions
+  CHTACC        | varies    | Tenant account ledger                    | Maps to sys_pm_tenants_accounts_trans
   CHSTFF        | varies    | Staff/employee master                    | Maps to sys_staff
   CHTYPES       | varies    | Unit type lookup codes                   | CHBUNITS.UNITTYP
   CHTAXES       | 1         | Tax rates (VAT 16%)                      | Various VAT calculations

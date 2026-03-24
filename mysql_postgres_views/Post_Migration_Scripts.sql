@@ -109,8 +109,6 @@ WHERE date_time        != BTRIM(date_time)
 SELECT setval(pg_get_serial_sequence('cb_returns_clients', 'id'), (SELECT MAX(id) FROM cb_returns_clients));
 SELECT setval(pg_get_serial_sequence('cb_landlord_account', 'id'), (SELECT MAX(id) FROM cb_landlord_account));
 
-
-
 UPDATE sys_pm_lease_agreements l
 SET sla_id = s.id
 FROM sys_pm_service_agreements s

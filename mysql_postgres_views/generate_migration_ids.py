@@ -137,6 +137,11 @@ TABLES = [
         'order_by': 'TENNAME, BLOCKNO, UNITNO',
         'where':    "TENNAME IS NOT NULL AND RTRIM(LTRIM(TENNAME)) <> ''",
         'desc':     '_004 -- sys_pm_clients (tenants) / _005 -- lease agreements',
+        # ── ID space offset ──────────────────────────────────────────────────
+        # CHTENS and CHLRDS both migrate into sys_pm_clients (same PK space).
+        # Tenants must start at MAX(CHLRDS.client_id) + 1 so IDs never collide.
+        # The value is read at runtime so it adjusts automatically if CHLRDS grows.
+        'offset_from': ('CHLRDS', 'client_id'),
     },
     {
         'table':    'CHCHRS',
@@ -331,10 +336,16 @@ def set_recovery_full(conn):
 # ===============================================================================
 # MAIN LOGIC
 # ===============================================================================
-def add_id_column(conn, entry):
+def add_id_column(conn, entry, offset=0):
     """
     Add an ID column to a table and populate it with deterministic
     sequential IDs using the exact ROW_NUMBER ORDER BY from the migration view.
+
+    offset > 0 is used when a table shares a target PK space with another
+    table.  Example: CHTENS (tenants) and CHLRDS (landlords) both map to
+    sys_pm_clients.id.  Passing offset = MAX(CHLRDS.client_id) makes
+    CHTENS.tenant_id start at (offset+1) so IDs never collide no matter
+    how many times the scripts are re-run.
     """
     table     = entry['table']
     col_name  = entry['id_col']
@@ -343,6 +354,9 @@ def add_id_column(conn, entry):
     desc      = entry['desc']
 
     cur = conn.cursor()
+
+    if offset:
+        print(f"  [info] Applying offset +{offset:,}  (IDs will start at {offset+1:,})")
 
     # -- 1. Add column if it doesn't exist -------------------------------------
     if col_exists(cur, table, col_name):
@@ -361,15 +375,20 @@ def add_id_column(conn, entry):
     cur.execute("CHECKPOINT")
     conn.commit()
 
-    # -- 3. Populate ID using CTE + ROW_NUMBER ---------------------------------
+    # -- 3. Populate ID using CTE + ROW_NUMBER (+offset) -----------------------
     #    The CTE selects only rows matching the view's WHERE filter;
     #    rows not matching keep the id = NULL.
     #    Uses an updatable CTE -- SQL Server supports this natively.
     #    Single pass, no temp table needed.
+    rn_expr = (
+        f"ROW_NUMBER() OVER (ORDER BY {order_by}) + {offset}"
+        if offset else
+        f"ROW_NUMBER() OVER (ORDER BY {order_by})"
+    )
     sql = f"""
         ;WITH numbered AS (
             SELECT [{col_name}],
-                   ROW_NUMBER() OVER (ORDER BY {order_by}) AS rn
+                   {rn_expr} AS rn
             FROM [{table}]
             WHERE {where_cls}
         )
@@ -396,20 +415,26 @@ def add_id_column(conn, entry):
         conn.commit()
         print(f"  [idx]  Index {idx_name} created")
 
-    # -- 5. Verification: check max id = count of qualifying rows --------------
+    # -- 5. Verification: numbered_count == qualifying, max_id == qualifying+offset
     total_in_table = get_row_count(cur, table)
     qualifying     = get_row_count(cur, table, where_cls)
+    expected_max   = qualifying + offset
     cur.execute(f"SELECT MAX([{col_name}]) FROM [{table}]")
     max_id = cur.fetchone()[0] or 0
     cur.execute(f"SELECT COUNT(*) FROM [{table}] WHERE [{col_name}] IS NOT NULL")
     numbered_count = cur.fetchone()[0]
 
-    if max_id != qualifying or numbered_count != qualifying:
-        print(f"  [WARN] Mismatch! max_id={max_id}, qualifying={qualifying}, numbered={numbered_count}")
+    if max_id != expected_max or numbered_count != qualifying:
+        print(f"  [WARN] Mismatch! max_id={max_id}, expected={expected_max} "
+              f"(qualifying={qualifying} + offset={offset}), numbered={numbered_count}")
     else:
         null_rows = total_in_table - qualifying
         extra = f" ({null_rows:,} rows NULL -- filtered out)" if null_rows > 0 else ""
-        print(f"  [ok]   Verified: max {col_name} = {max_id:,} == qualifying rows{extra}")
+        if offset:
+            print(f"  [ok]   Verified: {col_name} = {offset+1:,}..{max_id:,}  "
+                  f"({qualifying:,} rows, offset +{offset:,}){extra}")
+        else:
+            print(f"  [ok]   Verified: max {col_name} = {max_id:,} == qualifying rows{extra}")
 
     cur.close()
 
@@ -1257,7 +1282,22 @@ def main():
         print(f"{'=' * 70}")
         print(f"  [{i}/{len(TABLES)}] {entry['table']}.{entry['id_col']}  --  {entry['desc']}")
         try:
-            add_id_column(conn, entry)
+            offset = 0
+            if 'offset_from' in entry:
+                of_table, of_col = entry['offset_from']
+                _cur = conn.cursor()
+                _cur.execute(
+                    f"SELECT MAX([{of_col}]) FROM [{of_table}] WHERE [{of_col}] IS NOT NULL"
+                )
+                _row = _cur.fetchone()
+                _cur.close()
+                offset = int(_row[0]) if _row and _row[0] is not None else 0
+                if offset == 0:
+                    print(f"  [WARN] offset_from {of_table}.{of_col} returned 0 — "
+                          f"ensure {of_table} is stamped before this table.")
+                else:
+                    print(f"  [info] offset_from {of_table}.{of_col} = {offset:,}")
+            add_id_column(conn, entry, offset=offset)
             success += 1
         except Exception as e:
             print(f"  [ERROR] {entry['table']}: {e}")
