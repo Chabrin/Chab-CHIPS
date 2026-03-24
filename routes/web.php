@@ -578,11 +578,17 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnSummaryData'])->name('ajax.returns.summary');
     Route::get('/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedExcel'])->name('returns.excel');
 
-    // Returns Approval Routes
+    // Returns Approval Routes (Batch-level)
     Route::get('/ajax/returns/batches/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getBatchApprovals'])->name('ajax.returns.batches.approvals');
     Route::post('/ajax/returns/batches/{id}/approvals/comment', [App\Http\Controllers\ReturnsApprovalController::class, 'addApprovalComment'])->name('ajax.returns.batches.approvals.comment');
     Route::post('/ajax/returns/batches/{id}/approvals/approve', [App\Http\Controllers\ReturnsApprovalController::class, 'approveBatch'])->name('ajax.returns.batches.approvals.approve');
     Route::post('/ajax/returns/batches/{id}/approvals/reject', [App\Http\Controllers\ReturnsApprovalController::class, 'rejectBatch'])->name('ajax.returns.batches.approvals.reject');
+
+    // Returns Approval Routes (Return-summary-level)
+    Route::get('/ajax/returns/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getReturnApprovals'])->name('ajax.returns.approvals');
+    Route::post('/ajax/returns/{id}/approvals/approve', [App\Http\Controllers\ReturnsApprovalController::class, 'approveReturn'])->name('ajax.returns.approvals.approve');
+    Route::post('/ajax/returns/{id}/approvals/reject', [App\Http\Controllers\ReturnsApprovalController::class, 'rejectReturn'])->name('ajax.returns.approvals.reject');
+    Route::post('/ajax/returns/{id}/approvals/comment', [App\Http\Controllers\ReturnsApprovalController::class, 'addReturnApprovalComment'])->name('ajax.returns.approvals.comment');
 
     Route::get('/ajax/returns/invoice-history/{leaseId}', [App\Http\Controllers\ClientReturnsController::class, 'getInvoiceHistory'])->name('ajax.returns.invoice.history');
     Route::get('/ajax/returns/properties', [App\Http\Controllers\ClientReturnsController::class, 'getProperties'])->name('ajax.returns.properties');

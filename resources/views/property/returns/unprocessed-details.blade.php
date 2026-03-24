@@ -173,44 +173,194 @@
                             </div>
                         </div>
 
-                        <!-- Detail Lines -->
-                        <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
-                            <h6 class="mb-0" style="font-size:0.8rem;">Detail Lines</h6>
-                            <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
-                                <span class="material-symbols-outlined" style="font-size:14px;">download</span>
-                                <span class="ms-1" style="font-size:0.72rem;">Excel</span>
-                            </a>
-                        </div>
+                        <!-- Content Tabs: Detail Lines / Approvals -->
                         <style>
-                            #details-table td,
-                            #details-table th {
-                                padding: 2px 4px !important;
-                                font-size: 0.78rem !important;
-                                line-height: 1.2;
+                            #contentTabs .nav-link {
+                                color: #555;
+                                font-weight: 600;
+                                font-size: 0.88rem;
+                                border: none;
+                                border-bottom: 3px solid transparent;
+                                border-radius: 0;
+                                padding: 8px 18px;
+                                transition: color .2s, border-color .2s;
+                            }
+
+                            #contentTabs .nav-link:hover {
+                                color: #3598db;
+                                border-bottom-color: #b8dcf0;
+                            }
+
+                            #contentTabs .nav-link.active {
+                                color: #3598db;
+                                font-weight: 700;
+                                background: none;
+                                border-bottom: 3px solid #3598db;
                             }
                         </style>
-                        <div class="table-responsive custom-scrollbar">
-                            <table class="display" id="details-table" style="width:100%;font-size:0.66rem;">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Entry Type</th>
-                                        <th>Tenant</th>
-                                        <th>Unit</th>
-                                        <th>Description</th>
-                                        <th>Dr/Cr</th>
-                                        <th class="text-end">Amt</th>
-                                        <th class="text-end">Net</th>
-                                        <th class="text-end">VAT</th>
-                                        <th class="text-end">Pay %</th>
-                                        <th>Period</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
+                        <ul class="nav nav-tabs border-bottom mb-0" id="contentTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="details-content-tab" data-bs-toggle="tab" data-bs-target="#details-lines-content" type="button" role="tab">
+                                    <i class="fa fa-list me-1"></i> Detail Lines
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="approvals-content-tab" data-bs-toggle="tab" data-bs-target="#approvals-content" type="button" role="tab">
+                                    <i class="fa fa-check-circle me-1"></i> Approvals
+                                </button>
+                            </li>
+                            <li class="ms-auto d-flex align-items-center">
+                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+                                    <span class="ms-1" style="font-size:0.72rem;">Excel</span>
+                                </a>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="contentTabsContent">
+                            <!-- Detail Lines Tab -->
+                            <div class="tab-pane fade show active pt-2" id="details-lines-content" role="tabpanel">
+                                <style>
+                                    #details-table td,
+                                    #details-table th {
+                                        padding: 2px 4px !important;
+                                        font-size: 0.78rem !important;
+                                        line-height: 1.2;
+                                    }
+                                </style>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table class="display" id="details-table" style="width:100%;font-size:0.66rem;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Entry Type</th>
+                                                <th>Tenant</th>
+                                                <th>Unit</th>
+                                                <th>Description</th>
+                                                <th>Dr/Cr</th>
+                                                <th class="text-end">Amt</th>
+                                                <th class="text-end">Net</th>
+                                                <th class="text-end">VAT</th>
+                                                <th class="text-end">Pay %</th>
+                                                <th>Period</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div><!-- /details-lines-content -->
+
+                            <!-- Approvals Tab -->
+                            <div class="tab-pane fade pt-2" id="approvals-content" role="tabpanel">
+                                <div id="approvals-loader" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2 text-muted">Loading approval workflow...</p>
+                                </div>
+
+                                <div id="approvals-main-content" class="row" style="display: none;">
+                                    <!-- Left Column: Conversation Trail -->
+                                    <div class="col-md-8">
+                                        <div class="card">
+                                            <div class="card-header py-2" style="background: #3598db; color: white;">
+                                                <h6 class="mb-0" style="font-size:0.8rem;"><i class="fa fa-comments me-2"></i>Approval Comments Trail</h6>
+                                            </div>
+                                            <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                                                <div id="comments-trail"></div>
+
+                                                <div id="action-buttons-section" style="display: none;" class="mt-3 pt-2 border-top">
+                                                    <div class="d-flex gap-2">
+                                                        <button class="btn btn-primary btn-sm" id="approve-btn" data-bs-toggle="modal" data-bs-target="#approveModal">
+                                                            <i class="fa fa-check me-1"></i> Approve
+                                                        </button>
+                                                        <button class="btn btn-danger btn-sm" id="reject-btn" data-bs-toggle="modal" data-bs-target="#rejectModal" style="display: none;">
+                                                            <i class="fa fa-times me-1"></i> Reject
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Right Column: Compact Timeline -->
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-header py-2" style="background: #3598db; color: white;">
+                                                <h6 class="mb-0" style="font-size:0.8rem;"><i class="fa fa-list-ul me-2"></i>Approval Timeline</h6>
+                                            </div>
+                                            <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                                                <div id="compact-timeline"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="approvals-no-workflow" style="display: none;">
+                                    <div class="alert alert-warning">
+                                        <i class="fa fa-info-circle me-2"></i><span id="approvals-no-workflow-msg">No approval workflow found</span>
+                                    </div>
+                                </div>
+                            </div><!-- /approvals-content -->
+                        </div><!-- /tab-content -->
+
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approve Modal -->
+<div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="fa fa-check-circle me-2 text-success"></i>Approve Return</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to approve this return?</p>
+                <div class="mb-3">
+                    <label class="form-label">Comments (Optional)</label>
+                    <textarea class="form-control" id="approve-comments" rows="3" placeholder="Add any comments..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-approve-btn">
+                    <i class="fa fa-check me-1"></i> Confirm Approval
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reject Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="fa fa-times-circle me-2 text-danger"></i>Reject Return</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Please provide a reason for rejecting this return and select which level to return it to.</p>
+                <div class="mb-3">
+                    <label class="form-label">Return to Level <span class="text-danger">*</span></label>
+                    <select class="form-select" id="return-to-level" required>
+                        <option value="">-- Select Level --</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Rejection Reason <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="reject-reason" rows="3" placeholder="Enter reason for rejection..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-reject-btn">
+                    <i class="fa fa-times me-1"></i> Confirm Rejection
+                </button>
             </div>
         </div>
     </div>
@@ -221,6 +371,8 @@
 <script>
     $(document).ready(function() {
         var summaryBaseUrl = '{{ url("/ajax/returns") }}';
+        var currentEncId = '{{ encrypt($return->id) }}';
+        var approvalsLoaded = false;
 
         var table = $('#details-table').DataTable({
             data: [],
@@ -387,9 +539,17 @@
                 type: 'GET',
                 success: function(response) {
                     if (response.success) {
+                        currentEncId = encId;
                         response.return.excel_url = response.excelUrl;
                         updatePage(response.return, response.lineTotals);
                         loadDetailLines(response.unitsUrl);
+                        // Reload approvals if that tab is active
+                        if ($('#approvals-content-tab').hasClass('active')) {
+                            approvalsLoaded = false;
+                            loadApprovals();
+                        } else {
+                            approvalsLoaded = false;
+                        }
                     }
                 },
                 error: function() {
@@ -400,6 +560,252 @@
                 }
             });
         });
+
+        // ═══════════════════════════════════════════════════════════════
+        // APPROVALS TAB LOGIC
+        // ═══════════════════════════════════════════════════════════════
+
+        // Load approvals when tab is clicked
+        $('#approvals-content-tab').on('shown.bs.tab', function() {
+            if (!approvalsLoaded) loadApprovals();
+        });
+
+        function loadApprovals() {
+            $('#approvals-loader').show();
+            $('#approvals-main-content').hide();
+            $('#approvals-no-workflow').hide();
+
+            $.ajax({
+                url: summaryBaseUrl + '/' + encodeURIComponent(currentEncId) + '/approvals',
+                method: 'GET',
+                success: function(response) {
+                    $('#approvals-loader').hide();
+                    if (response.success) {
+                        var data = response.data;
+                        renderCompactTimeline(data.timeline);
+                        renderCommentsTrail(data.timeline);
+
+                        if (data.can_approve) {
+                            $('#action-buttons-section').show();
+                            if (data.can_reject) {
+                                $('#reject-btn').show();
+                                var $sel = $('#return-to-level');
+                                $sel.empty().append('<option value="">-- Select Level --</option>');
+                                (data.available_reject_levels || []).forEach(function(lv) {
+                                    $sel.append('<option value="' + lv.level + '">Level ' + lv.level + ' - ' + escapeHtml(lv.approver_name) + '</option>');
+                                });
+                            } else {
+                                $('#reject-btn').hide();
+                            }
+                        } else {
+                            $('#action-buttons-section').hide();
+                        }
+                        $('#approvals-main-content').show();
+                        approvalsLoaded = true;
+                    } else {
+                        $('#approvals-no-workflow-msg').text(response.message || 'No approval workflow found');
+                        $('#approvals-no-workflow').show();
+                    }
+                },
+                error: function() {
+                    $('#approvals-loader').hide();
+                    $('#approvals-no-workflow-msg').text('Failed to load approval workflow.');
+                    $('#approvals-no-workflow').show();
+                }
+            });
+        }
+
+        function renderCompactTimeline(timeline) {
+            var html = '<div class="timeline-steps">';
+            timeline.forEach(function(item, idx) {
+                var hasApproved = item.actions && item.actions.some(function(a) {
+                    return a.action === 'Approved';
+                });
+                var hasReturned = item.actions && item.actions.some(function(a) {
+                    return a.action === 'Returned' || a.action === 'Rejected';
+                });
+                var icon = '';
+                if (hasApproved) icon = '<i class="fa fa-check-circle" style="color:#28a745;font-size:1.1rem;"></i>';
+                else if (hasReturned) icon = '<i class="fa fa-times-circle" style="color:#dc3545;font-size:1.1rem;"></i>';
+                else if (item.status === 'Pending') icon = '<i class="fa fa-clock" style="color:#ffc107;font-size:1.1rem;"></i>';
+                else icon = '<i class="fa fa-circle" style="color:#dee2e6;font-size:1.1rem;"></i>';
+
+                html += '<div class="d-flex align-items-start mb-3">';
+                html += '<div class="me-3" style="min-width:28px;text-align:center;">' + icon;
+                if (idx < timeline.length - 1) html += '<div style="width:2px;height:35px;background:#dee2e6;margin:4px auto 0;"></div>';
+                html += '</div>';
+                html += '<div class="flex-grow-1">';
+                html += '<div style="font-size:0.8rem;font-weight:600;color:#495057;">Level ' + item.level + ' - ' + escapeHtml(item.approver_name) + '</div>';
+                if (item.actions) {
+                    item.actions.forEach(function(a) {
+                        html += '<div style="font-size:0.7rem;color:#6c757d;">' + escapeHtml(a.action) + ' - ' + formatDate(a.action_timestamp);
+                        if (a.returned_to_level) html += ' → Level ' + a.returned_to_level;
+                        html += '</div>';
+                    });
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+            $('#compact-timeline').html(html);
+        }
+
+        function renderCommentsTrail(timeline) {
+            var allActions = [];
+            timeline.forEach(function(item) {
+                if (item.actions) {
+                    item.actions.forEach(function(a) {
+                        allActions.push({
+                            level: item.level,
+                            approver_name: item.approver_name,
+                            action: a.action,
+                            comments: a.comments,
+                            action_timestamp: a.action_timestamp,
+                            returned_to_level: a.returned_to_level
+                        });
+                    });
+                }
+            });
+            allActions.sort(function(a, b) {
+                return new Date(a.action_timestamp) - new Date(b.action_timestamp);
+            });
+
+            var html = '';
+            if (allActions.length === 0) {
+                html = '<div class="text-center text-muted py-3"><i class="fa fa-info-circle fa-2x mb-2"></i><p>No actions yet</p></div>';
+            } else {
+                allActions.forEach(function(a, idx) {
+                    if (idx > 0) html += '<hr style="margin:10px 0;border:0;border-top:1px solid #e9ecef;">';
+                    var actionIcon = '';
+                    if (a.action === 'Approved') actionIcon = '<i class="fa fa-check-circle" style="color:#28a745;font-size:0.75rem;"></i> ';
+                    else if (a.action === 'Returned' || a.action === 'Rejected') actionIcon = '<i class="fa fa-times-circle" style="color:#dc3545;font-size:0.75rem;"></i> ';
+                    else if (a.action === 'Initiated') actionIcon = '<i class="fa fa-play-circle" style="color:#3598db;font-size:0.75rem;"></i> ';
+
+                    html += '<div class="row">';
+                    html += '<div class="col-3"><div class="d-flex align-items-start">';
+                    html += '<div class="me-2" style="min-width:24px;"><div style="width:24px;height:24px;border-radius:50%;background:#d6ebf7;display:flex;align-items:center;justify-content:center;"><i class="fa fa-user" style="color:#3598db;font-size:0.7rem;"></i></div></div>';
+                    html += '<span style="font-size:0.78rem;font-weight:600;color:#212529;">' + escapeHtml(a.approver_name).toUpperCase() + '</span>';
+                    html += '</div></div>';
+                    html += '<div class="col-9">';
+                    html += '<div style="margin-bottom:4px;">' + actionIcon + '<span style="font-size:0.65rem;color:#3598db;font-style:italic;">' + formatDate(a.action_timestamp) + ' • L' + a.level + '</span></div>';
+                    if (a.comments) {
+                        html += '<div style="font-size:0.85rem;color:#495057;">' + escapeHtml(a.comments) + '</div>';
+                    } else {
+                        html += '<div style="font-size:0.85rem;color:#6c757d;font-style:italic;">' + a.action;
+                        if (a.returned_to_level) html += ' to Level ' + a.returned_to_level;
+                        html += '</div>';
+                    }
+                    html += '</div></div>';
+                });
+            }
+            $('#comments-trail').html(html);
+        }
+
+        // Confirm approve
+        $('#confirm-approve-btn').on('click', function() {
+            var $btn = $(this);
+            var comments = $('#approve-comments').val().trim();
+            $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin me-1"></i> Processing...');
+
+            $.ajax({
+                url: summaryBaseUrl + '/' + encodeURIComponent(currentEncId) + '/approvals/approve',
+                method: 'POST',
+                data: {
+                    comments: comments,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#approveModal').modal('hide');
+                        $('#approve-comments').val('');
+                        $('#approvals-content').prepend('<div class="alert alert-success alert-dismissible fade show" role="alert"><i class="fa fa-check-circle me-2"></i>' + response.message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+                        approvalsLoaded = false;
+                        loadApprovals();
+                        setTimeout(function() {
+                            $('.alert-success').fadeOut();
+                        }, 5000);
+                    } else {
+                        alert(response.message || 'Failed to approve return');
+                    }
+                    $btn.prop('disabled', false).html('<i class="fa fa-check me-1"></i> Confirm Approval');
+                },
+                error: function(xhr) {
+                    var msg = 'Failed to approve return.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    alert(msg);
+                    $btn.prop('disabled', false).html('<i class="fa fa-check me-1"></i> Confirm Approval');
+                }
+            });
+        });
+
+        // Confirm reject
+        $('#confirm-reject-btn').on('click', function() {
+            var $btn = $(this);
+            var reason = $('#reject-reason').val().trim();
+            var returnToLevel = $('#return-to-level').val();
+
+            if (!returnToLevel) {
+                alert('Please select a level to return to');
+                return;
+            }
+            if (!reason) {
+                alert('Please provide a reason for rejection');
+                return;
+            }
+
+            $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin me-1"></i> Processing...');
+
+            $.ajax({
+                url: summaryBaseUrl + '/' + encodeURIComponent(currentEncId) + '/approvals/reject',
+                method: 'POST',
+                data: {
+                    reason: reason,
+                    return_to_level: returnToLevel,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#rejectModal').modal('hide');
+                        $('#reject-reason').val('');
+                        $('#return-to-level').val('');
+                        $('#approvals-content').prepend('<div class="alert alert-warning alert-dismissible fade show" role="alert"><i class="fa fa-info-circle me-2"></i>' + response.message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+                        approvalsLoaded = false;
+                        loadApprovals();
+                        setTimeout(function() {
+                            $('.alert-warning').fadeOut();
+                        }, 5000);
+                    } else {
+                        alert(response.message || 'Failed to reject return');
+                    }
+                    $btn.prop('disabled', false).html('<i class="fa fa-times me-1"></i> Confirm Rejection');
+                },
+                error: function(xhr) {
+                    var msg = 'Failed to reject return.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    alert(msg);
+                    $btn.prop('disabled', false).html('<i class="fa fa-times me-1"></i> Confirm Rejection');
+                }
+            });
+        });
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            var d = new Date(dateString);
+            return d.toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                }) + ', ' +
+                d.toLocaleTimeString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+        }
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
     });
 </script>
 @endsection

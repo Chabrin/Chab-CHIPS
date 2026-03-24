@@ -627,6 +627,36 @@ class ClientReturnsController extends Controller
             // DELETE EXISTING UN-APPROVED RETURNS FOR THIS PERIOD
             // ═══════════════════════════════════════════════════════════════════
             if ($propertySelection === 'one') {
+                // Clean up approval workflow for unapproved summaries being replaced
+                DB::delete("
+                    DELETE FROM cb_approval_actions WHERE approval_item_id IN (
+                        SELECT ai.id FROM cb_approval_items ai
+                        JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+                        WHERE rs.year = ? AND rs.month = ?
+                          AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                          AND rs.property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)
+                    )
+                ", [$returnYear, $returnMonthNum, $propertyId]);
+
+                DB::delete("
+                    DELETE FROM cb_item_approvers WHERE approval_item_id IN (
+                        SELECT ai.id FROM cb_approval_items ai
+                        JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+                        WHERE rs.year = ? AND rs.month = ?
+                          AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                          AND rs.property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)
+                    )
+                ", [$returnYear, $returnMonthNum, $propertyId]);
+
+                DB::delete("
+                    DELETE FROM cb_approval_items WHERE item_type = 'return_summary' AND item_id IN (
+                        SELECT rs.id FROM cb_returns_summary rs
+                        WHERE rs.year = ? AND rs.month = ?
+                          AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                          AND rs.property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)
+                    )
+                ", [$returnYear, $returnMonthNum, $propertyId]);
+
                 DB::delete("
                     DELETE FROM cb_returns_clients
                     WHERE return_period = ?
@@ -646,6 +676,33 @@ class ClientReturnsController extends Controller
                       AND property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)
                 ", [$returnYear, $returnMonthNum, $propertyId]);
             } else {
+                // Clean up approval workflow for unapproved summaries being replaced
+                DB::delete("
+                    DELETE FROM cb_approval_actions WHERE approval_item_id IN (
+                        SELECT ai.id FROM cb_approval_items ai
+                        JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+                        WHERE rs.year = ? AND rs.month = ?
+                          AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                    )
+                ", [$returnYear, $returnMonthNum]);
+
+                DB::delete("
+                    DELETE FROM cb_item_approvers WHERE approval_item_id IN (
+                        SELECT ai.id FROM cb_approval_items ai
+                        JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+                        WHERE rs.year = ? AND rs.month = ?
+                          AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                    )
+                ", [$returnYear, $returnMonthNum]);
+
+                DB::delete("
+                    DELETE FROM cb_approval_items WHERE item_type = 'return_summary' AND item_id IN (
+                        SELECT rs.id FROM cb_returns_summary rs
+                        WHERE rs.year = ? AND rs.month = ?
+                          AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                    )
+                ", [$returnYear, $returnMonthNum]);
+
                 DB::delete("
                     DELETE FROM cb_returns_clients
                     WHERE return_period = ?
@@ -916,6 +973,81 @@ class ClientReturnsController extends Controller
             ));
 
             Log::info("Query 3: Inserted summaries", ['summaries' => $summaryCount]);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // CREATE APPROVAL WORKFLOW ITEMS FOR NEW SUMMARIES (bulk SQL)
+            // ═══════════════════════════════════════════════════════════════════
+            $userId = auth()->id();
+            $clientIp = request()->ip();
+
+            // Q4: Bulk insert approval items
+            $approvalCount = DB::affectingStatement("
+                INSERT INTO cb_approval_items (
+                    item_type, item_id, item_reference, status,
+                    current_level, total_levels, initiated_by, initiated_at,
+                    created_at, updated_at
+                )
+                SELECT
+                    'return_summary', rs.id, rs.return_code, 'Pending',
+                    1, 4, ?, NOW(),
+                    NOW(), NOW()
+                FROM cb_returns_summary rs
+                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                WHERE rs.return_period = ?
+                  AND rs.approved_status = 0
+                  AND p.field_officer_id IS NOT NULL
+                  {$propertyFilterSummary}
+                ON CONFLICT (item_type, item_id) DO NOTHING
+            ", array_merge([$userId, $returnPeriod], $propBindings));
+
+            // Q5: Bulk insert level-1 approvers
+            DB::statement("
+                INSERT INTO cb_item_approvers (
+                    approval_item_id, approver_id, approver_level,
+                    is_optional, approval_status, assigned_at,
+                    created_at, updated_at
+                )
+                SELECT
+                    ai.id, p.field_officer_id, 1,
+                    0, 'Pending', NOW(),
+                    NOW(), NOW()
+                FROM cb_approval_items ai
+                JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                WHERE rs.return_period = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM cb_item_approvers ia
+                      WHERE ia.approval_item_id = ai.id AND ia.approver_level = 1
+                  )
+                  {$propertyFilterSummary}
+            ", array_merge([$returnPeriod], $propBindings));
+
+            // Q6: Bulk insert initial actions
+            DB::statement("
+                INSERT INTO cb_approval_actions (
+                    item_approver_id, approval_item_id, actor_id,
+                    from_level, to_level, action, comments,
+                    action_timestamp, ip_address, sequence_number, is_current,
+                    created_at, updated_at
+                )
+                SELECT
+                    ia.id, ai.id, ?,
+                    0, 1, 'Initiated', 'Return submitted for approval',
+                    NOW(), ?, 1, 1,
+                    NOW(), NOW()
+                FROM cb_item_approvers ia
+                JOIN cb_approval_items ai ON ai.id = ia.approval_item_id
+                JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+                WHERE rs.return_period = ?
+                  AND ia.approver_level = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM cb_approval_actions aa
+                      WHERE aa.item_approver_id = ia.id AND aa.action = 'Initiated'
+                  )
+                  {$propertyFilterSummary}
+            ", array_merge([$userId, $clientIp, $returnPeriod], $propBindings));
+
+            Log::info("Approval items created", ['count' => $approvalCount]);
 
             DB::commit();
 

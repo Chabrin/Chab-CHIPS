@@ -19,14 +19,15 @@
 --   _007  vw_sys_set_zone_areas_007
 --   _008  vw_sys_set_invoiceable_items_008
 --   _009  vw_sys_pm_debtors_invoices_009
---   _015  vw_cb_returns_summary_015
---   _016  vw_cb_returns_clients_016
---   _017  vw_cb_landlord_account_017
 --   _011  vw_sys_pm_tenants_payments_allocated_011
 --   _012  vw_sys_pm_tenants_payments_unallocated_012
 --   _013  vw_sys_pm_tenants_accounts_transactions_013
 --   _014  vw_cb_receipts_014
+--   _015  vw_cb_returns_summary_015
+--   _016  vw_cb_returns_clients_016
+--   _017  vw_chofficers_to_josya_users_017
 --   _018  vw_sys_pm_service_agreements_018
+--   _019  vw_cb_landlord_account_019
 -- ============================================================================
 
 USE CHABRINS;
@@ -401,170 +402,6 @@ WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
 ';
 
 -- ============================================================================
--- _015  vw_cb_returns_summary_015  (CHRHMS -> cb_returns_summary, 35,217 rows)
--- ============================================================================
--- Return header/summary: one row per property per period.
--- Workflow: prepared -> checked -> finalized -> approved -> paid.
-EXEC sp_executesql N'
-CREATE OR ALTER VIEW vw_cb_returns_summary_015 AS
-SELECT
-    h.return_id                                         AS id,
-    RTRIM(LTRIM(h.RETURNID))                            AS return_code,
-    RTRIM(LTRIM(h.LORDID))                              AS landlord_code,
-    RTRIM(LTRIM(h.BLOCKID))                             AS property_code,
-    h.YEARR                                             AS year,
-    h.MONTHH                                            AS month,
-    RTRIM(LTRIM(h.RETDESC))                             AS return_description,
-    RTRIM(LTRIM(h.RETNPRD))                             AS return_period,
-    RTRIM(LTRIM(h.RETTYPE))                             AS return_type,
-    ISNULL(h.COMMRATE, 0)                               AS commission_rate,
-    ISNULL(h.TOTALCR, 0)                                AS total_credit,
-    ISNULL(h.SUMCOM, 0)                                 AS commission_total,
-    ISNULL(h.SUMVATBL, 0)                               AS vatable_total,
-    ISNULL(h.TOTALCOM, 0)                               AS commission_amount,
-    ISNULL(h.TOTALDR, 0)                                AS total_debit,
-    ISNULL(h.NETAMT, 0)                                 AS net_amount,
-    ISNULL(h.TRXAMT, 0)                                 AS transaction_amount,
-    ISNULL(h.NETBAL, 0)                                 AS net_balance,
-    RTRIM(LTRIM(h.PREPBY))                              AS prepared_by,
-    ISNULL(h.PREPST, 0)                                 AS prepared_status,
-    h.PREPDAT                                           AS prepared_date,
-    RTRIM(LTRIM(h.CHKBY))                               AS checked_by,
-    ISNULL(h.CHKST, 0)                                  AS checked_status,
-    h.CHKDAT                                            AS checked_date,
-    ISNULL(h.SAVDST, 0)                                 AS saved_status,
-    ISNULL(h.FINAST, 0)                                 AS finalized_status,
-    RTRIM(LTRIM(h.FINABY))                              AS finalized_by,
-    h.FINADAT                                           AS finalized_date,
-    RTRIM(LTRIM(h.APPBY))                               AS approved_by,
-    ISNULL(h.APPST, 0)                                  AS approved_status,
-    h.APPDAT                                            AS approved_date,
-    ISNULL(h.PAIDST, 0)                                 AS paid_status,
-    RTRIM(LTRIM(h.VOUCHERNO))                           AS voucher_number,
-    RTRIM(LTRIM(h.RETRMKS))                             AS remarks,
-    RTRIM(LTRIM(h.RETRMKS2))                            AS remarks_2,
-    h.REBYRR                                            AS rebate_year,
-    h.REBMNTH                                           AS rebate_month,
-    RTRIM(LTRIM(h.RETURNT))                             AS return_tag,
-    ISNULL(h.RETSTAT, 0)                                AS return_status,
-    RTRIM(LTRIM(h.CHQNO))                               AS cheque_number,
-    RTRIM(LTRIM(h.BANKACC))                             AS bank_account,
-    ISNULL(h.AMTPAYD, 0)                                AS amount_paid,
-    ISNULL(h.AMTOVD, 0)                                 AS amount_overdraft,
-    RTRIM(LTRIM(h.PAYDAT))                              AS payment_date,
-    RTRIM(LTRIM(h.RETZON))                              AS return_zone,
-    h.AUTH2M                                            AS auth_2m,
-    h.AUTHUN                                            AS auth_un,
-    ISNULL(h.OVDPER, 0)                                 AS overdraft_percentage,
-    h.return_id                                         AS return_id
-FROM CHABRINS.dbo.CHRHMS h
-WHERE h.RETURNID IS NOT NULL;
-';
-
--- ============================================================================
--- _016  vw_cb_returns_clients_016  (CHRTXS -> cb_returns_clients, 1,470,210 rows)
--- ============================================================================
--- Return detail lines: per unit, per tenant, per charge type within a return.
--- Join to cb_returns_summary via return_code (RETURNID).
-EXEC sp_executesql N'
-CREATE OR ALTER VIEW vw_cb_returns_clients_016 AS
-SELECT
-    x.return_line_id                                    AS id,
-    RTRIM(LTRIM(x.RETURNID))                            AS return_code,
-    x.RETNPRD                                           AS return_period,
-    RTRIM(LTRIM(x.TRANSNUM))                            AS transaction_number,
-    RTRIM(LTRIM(x.TRANSDAT))                            AS transaction_date,
-    x.TRANSDATF                                         AS transaction_date_num,
-    RTRIM(LTRIM(x.ENTRYDE))                             AS entry_description,
-    RTRIM(LTRIM(x.ENTRYTYP))                            AS entry_type,
-    RTRIM(LTRIM(x.TRANSCODE))                           AS transaction_code,
-    RTRIM(LTRIM(x.ENTRYDESC))                           AS narration,
-    RTRIM(LTRIM(x.TRANSREF))                            AS transaction_ref,
-    x.SRCDATE                                           AS source_date,
-    RTRIM(LTRIM(x.BLOCKID))                             AS property_code,
-    RTRIM(LTRIM(x.UNITNO))                              AS unit_code,
-    x.UNITID                                            AS unit_seq_id,
-    RTRIM(LTRIM(x.DRCR))                                AS dr_cr,
-    RTRIM(LTRIM(x.TENNAME))                             AS tenant_name,
-    RTRIM(LTRIM(x.TENSTAT))                             AS tenant_status,
-    RTRIM(LTRIM(x.ENTAMTT))                             AS amount_text,
-    ISNULL(x.AMTPAYBL, 0)                               AS amount_payable_landlord,
-    ISNULL(x.AMTPAYTN, 0)                               AS amount_payable_tenant,
-    ISNULL(x.RESAMTDR, 0)                               AS residual_debit,
-    ISNULL(x.RESAMTCR, 0)                               AS residual_credit,
-    ISNULL(x.RESAMTNT, 0)                               AS net_amount,
-    RTRIM(LTRIM(x.TREMARKS))                            AS remarks,
-    RTRIM(LTRIM(x.TRANSSRC))                            AS transaction_source,
-    x.DEDPNT                                            AS deduction_point,
-    RTRIM(LTRIM(x.VATABL))                              AS is_vatable,
-    RTRIM(LTRIM(x.COMMBL))                              AS is_commissionable,
-    RTRIM(LTRIM(x.DEDPNT2))                             AS deduction_point_2,
-    x.PPERIOD                                           AS payment_period,
-    RTRIM(LTRIM(x.CHQNO))                               AS cheque_number,
-    RTRIM(LTRIM(x.BANKACC))                             AS bank_account,
-    ISNULL(x.VATAMT, 0)                                 AS vat_amount,
-    x.AUTH2M                                            AS auth_2m,
-    x.AUTHUN                                            AS auth_un,
-    RTRIM(LTRIM(x.PAYPERC))                             AS pay_percentage,
-    x.return_line_id                                    AS return_line_id,
-    x.property_id                                       AS property_id,
-    x.client_id                                         AS client_id,
-    x.zone_id                                           AS zone_id,
-    x.field_officer_id                                  AS field_officer_id,
-    x.zone_supervisor_id                                AS zone_supervisor_id,
-    x.zone_manager_id                                   AS zone_manager_id,
-    x.unit_id                                           AS unit_id,
-    x.tenant_id                                         AS tenant_id,
-    x.return_id                                         AS return_id,
-    x.invoice_id                                        AS invoice_id
-FROM CHABRINS.dbo.CHRTXS x
-WHERE x.RETURNID IS NOT NULL;
-';
-
--- ============================================================================
--- _017  vw_cb_landlord_account_017  (CHLACC -> cb_landlord_account, 128,423 rows)
--- ============================================================================
--- Landlord account ledger: debit/credit entries for landlord accounts.
--- Links to cb_returns_summary via return_code (RETURNID) when entry
--- originates from a return. Direct charges have NULL return_code.
-EXEC sp_executesql N'
-CREATE OR ALTER VIEW vw_cb_landlord_account_017 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY l.YEARR, l.MONTHH, l.LORDID, l.ENTRYNU)  AS id,
-    l.YEARR                                             AS year,
-    l.MONTHH                                            AS month,
-    RTRIM(LTRIM(l.LORDID))                              AS landlord_code,
-    RTRIM(LTRIM(l.LFNAME))                              AS landlord_name,
-    RTRIM(LTRIM(l.HOUSEID))                             AS property_code,
-    RTRIM(LTRIM(l.GTTCNUM))                             AS transaction_number,
-    RTRIM(LTRIM(l.ENTRYID))                             AS entry_type_code,
-    l.ENTRYNU                                           AS entry_sequence,
-    RTRIM(LTRIM(l.ENTRYDE))                             AS entry_description,
-    l.ENTRYDA                                           AS entry_date,
-    ISNULL(l.AMTDR, 0)                                  AS debit_amount,
-    ISNULL(l.AMTCR, 0)                                  AS credit_amount,
-    ISNULL(l.AMTTOT, 0)                                 AS total_amount,
-    l.ACCSTAT                                           AS account_status,
-    RTRIM(LTRIM(l.PAYREF))                              AS payment_ref,
-    RTRIM(LTRIM(l.PAYREFT))                             AS payment_ref_type,
-    ISNULL(l.INTRATE, 0)                                AS interest_rate,
-    RTRIM(LTRIM(l.AUDTUSR))                             AS audit_user,
-    RTRIM(LTRIM(l.ENTPART))                             AS entry_particulars,
-    RTRIM(LTRIM(l.PVNO))                                AS pv_number,
-    RTRIM(LTRIM(l.FINACC))                              AS gl_account,
-    RTRIM(LTRIM(l.VENDORID))                            AS vendor_id,
-    ISNULL(l.RECOVD, 0)                                 AS is_recovered,
-    l.RECOYR                                            AS recovery_year,
-    l.RECOMN                                            AS recovery_month,
-    RTRIM(LTRIM(l.RETTRANS))                            AS return_transaction,
-    RTRIM(LTRIM(l.RETURNID))                            AS return_code,
-    l.client_id                                         AS client_id,
-    l.property_id                                       AS property_id
-FROM CHABRINS.dbo.CHLACC l
-WHERE l.LORDID IS NOT NULL;
-';
-
--- ============================================================================
 -- _011  vw_sys_pm_tenants_payments_allocated_011
 -- ============================================================================
 -- SOURCE: CHTPAYS (1,435,222 rows) — payments received and allocated to tenants.
@@ -732,6 +569,165 @@ FROM CHABRINS.dbo.CHRCS r;
 ';
 
 -- ============================================================================
+-- _015  vw_cb_returns_summary_015  (CHRHMS -> cb_returns_summary, 35,217 rows)
+-- ============================================================================
+-- Return header/summary: one row per property per period.
+-- Workflow: prepared -> checked -> finalized -> approved -> paid.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_returns_summary_015 AS
+SELECT
+    h.return_id                                         AS id,
+    RTRIM(LTRIM(h.RETURNID))                            AS return_code,
+    RTRIM(LTRIM(h.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(h.BLOCKID))                             AS property_code,
+    h.YEARR                                             AS year,
+    h.MONTHH                                            AS month,
+    RTRIM(LTRIM(h.RETDESC))                             AS return_description,
+    RTRIM(LTRIM(h.RETNPRD))                             AS return_period,
+    RTRIM(LTRIM(h.RETTYPE))                             AS return_type,
+    ISNULL(h.COMMRATE, 0)                               AS commission_rate,
+    ISNULL(h.TOTALCR, 0)                                AS total_credit,
+    ISNULL(h.SUMCOM, 0)                                 AS commission_total,
+    ISNULL(h.SUMVATBL, 0)                               AS vatable_total,
+    ISNULL(h.TOTALCOM, 0)                               AS commission_amount,
+    ISNULL(h.TOTALDR, 0)                                AS total_debit,
+    ISNULL(h.NETAMT, 0)                                 AS net_amount,
+    ISNULL(h.TRXAMT, 0)                                 AS transaction_amount,
+    ISNULL(h.NETBAL, 0)                                 AS net_balance,
+    RTRIM(LTRIM(h.PREPBY))                              AS prepared_by,
+    ISNULL(h.PREPST, 0)                                 AS prepared_status,
+    h.PREPDAT                                           AS prepared_date,
+    RTRIM(LTRIM(h.CHKBY))                               AS checked_by,
+    ISNULL(h.CHKST, 0)                                  AS checked_status,
+    h.CHKDAT                                            AS checked_date,
+    ISNULL(h.SAVDST, 0)                                 AS saved_status,
+    ISNULL(h.FINAST, 0)                                 AS finalized_status,
+    RTRIM(LTRIM(h.FINABY))                              AS finalized_by,
+    h.FINADAT                                           AS finalized_date,
+    RTRIM(LTRIM(h.APPBY))                               AS approved_by,
+    ISNULL(h.APPST, 0)                                  AS approved_status,
+    h.APPDAT                                            AS approved_date,
+    ISNULL(h.PAIDST, 0)                                 AS paid_status,
+    RTRIM(LTRIM(h.VOUCHERNO))                           AS voucher_number,
+    RTRIM(LTRIM(h.RETRMKS))                             AS remarks,
+    RTRIM(LTRIM(h.RETRMKS2))                            AS remarks_2,
+    h.REBYRR                                            AS rebate_year,
+    h.REBMNTH                                           AS rebate_month,
+    RTRIM(LTRIM(h.RETURNT))                             AS return_tag,
+    ISNULL(h.RETSTAT, 0)                                AS return_status,
+    RTRIM(LTRIM(h.CHQNO))                               AS cheque_number,
+    RTRIM(LTRIM(h.BANKACC))                             AS bank_account,
+    ISNULL(h.AMTPAYD, 0)                                AS amount_paid,
+    ISNULL(h.AMTOVD, 0)                                 AS amount_overdraft,
+    RTRIM(LTRIM(h.PAYDAT))                              AS payment_date,
+    RTRIM(LTRIM(h.RETZON))                              AS return_zone,
+    h.AUTH2M                                            AS auth_2m,
+    h.AUTHUN                                            AS auth_un,
+    ISNULL(h.OVDPER, 0)                                 AS overdraft_percentage,
+    h.return_id                                         AS return_id
+FROM CHABRINS.dbo.CHRHMS h
+WHERE h.RETURNID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _016  vw_cb_returns_clients_016  (CHRTXS -> cb_returns_clients, 1,470,210 rows)
+-- ============================================================================
+-- Return detail lines: per unit, per tenant, per charge type within a return.
+-- Join to cb_returns_summary via return_code (RETURNID).
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_returns_clients_016 AS
+SELECT
+    x.return_line_id                                    AS id,
+    RTRIM(LTRIM(x.RETURNID))                            AS return_code,
+    x.RETNPRD                                           AS return_period,
+    RTRIM(LTRIM(x.TRANSNUM))                            AS transaction_number,
+    RTRIM(LTRIM(x.TRANSDAT))                            AS transaction_date,
+    x.TRANSDATF                                         AS transaction_date_num,
+    RTRIM(LTRIM(x.ENTRYDE))                             AS entry_description,
+    RTRIM(LTRIM(x.ENTRYTYP))                            AS entry_type,
+    RTRIM(LTRIM(x.TRANSCODE))                           AS transaction_code,
+    RTRIM(LTRIM(x.ENTRYDESC))                           AS narration,
+    RTRIM(LTRIM(x.TRANSREF))                            AS transaction_ref,
+    x.SRCDATE                                           AS source_date,
+    RTRIM(LTRIM(x.BLOCKID))                             AS property_code,
+    RTRIM(LTRIM(x.UNITNO))                              AS unit_code,
+    x.UNITID                                            AS unit_seq_id,
+    RTRIM(LTRIM(x.DRCR))                                AS dr_cr,
+    RTRIM(LTRIM(x.TENNAME))                             AS tenant_name,
+    RTRIM(LTRIM(x.TENSTAT))                             AS tenant_status,
+    RTRIM(LTRIM(x.ENTAMTT))                             AS amount_text,
+    ISNULL(x.AMTPAYBL, 0)                               AS amount_payable_landlord,
+    ISNULL(x.AMTPAYTN, 0)                               AS amount_payable_tenant,
+    ISNULL(x.RESAMTDR, 0)                               AS residual_debit,
+    ISNULL(x.RESAMTCR, 0)                               AS residual_credit,
+    ISNULL(x.RESAMTNT, 0)                               AS net_amount,
+    RTRIM(LTRIM(x.TREMARKS))                            AS remarks,
+    RTRIM(LTRIM(x.TRANSSRC))                            AS transaction_source,
+    x.DEDPNT                                            AS deduction_point,
+    RTRIM(LTRIM(x.VATABL))                              AS is_vatable,
+    RTRIM(LTRIM(x.COMMBL))                              AS is_commissionable,
+    RTRIM(LTRIM(x.DEDPNT2))                             AS deduction_point_2,
+    x.PPERIOD                                           AS payment_period,
+    RTRIM(LTRIM(x.CHQNO))                               AS cheque_number,
+    RTRIM(LTRIM(x.BANKACC))                             AS bank_account,
+    ISNULL(x.VATAMT, 0)                                 AS vat_amount,
+    x.AUTH2M                                            AS auth_2m,
+    x.AUTHUN                                            AS auth_un,
+    RTRIM(LTRIM(x.PAYPERC))                             AS pay_percentage,
+    x.return_line_id                                    AS return_line_id,
+    x.property_id                                       AS property_id,
+    x.client_id                                         AS client_id,
+    x.zone_id                                           AS zone_id,
+    x.field_officer_id                                  AS field_officer_id,
+    x.zone_supervisor_id                                AS zone_supervisor_id,
+    x.zone_manager_id                                   AS zone_manager_id,
+    x.unit_id                                           AS unit_id,
+    x.tenant_id                                         AS tenant_id,
+    x.return_id                                         AS return_id,
+    x.invoice_id                                        AS invoice_id
+FROM CHABRINS.dbo.CHRTXS x
+WHERE x.RETURNID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _017  vw_chofficers_to_josya_users_017  (CHOFFICERS -> josya_users, 158 rows)
+-- ============================================================================
+-- CHOFFICERS field officers / zone managers / property managers inserted
+-- into josya_users using officer_id as id so FK references match.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_chofficers_to_josya_users_017 AS
+SELECT
+    o.officer_id                                        AS id,
+    RTRIM(LTRIM(o.OFFFNAME))                            AS name,
+    RTRIM(LTRIM(o.OFFTYPE))
+        + CASE WHEN RTRIM(LTRIM(ISNULL(o.OFFZON, ''''))) <> ''''
+               THEN '' | '' + RTRIM(LTRIM(o.OFFZON))
+               ELSE '''' END                              AS username,
+    LOWER(
+        REPLACE(RTRIM(LTRIM(o.OFFONAME)), '' '', ''.'')
+        + ''.'' + REPLACE(RTRIM(LTRIM(o.OFFSNAME)), '' '', '''')
+        + ''@chabrinagencies.co.ke''
+    )                                                   AS email,
+    ''$2y$12$i5DCIlg1wO9KrQerpL0UDuws7SnJnSOZ2W0Xcrdlz/z8pAMVjhJuq''
+                                                        AS password,
+    0                                                   AS block,
+    0                                                   AS [sendEmail],
+    GETDATE()                                           AS [registerDate],
+    NULL                                                AS [lastvisitDate],
+    ''''                                                  AS activation,
+    ''''                                                  AS params,
+    NULL                                                AS [lastResetTime],
+    0                                                   AS [resetCount],
+    ''''                                                  AS [otpKey],
+    NULL                                                AS reset_token,
+    NULL                                                AS reset_token_expires_at,
+    ''''                                                  AS otep,
+    0                                                   AS [requireReset]
+FROM CHABRINS.dbo.CHOFFICERS o
+WHERE o.officer_id IS NOT NULL;
+';
+
+-- ============================================================================
 -- _018  vw_sys_pm_service_agreements_018
 -- ============================================================================
 -- SOURCE: CHBLOCKS (1,842 rows) — one SLA per property.
@@ -770,5 +766,48 @@ SELECT
     0                                                   AS flat_rate_vat
 FROM CHABRINS.dbo.CHBLOCKS b
 WHERE b.BLOCKID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _019  vw_cb_landlord_account_019  (CHLACC -> cb_landlord_account, 128,423 rows)
+-- ============================================================================
+-- Landlord account ledger: debit/credit entries for landlord accounts.
+-- Links to cb_returns_summary via return_code (RETURNID) when entry
+-- originates from a return. Direct charges have NULL return_code.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_landlord_account_019 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY l.YEARR, l.MONTHH, l.LORDID, l.ENTRYNU)  AS id,
+    l.YEARR                                             AS year,
+    l.MONTHH                                            AS month,
+    RTRIM(LTRIM(l.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(l.LFNAME))                              AS landlord_name,
+    RTRIM(LTRIM(l.HOUSEID))                             AS property_code,
+    RTRIM(LTRIM(l.GTTCNUM))                             AS transaction_number,
+    RTRIM(LTRIM(l.ENTRYID))                             AS entry_type_code,
+    l.ENTRYNU                                           AS entry_sequence,
+    RTRIM(LTRIM(l.ENTRYDE))                             AS entry_description,
+    l.ENTRYDA                                           AS entry_date,
+    ISNULL(l.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(l.AMTCR, 0)                                  AS credit_amount,
+    ISNULL(l.AMTTOT, 0)                                 AS total_amount,
+    l.ACCSTAT                                           AS account_status,
+    RTRIM(LTRIM(l.PAYREF))                              AS payment_ref,
+    RTRIM(LTRIM(l.PAYREFT))                             AS payment_ref_type,
+    ISNULL(l.INTRATE, 0)                                AS interest_rate,
+    RTRIM(LTRIM(l.AUDTUSR))                             AS audit_user,
+    RTRIM(LTRIM(l.ENTPART))                             AS entry_particulars,
+    RTRIM(LTRIM(l.PVNO))                                AS pv_number,
+    RTRIM(LTRIM(l.FINACC))                              AS gl_account,
+    RTRIM(LTRIM(l.VENDORID))                            AS vendor_id,
+    ISNULL(l.RECOVD, 0)                                 AS is_recovered,
+    l.RECOYR                                            AS recovery_year,
+    l.RECOMN                                            AS recovery_month,
+    RTRIM(LTRIM(l.RETTRANS))                            AS return_transaction,
+    RTRIM(LTRIM(l.RETURNID))                            AS return_code,
+    l.client_id                                         AS client_id,
+    l.property_id                                       AS property_id
+FROM CHABRINS.dbo.CHLACC l
+WHERE l.LORDID IS NOT NULL;
 ';
 
