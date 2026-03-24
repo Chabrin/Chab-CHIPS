@@ -577,6 +577,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnUnitsData'])->name('ajax.returns.units');
     Route::get('/ajax/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnSummaryData'])->name('ajax.returns.summary');
     Route::get('/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedExcel'])->name('returns.excel');
+    Route::post('/ajax/returns/lines/{lineId}/recovery', [App\Http\Controllers\ClientReturnsController::class, 'setRecoveryStatus'])->name('ajax.returns.lines.recovery');
 
     // Returns Approval Routes (Batch-level)
     Route::get('/ajax/returns/batches/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getBatchApprovals'])->name('ajax.returns.batches.approvals');

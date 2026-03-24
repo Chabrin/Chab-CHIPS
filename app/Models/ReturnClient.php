@@ -57,6 +57,8 @@ class ReturnClient extends Model
         'tenant_id',
         'return_id',
         'invoice_id',
+        'payable_status',
+        'payable_status_reason',
     ];
 
     protected $casts = [

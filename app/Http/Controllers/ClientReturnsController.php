@@ -205,6 +205,7 @@ class ClientReturnsController extends Controller
                     'total_units' => $return->total_units ?? 0,
                     'payable_amount' => number_format($return->payable_amount ?? 0, 2),
                     'non_payable_amount' => number_format($return->non_payable_amount ?? 0, 2),
+                    'paid_status' => (int) $return->paid_status,
                 ],
                 'lineTotals' => [
                     'rent_total' => number_format($lineTotals->rent_total ?? 0, 2),
@@ -246,6 +247,7 @@ class ClientReturnsController extends Controller
                 'success' => true,
                 'data' => $details->map(function ($d) {
                     return [
+                        'encrypted_id' => encrypt($d->id),
                         'entry_type' => $d->entry_type ?? '-',
                         'tenant_name' => $d->tenant_name ?? '-',
                         'unit_code' => $d->unit_code ?? '-',
@@ -256,6 +258,8 @@ class ClientReturnsController extends Controller
                         'vat_amount' => number_format($d->vat_amount ?? 0, 2),
                         'pay_percentage' => $d->pay_percentage ?? '',
                         'return_period' => $d->return_period ?? '-',
+                        'payable_status' => $d->payable_status,
+                        'payable_status_reason' => $d->payable_status_reason ?? '',
                     ];
                 })
             ]);
@@ -263,6 +267,82 @@ class ClientReturnsController extends Controller
             Log::error('Error fetching unprocessed return units: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to load detail lines'], 500);
         }
+    }
+
+    /**
+     * Set recovery status on a return line (AJAX)
+     * Only allowed when the parent summary is unpaid (paid_status=0) and not approved (approved_status=0)
+     */
+    public function setRecoveryStatus(Request $request, $lineId)
+    {
+        try {
+            $lineId = decrypt($lineId);
+            $line = ReturnClient::findOrFail($lineId);
+
+            $summary = ReturnSummary::where('return_code', $line->return_code)->firstOrFail();
+
+            if ($summary->paid_status != 0 || $summary->approved_status != 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Recovery cannot be set — return is already approved or paid.',
+                ], 403);
+            }
+
+            $request->validate([
+                'payable_status' => 'required|integer|in:34,35,36,37',
+            ]);
+
+            $reasons = [
+                34 => 'Paid Vacant',
+                35 => 'Sat Deposit',
+                36 => 'Absconded',
+                37 => 'Paid Owner',
+            ];
+
+            $line->payable_status = (int) $request->payable_status;
+            $line->payable_status_reason = $reasons[$line->payable_status];
+            $line->save();
+
+            $recomputed = $this->recomputeReturnSummary($summary);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Recovery status saved.',
+                'summary' => $recomputed,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error setting recovery status: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to save recovery status.'], 500);
+        }
+    }
+
+    /**
+     * Recompute payable_amount, non_payable_amount, payable_units, total_units
+     * on cb_returns_summary for the given return.
+     */
+    private function recomputeReturnSummary(ReturnSummary $summary): array
+    {
+        $stats = ReturnClient::where('return_code', $summary->return_code)
+            ->selectRaw("
+                SUM(CASE WHEN entry_type = 'RENT CURRENT' AND payable_status IN (1,2,3) THEN net_amount ELSE 0 END) AS payable_amount,
+                SUM(CASE WHEN entry_type = 'RENT CURRENT' AND (payable_status NOT IN (1,2,3) OR payable_status IS NULL) THEN amount_payable_landlord ELSE 0 END) AS non_payable_amount,
+                COUNT(DISTINCT CASE WHEN entry_type = 'RENT CURRENT' AND payable_status IN (1,2,3) THEN unit_id END) AS payable_units,
+                COUNT(DISTINCT CASE WHEN entry_type = 'RENT CURRENT' THEN unit_id END) AS total_units
+            ")
+            ->first();
+
+        $summary->payable_amount     = $stats->payable_amount     ?? 0;
+        $summary->non_payable_amount = $stats->non_payable_amount ?? 0;
+        $summary->payable_units      = $stats->payable_units      ?? 0;
+        $summary->total_units        = $stats->total_units        ?? 0;
+        $summary->save();
+
+        return [
+            'payable_amount'     => number_format((float) ($stats->payable_amount ?? 0), 2),
+            'non_payable_amount' => number_format((float) ($stats->non_payable_amount ?? 0), 2),
+            'payable_units'      => (int) ($stats->payable_units ?? 0),
+            'total_units'        => (int) ($stats->total_units ?? 0),
+        ];
     }
 
     /**
@@ -888,7 +968,7 @@ class ClientReturnsController extends Controller
                                   AND older.date_due < ?::date
                                   AND older.current_status_id = 1
                                   AND older.debtor_type_id = '2'
-                            ) THEN 2
+                            ) THEN 1
                             ELSE 0
                         END AS pay_status
                     FROM cb_returns_clients rc2

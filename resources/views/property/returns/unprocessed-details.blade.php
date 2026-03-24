@@ -77,7 +77,13 @@
                                 background-color: #fff;
                             }
                         </style>
-                        <div id="financial-summary" class="row mb-1 gx-2">
+                        <div id="financial-summary" class="row mb-1 gx-2"
+                            data-paid-status="{{ $return->paid_status }}"
+                            data-approved-status="{{ $return->approved_status }}"
+                            data-enc-id="{{ encrypt($return->id) }}"
+                            data-units-url="{{ route('ajax.returns.units', encrypt($return->id)) }}"
+                            data-summary-base="{{ url('/ajax/returns') }}"
+                            data-recovery-url="{{ url('/ajax/returns/lines') }}">
                             <div class="col-md-6">
                                 <table class="table table-borderless table-sm mb-0 summary-table" style="font-size:0.72rem;">
                                     <tbody id="credits-debits-body">
@@ -243,6 +249,8 @@
                                                 <th class="text-end">VAT</th>
                                                 <th class="text-end">Pay %</th>
                                                 <th>Period</th>
+                                                <th class="text-center">Payable?</th>
+                                                <th></th>
                                             </tr>
                                         </thead>
                                         <tbody></tbody>
@@ -310,6 +318,44 @@
     </div>
 </div>
 
+<!-- Recovery Modal -->
+<div class="modal fade" id="recoveryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2" style="background:#7366ff;color:#fff;">
+                <h6 class="modal-title d-flex align-items-center gap-1 mb-0" style="font-size:0.85rem;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">local_police</span>
+                    Mark Recovery
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="mb-2" style="font-size:0.78rem;">
+                    <strong id="rec-tenant-name"></strong>
+                    <span class="text-muted ms-2" id="rec-unit-code" style="font-size:0.72rem;"></span>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:0.78rem;font-weight:600;">Recovery Reason <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm" id="rec-reason-select">
+                        <option value="">-- Select Reason --</option>
+                        <option value="34">Paid Vacant</option>
+                        <option value="35">Sat Deposit</option>
+                        <option value="36">Absconded</option>
+                        <option value="37">Paid Owner</option>
+                    </select>
+                </div>
+                <div id="rec-feedback" class="alert d-none py-1" style="font-size:0.75rem;"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="rec-save-btn" style="background:#7366ff;border-color:#7366ff;">
+                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">save</span> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Approve Modal -->
 <div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -370,9 +416,14 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
-        var summaryBaseUrl = '{{ url("/ajax/returns") }}';
-        var currentEncId = '{{ encrypt($return->id) }}';
+        var $meta = $('#financial-summary');
+        var summaryBaseUrl = $meta.data('summary-base');
+        var currentEncId = $meta.data('enc-id');
+        var currentUnitsUrl = $meta.data('units-url');
+        var recoveryBaseUrl = $meta.data('recovery-url');
+        var csrfToken = $('meta[name="csrf-token"]').attr('content');
         var approvalsLoaded = false;
+        var isEditable = ($meta.data('paid-status') == 0 && $meta.data('approved-status') == 0);
 
         var table = $('#details-table').DataTable({
             data: [],
@@ -437,6 +488,35 @@
                 },
                 {
                     data: 'return_period'
+                },
+                {
+                    data: 'payable_status',
+                    className: 'text-center',
+                    orderable: false,
+                    render: function(d, t, r) {
+                        var payable = (d === 1 || d === 2 || d === 3);
+                        if (payable) {
+                            return '<span class="material-symbols-outlined text-success" style="font-size:14px;vertical-align:middle;" title="Payable">check_circle</span>';
+                        }
+                        var reason = r.payable_status_reason ? '<br><small class="text-muted" style="font-size:0.62rem;">' + escapeAttr(r.payable_status_reason) + '</small>' : '';
+                        return '<span class="material-symbols-outlined text-danger" style="font-size:14px;vertical-align:middle;" title="Not Payable">cancel</span>' + reason;
+                    }
+                },
+                {
+                    data: 'encrypted_id',
+                    className: 'text-center',
+                    orderable: false,
+                    searchable: false,
+                    render: function(d, t, r) {
+                        if (!isEditable || r.dr_cr !== 'CR') return '';
+                        return '<span class="material-symbols-outlined btn-recovery" ' +
+                            'style="font-size:16px;cursor:pointer;vertical-align:middle;color:#0d6efd;" ' +
+                            'data-line-id="' + d + '" ' +
+                            'data-tenant="' + escapeAttr(r.tenant_name) + '" ' +
+                            'data-unit="' + escapeAttr(r.unit_code) + '" ' +
+                            'data-payable-status="' + (r.payable_status || '') + '" ' +
+                            'title="Mark Recovery">edit_square</span>';
+                    }
                 }
             ],
             paging: true,
@@ -451,6 +531,7 @@
         });
 
         function loadDetailLines(url) {
+            currentUnitsUrl = url;
             $.ajax({
                 url: url,
                 type: 'GET',
@@ -507,6 +588,9 @@
             $('#val-payable-amount').text(r.payable_amount || '0.00');
             $('#val-non-payable-amount').text(r.non_payable_amount || '0.00');
 
+            // Update edit-ability flag for Recovery modal
+            isEditable = (r.paid_status == 0 && r.approved_status == 0);
+
             var remarks = (r.remarks || '').trim();
             if (remarks) {
                 $('#val-remarks').text('Remarks: ' + remarks);
@@ -519,7 +603,7 @@
         }
 
         // Initial load of detail lines
-        loadDetailLines('{{ route("ajax.returns.units", encrypt($return->id)) }}');
+        loadDetailLines(currentUnitsUrl);;
 
         // Tab click handler
         $('#return-tabs').on('click', 'a.nav-link', function(e) {
@@ -716,7 +800,7 @@
                 method: 'POST',
                 data: {
                     comments: comments,
-                    _token: '{{ csrf_token() }}'
+                    _token: csrfToken
                 },
                 success: function(response) {
                     if (response.success) {
@@ -765,7 +849,7 @@
                 data: {
                     reason: reason,
                     return_to_level: returnToLevel,
-                    _token: '{{ csrf_token() }}'
+                    _token: csrfToken
                 },
                 success: function(response) {
                     if (response.success) {
@@ -811,6 +895,76 @@
             div.textContent = text || '';
             return div.innerHTML;
         }
+
+        function escapeAttr(text) {
+            return (text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // RECOVERY MODAL
+        // ═══════════════════════════════════════════════════════════════
+        var currentRecoveryLineId = null;
+
+        $(document).on('click', '.btn-recovery', function() {
+            currentRecoveryLineId = $(this).data('line-id');
+            var existingStatus = $(this).data('payable-status');
+            $('#rec-tenant-name').text($(this).data('tenant'));
+            $('#rec-unit-code').text($(this).data('unit'));
+            var validStatuses = [34, 35, 36, 37];
+            $('#rec-reason-select').val(
+                existingStatus && validStatuses.includes(parseInt(existingStatus)) ? existingStatus : ''
+            );
+            $('#rec-save-btn').prop('disabled', false).html(
+                '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">save</span> Save'
+            );
+            $('#rec-feedback').addClass('d-none').text('');
+            $('#recoveryModal').modal('show');
+        });
+
+        $('#rec-save-btn').on('click', function() {
+            var status = $('#rec-reason-select').val();
+            if (!status) {
+                $('#rec-feedback').removeClass('d-none alert-success').addClass('alert-warning').text('Please select a recovery reason.');
+                return;
+            }
+            var $btn = $(this).prop('disabled', true).html(
+                '<span class="spinner-border spinner-border-sm me-1"></span> Saving...'
+            );
+            $('#rec-feedback').addClass('d-none');
+
+            $.ajax({
+                url: recoveryBaseUrl + '/' + encodeURIComponent(currentRecoveryLineId) + '/recovery',
+                method: 'POST',
+                data: {
+                    payable_status: status,
+                    _token: csrfToken
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#recoveryModal').modal('hide');
+                        // Refresh detail lines table
+                        loadDetailLines(currentUnitsUrl);
+                        // Update threshold summary panel
+                        var s = response.summary;
+                        $('#val-payable-units').text(s.payable_units + ' / ' + s.total_units);
+                        $('#val-payable-amount').text(s.payable_amount);
+                        $('#val-non-payable-amount').text(s.non_payable_amount);
+                    } else {
+                        $('#rec-feedback').removeClass('d-none alert-warning').addClass('alert-danger').text(response.message || 'Failed to save.');
+                        $btn.prop('disabled', false).html(
+                            '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">save</span> Save'
+                        );
+                    }
+                },
+                error: function(xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'An error occurred.';
+                    $('#rec-feedback').removeClass('d-none alert-warning').addClass('alert-danger').text(msg);
+                    $btn.prop('disabled', false).html(
+                        '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">save</span> Save'
+                    );
+                }
+            });
+        });
     });
 </script>
 @endsection
