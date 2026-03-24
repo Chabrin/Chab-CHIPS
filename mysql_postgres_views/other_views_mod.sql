@@ -28,6 +28,11 @@
 --   _017  vw_chofficers_to_josya_users_017
 --   _018  vw_sys_pm_service_agreements_018
 --   _019  vw_cb_landlord_account_019
+--   _020  vw_cb_money_recoveries_020
+--   _021  vw_cb_payment_vouchers_headers_new_021
+--   _022  vw_cb_payment_vouchers_headers_old_022
+--   _023  vw_cb_payment_vouchers_lines_new_023
+--   _024  vw_cb_payment_vouchers_lines_old_024
 -- ============================================================================
 
 USE CHABRINS;
@@ -810,5 +815,211 @@ SELECT
     l.property_id                                       AS property_id
 FROM CHABRINS.dbo.CHLACC l
 WHERE l.LORDID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _020  vw_cb_money_recoveries_020  (CHRACT -> cb_money_recoveries, 221,468 rows)
+-- ============================================================================
+-- Returns account transactions: both CREDIT entries (rent/charges collected for
+-- landlord) and DEBIT/DEDUCTION entries (recoveries deducted from landlord:
+-- SAT DEPOSIT, PAID OWNER, ABSCONDED, OVERPAID, PAID VACANT).
+-- TRACLASS = CR (218,213 credits) | DR (3,255 deductions/recoveries).
+-- Links to cb_returns_summary via return_id (CHRHMS.RETURNID = CHRACT.RETNPRD).
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_money_recoveries_020 AS
+SELECT
+    r.recovery_id                                       AS id,
+    r.GTTCNUM                                           AS transaction_number,
+    r.property_id                                       AS property_id,
+    r.client_id                                         AS client_id,
+    r.unit_id                                           AS unit_id,
+    r.tenant_id                                         AS tenant_id,
+    r.return_id                                         AS return_id,
+    r.zone_id                                           AS zone_id,
+    r.field_officer_id                                  AS field_officer_id,
+    r.zone_supervisor_id                                AS zone_supervisor_id,
+    r.zone_manager_id                                   AS zone_manager_id,
+    r.UNITNO                                            AS unit_code,
+    r.ACYEAR                                            AS year,
+    r.ACMNTH                                            AS month,
+    r.RETNPRD                                           AS return_period,
+    r.RTYPE                                             AS return_type,
+    r.TENNAME                                           AS tenant_name,
+    r.TENSTAT                                           AS tenant_status,
+    r.TRATYPE                                           AS transaction_type,
+    r.TRACATEG                                          AS transaction_category,
+    r.TRACLASS                                          AS transaction_class,
+    r.TRASRC                                            AS transaction_source,
+    r.PYMOD                                             AS payment_mode,
+    r.TRANSREF                                          AS transaction_ref,
+    r.TRANSDAT                                          AS transaction_date,
+    r.TRANSDESC                                         AS transaction_description,
+    ISNULL(r.AMTPAYBL, 0)                               AS amount_payable,
+    ISNULL(r.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(r.AMTCR, 0)                                  AS credit_amount,
+    r.RPERIOD                                           AS return_period_num,
+    r.PPERIOD                                           AS payment_period_num,
+    ISNULL(r.PRRATE, 0)                                 AS prorate_rate,
+    ISNULL(r.AMTRETRN, 0)                               AS amount_returned,
+    ISNULL(r.AMTBAL, 0)                                 AS balance_amount,
+    CAST(CASE WHEN r.VATABL = ''Yes'' THEN 1 ELSE 0 END AS BIT)  AS is_vatable,
+    CAST(CASE WHEN r.COMMBL = ''Yes'' THEN 1 ELSE 0 END AS BIT)  AS is_commissionable,
+    r.DEDPNT2                                           AS deduction_point_2,
+    r.PLSTATUS                                          AS processing_status,
+    r.RSTATUS                                           AS record_status,
+    CAST(ISNULL(r.LOCKD, 0) AS BIT)                     AS is_locked
+FROM CHABRINS.dbo.CHRACT r
+WHERE r.recovery_id IS NOT NULL;
+';
+
+-- ============================================================================
+-- _021  vw_cb_payment_vouchers_headers_new_021  (CHPVHH -> cb_payment_vouchers_headers_new, 49,412 rows)
+-- ============================================================================
+-- Current/active landlord payment voucher headers (2024-2026).
+-- PVNO links to CHRHMS.VOUCHERNO. VENDORID is landlord code (LAN-xxxxx).
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_payment_vouchers_headers_new_021 AS
+SELECT
+    h.PVSNO                                             AS voucher_sequence,
+    h.PVNO                                              AS voucher_number,
+    h.PYEAR                                             AS year,
+    h.PMONTH                                            AS month,
+    h.PVDATE                                            AS voucher_date,
+    h.PVDESC                                            AS description,
+    h.VENDORID                                          AS vendor_id,
+    h.VENDNAM                                           AS vendor_name,
+    h.VENDTYP                                           AS vendor_type,
+    ISNULL(h.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(h.AMTCR, 0)                                  AS credit_amount,
+    ISNULL(h.PVENTR, 0)                                 AS entry_count,
+    h.PVSTAT                                            AS voucher_status,
+    ISNULL(h.STDEL, 0)                                  AS is_deleted,
+    h.PREPBY                                            AS prepared_by,
+    h.CHECKSTT                                          AS checked_status,
+    h.CHECKBY                                           AS checked_by,
+    h.AUTHSTT                                           AS authorized_status,
+    h.AUTHBY                                            AS authorized_by,
+    ISNULL(h.STPRINT, 0)                                AS is_printed,
+    h.CHECKDAT                                          AS checked_date,
+    h.AUTHDAT                                           AS authorized_date
+FROM CHABRINS.dbo.CHPVHH h
+WHERE h.PVNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- _022  vw_cb_payment_vouchers_headers_old_022  (CHPVH -> cb_payment_vouchers_headers_old, 1,777 rows)
+-- ============================================================================
+-- Legacy payment voucher headers (2009-2017). No overlap with CHPVHH.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_payment_vouchers_headers_old_022 AS
+SELECT
+    h.YEARR                                             AS year,
+    h.MONTHH                                            AS month,
+    h.ENTDAT                                            AS entry_date,
+    h.PVSNO                                             AS voucher_sequence,
+    h.PVNO                                              AS voucher_number,
+    h.PVDESC                                            AS description,
+    h.BANKN                                             AS bank_name,
+    h.BANKB                                             AS bank_branch,
+    h.ACCNO                                             AS account_number,
+    h.PAYEEN                                            AS payee_name,
+    ISNULL(h.AMTFIG, 0)                                 AS amount_figure,
+    h.PVSTAT                                            AS voucher_status,
+    h.CHEQUE                                            AS cheque_number,
+    ISNULL(h.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(h.AMTCR, 0)                                  AS credit_amount,
+    ISNULL(h.AMTVAT, 0)                                 AS vat_amount,
+    ISNULL(h.AMTNET, 0)                                 AS net_amount,
+    ISNULL(h.STPAID, 0)                                 AS is_paid,
+    ISNULL(h.STPRINT, 0)                                AS is_printed,
+    ISNULL(h.STDEL, 0)                                  AS is_deleted,
+    h.PREPBY                                            AS prepared_by,
+    h.PREPDAT                                           AS prepared_date,
+    h.CHECKBY                                           AS checked_by,
+    h.CHECKDAT                                          AS checked_date,
+    h.AUTHBY                                            AS authorized_by,
+    h.AUTHDAT                                           AS authorized_date,
+    ISNULL(h.CHECKSTT, 0)                               AS checked_status,
+    ISNULL(h.AUTHSTT, 0)                                AS authorized_status,
+    h.ENTCNT                                            AS entry_count
+FROM CHABRINS.dbo.CHPVH h
+WHERE h.PVNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- _023  vw_cb_payment_vouchers_lines_new_023  (CHPVDD -> cb_payment_vouchers_lines_new, 81,773 rows)
+-- ============================================================================
+-- Current/active payment voucher detail lines (2024-2026).
+-- Links to cb_payment_vouchers_headers_new via voucher_number.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_payment_vouchers_lines_new_023 AS
+SELECT
+    d.PVNO                                              AS voucher_number,
+    d.ENTRYNO                                           AS entry_number,
+    d.ENYEAR                                            AS entry_year,
+    d.ENMNTH                                            AS entry_month,
+    d.ACCNUM                                            AS account_number,
+    d.ACCBNK                                            AS account_bank,
+    d.CHQNO                                             AS cheque_number,
+    d.CHQTYP                                            AS cheque_type,
+    d.BLOCKID                                           AS property_code,
+    d.DRCR                                              AS dr_cr,
+    d.ENTID                                             AS entry_id,
+    d.ENTDESC                                           AS entry_description,
+    d.PVAPPR                                            AS is_approved,
+    ISNULL(d.AMOUNT, 0)                                 AS amount,
+    ISNULL(d.INRATE, 0)                                 AS interest_rate,
+    d.GLACC                                             AS gl_account,
+    d.GTTCNUM                                           AS transaction_number,
+    d.PAYEEN                                            AS payee_name,
+    d.CRACC                                             AS credit_account,
+    d.CRMNTH                                            AS credit_month,
+    d.CRYEAR                                            AS credit_year,
+    d.SRCTRA                                            AS source_transaction,
+    ISNULL(d.CHQPSTD, 0)                                AS cheque_posted,
+    ISNULL(d.CHQOPEN, 0)                                AS cheque_open,
+    d.CHQDATE                                           AS cheque_date,
+    d.ENDDATE                                           AS end_date,
+    d.BLKDSC                                            AS property_description,
+    d.UNLCKBY                                           AS unlocked_by,
+    d.UNLCKDAT                                          AS unlocked_date,
+    d.UNLCKRS                                           AS unlock_reason
+FROM CHABRINS.dbo.CHPVDD d
+WHERE d.PVNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- _024  vw_cb_payment_vouchers_lines_old_024  (CHPVD -> cb_payment_vouchers_lines_old, 1,906 rows)
+-- ============================================================================
+-- Legacy payment voucher detail lines (2009-2017).
+-- Links to cb_payment_vouchers_headers_old via voucher_number.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_payment_vouchers_lines_old_024 AS
+SELECT
+    d.PVNO                                              AS voucher_number,
+    d.ENTNUM                                            AS entry_number,
+    d.GTTCNUM                                           AS transaction_number,
+    d.ENTRYID                                           AS entry_id,
+    d.ENTDES                                            AS entry_description,
+    d.ENTDAT                                            AS entry_date,
+    d.ENTPART                                           AS entry_particulars,
+    d.PAYEEN                                            AS payee_name,
+    d.PAYEEID                                           AS payee_id,
+    d.PAYEETY                                           AS payee_type,
+    ISNULL(d.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(d.AMTCR, 0)                                  AS credit_amount,
+    ISNULL(d.AMTVAT, 0)                                 AS vat_amount,
+    ISNULL(d.AMTNET, 0)                                 AS net_amount,
+    d.CHEQUENO                                          AS cheque_number,
+    d.SRCACC                                            AS source_account,
+    d.SRCACN                                            AS source_account_name,
+    d.BLOCKID                                           AS property_code,
+    d.UNITNO                                            AS unit_code,
+    d.BANKACC                                           AS bank_account,
+    ISNULL(d.STPOST, 0)                                 AS is_posted,
+    d.PYEAR                                             AS payment_year,
+    d.PMONTH                                            AS payment_month
+FROM CHABRINS.dbo.CHPVD d
+WHERE d.PVNO IS NOT NULL;
 ';
 

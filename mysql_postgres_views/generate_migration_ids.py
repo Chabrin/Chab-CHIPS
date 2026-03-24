@@ -46,6 +46,7 @@ Tables modified -- Primary IDs (views _001 to _10 + FK lookup tables):
   CHBCTH      -> voucher_id      (ORDER BY BTCHID)                    -- FK: payment voucher headers
   CHCHQ       -> cheque_id       (ORDER BY CHQNO)                     -- FK: cheque books
   CHRHMS      -> return_id       (ORDER BY RETURNID)                  -- FK: returns headers
+  CHRACT      -> recovery_id     (ORDER BY GTTCNUM, BLOCKID, UNITNO)  -- _020 cb_money_recoveries
 
 Lookup tables created:
   _mig_zones       (zone_id, bloc)                -- from DISTINCT CHBLOCKS.BLOC
@@ -80,6 +81,8 @@ FK columns stamped (57 operations across 22 tables):
   CHGLAC      : property_id, unit_id, tenant_id, account_id
   CHCBDE      : bank_id
   CHLACC      : client_id, property_id
+  CHRACT      : property_id, client_id, zone_id, field_officer_id,
+                zone_supervisor_id, zone_manager_id, unit_id, tenant_id, return_id
 """
 
 import pyodbc
@@ -206,6 +209,13 @@ TABLES = [
         'order_by': 'RETURNID',
         'where':    'RETURNID IS NOT NULL',
         'desc':     'FK -- returns master/headers',
+    },
+    {
+        'table':    'CHRACT',
+        'id_col':   'recovery_id',
+        'order_by': 'GTTCNUM, BLOCKID, UNITNO',
+        'where':    "GTTCNUM IS NOT NULL AND RTRIM(LTRIM(GTTCNUM)) <> ''",
+        'desc':     '_020 -- cb_money_recoveries (returns account transactions)',
     },
     # -- Payment transaction tables (_011, _012) --------------------------------
     {
@@ -1055,6 +1065,28 @@ def stamp_all_fk_columns(conn):
         WHERE ref.[bank_id] IS NOT NULL
     """, 'LEFT(BANKACC,2) -> CHBANK.BANKCODE')
 
+    # --- CHRACT (returns account transactions, 221K rows) --------------------
+    _stamp_block_chain('CHRACT', 'BLOCKID', with_officers=True)
+    _stamp_unit('CHRACT', 'BLOCKID')
+    _stamp_tenant('CHRACT', 'TENNAME', 'BLOCKID')
+
+    # CHRACT.client_id <- CHLRDS via LORDID (CHRACT has LAN- prefix)
+    _stamp('CHRACT', ['client_id'], """
+        UPDATE t SET t.[client_id] = ref.[client_id]
+        FROM [CHRACT] t
+        INNER JOIN [CHLRDS] ref
+          ON RTRIM(LTRIM(ref.LORDID)) = REPLACE(RTRIM(LTRIM(t.LORDID)), 'LAN-', '')
+        WHERE ref.[client_id] IS NOT NULL
+    """, 'LORDID (strip LAN-) -> CHLRDS')
+
+    # CHRACT.return_id <- CHRHMS via RETNPRD -> RETURNID
+    _stamp('CHRACT', ['return_id'], """
+        UPDATE t SET t.[return_id] = ref.[return_id]
+        FROM [CHRACT] t
+        INNER JOIN [CHRHMS] ref ON ref.RETURNID = t.RETNPRD
+        WHERE ref.[return_id] IS NOT NULL
+    """, 'RETNPRD -> CHRHMS.RETURNID')
+
     # --- CHLACC (landlord account transactions) -------------------------------
     _stamp('CHLACC', ['client_id'], """
         UPDATE t SET t.[client_id] = ref.[client_id]
@@ -1165,6 +1197,15 @@ def print_fk_summary(conn):
         ('CHCBDE',    'bank_id'),
         ('CHLACC',    'client_id'),
         ('CHLACC',    'property_id'),
+        ('CHRACT',    'property_id'),
+        ('CHRACT',    'client_id'),
+        ('CHRACT',    'zone_id'),
+        ('CHRACT',    'field_officer_id'),
+        ('CHRACT',    'zone_supervisor_id'),
+        ('CHRACT',    'zone_manager_id'),
+        ('CHRACT',    'unit_id'),
+        ('CHRACT',    'tenant_id'),
+        ('CHRACT',    'return_id'),
     ]
 
     for tbl, col in fk_checks:

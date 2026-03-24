@@ -1495,6 +1495,7 @@ GO
     34. vw_cb_returns_clients_016                      (CHRTXS → cb_returns_clients)
     35. vw_chofficers_to_josya_users_017               (CHOFFICERS → josya_users)
     36. vw_cb_landlord_account_019                     (CHLACC → cb_landlord_account)
+    37. vw_cb_money_recoveries_020                     (CHRACT → cb_money_recoveries)
 
 ================================================================================
 */
@@ -1718,4 +1719,60 @@ SELECT
     l.property_id                                       AS property_id
 FROM CHABRINS.dbo.CHLACC l
 WHERE l.LORDID IS NOT NULL;
+GO
+
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 37. vw_cb_money_recoveries_020  (CHRACT → cb_money_recoveries, 221,468 rows)
+-- ────────────────────────────────────────────────────────────────────────
+-- Returns account transactions: both CREDIT entries (rent/charges collected
+-- for landlord) and DEBIT/DEDUCTION entries (recoveries deducted from
+-- landlord: SAT DEPOSIT, PAID OWNER, ABSCONDED, OVERPAID, PAID VACANT).
+-- TRACLASS = CR (218,213 credits) | DR (3,255 deductions/recoveries).
+-- Links to cb_returns_summary via return_id (CHRHMS.RETURNID = CHRACT.RETNPRD).
+
+CREATE OR ALTER VIEW vw_cb_money_recoveries_020 AS
+SELECT
+    r.recovery_id                                       AS id,
+    r.GTTCNUM                                           AS transaction_number,
+    r.property_id                                       AS property_id,
+    r.client_id                                         AS client_id,
+    r.unit_id                                           AS unit_id,
+    r.tenant_id                                         AS tenant_id,
+    r.return_id                                         AS return_id,
+    r.zone_id                                           AS zone_id,
+    r.field_officer_id                                  AS field_officer_id,
+    r.zone_supervisor_id                                AS zone_supervisor_id,
+    r.zone_manager_id                                   AS zone_manager_id,
+    r.UNITNO                                            AS unit_code,
+    r.ACYEAR                                            AS year,
+    r.ACMNTH                                            AS month,
+    r.RETNPRD                                           AS return_period,
+    r.RTYPE                                             AS return_type,
+    r.TENNAME                                           AS tenant_name,
+    r.TENSTAT                                           AS tenant_status,
+    r.TRATYPE                                           AS transaction_type,
+    r.TRACATEG                                          AS transaction_category,
+    r.TRACLASS                                          AS transaction_class,
+    r.TRASRC                                            AS transaction_source,
+    r.PYMOD                                             AS payment_mode,
+    r.TRANSREF                                          AS transaction_ref,
+    r.TRANSDAT                                          AS transaction_date,
+    r.TRANSDESC                                         AS transaction_description,
+    ISNULL(r.AMTPAYBL, 0)                               AS amount_payable,
+    ISNULL(r.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(r.AMTCR, 0)                                  AS credit_amount,
+    r.RPERIOD                                           AS return_period_num,
+    r.PPERIOD                                           AS payment_period_num,
+    ISNULL(r.PRRATE, 0)                                 AS prorate_rate,
+    ISNULL(r.AMTRETRN, 0)                               AS amount_returned,
+    ISNULL(r.AMTBAL, 0)                                 AS balance_amount,
+    CAST(CASE WHEN r.VATABL = 'Yes' THEN 1 ELSE 0 END AS BIT)  AS is_vatable,
+    CAST(CASE WHEN r.COMMBL = 'Yes' THEN 1 ELSE 0 END AS BIT)  AS is_commissionable,
+    r.DEDPNT2                                           AS deduction_point_2,
+    r.PLSTATUS                                          AS processing_status,
+    r.RSTATUS                                           AS record_status,
+    CAST(ISNULL(r.LOCKD, 0) AS BIT)                     AS is_locked
+FROM CHABRINS.dbo.CHRACT r
+WHERE r.recovery_id IS NOT NULL;
 GO
