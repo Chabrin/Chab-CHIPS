@@ -77,6 +77,22 @@ trait HandlesReturnApprovalWorkflow
             // Record workflow activity
             $this->recordWorkflowActivity($batch, $approvedBy, $comments);
 
+            // Update cb_returns_summary to Approved (1)
+            $propertyRef = DB::table('sys_pm_properties')
+                ->where('id', $batch->property_id)
+                ->value('reference_number');
+            if ($propertyRef) {
+                DB::table('cb_returns_summary')
+                    ->where('property_code', $propertyRef)
+                    ->where('return_period', $batchId)
+                    ->whereIn('approved_status', [0, 2])
+                    ->update([
+                        'approved_status' => 1,
+                        'approved_by' => DB::table('josya_users')->where('id', $approvedBy)->value('name'),
+                        'approved_date' => now()
+                    ]);
+            }
+
             Log::info('Final approval workflow completed successfully', [
                 'batch_id' => $batch->id,
                 'returns_processed' => $processedCount
