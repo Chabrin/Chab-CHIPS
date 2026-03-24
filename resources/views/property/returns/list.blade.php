@@ -37,15 +37,24 @@
                                     <option value="12" {{ $currentMonth == 12 ? 'selected' : '' }}>December</option>
                                 </select>
                             </div>
-                            <div class="col-md-3 d-flex gap-2 align-items-end">
+                            <div class="col-md-2 d-flex gap-2 align-items-end">
                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
                                     <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
                                     <span class="material-symbols-outlined" id="search_icon">search</span>
                                     <span class="ms-1">Search</span>
                                 </button>
                             </div>
-                            <div class="col-md-5 d-flex justify-content-end align-items-end">
-                                <small class="text-muted" id="result_info" style="display:none;">Found <strong id="result_count">0</strong> records</small>
+                            <div class="col d-flex justify-content-end align-items-end">
+                                <small class="text-muted me-3" id="result_info" style="display:none;">Found <strong id="result_count">0</strong> records</small>
+                                <div>
+                                    <label for="status_filter" class="form-label mb-1">Approval Status</label>
+                                    <select class="form-control form-control-sm" id="status_filter">
+                                        <option value="">All</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="InProgress">InProgress</option>
+                                        <option value="Approved">Approved</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -194,6 +203,18 @@
                 }
             });
         }
+
+        // Custom search for status filter on column 9
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+            var selected = $('#status_filter').val();
+            if (!selected) return true;
+            var cellText = $(data[9]).text() || data[9];
+            return cellText === selected;
+        });
+
+        $('#status_filter').on('change', function() {
+            table.draw();
+        });
 
         $('#search_btn').on('click', loadData);
         loadData();
