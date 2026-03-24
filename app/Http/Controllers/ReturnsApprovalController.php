@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\ClientReturnsBatch;
 use App\Models\ReturnSummary;
+use App\Models\PaymentVoucherHeader;
+use App\Models\PaymentVoucherLine;
+use App\Models\ReturnClient;
 use App\Traits\HandlesApprovalWorkflow;
 use App\Traits\HandlesReturnApprovalWorkflow;
 use App\Jobs\ProcessReturnsFinalApprovalJob;
@@ -653,7 +656,10 @@ class ReturnsApprovalController extends Controller
                             'approved_date' => now()
                         ]);
 
-                    $message = 'Return approved successfully (Final Approval).';
+                    // Generate payment voucher for the approved return
+                    $voucherNumber = $this->generatePaymentVoucher($returnSummary);
+
+                    $message = 'Return approved successfully (Final Approval). Voucher: ' . $voucherNumber;
                 } else {
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update(['current_level' => $itemApprover->approver_level + 1, 'status' => 'InProgress', 'updated_at' => now()]);
@@ -984,5 +990,90 @@ class ReturnsApprovalController extends Controller
                 'message' => 'Failed to reject batch'
             ], 500);
         }
+    }
+
+    /**
+     * Generate a payment voucher for an approved return summary.
+     *
+     * Creates a header in cb_payment_vouchers_headers_new and
+     * one line per return-client entry in cb_payment_vouchers_lines_new.
+     * Updates cb_returns_summary.voucher_number.
+     *
+     * Voucher number format: PV{YYYY}{MM}{sequence}
+     */
+    protected function generatePaymentVoucher(ReturnSummary $return): string
+    {
+        $year = (int) $return->year;
+        $month = (int) $return->month;
+
+        // Next global sequence
+        $maxSeq = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
+        $nextSeq = $maxSeq + 1;
+
+        $voucherNumber = 'PV' . $year . str_pad($month, 2, '0', STR_PAD_LEFT) . $nextSeq;
+
+        // Resolve landlord name from cb_landlord_account
+        $landlordName = DB::table('cb_landlord_account')
+            ->where('landlord_code', $return->landlord_code)
+            ->value('landlord_name') ?? $return->landlord_code;
+
+        // Create voucher header
+        $header = PaymentVoucherHeader::create([
+            'voucher_sequence' => $nextSeq,
+            'voucher_number'   => $voucherNumber,
+            'year'             => $year,
+            'month'            => $month,
+            'voucher_date'     => now(),
+            'description'      => 'Return Payment ' . str_pad($month, 2, '0', STR_PAD_LEFT) . '/' . $year,
+            'vendor_id'        => $return->landlord_code,
+            'vendor_name'      => $landlordName,
+            'vendor_type'      => 'Landlord',
+            'debit_amount'     => $return->net_amount ?? 0,
+            'credit_amount'    => 0,
+            'entry_count'      => 0,
+            'voucher_status'   => 'Pending',
+            'is_deleted'       => 0,
+            'prepared_by'      => auth()->user()->name,
+            'is_printed'       => 0,
+        ]);
+
+        // Create voucher lines from return client entries
+        $lines = ReturnClient::where('return_code', $return->return_code)->get();
+        $entryNo = 0;
+
+        foreach ($lines as $line) {
+            $entryNo++;
+            PaymentVoucherLine::create([
+                'voucher_number'       => $voucherNumber,
+                'entry_number'         => $entryNo,
+                'entry_year'           => $year,
+                'entry_month'          => $month,
+                'property_code'        => $line->property_code,
+                'dr_cr'                => 'DR',
+                'entry_id'             => $line->transaction_number,
+                'entry_description'    => $line->entry_description ?? $line->narration,
+                'is_approved'          => 'Yes',
+                'amount'               => abs($line->net_amount ?? 0),
+                'gl_account'           => $return->landlord_code,
+                'payee_name'           => $landlordName,
+                'property_description' => $line->unit_code,
+            ]);
+        }
+
+        // Update header with line count
+        $header->update(['entry_count' => $entryNo]);
+
+        // Stamp voucher number on the return summary
+        $return->update(['voucher_number' => $voucherNumber]);
+
+        Log::info('Payment voucher generated', [
+            'voucher_number' => $voucherNumber,
+            'return_code'    => $return->return_code,
+            'landlord'       => $return->landlord_code,
+            'net_amount'     => $return->net_amount,
+            'lines'          => $entryNo,
+        ]);
+
+        return $voucherNumber;
     }
 }

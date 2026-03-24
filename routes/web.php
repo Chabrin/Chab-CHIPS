@@ -619,6 +619,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
     Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
 
+    // Payment Vouchers
+    Route::get('/payment/vouchers', [App\Http\Controllers\PaymentVouchersController::class, 'index'])->name('payment.vouchers.index');
+    Route::get('/ajax/payment/vouchers/data', [App\Http\Controllers\PaymentVouchersController::class, 'getVouchersData'])->name('ajax.payment.vouchers.data');
+    Route::get('/payment/vouchers/{id}/details', [App\Http\Controllers\PaymentVouchersController::class, 'show'])->name('payment.vouchers.details');
+    Route::get('/ajax/payment/vouchers/{id}/lines', [App\Http\Controllers\PaymentVouchersController::class, 'getVoucherLines'])->name('ajax.payment.vouchers.lines');
+
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
 
