@@ -1527,7 +1527,14 @@ class ClientReturnsController extends Controller
             $pdf->setPaper('A4', 'landscape');
 
             $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
-            return $pdf->download($fileName);
+            $token = request()->query('download_token');
+            $response = $pdf->download($fileName);
+            if ($token) {
+                $response->headers->setCookie(
+                    \Symfony\Component\HttpFoundation\Cookie::create('download_complete_' . $token, '1', time() + 60, '/', null, false, false)
+                );
+            }
+            return $response;
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error generating return PDF: ' . $e->getMessage());
@@ -1616,6 +1623,10 @@ class ClientReturnsController extends Controller
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             header('Content-Disposition: attachment;filename="' . $filename . '"');
             header('Cache-Control: max-age=0');
+            $dlToken = request()->query('download_token');
+            if ($dlToken) {
+                header('Set-Cookie: download_complete_' . $dlToken . '=1; Path=/; Max-Age=60; SameSite=Lax');
+            }
 
             $writer->save('php://output');
             exit;

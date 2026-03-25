@@ -159,12 +159,12 @@
                         <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
                             <h6 class="mb-0" style="font-size:0.8rem;">Detail Lines</h6>
                             <div class="d-flex gap-2">
-                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center" target="_blank">
+                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
                                     <span class="material-symbols-outlined" style="font-size:14px;">download</span>
                                     <span class="ms-1" id="excel-btn-text" style="font-size:0.72rem;">Excel</span>
                                     <span id="excel-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
                                 </a>
-                                <a href="{{ route('processed.returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-danger btn-sm py-0 px-2 d-flex align-items-center" target="_blank">
+                                <a href="{{ route('processed.returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-primary btn-sm py-0 px-2 d-flex align-items-center">
                                     <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
                                     <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
                                     <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
@@ -336,24 +336,39 @@
             $('#pdf-link').attr('href', r.pdf_url);
         }
 
-        // Excel spinner
-        $('#excel-link').on('click', function() {
-            $('#excel-spinner').removeClass('d-none');
-            $('#excel-btn-text').text('Downloading...');
+        // Download with spinner: polls a cookie set by server when file is ready
+        function triggerDownload(url, spinnerId, btnTextId, loadingText, originalText) {
+            var token = Math.random().toString(36).substr(2, 9);
+            $('#' + spinnerId).removeClass('d-none');
+            $('#' + btnTextId).text(loadingText);
+            window.location.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'download_token=' + token;
+            var cookieName = 'download_complete_' + token;
+            var interval = setInterval(function() {
+                if (document.cookie.indexOf(cookieName + '=1') !== -1) {
+                    clearInterval(interval);
+                    document.cookie = cookieName + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                    $('#' + spinnerId).addClass('d-none');
+                    $('#' + btnTextId).text(originalText);
+                }
+            }, 500);
+            // Fallback: hide spinner after 60s regardless
             setTimeout(function() {
-                $('#excel-spinner').addClass('d-none');
-                $('#excel-btn-text').text('Excel');
-            }, 5000);
+                clearInterval(interval);
+                $('#' + spinnerId).addClass('d-none');
+                $('#' + btnTextId).text(originalText);
+            }, 60000);
+        }
+
+        // Excel spinner
+        $('#excel-link').on('click', function(e) {
+            e.preventDefault();
+            triggerDownload($(this).attr('href'), 'excel-spinner', 'excel-btn-text', 'Downloading...', 'Excel');
         });
 
         // PDF spinner
-        $('#pdf-link').on('click', function() {
-            $('#pdf-spinner').removeClass('d-none');
-            $('#pdf-btn-text').text('Generating...');
-            setTimeout(function() {
-                $('#pdf-spinner').addClass('d-none');
-                $('#pdf-btn-text').text('PDF');
-            }, 8000);
+        $('#pdf-link').on('click', function(e) {
+            e.preventDefault();
+            triggerDownload($(this).attr('href'), 'pdf-spinner', 'pdf-btn-text', 'Generating...', 'PDF');
         });
 
         // Initial load of detail lines
