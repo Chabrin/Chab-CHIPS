@@ -11,10 +11,14 @@
 
         body {
             font-family: 'DejaVu Sans', Arial, sans-serif;
-            font-size: 7pt;
+            font-size: 8.5pt;
             margin: 0;
             padding: 10px 15px;
-            color: #222;
+            color: #111;
+        }
+
+        .main-table tbody td {
+            color: #111;
         }
 
         /* ── PAGE HEADER ─────────────────────────────── */
@@ -22,7 +26,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 6px;
-            border-bottom: 2px solid #2c5f8a;
+            border-bottom: 2px solid #000;
             padding-bottom: 5px;
         }
 
@@ -45,39 +49,39 @@
             width: 23%;
             text-align: right;
             vertical-align: top;
-            font-size: 6.5pt;
-            color: #444;
+            font-size: 7.5pt;
+            color: #000;
             line-height: 1.6;
         }
 
         .company-name {
-            font-size: 13pt;
+            font-size: 14pt;
             font-weight: bold;
-            color: #2c5f8a;
+            color: #000;
             margin: 0;
         }
 
         .company-tagline {
-            font-size: 9pt;
+            font-size: 10pt;
             font-weight: bold;
-            color: #555;
+            color: #000;
             margin: 2px 0 0 0;
         }
 
         .company-address {
-            font-size: 6pt;
-            color: #777;
+            font-size: 7pt;
+            color: #000;
             margin: 2px 0 0 0;
         }
 
         /* ── RETURN INFO STRIP ───────────────────────── */
         .return-info {
-            background: #f0f4fa;
-            border: 1px solid #d0dcf0;
-            border-radius: 3px;
+            background: #fff;
+            border: 1px solid #000;
+            border-radius: 0;
             padding: 4px 8px;
             margin-bottom: 6px;
-            font-size: 6.5pt;
+            font-size: 7.5pt;
         }
 
         .return-info table {
@@ -90,7 +94,7 @@
         }
 
         .return-info .lbl {
-            color: #777;
+            color: #000;
             font-weight: bold;
         }
 
@@ -99,43 +103,43 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 8px;
-            font-size: 6pt;
+            font-size: 7pt;
         }
 
         .main-table thead tr:first-child th {
-            background: #2c5f8a;
-            color: #fff;
+            background: #e0e0e0;
+            color: #000;
             font-weight: bold;
             text-align: center;
             padding: 3px 2px;
-            border: 1px solid #1a4a70;
-            font-size: 6pt;
+            border: 1px solid #999;
+            font-size: 7pt;
         }
 
         .main-table thead tr:last-child th {
-            background: #3a7bbf;
-            color: #fff;
+            background: #ececec;
+            color: #000;
             font-weight: bold;
             text-align: center;
             padding: 2px 2px;
-            border: 1px solid #1a4a70;
-            font-size: 5.5pt;
+            border: 1px solid #999;
+            font-size: 6.5pt;
         }
 
         .main-table tbody td {
-            border: 1px solid #ccc;
+            border: 1px solid #999;
             padding: 2px 3px;
             vertical-align: top;
         }
 
         .main-table tbody tr:nth-child(even) td {
-            background: #f5f8fc;
+            background: #fff;
         }
 
         .main-table tbody tr.total-row td {
-            background: #e8f0fb;
+            background: #e0e0e0;
             font-weight: bold;
-            border-top: 2px solid #2c5f8a;
+            border-top: 2px solid #999;
         }
 
         .text-right {
@@ -147,8 +151,8 @@
         }
 
         .text-muted-sm {
-            color: #888;
-            font-size: 5.5pt;
+            color: #000;
+            font-size: 6.5pt;
         }
 
         /* ── FOOTER LAYOUT ───────────────────────────── */
@@ -172,39 +176,40 @@
         .summary-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 6.5pt;
+            font-size: 7.5pt;
         }
 
         .summary-table th {
-            background: #2c5f8a;
-            color: #fff;
+            background: #e0e0e0;
+            color: #000;
             padding: 3px 6px;
             text-align: center;
-            font-size: 6.5pt;
+            font-size: 7.5pt;
+            border-bottom: 1px solid #999;
         }
 
         .summary-table td {
             padding: 2px 6px;
-            border-bottom: 1px solid #e0e8f4;
+            border-bottom: 1px solid #ccc;
         }
 
         .summary-table tr.indent td:first-child {
             padding-left: 14px;
-            color: #555;
+            color: #000;
         }
 
         .summary-table tr.total td {
             font-weight: bold;
-            background: #e8f0fb;
-            border-top: 1.5px solid #2c5f8a;
+            background: #e0e0e0;
+            border-top: 1.5px solid #999;
         }
 
         .summary-table tr.net-income td {
             font-weight: bold;
-            background: #2c5f8a;
-            color: #fff;
-            font-size: 7.5pt;
-            border-top: 2px solid #1a4a70;
+            background: #d0d0d0;
+            color: #000;
+            font-size: 8.5pt;
+            border-top: 2px solid #999;
         }
 
         .amount-col {
@@ -219,11 +224,7 @@
     {{-- ══════ PAGE HEADER ══════ --}}
     <table class="page-header">
         <tr>
-            <td class="col-logo">
-                @if($logoSrc)
-                <img src="{{ $logoSrc }}" style="max-height:45px; max-width:90px;">
-                @endif
-            </td>
+            <td class="col-logo"></td>
             <td class="col-company">
                 <p class="company-name">CHABRIN AGENCIES LIMITED</p>
                 <p class="company-tagline">PROPERTY MANAGING AGENTS</p>
@@ -278,7 +279,6 @@
                 <th rowspan="2" style="width:5%;">Water Bill</th>
                 <th rowspan="2" style="width:5%;">Svc Charge</th>
                 <th rowspan="2" style="width:5%;">Monthly Rent</th>
-                <th rowspan="2" style="width:7%; text-align:left;">Remarks</th>
             </tr>
             {{-- Row 2: sub-headers --}}
             <tr>
@@ -309,11 +309,10 @@
                 <td class="text-right">{{ $row['water_bill'] > 0 ? number_format($row['water_bill'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['service_charge'] > 0 ? number_format($row['service_charge'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['monthly_rent'] > 0 ? number_format($row['monthly_rent'], 2) : '' }}</td>
-                <td>{{ trim($row['remarks']) }}</td>
             </tr>
             @empty
             <tr>
-                <td colspan="16" class="text-center" style="padding:8px; color:#999;">No tenant lines found for this return.</td>
+                <td colspan="15" class="text-center" style="padding:8px;">No tenant lines found for this return.</td>
             </tr>
             @endforelse
 
@@ -335,7 +334,6 @@
                 <td class="text-right">{{ $totals['water_bill'] > 0 ? number_format($totals['water_bill'], 2) : '' }}</td>
                 <td class="text-right">{{ $totals['service_charge'] > 0 ? number_format($totals['service_charge'], 2) : '' }}</td>
                 <td class="text-right">{{ number_format($totals['monthly_rent'], 2) }}</td>
-                <td></td>
             </tr>
             @endif
         </tbody>
