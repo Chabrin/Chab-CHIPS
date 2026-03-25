@@ -158,10 +158,18 @@
                         <!-- Detail Lines -->
                         <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
                             <h6 class="mb-0" style="font-size:0.8rem;">Detail Lines</h6>
-                            <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
-                                <span class="material-symbols-outlined" style="font-size:14px;">download</span>
-                                <span class="ms-1" style="font-size:0.72rem;">Excel</span>
-                            </a>
+                            <div class="d-flex gap-2">
+                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center" target="_blank">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+                                    <span class="ms-1" id="excel-btn-text" style="font-size:0.72rem;">Excel</span>
+                                    <span id="excel-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
+                                </a>
+                                <a href="{{ route('processed.returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-danger btn-sm py-0 px-2 d-flex align-items-center" target="_blank">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
+                                    <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
+                                    <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
+                                </a>
+                            </div>
                         </div>
                         <style>
                             #details-table td,
@@ -325,7 +333,28 @@
             }
 
             $('#excel-link').attr('href', r.excel_url);
+            $('#pdf-link').attr('href', r.pdf_url);
         }
+
+        // Excel spinner
+        $('#excel-link').on('click', function() {
+            $('#excel-spinner').removeClass('d-none');
+            $('#excel-btn-text').text('Downloading...');
+            setTimeout(function() {
+                $('#excel-spinner').addClass('d-none');
+                $('#excel-btn-text').text('Excel');
+            }, 5000);
+        });
+
+        // PDF spinner
+        $('#pdf-link').on('click', function() {
+            $('#pdf-spinner').removeClass('d-none');
+            $('#pdf-btn-text').text('Generating...');
+            setTimeout(function() {
+                $('#pdf-spinner').addClass('d-none');
+                $('#pdf-btn-text').text('PDF');
+            }, 8000);
+        });
 
         // Initial load of detail lines
         loadDetailLines('{{ route("ajax.processed.returns.units", encrypt($return->id)) }}');
@@ -349,6 +378,7 @@
                 success: function(response) {
                     if (response.success) {
                         response.return.excel_url = response.excelUrl;
+                        response.return.pdf_url = response.pdfUrl;
                         updatePage(response.return, response.lineTotals);
                         loadDetailLines(response.unitsUrl);
                     }

@@ -13,6 +13,7 @@ use App\Models\ClientReturnsBatch;
 use App\Models\ReturnSummary;
 use App\Models\ReturnClient;
 use App\Jobs\UpdateAbstractThresholdsJob;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ClientReturnsController extends Controller
 {
@@ -1336,6 +1337,7 @@ class ClientReturnsController extends Controller
                 ],
                 'unitsUrl' => route('ajax.processed.returns.units', encrypt($return->id)),
                 'excelUrl' => route('processed.returns.excel', encrypt($return->id)),
+                'pdfUrl'   => route('processed.returns.pdf', encrypt($return->id)),
             ]);
         } catch (Exception $e) {
             Log::error('Error fetching return summary: ' . $e->getMessage());
@@ -1389,140 +1391,147 @@ class ClientReturnsController extends Controller
     }
 
     /**
-     * Download PDF for a specific return
+     * Download PDF for a specific return — landscape A4, tenant-pivot layout
      */
     public function downloadPdf($id)
     {
         try {
             $id = decrypt($id);
 
-            // Get return details
-            $return = DB::table('sys_reports_returns_properties as rp')
-                ->select([
-                    'rp.*',
-                    DB::raw("DATE_FORMAT(rp.period_date, '%b %Y') as period_name"),
-                    'c.names as client_name',
-                    'c.email_address as client_email',
-                    'c.mobile_number as client_phone',
-                    DB::raw("CONCAT_WS(' - ', p.reference_number, p.property_name) as property"),
-                ])
-                ->join('sys_pm_clients as c', 'c.id', '=', 'rp.client_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'rp.property_id')
-                ->where('rp.id', $id)
-                ->first();
+            $return = ReturnSummary::findOrFail($id);
 
-            if (!$return) {
-                return response()->json(['success' => false, 'message' => 'Return not found'], 404);
-            }
-
-            // Get unit details
-            $units = DB::table('sys_reports_returns_items as ri')
-                ->select([
-                    'ri.unit_code as room_no',
-                    DB::raw("MAX(t.names) as tenant_name"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Unit Rent' THEN ri.trans_amount ELSE 0 END) as monthly_rent"),
-                    DB::raw("SUM(CASE WHEN ri.item_name = 'Service Charge' THEN ri.trans_amount ELSE 0 END) as service_charge"),
-                    DB::raw("SUM(ri.trans_amount) as total_charges"),
-                    DB::raw("SUM(ri.comm_amount) as total_commission"),
-                    DB::raw("SUM(ri.comm_vat) as total_commission_vat"),
-                    DB::raw("SUM(ri.payable_amount) as net_payable"),
-                ])
-                ->join('sys_pm_units as u', 'u.id', '=', 'ri.unit_id')
-                ->leftJoin('sys_pm_lease_agreements as l', 'l.id', '=', 'ri.lease_id')
-                ->leftJoin('sys_pm_clients as t', 't.id', '=', 'l.tenant_id')
-                ->where('ri.property_report_id', $id)
-                ->groupBy('ri.unit_code')
-                ->orderBy('ri.unit_code', 'asc')
+            $lines = ReturnClient::where('return_code', $return->return_code)
+                ->orderBy('tenant_name')
+                ->orderBy('unit_code')
                 ->get();
 
-            $pdf = new \TCPDF('L', 'mm', 'A4', true, 'UTF-8');
-            $pdf->SetCreator('CHIPS');
-            $pdf->SetAuthor('Property Management System');
-            $pdf->SetTitle('Property Return Report');
-            $pdf->setPrintHeader(false);
-            $pdf->setPrintFooter(false);
-            $pdf->AddPage();
+            // Recompute line totals (same formula as details page)
+            $lineTotals = ReturnClient::where('return_code', $return->return_code)
+                ->selectRaw("
+                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat
+                ")
+                ->first();
 
-            // Header
-            $pdf->SetFont('helvetica', 'B', 16);
-            $pdf->Cell(0, 10, 'PROPERTY RETURN REPORT', 0, 1, 'C');
-            $pdf->Ln(3);
+            // Pivot lines by tenant + unit
+            $tenantRows = [];
+            $totals = [
+                'monthly_rent'   => 0.0,
+                'rent_arrears'   => 0.0,
+                'vat'            => 0.0,
+                'house_deposit'  => 0.0,
+                'elec_deposit'   => 0.0,
+                'water_deposit'  => 0.0,
+                'elec_bill'      => 0.0,
+                'water_bill'     => 0.0,
+                'service_charge' => 0.0,
+            ];
 
-            // Return Info
-            $pdf->SetFont('helvetica', '', 10);
-            $pdf->Cell(30, 5, 'Client:', 0, 0);
-            $pdf->Cell(100, 5, $return->client_name, 0, 0);
-            $pdf->Cell(30, 5, 'Period:', 0, 0);
-            $pdf->Cell(0, 5, $return->period_name, 0, 1);
-            $pdf->Cell(30, 5, 'Property:', 0, 0);
-            $pdf->Cell(0, 5, $return->property, 0, 1);
-            $pdf->Ln(5);
-
-            // Units breakdown
-            if ($units->count() > 0) {
-                $pdf->SetFont('helvetica', 'B', 11);
-                $pdf->Cell(0, 6, 'UNIT BREAKDOWN', 0, 1);
-                $pdf->SetFont('helvetica', 'B', 8);
-                $pdf->Cell(50, 6, 'Tenant', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Lease Ref', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Rent', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Service', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Water', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Elec', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Total', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Comm', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Comm VAT', 1, 0, 'C');
-                $pdf->Cell(25, 6, 'Net', 1, 1, 'C');
-
-                $pdf->SetFont('helvetica', '', 7);
-                $unitStartY = $pdf->GetY();
-                foreach ($units as $unit) {
-                    $pdf->Cell(50, 5, substr($unit->tenant_name ?? '-', 0, 25), 1, 0);
-                    $pdf->Cell(25, 5, substr($unit->lease_reference ?? '-', 0, 12), 1, 0);
-                    $pdf->Cell(25, 5, number_format($unit->monthly_rent ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->service_charge ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->water_bill ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->elec_bill ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->total_charges ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->total_commission ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->total_commission_vat ?? 0, 2), 1, 0, 'R');
-                    $pdf->Cell(25, 5, number_format($unit->net_payable ?? 0, 2), 1, 1, 'R');
+            foreach ($lines as $l) {
+                $key = ($l->tenant_name ?? '') . '||' . ($l->unit_code ?? '');
+                if (!isset($tenantRows[$key])) {
+                    $tenantRows[$key] = [
+                        'tenant_name'       => $l->tenant_name ?? '-',
+                        'unit_code'         => $l->unit_code ?? '-',
+                        'monthly_rent'      => 0.0,
+                        'rent_arrears'      => 0.0,
+                        'vat'               => 0.0,
+                        'house_deposit_amt' => 0.0,
+                        'house_deposit_ref' => '',
+                        'elec_deposit_amt'  => 0.0,
+                        'elec_deposit_ref'  => '',
+                        'water_deposit_amt' => 0.0,
+                        'water_deposit_ref' => '',
+                        'elec_bill'         => 0.0,
+                        'water_bill'        => 0.0,
+                        'service_charge'    => 0.0,
+                        'remarks'           => '',
+                    ];
                 }
-                $unitEndY = $pdf->GetY();
 
-                // Financial Summary - positioned at bottom right
-                $summaryX = 180;
-                $summaryY = $unitStartY;
-                $pdf->SetXY($summaryX, $summaryY);
-                $pdf->SetFont('helvetica', 'B', 10);
-                $pdf->Cell(0, 6, 'FINANCIAL SUMMARY', 0, 1);
-                $pdf->SetXY($summaryX, $pdf->GetY());
-                $pdf->SetFont('helvetica', '', 9);
-                $pdf->Cell(50, 5, 'Gross Returns', 1, 0);
-                $pdf->Cell(35, 5, 'KSh ' . number_format($return->total_gross ?? 0, 2), 1, 1, 'R');
-                $pdf->SetX($summaryX);
-                $pdf->Cell(50, 5, 'Less: Commission', 1, 0);
-                $pdf->Cell(35, 5, 'KSh ' . number_format($return->total_commission ?? 0, 2), 1, 1, 'R');
-                $pdf->SetX($summaryX);
-                $pdf->Cell(50, 5, 'Less: VAT', 1, 0);
-                $pdf->Cell(35, 5, 'KSh ' . number_format($return->vat_on_commission ?? 0, 2), 1, 1, 'R');
-                $pdf->SetX($summaryX);
-                $pdf->Cell(50, 5, 'Less: Recoveries', 1, 0);
-                $pdf->Cell(35, 5, 'KSh ' . number_format($return->total_recoveries ?? 0, 2), 1, 1, 'R');
-                $pdf->SetX($summaryX);
-                $pdf->SetFont('helvetica', 'B', 10);
-                $pdf->Cell(50, 6, 'NET PAYABLE', 1, 0);
-                $pdf->Cell(35, 6, 'KSh ' . number_format($return->total_net_amount ?? 0, 2), 1, 1, 'R');
+                $et  = strtoupper(trim($l->entry_type ?? ''));
+                $amt = (float) ($l->net_amount ?? 0);
+                $ref = $l->transaction_ref ?? '';
+
+                if (str_contains($et, 'HOUSE') && str_contains($et, 'DEPOSIT')) {
+                    $tenantRows[$key]['house_deposit_amt'] += $amt;
+                    if ($ref) $tenantRows[$key]['house_deposit_ref'] = $ref;
+                    $totals['house_deposit'] += $amt;
+                } elseif ((str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC')) && str_contains($et, 'DEPOSIT')) {
+                    $tenantRows[$key]['elec_deposit_amt'] += $amt;
+                    if ($ref) $tenantRows[$key]['elec_deposit_ref'] = $ref;
+                    $totals['elec_deposit'] += $amt;
+                } elseif (str_contains($et, 'WATER') && str_contains($et, 'DEPOSIT')) {
+                    $tenantRows[$key]['water_deposit_amt'] += $amt;
+                    if ($ref) $tenantRows[$key]['water_deposit_ref'] = $ref;
+                    $totals['water_deposit'] += $amt;
+                } elseif (str_contains($et, 'RENT ARREARS')) {
+                    $tenantRows[$key]['rent_arrears'] += $amt;
+                    $totals['rent_arrears'] += $amt;
+                } elseif (str_contains($et, 'RENT')) {
+                    $tenantRows[$key]['monthly_rent'] += $amt;
+                    $totals['monthly_rent'] += $amt;
+                } elseif (str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC')) {
+                    $tenantRows[$key]['elec_bill'] += $amt;
+                    $totals['elec_bill'] += $amt;
+                } elseif (str_contains($et, 'WATER')) {
+                    $tenantRows[$key]['water_bill'] += $amt;
+                    $totals['water_bill'] += $amt;
+                } elseif (str_contains($et, 'SERVICE')) {
+                    $tenantRows[$key]['service_charge'] += $amt;
+                    $totals['service_charge'] += $amt;
+                }
+
+                if ((float) ($l->vat_amount ?? 0) > 0) {
+                    $tenantRows[$key]['vat'] += (float) $l->vat_amount;
+                    $totals['vat'] += (float) $l->vat_amount;
+                }
+
+                if (!empty($l->remarks)) {
+                    $tenantRows[$key]['remarks'] = trim($tenantRows[$key]['remarks'] . ' ' . $l->remarks);
+                }
             }
 
-            return $pdf->Output('return_' . $id . '.pdf', 'D');
+            // Financial summary
+            $commTotal      = (float) ($return->commission_total ?? 0);
+            $commission     = (float) ($lineTotals->commission ?? 0);
+            $vat            = (float) ($lineTotals->vat ?? 0);
+            $balAfterComm   = $commTotal - $commission;
+            $balLessVat     = $balAfterComm - $vat;
+            $houseDeposits  = $totals['house_deposit'];
+            $waterElecBills = $totals['elec_bill'] + $totals['water_bill'];
+
+            $summary = [
+                'total_rent'       => (float) ($lineTotals->rent_total ?? 0),
+                'comm_total'       => $commTotal,
+                'commission'       => $commission,
+                'bal_after_comm'   => $balAfterComm,
+                'vat'              => $vat,
+                'bal_less_vat'     => $balLessVat,
+                'house_deposits'   => $houseDeposits,
+                'water_elec_bills' => $waterElecBills,
+                'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
+            ];
+
+            $logoPath = public_path('assets/images/logo/logo_dark.png');
+            $logoSrc  = file_exists($logoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+                : '';
+
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc');
+
+            $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
+            $pdf->setPaper('A4', 'landscape');
+
+            $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
+            return $pdf->download($fileName);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error generating PDF: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate PDF: ' . $e->getMessage()
-            ], 500);
+            Log::error('Error generating return PDF: ' . $e->getMessage());
+            return back()->with('error', 'Failed to generate PDF: ' . $e->getMessage());
         }
     }
 
