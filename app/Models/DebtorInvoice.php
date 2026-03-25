@@ -34,7 +34,8 @@ class DebtorInvoice extends Model
         'vat_ammount',
         'vat_on_commission',
         'created_by',
-        'created_date'
+        'created_date',
+        'created_at'
     ];
 
     protected $casts = [
@@ -49,7 +50,8 @@ class DebtorInvoice extends Model
         'payable_amount' => 'decimal:2',
         'vat_per' => 'decimal:2',
         'vat_ammount' => 'decimal:2',
-        'vat_on_commission' => 'decimal:2'
+        'vat_on_commission' => 'decimal:2',
+        'created_at' => 'datetime'
     ];
 
     /**

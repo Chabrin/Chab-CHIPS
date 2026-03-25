@@ -1482,7 +1482,8 @@ class InvoicingController extends Controller
                     zone_supervisor_id,
                     zone_manager_id,
                     vat_on_commission,
-                    override_period_check
+                    override_period_check,
+                    created_at
                 )
                 SELECT
                     NOW() AS date_time,
@@ -1590,7 +1591,8 @@ class InvoicingController extends Controller
                             )
                         ELSE 0.00
                     END AS vat_on_commission,
-                    1 AS override_period_check
+                    1 AS override_period_check,
+                    NOW() AS created_at
                 FROM sys_pm_lease_agreements l
                 INNER JOIN sys_pm_units u 
                     ON u.id = l.unit_id
@@ -1619,6 +1621,60 @@ class InvoicingController extends Controller
                     $vatOnCommRate,                      // vat_on_commission rate (first)
                     $vatOnCommRate,                      // vat_on_commission rate (second)
                 ]);
+
+                // Insert DR entries into the tenant accounts ledger for each generated invoice
+                $drSql = "
+                    INSERT INTO sys_pm_tenants_accounts_trans (
+                        date_time,
+                        narration,
+                        pay_for,
+                        dr_cr,
+                        debit_amount,
+                        credit_amount,
+                        entry_ref,
+                        del_status,
+                        invoice_number,
+                        invoice_id,
+                        zone_id,
+                        property_id,
+                        unit_id,
+                        lease_id,
+                        client_id,
+                        tenant_id,
+                        sla_id,
+                        field_officer_id,
+                        zone_supervisor_id,
+                        zone_manager_id,
+                        current_status_id
+                    )
+                    SELECT
+                        inv.date_time,
+                        inv.narration,
+                        'Unit Rent'                     AS pay_for,
+                        'DR'                            AS dr_cr,
+                        inv.total_amount                AS debit_amount,
+                        0.00                            AS credit_amount,
+                        inv.trans_details               AS entry_ref,
+                        'Not Deleted'                   AS del_status,
+                        inv.reference_number            AS invoice_number,
+                        inv.id                          AS invoice_id,
+                        inv.zone_id,
+                        inv.property_id,
+                        inv.unit_id,
+                        inv.lease_id,
+                        inv.client_id,
+                        inv.tenant_id,
+                        inv.sla_id,
+                        inv.field_officer_id,
+                        inv.zone_supervisor_id,
+                        inv.zone_manager_id,
+                        1                               AS current_status_id
+                    FROM sys_pm_debtors_invoices inv
+                    WHERE inv.created_by = ?
+                      AND inv.created_at >= NOW() - INTERVAL '10 seconds'
+                ";
+
+                DB::statement($drSql, [Auth::id()]);
 
                 // Get count of inserted records
                 $generatedCount = DB::table('sys_pm_debtors_invoices')
