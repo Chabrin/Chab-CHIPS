@@ -210,6 +210,7 @@
 <script>
     $(document).ready(function() {
         var summaryBaseUrl = '{{ url("/ajax/processed/returns") }}';
+        var currentReturnType = '{{ $return->return_type }}';
 
         var table = $('#details-table').DataTable({
             data: [],
@@ -295,6 +296,7 @@
             $('#hdr-landlord').text(r.landlord_code);
             $('#hdr-period').text(r.period);
             $('#hdr-type').text(r.return_type);
+            currentReturnType = r.return_type;
             $('#hdr-commission-rate').text(r.commission_rate + '%');
 
             $('#val-rent').text(lt.rent_total);
@@ -362,12 +364,30 @@
         // Excel spinner
         $('#excel-link').on('click', function(e) {
             e.preventDefault();
+            var allowed = ['MINIRETURN', 'MAINRETURN'];
+            if (allowed.indexOf(currentReturnType) === -1) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Download Not Available',
+                    text: currentReturnType + ' returns do not support Excel download.'
+                });
+                return;
+            }
             triggerDownload($(this).attr('href'), 'excel-spinner', 'excel-btn-text', 'Downloading...', 'Excel');
         });
 
         // PDF spinner
         $('#pdf-link').on('click', function(e) {
             e.preventDefault();
+            var allowed = ['MINIRETURN', 'MAINRETURN'];
+            if (allowed.indexOf(currentReturnType) === -1) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Download Not Available',
+                    text: currentReturnType + ' returns do not support PDF download.'
+                });
+                return;
+            }
             triggerDownload($(this).attr('href'), 'pdf-spinner', 'pdf-btn-text', 'Generating...', 'PDF');
         });
 

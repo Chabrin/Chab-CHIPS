@@ -1400,6 +1400,11 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN'];
+            if (!in_array($return->return_type, $allowedTypes)) {
+                abort(403, 'PDF download is only available for MINIRETURN and MAINRETURN returns.');
+            }
+
             $lines = ReturnClient::where('return_code', $return->return_code)
                 ->orderBy('tenant_name')
                 ->orderBy('unit_code')
@@ -1453,6 +1458,7 @@ class ClientReturnsController extends Controller
                 }
 
                 $et  = strtoupper(trim($l->entry_type ?? ''));
+                $ed  = strtoupper(trim($l->entry_description ?? '')); // fallback for entries stored under generic types
                 $amt = (float) ($l->net_amount ?? 0);
                 $ref = $l->transaction_ref ?? '';
 
@@ -1468,19 +1474,19 @@ class ClientReturnsController extends Controller
                     $tenantRows[$key]['water_deposit_amt'] += $amt;
                     if ($ref) $tenantRows[$key]['water_deposit_ref'] = $ref;
                     $totals['water_deposit'] += $amt;
-                } elseif (str_contains($et, 'RENT ARREARS')) {
+                } elseif (str_contains($et, 'RENT ARREARS') || str_contains($ed, 'RENT ARREARS')) {
                     $tenantRows[$key]['rent_arrears'] += $amt;
                     $totals['rent_arrears'] += $amt;
-                } elseif (str_contains($et, 'RENT')) {
+                } elseif (str_contains($et, 'RENT') || str_contains($ed, 'RENT')) {
                     $tenantRows[$key]['monthly_rent'] += $amt;
                     $totals['monthly_rent'] += $amt;
-                } elseif (str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC')) {
+                } elseif (str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC') || str_contains($ed, 'ELEC') || str_contains($ed, 'ELECTRIC')) {
                     $tenantRows[$key]['elec_bill'] += $amt;
                     $totals['elec_bill'] += $amt;
-                } elseif (str_contains($et, 'WATER')) {
+                } elseif (str_contains($et, 'WATER') || str_contains($ed, 'WATER')) {
                     $tenantRows[$key]['water_bill'] += $amt;
                     $totals['water_bill'] += $amt;
-                } elseif (str_contains($et, 'SERVICE')) {
+                } elseif (str_contains($et, 'SERVICE') || str_contains($ed, 'SERVICE')) {
                     $tenantRows[$key]['service_charge'] += $amt;
                     $totals['service_charge'] += $amt;
                 }
@@ -1551,6 +1557,11 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
 
             $return = ReturnSummary::findOrFail($id);
+
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN'];
+            if (!in_array($return->return_type, $allowedTypes)) {
+                abort(403, 'Excel download is only available for MINIRETURN and MAINRETURN returns.');
+            }
 
             $lines = ReturnClient::where('return_code', $return->return_code)
                 ->orderBy('entry_type')
