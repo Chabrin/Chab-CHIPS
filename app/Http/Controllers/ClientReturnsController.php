@@ -1533,14 +1533,17 @@ class ClientReturnsController extends Controller
             $pdf->setPaper('A4', 'landscape');
 
             $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
-            $token = request()->query('download_token');
-            $response = $pdf->download($fileName);
+            $token    = request()->query('download_token');
+            $pdfContent = $pdf->output();
+
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $fileName . '"');
+            header('Cache-Control: max-age=0');
             if ($token) {
-                $response->headers->setCookie(
-                    \Symfony\Component\HttpFoundation\Cookie::create('download_complete_' . $token, '1', time() + 60, '/', null, false, false)
-                );
+                header('Set-Cookie: download_complete_' . $token . '=1; Path=/; Max-Age=60; SameSite=Lax');
             }
-            return $response;
+            echo $pdfContent;
+            exit;
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error generating return PDF: ' . $e->getMessage());

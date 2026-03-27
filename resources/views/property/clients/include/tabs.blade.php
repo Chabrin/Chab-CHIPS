@@ -77,4 +77,9 @@
         Repairs & Maintenance
     </button>
 </li>
-@endpermission
+@endpermission<li class="nav-item" role="presentation">
+    <button class="nav-link" id="returns-config-tab" data-bs-toggle="tab" data-bs-target="#returns-config" type="button" role="tab">
+        <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">settings</span>
+        Returns Config
+    </button>
+</li>

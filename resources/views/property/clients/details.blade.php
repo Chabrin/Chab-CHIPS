@@ -68,54 +68,44 @@ use Illuminate\Support\Facades\Crypt;
                         <div class="tab-content" id="clientTabsContent">
 
                             <!-- Profile Information Tab -->
-                            @permission('read_clients')
                             @include('property.clients.include.profile')
-                            @endpermission
 
                             <!-- Statistics Tab -->
-                            @permission('read_clients')
                             @include('property.clients.include.stats')
-                            @endpermission
 
                             <!-- Properties Tab (AJAX Load) -->
-                            @permission('read_properties')
                             @include('property.clients.include.properties')
-                            @endpermission
 
                             <!-- SLA Tab (AJAX Load) -->
-                            @permission('read_service_agreements')
                             @include('property.clients.include.sla')
-                            @endpermission
 
                             <!-- Units Tab (AJAX Load) -->
-                            @permission('read_units')
                             @include('property.clients.include.units')
-                            @endpermission
 
                             <!-- Tenants Tab (AJAX Load) -->
-                            @permission('read_tenants')
                             @include('property.clients.include.tenants')
-                            @endpermission
 
                             <!-- Leases Tab (AJAX Load) -->
-                            @permission('read_lease_agreements')
                             @include('property.clients.include.leases')
-                            @endpermission
 
                             <!-- Recoveries Tab (AJAX Load) -->
-                            @permission('read_recoveries')
                             @include('property.clients.include.recoveries')
-                            @endpermission
 
                             <!-- Inspections Tab (AJAX Load) -->
-                            @permission('read_inspections')
                             @include('property.clients.include.inspections')
-                            @endpermission
 
                             <!-- Repairs & Maintenance Tab (AJAX Load) -->
-                            @permission('read_repair_requests')
                             @include('property.clients.include.repairs')
-                            @endpermission
+
+                            <!-- Returns Config Tab -->
+                            <div class="tab-pane fade" id="returns-config" role="tabpanel" aria-labelledby="returns-config-tab">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Returns Configuration</h6>
+                                        <p class="text-muted">Returns configuration settings will be implemented here.</p>
+                                    </div>
+                                </div>
+                            </div>
 
                         </div>
 
@@ -133,7 +123,7 @@ use Illuminate\Support\Facades\Crypt;
                                     <form action="{{ route('property.bulk.upload') }}" method="POST" enctype="multipart/form-data" id="bulkUploadForm">
                                         @csrf
                                         <input type="hidden" name="client_id" value="{{ $client->id }}">
-                                        
+
                                         <div class="modal-body">
                                             <!-- Upload Type Selection -->
                                             <div class="mb-4">
@@ -152,7 +142,7 @@ use Illuminate\Support\Facades\Crypt;
                                                 </select>
                                                 <small class="form-text text-muted">Choose what type of data you want to upload</small>
                                             </div>
-                        
+
                                             <!-- Sample File Download Section -->
                                             <div class="mb-4 p-3 bg-light rounded" id="sampleDownloadSection" style="display: none;">
                                                 <div class="d-flex align-items-start">
@@ -167,7 +157,7 @@ use Illuminate\Support\Facades\Crypt;
                                                     </div>
                                                 </div>
                                             </div>
-                        
+
                                             <!-- File Upload Section -->
                                             <div class="mb-3" id="fileUploadSection" style="display: none;">
                                                 <label for="bulk_file" class="form-label fw-bold">
@@ -177,7 +167,7 @@ use Illuminate\Support\Facades\Crypt;
                                                 <input type="file" class="form-control" id="bulk_file" name="bulk_file" accept=".xlsx,.xls,.csv" required>
                                                 <small class="form-text text-muted">Accepted formats: Excel (.xlsx, .xls) or CSV (.csv)</small>
                                             </div>
-                        
+
                                             <!-- Instructions -->
                                             <div class="alert alert-info" id="instructionsSection" style="display: none;">
                                                 <h6 class="alert-heading">
@@ -189,7 +179,7 @@ use Illuminate\Support\Facades\Crypt;
                                                 </ol>
                                             </div>
                                         </div>
-                        
+
                                         <div class="modal-footer">
                                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                                             <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
@@ -293,7 +283,7 @@ use Illuminate\Support\Facades\Crypt;
                                 <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
                             </a>
                         `;
-                        
+
                         buttons += '</div>';
                         return buttons;
                     }
@@ -417,8 +407,7 @@ use Illuminate\Support\Facades\Crypt;
         // Initialize SLA DataTable immediately but with empty data
         var slaTable = $('#slaTable').DataTable({
             data: [],
-            columns: [
-                {
+            columns: [{
                     data: null,
                     render: function(data, type, row, meta) {
                         return meta.row + 1;
@@ -493,9 +482,9 @@ use Illuminate\Support\Facades\Crypt;
                 emptyTable: "No service agreements found for this client"
             }
         });
-        
+
         var slaLoaded = false;
-        
+
         // Load SLA when tab is clicked
         $('#sla-tab').on('click', function() {
             if (!slaLoaded) {
@@ -503,7 +492,7 @@ use Illuminate\Support\Facades\Crypt;
                 slaLoaded = true;
             }
         });
-        
+
         // Function to load SLA
         function loadSLA() {
             $.ajax({
@@ -552,7 +541,7 @@ use Illuminate\Support\Facades\Crypt;
 
         // Initialize Bootstrap dropdowns (if needed)
         var dropdownElementList = [].slice.call(document.querySelectorAll('.dropdown-toggle'))
-        var dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
+        var dropdownList = dropdownElementList.map(function(dropdownToggleEl) {
             return new bootstrap.Dropdown(dropdownToggleEl)
         });
 
@@ -820,8 +809,7 @@ use Illuminate\Support\Facades\Crypt;
         // Initialize Recoveries DataTable (empty initially)
         var recoveriesTable = $('#recoveriesTable').DataTable({
             data: [],
-            columns: [
-                {
+            columns: [{
                     data: null,
                     render: function(data, type, row, meta) {
                         return meta.row + 1;
@@ -921,8 +909,7 @@ use Illuminate\Support\Facades\Crypt;
         // Initialize Inspections DataTable (empty initially)
         var inspectionsTable = $('#inspectionsTable').DataTable({
             data: [],
-            columns: [
-                {
+            columns: [{
                     data: null,
                     render: function(data, type, row, meta) {
                         return meta.row + 1;
@@ -1012,13 +999,13 @@ use Illuminate\Support\Facades\Crypt;
         // Bulk Upload Modal Logic
         $('#upload_type').on('change', function() {
             var uploadType = $(this).val();
-            
+
             if (uploadType) {
                 $('#sampleDownloadSection').show();
                 $('#fileUploadSection').show();
                 $('#instructionsSection').show();
                 $('#uploadBtn').prop('disabled', false);
-                
+
                 // Update instructions based on type
                 var instructions = '';
                 if (uploadType === 'properties') {
@@ -1060,7 +1047,7 @@ use Illuminate\Support\Facades\Crypt;
                 $('#uploadBtn').prop('disabled', true);
             }
         });
-        
+
         // Download Sample File
         $('#downloadSampleBtn').on('click', function() {
             var uploadType = $('#upload_type').val();
@@ -1068,17 +1055,17 @@ use Illuminate\Support\Facades\Crypt;
                 window.location.href = "{{ route('property.bulk.sample') }}?type=" + uploadType + "&client_id={{ $client->id }}";
             }
         });
-        
+
         // Handle form submission
         $('#bulkUploadForm').on('submit', function(e) {
             var uploadBtn = $('#uploadBtn');
             var spinner = $('#uploadSpinner');
-            
+
             spinner.removeClass('d-none');
             uploadBtn.prop('disabled', true);
             uploadBtn.find('span:last').text('Processing...');
         });
-        
+
         // Reset modal on close
         $('#bulkUploadModal').on('hidden.bs.modal', function() {
             $('#bulkUploadForm')[0].reset();
@@ -1093,8 +1080,7 @@ use Illuminate\Support\Facades\Crypt;
         // Initialize Repairs DataTable (empty initially)
         var repairsTable = $('#repairsTable').DataTable({
             data: [],
-            columns: [
-                {
+            columns: [{
                     data: null,
                     render: function(data, type, row, meta) {
                         return meta.row + 1;
@@ -1112,8 +1098,16 @@ use Illuminate\Support\Facades\Crypt;
                         if (!data) return '-';
                         const date = new Date(data.replace(' ', 'T'));
                         if (isNaN(date.getTime())) return data;
-                        const dateOptions = { year: 'numeric', month: 'short', day: '2-digit' };
-                        const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                        const dateOptions = {
+                            year: 'numeric',
+                            month: 'short',
+                            day: '2-digit'
+                        };
+                        const timeOptions = {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                        };
                         const formattedDate = date.toLocaleDateString('en-GB', dateOptions);
                         const formattedTime = date.toLocaleTimeString('en-GB', timeOptions);
                         return formattedDate + ' ' + formattedTime;

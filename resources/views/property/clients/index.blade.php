@@ -64,8 +64,7 @@
                 type: 'GET',
                 dataSrc: 'clients'
             },
-            columns: [
-                {
+            columns: [{
                     data: null,
                     orderable: false,
                     searchable: false,
@@ -73,38 +72,43 @@
                         return meta.row + 1;
                     }
                 },
-                { data: 'id' },
+                {
+                    data: 'id'
+                },
                 {
                     data: 'names',
                     render: function(data, type, row) {
-                        if (row.can_read) {
-                            return `<a class="client-link" style="color:#3598db" href="/property/clients/${row.encrypted_id}">${data}</a>`;
-                        }
-                        return data;
+                        return `<a class="client-link" style="color:#3598db" href="/property/clients/${row.encrypted_id}">${data}</a>`;
                     }
                 },
-                { data: 'mobile_number' },
-                { data: 'national_id' },
-                { data: 'reference_number' },
-                { data: 'registered_date' },
+                {
+                    data: 'mobile_number'
+                },
+                {
+                    data: 'national_id'
+                },
+                {
+                    data: 'reference_number'
+                },
+                {
+                    data: 'registered_date'
+                },
                 {
                     data: 'encrypted_id',
                     orderable: false,
                     searchable: false,
                     render: function(encryptedId, type, row) {
                         let actions = '<div class="d-flex flex-row gap-1">';
-                        
-                        if (row.can_read) {
-                            actions += `
-                                <a class="client-link" href="/property/clients/${encryptedId}" title="View">
-                                    <span class="material-symbols-outlined view-icon" style="font-size:18px;">visibility</span>
-                                </a>
-                                <div class="spinner-border spinner-border-sm text-primary row-spinner" role="status" style="display: none;">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                            `;
-                        }
-                        
+
+                        actions += `
+                            <a class="client-link" href="/property/clients/${encryptedId}" title="View">
+                                <span class="material-symbols-outlined view-icon" style="font-size:18px;">visibility</span>
+                            </a>
+                            <div class="spinner-border spinner-border-sm text-primary row-spinner" role="status" style="display: none;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        `;
+
                         if (row.can_update) {
                             actions += `
                                 <a href="/property/clients/${encryptedId}/edit" title="Edit">
@@ -112,7 +116,7 @@
                                 </a>
                             `;
                         }
-                        
+
                         actions += '</div>';
                         return actions;
                     }
@@ -123,7 +127,9 @@
             lengthChange: true,
             searching: true,
             ordering: true,
-            order: [[2, 'asc']] // Sort by names
+            order: [
+                [2, 'asc']
+            ] // Sort by names
         });
 
         // Handle row-level spinner on client link click
