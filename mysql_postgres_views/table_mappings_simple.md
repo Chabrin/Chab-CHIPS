@@ -208,11 +208,29 @@ CHEAPI -> EFT Advance Payments — empty (unused)
 CHEDITS -> Receipt Edit Log — empty
 CHICH -> Internal Check records — empty
 CHJVDP -> JV Lines staging duplicate — empty
+CHJVHP -> JV Headers staging duplicate — 2 rows
 CHBTDD -> Receipt Batch Lines (legacy) — 3 rows
 CHBTDR -> Receipt Batch Headers variant (legacy) — 15 rows
 CHTN -> Tenant quick-name ref — empty
 CHVACT -> Vacated tenants — empty
 CHRCSD -> Receipt Banking/Deposit records — empty
+CHPUSS -> PV approval chain users — empty
+CHPSEQv -> Payment sequence variant (duplicate of CHPSEQ) — empty
+CHLOCA -> Office locations variant (1 row) — near-empty
+
+-- >> PROPERTY / UNIT INFO (missing from earlier listing)
+CHUINF -> Unit Info Notes — 20,820 rows
+Free-text notes/status entries per unit/block (ENTRYID, BLOCKID, UNITNO, ENTDESC, ESTATUS).
+CHUNICO -> Unit Recurring Non-Rental Charges — 42 rows
+Defines standing non-rent charges per unit (PAYDESC, PAYAMT, PAYMOD, PAYAFT).
+
+-- >> PROPERTY ISSUES / MAINTENANCE (missing from earlier listing)
+CHISRE -> Property Issue / Complaint Register — 1 row
+Logs issues per unit (ISSUEDES, CORRACT, priority, corrective action dates).
+
+-- >> STANDALONE INVOICE SYSTEM (legacy, near-empty)
+CHIVH -> Invoice Headers (legacy) — 3 rows
+CHIVD -> Invoice Detail Lines (legacy) — 4 rows
 
 -- ============================================================
 -- ⚠ LANDLORD RECOVERIES / ADVANCES / LOANS — KEY GAPS

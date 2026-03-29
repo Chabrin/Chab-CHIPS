@@ -135,3 +135,9 @@ Un_Mapped  Junk/Artifacts,CHVACT,Vacated tenants,0,Empty  skip
 Un_Mapped  Junk/Artifacts,CHRCSD,Receipt banking/deposit records,0,Empty  skip
 Un_Mapped  Junk/Artifacts,CHPUSS,PV approval chain users,0,Empty  skip
 
+Un_Mapped -- Property/Unit Info,CHUINF,Unit info notes and status entries per unit,20820,--
+Un_Mapped -- Property/Unit Info,CHUNICO,Unit recurring non-rental charges,42,--
+Un_Mapped -- Property/Unit Info,CHISRE,Property issue and complaint register,1,--
+Un_Mapped -- Junk/Artifacts,CHJVHP,JV headers staging duplicate,2,Skip
+Un_Mapped -- Junk/Artifacts,CHLOCA,Office locations variant,1,Skip
+Un_Mapped -- Junk/Artifacts,CHPSEQv,Payment sequence variant (duplicate of CHPSEQ),0,Skip
