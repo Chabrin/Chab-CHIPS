@@ -33,6 +33,7 @@
 --   _022  vw_cb_payment_vouchers_headers_old_022
 --   _023  vw_cb_payment_vouchers_lines_new_023
 --   _024  vw_cb_payment_vouchers_lines_old_024
+--   _026  vw_cb_landlord_charge_pairs_026
 -- ============================================================================
 
 USE CHABRINS;
@@ -1021,5 +1022,24 @@ SELECT
     d.PMONTH                                            AS payment_month
 FROM CHABRINS.dbo.CHPVD d
 WHERE d.PVNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- _026  vw_cb_landlord_charge_pairs_026  (CHCDC -> cb_landlord_charge_pairs, 12 rows)
+-- ============================================================================
+-- Defines which service charge is automatically paired with a main charge.
+-- e.g. CARETAKER SALARY (0012) always incurs CARETAKER SALARY CHARGE (0015),
+-- LOAN (0020) always incurs CHEQUE CHARGES (0014)
+-- Both PCHRGID and DCHRGID are FKs to sys_set_invoiceable_items.billing_code (via CHCHRS/_008)
+
+
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cb_landlord_charge_pairs_026 AS
+SELECT
+    c.item_id                                           AS id,
+    RTRIM(LTRIM(c.PCHRGID))                             AS primary_charge_code,
+    RTRIM(LTRIM(c.DCHRGID))                             AS debit_charge_code
+FROM CHABRINS.dbo.CHCDC c
+WHERE c.PCHRGID IS NOT NULL;
 ';
 

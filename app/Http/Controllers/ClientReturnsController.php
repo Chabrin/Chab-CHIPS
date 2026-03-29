@@ -744,6 +744,30 @@ class ClientReturnsController extends Controller
                     )
                 ", [$returnYear, $returnMonthNum, $propertyId]);
 
+                // Reset landlord account advances & money recoveries recovered by these about-to-be-deleted returns
+                DB::statement("
+                    UPDATE cb_landlord_account
+                    SET is_recovered = 0, return_code = NULL, recovery_year = NULL, recovery_month = NULL
+                    WHERE is_recovered = 1
+                      AND return_code IN (
+                          SELECT return_code FROM cb_returns_summary
+                          WHERE year = ? AND month = ?
+                            AND (approved_status = 0 OR approved_status IS NULL)
+                            AND property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)
+                      )
+                ", [$returnYear, $returnMonthNum, $propertyId]);
+
+                DB::statement("
+                    UPDATE cb_money_recoveries
+                    SET return_id = NULL
+                    WHERE return_id IN (
+                        SELECT id FROM cb_returns_summary
+                        WHERE year = ? AND month = ?
+                          AND (approved_status = 0 OR approved_status IS NULL)
+                          AND property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)
+                    )
+                ", [$returnYear, $returnMonthNum, $propertyId]);
+
                 DB::delete("
                     DELETE FROM cb_returns_clients
                     WHERE return_period = ?
@@ -787,6 +811,28 @@ class ClientReturnsController extends Controller
                         SELECT rs.id FROM cb_returns_summary rs
                         WHERE rs.year = ? AND rs.month = ?
                           AND (rs.approved_status = 0 OR rs.approved_status IS NULL)
+                    )
+                ", [$returnYear, $returnMonthNum]);
+
+                // Reset landlord account advances & money recoveries recovered by these about-to-be-deleted returns
+                DB::statement("
+                    UPDATE cb_landlord_account
+                    SET is_recovered = 0, return_code = NULL, recovery_year = NULL, recovery_month = NULL
+                    WHERE is_recovered = 1
+                      AND return_code IN (
+                          SELECT return_code FROM cb_returns_summary
+                          WHERE year = ? AND month = ?
+                            AND (approved_status = 0 OR approved_status IS NULL)
+                      )
+                ", [$returnYear, $returnMonthNum]);
+
+                DB::statement("
+                    UPDATE cb_money_recoveries
+                    SET return_id = NULL
+                    WHERE return_id IN (
+                        SELECT id FROM cb_returns_summary
+                        WHERE year = ? AND month = ?
+                          AND (approved_status = 0 OR approved_status IS NULL)
                     )
                 ", [$returnYear, $returnMonthNum]);
 
@@ -995,6 +1041,112 @@ class ClientReturnsController extends Controller
             Log::info("Query 2: Updated pay percentages, net_amount, commission and vat");
 
             // ═══════════════════════════════════════════════════════════════════
+            // QUERY 2B: INSERT Advance Payments from Landlord Account as DR lines
+            // Picks up all debit entries tagged for this return period
+            // (recovery_year/month set when the advance was recorded).
+            // The LATERAL join implicitly limits to properties in this batch.
+            // ═══════════════════════════════════════════════════════════════════
+            $advancesInserted = DB::affectingStatement("
+                INSERT INTO cb_returns_clients (
+                    return_code, return_period, transaction_number, transaction_date,
+                    entry_description, entry_type, dr_cr,
+                    property_code, net_amount, narration,
+                    property_id, client_id, zone_id, field_officer_id,
+                    zone_supervisor_id, zone_manager_id,
+                    return_id, deduction_point_2, is_commissionable
+                )
+                SELECT
+                    rc_base.return_code,
+                    ?::integer,
+                    '',
+                    ?,
+                    la.entry_description,
+                    'Advance Payments-From Landlord Acc',
+                    'DR',
+                    rc_base.property_code,
+                    la.debit_amount,
+                    la.entry_description,
+                    la.property_id,
+                    la.client_id,
+                    rc_base.zone_id,
+                    rc_base.field_officer_id,
+                    rc_base.zone_supervisor_id,
+                    rc_base.zone_manager_id,
+                    rc_base.return_id,
+                    NULL,
+                    'No'
+                FROM cb_landlord_account la
+                JOIN LATERAL (
+                    SELECT return_code, return_id, property_code,
+                           zone_id, field_officer_id, zone_supervisor_id, zone_manager_id
+                    FROM cb_returns_clients
+                    WHERE return_period = ? AND property_id = la.property_id
+                    LIMIT 1
+                ) rc_base ON true
+                WHERE la.debit_amount > 0
+                  AND la.is_recovered = 0
+                  AND la.recovery_year = ?
+                  AND la.recovery_month = ?
+                  AND la.entry_type_code != '0005'
+            ", [$returnPeriod, $transactionDate, $returnPeriod, $returnYear, $returnMonthNum]);
+
+            Log::info("Query 2B: Advance payment DR lines inserted", ['count' => $advancesInserted]);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // QUERY 2C: INSERT Recoveries from cb_money_recoveries as DR lines
+            // Picks up DR-class entries for this year/month not yet linked to a return.
+            // The LATERAL join implicitly limits to properties in this batch.
+            // ═══════════════════════════════════════════════════════════════════
+            $recoveriesInserted = DB::affectingStatement("
+                INSERT INTO cb_returns_clients (
+                    return_code, return_period, transaction_number, transaction_date,
+                    entry_description, entry_type, dr_cr,
+                    property_code, unit_code, tenant_name,
+                    net_amount, narration,
+                    property_id, client_id, zone_id, field_officer_id,
+                    zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
+                    return_id, deduction_point_2, is_commissionable
+                )
+                SELECT
+                    rc_base.return_code,
+                    ?::integer,
+                    '',
+                    ?,
+                    mr.transaction_description,
+                    'Recoveries',
+                    'DR',
+                    rc_base.property_code,
+                    mr.unit_code,
+                    mr.tenant_name,
+                    mr.debit_amount,
+                    mr.transaction_description,
+                    mr.property_id,
+                    mr.client_id,
+                    mr.zone_id,
+                    mr.field_officer_id,
+                    mr.zone_supervisor_id,
+                    mr.zone_manager_id,
+                    mr.unit_id,
+                    mr.tenant_id,
+                    rc_base.return_id,
+                    'After Comm',
+                    'No'
+                FROM cb_money_recoveries mr
+                JOIN LATERAL (
+                    SELECT return_code, return_id, property_code
+                    FROM cb_returns_clients
+                    WHERE return_period = ? AND property_id = mr.property_id
+                    LIMIT 1
+                ) rc_base ON true
+                WHERE mr.transaction_class = 'DR'
+                  AND mr.year = ?
+                  AND mr.month = ?
+                  AND mr.return_id IS NULL
+            ", [$returnPeriod, $transactionDate, $returnPeriod, $returnYear, $returnMonthNum]);
+
+            Log::info("Query 2C: Recovery DR lines inserted", ['count' => $recoveriesInserted]);
+
+            // ═══════════════════════════════════════════════════════════════════
             // QUERY 3: INSERT SUMMARIES INTO cb_returns_summary
             // ═══════════════════════════════════════════════════════════════════
             $q3 = "
@@ -1023,16 +1175,20 @@ class ClientReturnsController extends Controller
                     ) || '-{$monthName} {$returnYear}' AS return_description,
                     ? AS return_period,
                     'MAINRETURN' AS return_type,
-                    CASE WHEN SUM(rc.commission_amount) > 0 AND SUM(rc.net_amount) > 0
-                        THEN ROUND(SUM(rc.commission_amount) / SUM(rc.net_amount) * 100, 2)
+                    CASE WHEN SUM(rc.commission_amount) > 0
+                              AND SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) > 0
+                        THEN ROUND(SUM(rc.commission_amount) / SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) * 100, 2)
                         ELSE 0
                     END AS commission_rate,
-                    SUM(rc.net_amount) AS total_credit,
-                    SUM(rc.net_amount) AS commission_total,
+                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS total_credit,
+                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS commission_total,
                     0 AS vatable_total,
                     SUM(rc.commission_amount) AS commission_amount,
-                    SUM(rc.commission_amount) + SUM(rc.vat_amount) AS total_debit,
-                    SUM(rc.net_amount) - SUM(rc.commission_amount) - SUM(rc.vat_amount) AS net_amount,
+                    SUM(rc.commission_amount) + SUM(rc.vat_amount)
+                        + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
+                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
+                        - SUM(rc.commission_amount) - SUM(rc.vat_amount)
+                        - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS net_amount,
                     0 AS transaction_amount,
                     0 AS net_balance,
                     ? AS prepared_by,
@@ -1060,6 +1216,49 @@ class ClientReturnsController extends Controller
             ));
 
             Log::info("Query 3: Inserted summaries", ['summaries' => $summaryCount]);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // QUERY 3B: Mark landlord account entries as recovered
+            // Uses the same filter as Q2B; DISTINCT property_id→return_code join
+            // avoids any per-row lookups.
+            // ═══════════════════════════════════════════════════════════════════
+            DB::statement("
+                UPDATE cb_landlord_account la
+                SET is_recovered = 1,
+                    recovery_year  = ?,
+                    recovery_month = ?,
+                    return_code    = rc_base.return_code
+                FROM (
+                    SELECT DISTINCT property_id, return_code
+                    FROM cb_returns_clients
+                    WHERE return_period = ?
+                ) rc_base
+                WHERE la.property_id = rc_base.property_id
+                  AND la.debit_amount > 0
+                  AND la.is_recovered = 0
+                  AND la.recovery_year  = ?
+                  AND la.recovery_month = ?
+                  AND la.entry_type_code != '0005'
+            ", [$returnYear, $returnMonthNum, $returnPeriod, $returnYear, $returnMonthNum]);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // QUERY 3C: Link money recoveries to their new return_id
+            // ═══════════════════════════════════════════════════════════════════
+            DB::statement("
+                UPDATE cb_money_recoveries mr
+                SET return_id = rs.id
+                FROM cb_returns_summary rs
+                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                WHERE mr.year  = ?
+                  AND mr.month = ?
+                  AND mr.transaction_class = 'DR'
+                  AND mr.return_id IS NULL
+                  AND mr.property_id = p.id
+                  AND rs.return_period = ?
+                  AND rs.approved_status = 0
+            ", [$returnYear, $returnMonthNum, $returnPeriod]);
+
+            Log::info("Query 3B/3C: Landlord account marked recovered, recoveries linked");
 
             // ═══════════════════════════════════════════════════════════════════
             // CREATE APPROVAL WORKFLOW ITEMS FOR NEW SUMMARIES (bulk SQL)
@@ -1139,14 +1338,17 @@ class ClientReturnsController extends Controller
             DB::commit();
 
             Log::info("=== RETURN GENERATION COMPLETE ===", [
-                'client_lines' => $rentInserted,
-                'summaries' => $summaryCount,
-                'returns_month' => $returnsMonth,
+                'client_lines'       => $rentInserted,
+                'advance_lines'      => $advancesInserted,
+                'recovery_lines'     => $recoveriesInserted,
+                'summaries'          => $summaryCount,
+                'returns_month'      => $returnsMonth,
             ]);
 
+            $totalLines = $rentInserted + $advancesInserted + $recoveriesInserted;
             $message = $propertySelection === 'all'
-                ? "Client returns generated successfully for {$summaryCount} properties ({$rentInserted} lines)"
-                : "Client returns generated successfully ({$rentInserted} lines)";
+                ? "Client returns generated successfully for {$summaryCount} properties ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery lines)"
+                : "Client returns generated successfully ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery lines)";
 
             return response()->json([
                 'success' => true,

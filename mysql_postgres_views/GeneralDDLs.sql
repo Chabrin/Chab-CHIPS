@@ -9,6 +9,7 @@
 --   3. cb_payment_vouchers_headers_old   (CHPVH,     1,777 rows)
 --   4. cb_payment_vouchers_lines_new     (CHPVDD,   81,773 rows)
 --   5. cb_payment_vouchers_lines_old     (CHPVD,     1,906 rows)
+--   6. cb_landlord_charge_pairs          (CHCDC,        12 rows)
 -- ============================================================================
 
 
@@ -257,3 +258,64 @@ create table cb_payment_vouchers_lines_old (
 
 create index idx_cb_pvl_old_voucher_number on cb_payment_vouchers_lines_old (voucher_number);
 create index idx_cb_pvl_old_property_code  on cb_payment_vouchers_lines_old (property_code);
+
+-- ============================================================================
+-- 6. cb_landlord_charge_types  (CHCHRS, 36 rows)
+-- ============================================================================
+-- Master lookup for all landlord account entry type codes (ENTRYID in CHLACC).
+-- Defines every charge/credit category that can appear on a landlord statement:
+-- electricity, water, garbage, agent fees, loans, deposit refunds, banking
+-- charges, salaries, repairs, VAT, etc.
+-- Also the source for sys_pm_invoiceable_items (view _008 shares CHCHRS).
+-- CHRGTYP values: Debit, Credit, Lumpsum, Percentage.
+-- SHINSUB = 1 means auto-insert the paired service charge (see CHCDC/_026).
+--
+-- Source:   CHABRINS.dbo.CHCHRS
+-- View:     vw_cb_landlord_charge_types_025
+
+create table cb_landlord_charge_types (
+    id                  int primary key,                -- item_id (CHCHRS)
+    charge_code         varchar(20) not null unique,    -- CHRGID: e.g. 0009, 0013, 0014
+    charge_description  varchar(100),                   -- CHRDSC: human-readable name
+    charge_status       varchar(50),                    -- CHRSTT: Lumpsum, Commissionable, etc.
+    charge_type         varchar(20),                    -- CHRGTYP: Debit | Credit | Percentage
+    default_amount      numeric(18,2) default 0,        -- DEFAMT: default charge amount
+    gl_account          varchar(50),                    -- FINACC: GL/expense account code
+    show_in_sub         smallint default 0,             -- SHINSUB: 1 = auto-add paired debit
+    post_sequence       varchar(50),                    -- POSTSQ: posting sequence desc
+    created_at          timestamp default now(),
+    updated_at          timestamp default now()
+);
+
+create index idx_cb_landlord_charge_types_code on cb_landlord_charge_types (charge_code);
+
+
+-- ============================================================================
+-- 6. cb_landlord_charge_pairs  (CHCDC, 12 rows)
+-- ============================================================================
+-- Maps a primary landlord charge to the service/admin charge it automatically
+-- generates when posted. e.g.:
+--   0009  ADVANCE PAYMENTS          ? 0014  CHEQUE CHARGES (100)
+--   0012  CARETAKER SALARY          ? 0015  CARETAKER SALARY CHARGE (150)
+--   0020  LOAN                      ? 0014  CHEQUE CHARGES (100)
+--   0032  WATCHMAN SALARY           ? 0033  WATCHMAN SALARY CHARGE (150)
+--   0001  Electricity Bill          ? 0002  Electricity Bill Charge (100)
+--   0003  Water Bill                ? 0004  Water Bill Charge (100)
+-- The return engine uses this table to know which paired debit lines to
+-- include alongside a primary advance in cb_returns_clients.
+--
+-- Source:   CHABRINS.dbo.CHCDC
+-- View:     vw_cb_landlord_charge_pairs_026
+
+create table cb_landlord_charge_pairs (
+    id                  int primary key,                -- item_id (CHCDC)
+    primary_charge_code varchar(20) not null,           -- PCHRGID: FK -> sys_set_invoiceable_items
+    debit_charge_code   varchar(20) not null,           -- DCHRGID: FK -> sys_set_invoiceable_items
+    created_at          timestamp default now(),
+    updated_at          timestamp default now(),
+    constraint fk_charge_pairs_primary foreign key (primary_charge_code)
+        references sys_set_invoiceable_items (billing_code),
+    constraint fk_charge_pairs_debit foreign key (debit_charge_code)
+        references sys_set_invoiceable_items (billing_code),
+    constraint uq_charge_pairs unique (primary_charge_code, debit_charge_code)
+);
