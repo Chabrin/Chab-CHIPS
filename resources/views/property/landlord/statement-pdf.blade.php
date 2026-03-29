@@ -100,7 +100,7 @@
             background-color: #f9f9f9;
         }
 
-        .statement-table tbody tr:last-child {
+        .totals-row {
             font-weight: bold;
             background-color: #e8f4f8;
             border-top: 1.5px solid #3598db;
@@ -171,6 +171,19 @@
                 <td class="balance-cell">{{ $entry['balance_formatted'] }}</td>
             </tr>
             @endforeach
+            @if(count($statement) > 0)
+            @php
+            $lastEntry = end($statement);
+            $totalDr = array_sum(array_column($statement, 'debit'));
+            $totalCr = array_sum(array_column($statement, 'credit'));
+            @endphp
+            <tr class="totals-row">
+                <td colspan="3">Closing Balance</td>
+                <td class="text-right">{{ number_format($totalDr, 2) }}</td>
+                <td class="text-right">{{ number_format($totalCr, 2) }}</td>
+                <td class="balance-cell">{{ $lastEntry['balance_formatted'] }}</td>
+            </tr>
+            @endif
         </tbody>
     </table>
 

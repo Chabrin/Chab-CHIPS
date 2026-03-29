@@ -35,8 +35,8 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
                 'date' => $this->formatOrdinalDate($entry['date']),
                 'reference' => $entry['reference'],
                 'narration' => $entry['narration'],
-                'debit' => $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '-',
-                'credit' => $entry['credit'] > 0 ? number_format($entry['credit'], 2) : '-',
+                'debit' => $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '',
+                'credit' => $entry['credit'] > 0 ? number_format($entry['credit'], 2) : '',
                 'balance' => number_format($entry['balance'], 2),
             ];
         });
@@ -95,7 +95,35 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
 
         // Data rows borders and alignment
         $lastRow = 6 + count($this->statement);
-        $sheet->getStyle('A6:F' . $lastRow)->applyFromArray([
+        $totalsRow = $lastRow + 1;
+
+        // Totals row values
+        $totalDebit = collect($this->statement)->sum('debit');
+        $totalCredit = collect($this->statement)->sum('credit');
+        $closingBalance = collect($this->statement)->last()['balance'] ?? 0;
+
+        $sheet->mergeCells('A' . $totalsRow . ':C' . $totalsRow);
+        $sheet->setCellValue('A' . $totalsRow, 'Closing Balance');
+        $sheet->setCellValue('D' . $totalsRow, $totalDebit > 0 ? number_format($totalDebit, 2) : '');
+        $sheet->setCellValue('E' . $totalsRow, $totalCredit > 0 ? number_format($totalCredit, 2) : '');
+        $sheet->setCellValue('F' . $totalsRow, number_format($closingBalance, 2));
+
+        $sheet->getStyle('A' . $totalsRow . ':F' . $totalsRow)->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '3598DB']
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['rgb' => '2a7ab5']
+                ]
+            ]
+        ]);
+        $sheet->getStyle('D' . $totalsRow . ':F' . $totalsRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+        $sheet->getStyle('A6:F' . $totalsRow)->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,
@@ -107,7 +135,7 @@ class TenantStatementExport implements FromCollection, WithHeadings, WithStyles,
         // Right align numeric columns
         $sheet->getStyle('D7:F' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
-        // Bold the last row (final balance)
+        // Bold the last data row
         $sheet->getStyle('A' . $lastRow . ':F' . $lastRow)->getFont()->setBold(true);
 
         return [];

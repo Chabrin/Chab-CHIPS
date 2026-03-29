@@ -35,8 +35,8 @@ class LandlordStatementExport implements FromCollection, WithHeadings, WithStyle
                 'date' => $this->formatOrdinalDate($entry['date']),
                 'reference' => $entry['reference'],
                 'narration' => $entry['narration'],
-                'debit' => $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '-',
-                'credit' => $entry['credit'] > 0 ? number_format($entry['credit'], 2) : '-',
+                'debit' => $entry['debit'] > 0 ? number_format($entry['debit'], 2) : '',
+                'credit' => $entry['credit'] > 0 ? number_format($entry['credit'], 2) : '',
                 'balance' => number_format($entry['balance'], 2),
             ];
         });

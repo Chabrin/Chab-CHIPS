@@ -121,11 +121,23 @@ class LandlordController extends Controller
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
 
-            $query = LandlordAccount::where('client_id', $landlordId);
+            $landlord = Client::find($landlordId);
+            $landlordCode = $landlord->reference_number ?? null;
 
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
+            Log::info('[searchStatement] Step 1 — landlord lookup', [
+                'landlordId'   => $landlordId,
+                'landlordCode' => $landlordCode,
+                'landlordName' => $landlord->names ?? null,
+                'sql'          => "SELECT * FROM sys_pm_clients WHERE id = {$landlordId};",
+            ]);
+
+            $query = LandlordAccount::where(function ($q) use ($landlordId, $landlordCode) {
+                $q->where('client_id', $landlordId);
+                if ($landlordCode) {
+                    $q->orWhere('landlord_code', $landlordCode);
+                }
+            });
+
 
             if ($dateType === 'range' && $dateFrom && $dateTo) {
                 $query->whereDate('entry_date', '>=', $dateFrom)
@@ -134,9 +146,21 @@ class LandlordController extends Controller
                 $query->whereDate('entry_date', '<=', $dateTo);
             }
 
+            Log::info('[searchStatement] Step 2 — main query', [
+                'sql'      => $query->toSql(),
+                'bindings' => $query->getBindings(),
+                'raw_sql'  => vsprintf(str_replace('?', "'%s'", $query->toSql()), $query->getBindings()),
+            ]);
+
             $transactions = $query->orderBy('entry_date', 'asc')
                 ->orderBy('id', 'asc')
                 ->get();
+
+            Log::info('[searchStatement] Step 3 — results', [
+                'count'       => $transactions->count(),
+                'raw_count_sql' => "SELECT COUNT(*) FROM cb_landlord_account WHERE (client_id = {$landlordId}" . ($landlordCode ? " OR landlord_code = '{$landlordCode}'" : '') . ");",
+                'full_check_sql' => "SELECT * FROM cb_landlord_account WHERE landlord_code = '" . ($landlordCode ?? '') . "' ORDER BY entry_date ASC, id ASC;",
+            ]);
 
             $statementEntries = [];
             $balance = 0;
@@ -149,13 +173,13 @@ class LandlordController extends Controller
                 $statementEntries[] = [
                     'date' => $txn->entry_date,
                     'reference' => $txn->transaction_number ?? '-',
-                    'narration' => $txn->entry_description ?? '-',
+                    'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
                     'debit' => $debit,
                     'credit' => $credit,
                     'balance' => $balance,
                     'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '-',
-                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '-',
-                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
+                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '',
+                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '',
                     'balance_formatted' => number_format($balance, 2),
                 ];
             }
@@ -208,11 +232,14 @@ class LandlordController extends Controller
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
 
-            $query = LandlordAccount::where('client_id', $landlordId);
+            $landlordCode = $landlord->reference_number ?? null;
+            $query = LandlordAccount::where(function ($q) use ($landlordId, $landlordCode) {
+                $q->where('client_id', $landlordId);
+                if ($landlordCode) {
+                    $q->orWhere('landlord_code', $landlordCode);
+                }
+            });
 
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
 
             if ($dateType === 'range' && $dateFrom && $dateTo) {
                 $query->whereDate('entry_date', '>=', $dateFrom)
@@ -236,7 +263,7 @@ class LandlordController extends Controller
                 $statementEntries[] = [
                     'date' => $txn->entry_date,
                     'reference' => $txn->transaction_number ?? '-',
-                    'narration' => $txn->entry_description ?? '-',
+                    'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
                     'debit' => $debit,
                     'credit' => $credit,
                     'balance' => $balance,
@@ -291,11 +318,14 @@ class LandlordController extends Controller
             $dateFrom = $request->input('date_from');
             $dateTo = $request->input('date_to');
 
-            $query = LandlordAccount::where('client_id', $landlordId);
+            $landlordCode = $landlord->reference_number ?? null;
+            $query = LandlordAccount::where(function ($q) use ($landlordId, $landlordCode) {
+                $q->where('client_id', $landlordId);
+                if ($landlordCode) {
+                    $q->orWhere('landlord_code', $landlordCode);
+                }
+            });
 
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
 
             if ($dateType === 'range' && $dateFrom && $dateTo) {
                 $query->whereDate('entry_date', '>=', $dateFrom)
@@ -319,13 +349,13 @@ class LandlordController extends Controller
                 $statementEntries[] = [
                     'date' => $txn->entry_date,
                     'reference' => $txn->transaction_number ?? '-',
-                    'narration' => $txn->entry_description ?? '-',
+                    'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
                     'debit' => $debit,
                     'credit' => $credit,
                     'balance' => $balance,
-                    'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '-',
-                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '-',
-                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
+                    'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '',
+                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '',
+                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '',
                     'balance_formatted' => number_format($balance, 2),
                 ];
             }

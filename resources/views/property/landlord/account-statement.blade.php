@@ -211,15 +211,15 @@
 
                 <!-- Scrollable Table -->
                 <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                    <table class="table table-hover table-sm mb-0" id="statement_table" style="font-size: 0.875rem;">
-                        <thead class="sticky-top" style="background-color: #e9ecef; border-bottom: 2px solid #dee2e6;">
+                    <table class="table table-hover table-sm table-borderless mb-0" id="statement_table" style="font-size: 0.82rem; line-height: 1.2;">
+                        <thead class="sticky-top" style="background-color: #e9ecef; border-bottom: 2px solid #dee2e6; font-size: 0.82rem;">
                             <tr>
-                                <th class="py-2">Date</th>
-                                <th class="py-2">Reference</th>
-                                <th class="py-2" style="max-width: 200px;">Narration</th>
-                                <th class="py-2 text-end">Dr</th>
-                                <th class="py-2 text-end">Cr</th>
-                                <th class="py-2 text-end">Balance</th>
+                                <th class="py-1 px-2" style="white-space:nowrap;">Date</th>
+                                <th class="py-1 px-2" style="white-space:nowrap;">Reference</th>
+                                <th class="py-1 px-2">Narration</th>
+                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Dr</th>
+                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Cr</th>
+                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Balance</th>
                             </tr>
                         </thead>
                         <tbody id="statement_tbody" class="bg-white">
@@ -456,13 +456,13 @@
                         let html = '';
                         response.statement.forEach(function(entry) {
                             html += `
-                                <tr class="border-bottom">
-                                    <td class="py-2">${entry.date_formatted}</td>
-                                    <td class="py-2">${entry.reference}</td>
-                                    <td class="py-2" style="max-width: 200px; word-wrap: break-word; white-space: normal;">${entry.narration}</td>
-                                    <td class="py-2 text-end">${entry.debit_formatted}</td>
-                                    <td class="py-2 text-end">${entry.credit_formatted}</td>
-                                    <td class="py-2 text-end fw-semibold">${entry.balance_formatted}</td>
+                                <tr>
+                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.date_formatted}</td>
+                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.reference}</td>
+                                    <td class="py-1 px-2" style="word-wrap:break-word;white-space:normal;">${entry.narration}</td>
+                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.debit_formatted}</td>
+                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.credit_formatted}</td>
+                                    <td class="py-1 px-2 text-end fw-semibold" style="white-space:nowrap;">${entry.balance_formatted}</td>
                                 </tr>
                             `;
                         });
