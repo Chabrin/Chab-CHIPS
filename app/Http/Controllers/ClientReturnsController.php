@@ -1810,7 +1810,7 @@ class ClientReturnsController extends Controller
             $i = 1;
             foreach ($lines as $l) {
                 $sheet->setCellValue('A' . $row, $i++)
-                    ->setCellValue('B' . $row, $l->entry_type ?? '-')
+                    ->setCellValue('B' . $row, $l->narration ?? '-')
                     ->setCellValue('C' . $row, $l->tenant_name ?? '-')
                     ->setCellValue('D' . $row, $l->unit_code ?? '-')
                     ->setCellValue('E' . $row, $l->entry_description ?? '-')

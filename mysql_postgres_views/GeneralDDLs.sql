@@ -273,22 +273,6 @@ create index idx_cb_pvl_old_property_code  on cb_payment_vouchers_lines_old (pro
 -- Source:   CHABRINS.dbo.CHCHRS
 -- View:     vw_cb_landlord_charge_types_025
 
-create table cb_landlord_charge_types (
-    id                  int primary key,                -- item_id (CHCHRS)
-    charge_code         varchar(20) not null unique,    -- CHRGID: e.g. 0009, 0013, 0014
-    charge_description  varchar(100),                   -- CHRDSC: human-readable name
-    charge_status       varchar(50),                    -- CHRSTT: Lumpsum, Commissionable, etc.
-    charge_type         varchar(20),                    -- CHRGTYP: Debit | Credit | Percentage
-    default_amount      numeric(18,2) default 0,        -- DEFAMT: default charge amount
-    gl_account          varchar(50),                    -- FINACC: GL/expense account code
-    show_in_sub         smallint default 0,             -- SHINSUB: 1 = auto-add paired debit
-    post_sequence       varchar(50),                    -- POSTSQ: posting sequence desc
-    created_at          timestamp default now(),
-    updated_at          timestamp default now()
-);
-
-create index idx_cb_landlord_charge_types_code on cb_landlord_charge_types (charge_code);
-
 
 -- ============================================================================
 -- 6. cb_landlord_charge_pairs  (CHCDC, 12 rows)
