@@ -239,7 +239,7 @@
                                         <thead>
                                             <tr>
                                                 <th>#</th>
-                                                <th>Entry Type</th>
+                                                <th>Narration</th>
                                                 <th>Tenant</th>
                                                 <th>Unit</th>
                                                 <th>Description</th>
@@ -436,7 +436,7 @@
                     }
                 },
                 {
-                    data: 'entry_type'
+                    data: 'narration'
                 },
                 {
                     data: 'tenant_name'

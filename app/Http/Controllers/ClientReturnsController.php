@@ -250,6 +250,7 @@ class ClientReturnsController extends Controller
                     return [
                         'encrypted_id' => encrypt($d->id),
                         'entry_type' => $d->entry_type ?? '-',
+                        'narration' => $d->narration ?? '-',
                         'tenant_name' => $d->tenant_name ?? '-',
                         'unit_code' => $d->unit_code ?? '-',
                         'entry_description' => $d->entry_description ?? '-',
@@ -927,7 +928,7 @@ class ClientReturnsController extends Controller
                     'DR',
                     rc_base.property_code,
                     la.debit_amount,
-                    la.entry_description,
+                    COALESCE(la.entry_particulars, la.entry_description),
                     la.property_id,
                     la.client_id,
                     rc_base.zone_id,
@@ -1150,9 +1151,10 @@ class ClientReturnsController extends Controller
             DB::statement("
                 UPDATE cb_landlord_account la
                 SET is_recovered = 1,
-                    recovery_year  = ?,
-                    recovery_month = ?,
-                    return_code    = rc_base.return_code
+                    recovery_year        = ?,
+                    recovery_month       = ?,
+                    return_code          = rc_base.return_code,
+                    recovery_server_time = NOW()
                 FROM (
                     SELECT DISTINCT ON (property_id) property_id, return_code
                     FROM cb_returns_clients
