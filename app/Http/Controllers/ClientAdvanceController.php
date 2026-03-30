@@ -87,6 +87,13 @@ class ClientAdvanceController extends Controller
                         8 => 'Rescheduled'
                     ];
 
+                    // Map advance type IDs to names
+                    $typeMap = [
+                        1 => 'Expense Advance',
+                        2 => 'Client Payment Advance',
+                        3 => 'Overpayment Advance',
+                    ];
+
                     return [
                         'id' => $advance->id,
                         'encrypted_id' => Crypt::encrypt($advance->id),
@@ -95,7 +102,7 @@ class ClientAdvanceController extends Controller
                         'client_name' => $advance->client ? $advance->client->client_name : '-',
                         'property_name' => $advance->property ? $advance->property->property_name : '-',
                         'zone_name' => $advance->zone ? $advance->zone->zone_name : '-',
-                        'miscellaneous_charge' => $advance->invoiceableitems ? $advance->invoiceableitems->item_name : '-',
+                        'advance_type' => $typeMap[$advance->advance_type_id] ?? 'Unknown',
                         'charge_amount' => $advance->charge_amount ? number_format($advance->charge_amount, 2) : '0.00',
                         'amount' => $advance->amount ? number_format($advance->amount, 2) : '0.00',
                         'current_balance' => $advance->current_balance ? number_format($advance->current_balance, 2) : '0.00',
@@ -218,72 +225,64 @@ class ClientAdvanceController extends Controller
         DB::beginTransaction();
 
         try {
+            $advanceTypeId = $request->input('advance_type_id');
+
             // Base validation rules
             $rules = [
-                'advance_type_id' => 'required|integer|in:1,2,3,4',
+                'advance_type_id' => 'required|integer|in:1,2,3',
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',
                 'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
-                'miscallenous_charge_id' => 'nullable|integer|exists:sys_set_invoiceable_items,id',
-                'charge_amount' => 'nullable|numeric|min:0',
-                'one_off' => 'nullable|boolean',
                 'requisition_date' => 'required|date|before_or_equal:today',
                 'disbursement_date' => 'required|date|after_or_equal:requisition_date',
-                'principal_start_date' => 'required|date|after:disbursement_date',
-                'amount' => 'required|numeric|min:10000',
-                'interest_rate' => 'required|numeric|min:0.5|max:5',
-                'repayment_months' => 'required|integer|min:3|max:36',
-                'narration' => 'required|string|min:20|max:500',
+                'amount' => 'required|numeric|min:1',
+                'narration' => 'required|string|min:5|max:500',
             ];
+
+            // Type-specific rules
+            if ($advanceTypeId == 1) { // Expense Advance
+                $rules['expense_category'] = 'required|string|in:repairs_maintenance,caretaker_salaries,garbage_collection,electricity_bills,water_bills,printing_photocopying,refund_tenant_deposits,eviction_costs,locking_devices,security_services';
+                $rules['charge_amount'] = 'required|numeric|min:0';
+                $rules['charge_billed_to'] = 'required|string|in:Client,Tenant';
+            } elseif ($advanceTypeId == 2) { // Client Payment Advance
+                $rules['payment_method'] = 'required|string|in:bank_transfer,alternative';
+                $rules['payment_instructions'] = 'nullable|string|max:500';
+                $rules['charge_amount'] = 'nullable|numeric|min:0';
+                $rules['interest_rate'] = 'nullable|numeric|min:0|max:10';
+            } elseif ($advanceTypeId == 3) { // Overpayment Advance
+                $rules['repayment_months'] = 'required|integer|min:1|max:36';
+                $rules['principal_start_date'] = 'required|date|after:disbursement_date';
+                $rules['interest_rate'] = 'required|numeric|min:0|max:10';
+                $rules['charge_amount'] = 'nullable|numeric|min:0';
+            }
 
             $validated = $request->validate($rules);
 
             Log::info('Processing advance requisition', [
                 'client_id' => $validated['client_id'],
                 'amount' => $validated['amount'],
+                'advance_type' => $advanceTypeId,
                 'user_id' => Auth::id()
             ]);
 
             $clientId = $validated['client_id'];
             $amount = $validated['amount'];
-            $repaymentMonths = $validated['repayment_months'];
-            $interestRate = $validated['interest_rate'];
 
             // Business logic validations
             $errors = [];
 
-            // 1. Check client eligibility
+            // Check client eligibility
             $maxAmount = $this->getMaxAdvanceAmount($clientId);
-            if ($amount > $maxAmount) {
+            if ($amount > $maxAmount && $maxAmount > 0) {
                 $errors['amount'] = ['Amount exceeds available limit of KSh ' . number_format($maxAmount, 2)];
-                Log::warning('Advance amount exceeds limit', [
-                    'client_id' => $clientId,
-                    'requested' => $amount,
-                    'max_allowed' => $maxAmount
-                ]);
             }
 
-            // 2. Check active advances count
+            // Check active advances count
             $activeCount = $this->getClientActiveAdvancesCount($clientId);
             if ($activeCount >= 2) {
                 $errors['client_id'] = ['Client already has maximum (2) active advances'];
-                Log::warning('Client has maximum active advances', [
-                    'client_id' => $clientId,
-                    'active_count' => $activeCount
-                ]);
             }
 
-            // 3. Check DSCR
-            $dscrCheck = $this->checkDebtServiceCoverage($clientId, $amount, $repaymentMonths, $interestRate);
-            if (!$dscrCheck['approved']) {
-                $errors['amount'] = [$dscrCheck['message']];
-                Log::warning('DSCR check failed', [
-                    'client_id' => $clientId,
-                    'dscr' => $dscrCheck['dscr'],
-                    'message' => $dscrCheck['message']
-                ]);
-            }
-
-            // 4. Date validations
+            // Date validations
             $disbursement = \Carbon\Carbon::parse($validated['disbursement_date']);
             $requisition = \Carbon\Carbon::parse($validated['requisition_date']);
             if ($disbursement->gt($requisition->copy()->addDays(30))) {
@@ -296,117 +295,152 @@ class ClientAdvanceController extends Controller
             }
 
             // Get zone_id from the selected property
-            $property = $validated['property_id'] ? \App\Models\Property::find($validated['property_id']) : null;
-
-            if ($validated['property_id'] && !$property) {
-                DB::rollBack();
-                Log::error('Property not found', ['property_id' => $validated['property_id']]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Selected property not found'
-                ], 404);
-            }
+            $property = !empty($validated['property_id']) ? \App\Models\Property::find($validated['property_id']) : null;
 
             // Auto-populate fields
             $validated['date_time'] = now();
             $validated['created_by'] = Auth::id();
             $validated['current_status_id'] = 1; // Pending
             $validated['zone_id'] = $property ? $property->zone_id : null;
-            $validated['advance_type_id'] = $validated['advance_type_id'] ?? 1; // Default to New
 
             // Generate reference number: ADV-YYYY-###
             $year = date('Y');
             $lastAdvance = ClientAdvance::whereYear('date_time', $year)
                 ->orderBy('id', 'desc')
-                ->lockForUpdate() // Lock to prevent duplicate reference numbers
+                ->lockForUpdate()
                 ->first();
             $nextNumber = $lastAdvance ? (intval(substr($lastAdvance->reference_number, -3)) + 1) : 1;
             $validated['reference_number'] = 'ADV-' . $year . '-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
-            Log::info('Generated reference number', ['reference' => $validated['reference_number']]);
+            // ===== INTEREST & CHARGE CALCULATIONS BY TYPE =====
 
-            // Calculate amortization schedule
-            $schedule = $this->calculateAmortizationSchedule(
-                $amount,
-                $interestRate,
-                $repaymentMonths,
-                $validated['disbursement_date'],
-                $validated['principal_start_date']
-            );
+            $interestAmount = 0;
+            $totalAmount = $amount;
+            $schedule = [];
 
-            if (empty($schedule)) {
-                DB::rollBack();
-                Log::error('Failed to generate amortization schedule', ['client_id' => $clientId]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to generate repayment schedule'
-                ], 500);
+            if ($advanceTypeId == 1) {
+                // EXPENSE ADVANCE: No interest, cheque charge auto-set by category
+                $validated['interest_rate'] = 0;
+                $validated['interest_amount'] = 0;
+                $chargeAmount = floatval($validated['charge_amount'] ?? 0);
+                $validated['total_amount'] = $amount + $chargeAmount;
+                $validated['current_balance'] = $validated['total_amount'];
+                $validated['repayment_months'] = null;
+                $validated['principal_start_date'] = null;
+
+            } elseif ($advanceTypeId == 2) {
+                // CLIENT PAYMENT ADVANCE: Interest based on issued date in the month
+                $day = $disbursement->day;
+                $daysInMonth = $disbursement->daysInMonth;
+                $remainingDays = $daysInMonth - $day;
+                $rate = floatval($validated['interest_rate'] ?? 3);
+
+                if ($day < 20) {
+                    // Before 20th: full interest
+                    $interestAmount = $amount * $rate / 100;
+                } elseif ($day >= 20 && $day <= 25) {
+                    // 20th-25th: prorated interest
+                    $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
+                } else {
+                    // After 25th: no interest
+                    $interestAmount = 0;
+                    $validated['interest_rate'] = 0;
+                }
+
+                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
+                $validated['charge_amount'] = $chargeAmount;
+                $validated['interest_amount'] = round($interestAmount, 2);
+                $validated['total_amount'] = round($amount + $interestAmount + $chargeAmount, 2);
+                $validated['current_balance'] = $validated['total_amount'];
+                $validated['repayment_months'] = null;
+                $validated['principal_start_date'] = null;
+
+            } elseif ($advanceTypeId == 3) {
+                // OVERPAYMENT ADVANCE: 3% monthly reducing balance, 3 month default repayment
+                $rate = floatval($validated['interest_rate'] ?? 3);
+                $repaymentMonths = intval($validated['repayment_months'] ?? 3);
+
+                // Calculate first month interest (prorated if before 25th)
+                $day = $disbursement->day;
+                $daysInMonth = $disbursement->daysInMonth;
+                $remainingDays = $daysInMonth - $day;
+
+                // Generate amortization schedule (reducing balance)
+                $schedule = $this->calculateAmortizationSchedule(
+                    $amount,
+                    $rate,
+                    $repaymentMonths,
+                    $validated['disbursement_date'],
+                    $validated['principal_start_date']
+                );
+
+                $totalInterest = array_sum(array_column($schedule, 'interest'));
+                $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
+
+                // If disbursed before 25th, prorate first month interest
+                if ($day < 25 && !empty($schedule)) {
+                    $firstInterest = $schedule[0]['interest'];
+                    $proratedFirst = round($firstInterest * ($remainingDays / $daysInMonth), 2);
+                    $schedule[0]['interest'] = $proratedFirst;
+                    $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
+                    $totalInterest = array_sum(array_column($schedule, 'interest'));
+                }
+
+                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
+                $validated['charge_amount'] = $chargeAmount;
+                $validated['interest_amount'] = round($totalInterest, 2);
+                $validated['total_amount'] = round($totalPrincipal + $totalInterest + $chargeAmount, 2);
+                $validated['current_balance'] = $validated['total_amount'];
             }
 
-            // Calculate totals from schedule
-            $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
-            $totalInterest = array_sum(array_column($schedule, 'interest'));
-
-            $validated['interest_amount'] = round($totalInterest, 2);
-            $validated['total_amount'] = round($totalPrincipal + $totalInterest, 2);
-            $validated['current_balance'] = $validated['total_amount'];
-
-            // Create advance
+            // Create advance record
             $advance = ClientAdvance::create($validated);
 
             if (!$advance) {
                 DB::rollBack();
-                Log::error('Failed to create advance record', ['client_id' => $clientId]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to create advance record'
-                ], 500);
+                return response()->json(['success' => false, 'message' => 'Failed to create advance record'], 500);
             }
 
             Log::info('Advance record created', [
                 'advance_id' => $advance->id,
-                'reference' => $advance->reference_number
+                'reference' => $advance->reference_number,
+                'type' => $advanceTypeId
             ]);
 
-            // Create amortization schedule entries
-            $scheduleCount = 0;
-            foreach ($schedule as $index => $entry) {
-                try {
-                    \App\Models\AdvanceSchedule::create([
-                        'parent_id' => $advance->id,
-                        'payment_date' => $entry['payment_date'],
-                        'principal_amount' => $entry['principal_amount'],
-                        'interest' => $entry['interest'],
-                        'loan_balance' => $entry['loan_balance'],
-                        'current_status_id' => 1 // Pending
-                    ]);
-                    $scheduleCount++;
-                } catch (\Exception $scheduleException) {
-                    DB::rollBack();
-                    Log::error('Failed to create schedule entry', [
-                        'advance_id' => $advance->id,
-                        'entry_index' => $index,
-                        'error' => $scheduleException->getMessage()
-                    ]);
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Failed to create repayment schedule: ' . $scheduleException->getMessage()
-                    ], 500);
+            // Create amortization schedule entries (for Overpayment type)
+            if (!empty($schedule)) {
+                foreach ($schedule as $index => $entry) {
+                    try {
+                        \App\Models\AdvanceSchedule::create([
+                            'parent_id' => $advance->id,
+                            'payment_date' => $entry['payment_date'],
+                            'principal_amount' => $entry['principal_amount'],
+                            'interest' => $entry['interest'],
+                            'loan_balance' => $entry['loan_balance'],
+                            'current_status_id' => 1
+                        ]);
+                    } catch (\Exception $scheduleException) {
+                        DB::rollBack();
+                        Log::error('Failed to create schedule entry', [
+                            'advance_id' => $advance->id,
+                            'entry_index' => $index,
+                            'error' => $scheduleException->getMessage()
+                        ]);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Failed to create repayment schedule: ' . $scheduleException->getMessage()
+                        ], 500);
+                    }
                 }
             }
 
-            Log::info('Schedule entries created', [
-                'advance_id' => $advance->id,
-                'schedule_count' => $scheduleCount
-            ]);
-
-            // Commit transaction
             DB::commit();
 
             Log::info('Advance requisition completed successfully', [
                 'advance_id' => $advance->id,
                 'reference' => $advance->reference_number,
-                'client_id' => $clientId
+                'client_id' => $clientId,
+                'type' => $advanceTypeId
             ]);
 
             return response()->json([
@@ -458,93 +492,114 @@ class ClientAdvanceController extends Controller
             $id = Crypt::decrypt($encryptedId);
             $advance = ClientAdvance::findOrFail($id);
 
+            $advanceTypeId = $request->input('advance_type_id');
+
             // Base validation rules
             $rules = [
-                'advance_type_id' => 'required|integer|in:1,2,3,4',
+                'advance_type_id' => 'required|integer|in:1,2,3',
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',
-                'property_id' => 'required|integer|exists:sys_pm_properties,id',
-                'miscallenous_charge_id' => 'required|integer|exists:sys_set_invoiceable_items,id',
-                'charge_amount' => 'required|numeric|min:0',
-                'one_off' => 'nullable|boolean',
+                'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
+                'requisition_date' => 'required|date',
+                'disbursement_date' => 'required|date',
+                'amount' => 'required|numeric|min:1',
+                'narration' => 'required|string|min:5|max:500',
             ];
 
-            // Add conditional validation based on advance type
-            $advanceType = $request->input('advance_type_id');
-
-            if (in_array($advanceType, [1, 2, 4])) { // New, Top Up, Lumpsum
-                $rules['requisition_date'] = 'required|date';
-                $rules['disbursement_date'] = 'required|date';
-                $rules['repayment_months'] = 'required|integer|min:1';
-                $rules['principal_start_date'] = 'required|date';
-                $rules['narration'] = 'required|string|max:255';
-            }
-
-            if ($advanceType == 1 || $advanceType == 4) { // New or Lumpsum
-                $rules['amount'] = 'required|numeric|min:0';
-                $rules['interest_rate'] = 'required|numeric|min:0|max:100';
-            }
-
-            if ($advanceType == 2) { // Top Up
-                $rules['previous_advance_id'] = 'required|integer|exists:sys_pm_clients_advances_requisitions,id';
-                $rules['top_up'] = 'required|numeric|min:0';
-                $rules['interest_rate'] = 'required|numeric|min:0|max:100';
-            }
-
-            if ($advanceType == 3) { // Reschedule
-                $rules['previous_advance_id'] = 'required|integer|exists:sys_pm_clients_advances_requisitions,id';
-                $rules['principal_start_date'] = 'required|date';
+            // Type-specific rules
+            if ($advanceTypeId == 1) { // Expense Advance
+                $rules['expense_category'] = 'required|string|in:repairs_maintenance,caretaker_salaries,garbage_collection,electricity_bills,water_bills,printing_photocopying,refund_tenant_deposits,eviction_costs,locking_devices,security_services';
+                $rules['charge_amount'] = 'required|numeric|min:0';
+                $rules['charge_billed_to'] = 'required|string|in:Client,Tenant';
+            } elseif ($advanceTypeId == 2) { // Client Payment Advance
+                $rules['payment_method'] = 'required|string|in:bank_transfer,alternative';
+                $rules['payment_instructions'] = 'nullable|string|max:500';
+                $rules['charge_amount'] = 'nullable|numeric|min:0';
+                $rules['interest_rate'] = 'nullable|numeric|min:0|max:10';
+            } elseif ($advanceTypeId == 3) { // Overpayment Advance
+                $rules['repayment_months'] = 'required|integer|min:1|max:36';
+                $rules['principal_start_date'] = 'required|date|after:disbursement_date';
+                $rules['interest_rate'] = 'required|numeric|min:0|max:10';
+                $rules['charge_amount'] = 'nullable|numeric|min:0';
             }
 
             $validated = $request->validate($rules);
 
             // Get zone_id from the selected property
-            $property = \App\Models\Property::find($validated['property_id']);
+            $property = !empty($validated['property_id']) ? \App\Models\Property::find($validated['property_id']) : null;
             $validated['zone_id'] = $property ? $property->zone_id : null;
 
-            // Recalculate interest_amount, total_amount, and current_balance
-            if (isset($validated['amount']) && isset($validated['interest_rate'])) {
-                $amount = floatval($validated['amount']);
-                $interestRate = floatval($validated['interest_rate']);
-                $chargeAmount = floatval($validated['charge_amount']);
-                $repaymentMonths = isset($validated['repayment_months']) ? intval($validated['repayment_months']) : 1;
+            // ===== INTEREST & CHARGE CALCULATIONS BY TYPE =====
+            $disbursement = \Carbon\Carbon::parse($validated['disbursement_date']);
+            $amount = floatval($validated['amount']);
 
-                // Calculate interest amount: (amount * interest_rate * months) / 100
-                $validated['interest_amount'] = ($amount * $interestRate * $repaymentMonths) / 100;
-
-                // Calculate total amount: amount + interest_amount + charge_amount
-                $validated['total_amount'] = $amount + $validated['interest_amount'] + $chargeAmount;
-
-                // Update current balance (preserve payments if any)
-                $oldTotal = $advance->total_amount ?? 0;
-                $oldBalance = $advance->current_balance ?? 0;
-                $amountPaid = $oldTotal - $oldBalance;
-                $validated['current_balance'] = $validated['total_amount'] - $amountPaid;
-            } elseif ($advanceType == 2 && isset($validated['top_up'])) {
-                // For Top Up: calculate based on top_up amount
-                $topUpAmount = floatval($validated['top_up']);
-                $interestRate = floatval($validated['interest_rate']);
-                $chargeAmount = floatval($validated['charge_amount']);
-                $repaymentMonths = isset($validated['repayment_months']) ? intval($validated['repayment_months']) : 1;
-
-                $validated['interest_amount'] = ($topUpAmount * $interestRate * $repaymentMonths) / 100;
-                $validated['total_amount'] = $topUpAmount + $validated['interest_amount'] + $chargeAmount;
-
-                // Update current balance (preserve payments if any)
-                $oldTotal = $advance->total_amount ?? 0;
-                $oldBalance = $advance->current_balance ?? 0;
-                $amountPaid = $oldTotal - $oldBalance;
-                $validated['current_balance'] = $validated['total_amount'] - $amountPaid;
-            } else {
-                // For Reschedule or if no calculations needed
+            if ($advanceTypeId == 1) {
+                // EXPENSE ADVANCE: No interest
+                $validated['interest_rate'] = 0;
                 $validated['interest_amount'] = 0;
-                $validated['total_amount'] = floatval($validated['charge_amount']);
+                $chargeAmount = floatval($validated['charge_amount'] ?? 0);
+                $validated['total_amount'] = $amount + $chargeAmount;
+                $validated['repayment_months'] = null;
+                $validated['principal_start_date'] = null;
 
-                // Update current balance (preserve payments if any)
-                $oldTotal = $advance->total_amount ?? 0;
-                $oldBalance = $advance->current_balance ?? 0;
-                $amountPaid = $oldTotal - $oldBalance;
-                $validated['current_balance'] = $validated['total_amount'] - $amountPaid;
+            } elseif ($advanceTypeId == 2) {
+                // CLIENT PAYMENT ADVANCE: Interest based on issued date
+                $day = $disbursement->day;
+                $daysInMonth = $disbursement->daysInMonth;
+                $remainingDays = $daysInMonth - $day;
+                $rate = floatval($validated['interest_rate'] ?? 3);
+
+                if ($day < 20) {
+                    $interestAmount = $amount * $rate / 100;
+                } elseif ($day >= 20 && $day <= 25) {
+                    $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
+                } else {
+                    $interestAmount = 0;
+                    $validated['interest_rate'] = 0;
+                }
+
+                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
+                $validated['charge_amount'] = $chargeAmount;
+                $validated['interest_amount'] = round($interestAmount, 2);
+                $validated['total_amount'] = round($amount + $interestAmount + $chargeAmount, 2);
+                $validated['repayment_months'] = null;
+                $validated['principal_start_date'] = null;
+
+            } elseif ($advanceTypeId == 3) {
+                // OVERPAYMENT ADVANCE: Reducing balance
+                $rate = floatval($validated['interest_rate'] ?? 3);
+                $repaymentMonths = intval($validated['repayment_months'] ?? 3);
+                $day = $disbursement->day;
+                $daysInMonth = $disbursement->daysInMonth;
+                $remainingDays = $daysInMonth - $day;
+
+                $schedule = $this->calculateAmortizationSchedule(
+                    $amount,
+                    $rate,
+                    $repaymentMonths,
+                    $validated['disbursement_date'],
+                    $validated['principal_start_date']
+                );
+
+                if ($day < 25 && !empty($schedule)) {
+                    $firstInterest = $schedule[0]['interest'];
+                    $proratedFirst = round($firstInterest * ($remainingDays / $daysInMonth), 2);
+                    $schedule[0]['interest'] = $proratedFirst;
+                    $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
+                }
+
+                $totalInterest = array_sum(array_column($schedule, 'interest'));
+                $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
+                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
+                $validated['charge_amount'] = $chargeAmount;
+                $validated['interest_amount'] = round($totalInterest, 2);
+                $validated['total_amount'] = round($totalPrincipal + $totalInterest + $chargeAmount, 2);
             }
+
+            // Update current balance (preserve payments already made)
+            $oldTotal = $advance->total_amount ?? 0;
+            $oldBalance = $advance->current_balance ?? 0;
+            $amountPaid = $oldTotal - $oldBalance;
+            $validated['current_balance'] = $validated['total_amount'] - $amountPaid;
 
             $advance->update($validated);
 

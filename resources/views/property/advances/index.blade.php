@@ -9,7 +9,7 @@
                     <div class="card-header card-no-border d-flex align-items-center justify-content-between">
                         <h5 class="mb-0">Client Advances</h5>
                         @permission('create_client_advances')
-                        <a href="{{ route('property.advances.create') }}" class="btn btn-primary btn-sm">
+                        <a href="{{ route('client.advances.create') }}" class="btn btn-primary btn-sm">
                             <i class="fa fa-plus"></i> New Requisition
                         </a>
                         @endpermission
@@ -22,6 +22,7 @@
                                         <th>#</th>
                                         <th>Date</th>
                                         <th>Reference</th>
+                                        <th>Type</th>
                                         <th>Client</th>
                                         <th>Property</th>
                                         <th class="text-end">Amount</th>
@@ -68,6 +69,19 @@
                 },
                 {
                     data: 'reference_number'
+                },
+                {
+                    data: 'advance_type',
+                    render: function(data) {
+                        if (data === 'Expense Advance') {
+                            return '<span class="badge bg-warning">' + data + '</span>';
+                        } else if (data === 'Client Payment Advance') {
+                            return '<span class="badge bg-primary">' + data + '</span>';
+                        } else if (data === 'Overpayment Advance') {
+                            return '<span class="badge bg-info">' + data + '</span>';
+                        }
+                        return '<span class="badge bg-secondary">' + data + '</span>';
+                    }
                 },
                 {
                     data: 'client_name'

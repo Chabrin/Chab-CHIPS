@@ -12,7 +12,7 @@
                             <button type="submit" form="advanceForm" class="btn btn-primary btn-sm">
                                 <i class="fa fa-save"></i> Update Advance
                             </button>
-                            <a href="{{ route('property.advances.index') }}" class="btn btn-secondary btn-sm">
+                            <a href="{{ route('client.advances.index') }}" class="btn btn-secondary btn-sm">
                                 <i class="fa fa-arrow-left"></i> Back to List
                             </a>
                         </div>
@@ -22,20 +22,19 @@
                             @csrf
                             @method('PUT')
                             <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label for="advanceType" class="form-label">Advance Type <span class="text-danger">*</span></label>
                                     <select class="form-select" id="advanceType" name="advance_type_id" required>
                                         <option value="">Select Advance Type</option>
-                                        <option value="1" {{ old('advance_type_id', $advance->advance_type_id) == 1 ? 'selected' : '' }}>New Advance</option>
-                                        <option value="2" {{ old('advance_type_id', $advance->advance_type_id) == 2 ? 'selected' : '' }}>Top Up Advance</option>
-                                        <option value="3" {{ old('advance_type_id', $advance->advance_type_id) == 3 ? 'selected' : '' }}>Reschedule Advance</option>
-                                        <option value="4" {{ old('advance_type_id', $advance->advance_type_id) == 4 ? 'selected' : '' }}>Lumpsum Advance</option>
+                                        <option value="1" {{ old('advance_type_id', $advance->advance_type_id) == 1 ? 'selected' : '' }}>Expense Advance</option>
+                                        <option value="2" {{ old('advance_type_id', $advance->advance_type_id) == 2 ? 'selected' : '' }}>Client Payment Advance</option>
+                                        <option value="3" {{ old('advance_type_id', $advance->advance_type_id) == 3 ? 'selected' : '' }}>Overpayment Advance</option>
                                     </select>
                                     @error('advance_type_id')
                                         <div class="invalid-feedback d-block">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label for="client" class="form-label">Client <span class="text-danger">*</span></label>
                                     <select class="form-select" id="client" name="client_id" required>
                                         <option value="">Loading clients...</option>
@@ -44,9 +43,7 @@
                                         <div class="invalid-feedback d-block">{{ $message }}</div>
                                     @enderror
                                 </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label for="property" class="form-label">Property <span class="text-danger">*</span></label>
                                     <select class="form-select" id="property" name="property_id" required>
                                         <option value="">Loading properties...</option>
@@ -55,44 +52,63 @@
                                         <div class="invalid-feedback d-block">{{ $message }}</div>
                                     @enderror
                                 </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="miscCharge" class="form-label">Miscellaneous Charge <span class="text-danger">*</span></label>
-                                    <select class="form-select" id="miscCharge" name="miscallenous_charge_id" required>
-                                        <option value="">Select Charge</option>
-                                    </select>
-                                    @error('miscallenous_charge_id')
-                                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                                    @enderror
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="chargeAmount" class="form-label">Charge Amount <span class="text-danger">*</span></label>
-                                    <input type="number" class="form-control" id="chargeAmount" name="charge_amount" step="0.01" min="0" value="{{ old('charge_amount', $advance->charge_amount) }}" required>
-                                    @error('charge_amount')
-                                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                                    @enderror
-                                </div>
                             </div>
 
-                            <!-- Clients Advances Requisitions Section -->
+                            <!-- Requisitions Section -->
                             <div id="requisitionsSection">
-                                <h5 class="border-bottom pb-2 mb-3 mt-4">Clients Advances Requisitions</h5>
+                                <h5 class="border-bottom pb-2 mb-3 mt-4">Requisition Details</h5>
 
-                                <!-- Previous Reference (Top Up & Reschedule only) -->
-                                <div class="row field-group" id="previousReferenceGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="previousReference" class="form-label">Previous Reference <span class="text-danger">*</span></label>
-                                        <select class="form-select" id="previousReference" name="previous_advance_id">
-                                            <option value="">Please select</option>
+                                <!-- Expense Category (Expense Advance only) -->
+                                <div class="row field-group" id="expenseCategoryGroup" style="display: none;">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="expenseCategory" class="form-label">Expense Category <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="expenseCategory" name="expense_category">
+                                            <option value="">Select Category</option>
+                                            <option value="repairs_maintenance" {{ old('expense_category', $advance->expense_category) == 'repairs_maintenance' ? 'selected' : '' }}>Repairs and Maintenance</option>
+                                            <option value="caretaker_salaries" {{ old('expense_category', $advance->expense_category) == 'caretaker_salaries' ? 'selected' : '' }}>Caretaker Salaries</option>
+                                            <option value="garbage_collection" {{ old('expense_category', $advance->expense_category) == 'garbage_collection' ? 'selected' : '' }}>Garbage Collection</option>
+                                            <option value="electricity_bills" {{ old('expense_category', $advance->expense_category) == 'electricity_bills' ? 'selected' : '' }}>Electricity Bills</option>
+                                            <option value="water_bills" {{ old('expense_category', $advance->expense_category) == 'water_bills' ? 'selected' : '' }}>Water Bills</option>
+                                            <option value="printing_photocopying" {{ old('expense_category', $advance->expense_category) == 'printing_photocopying' ? 'selected' : '' }}>Printing and Photocopying</option>
+                                            <option value="refund_tenant_deposits" {{ old('expense_category', $advance->expense_category) == 'refund_tenant_deposits' ? 'selected' : '' }}>Refund of Tenant Deposits</option>
+                                            <option value="eviction_costs" {{ old('expense_category', $advance->expense_category) == 'eviction_costs' ? 'selected' : '' }}>Eviction Costs</option>
+                                            <option value="locking_devices" {{ old('expense_category', $advance->expense_category) == 'locking_devices' ? 'selected' : '' }}>Locking Devices</option>
+                                            <option value="security_services" {{ old('expense_category', $advance->expense_category) == 'security_services' ? 'selected' : '' }}>Security Services</option>
                                         </select>
-                                        @error('previous_advance_id')
+                                        @error('expense_category')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
                                     </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Cheque Charge (KES)</label>
+                                        <input type="number" class="form-control" id="chequeChargeExpense" name="charge_amount" step="0.01" value="{{ old('charge_amount', $advance->charge_amount) }}" readonly>
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Charge Billed To</label>
+                                        <input type="text" class="form-control" id="chargeBilledTo" name="charge_billed_to" value="{{ old('charge_billed_to', $advance->charge_billed_to) }}" readonly>
+                                    </div>
                                 </div>
 
-                                <!-- Requisition Date & Issued Date (All except Reschedule) -->
+                                <!-- Payment Method (Client Payment only) -->
+                                <div class="row field-group" id="paymentMethodGroup" style="display: none;">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="paymentMethod" class="form-label">Payment Method <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="paymentMethod" name="payment_method">
+                                            <option value="">Select Method</option>
+                                            <option value="bank_transfer" {{ old('payment_method', $advance->payment_method) == 'bank_transfer' ? 'selected' : '' }}>Direct Bank Transfer</option>
+                                            <option value="alternative" {{ old('payment_method', $advance->payment_method) == 'alternative' ? 'selected' : '' }}>Alternative Payment Instructions</option>
+                                        </select>
+                                        @error('payment_method')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                    <div class="col-md-6 mb-3" id="paymentInstructionsGroup" style="display: none;">
+                                        <label class="form-label">Payment Instructions</label>
+                                        <textarea class="form-control" id="paymentInstructions" name="payment_instructions" rows="2">{{ old('payment_instructions', $advance->payment_instructions) }}</textarea>
+                                    </div>
+                                </div>
+
+                                <!-- Dates -->
                                 <div class="row field-group" id="requisitionDateGroup" style="display: none;">
                                     <div class="col-md-6 mb-3">
                                         <label for="requisitionDate" class="form-label">Requisition Date <span class="text-danger">*</span></label>
@@ -110,76 +126,58 @@
                                     </div>
                                 </div>
 
-                                <!-- Months & Payment Start Date (New, Top Up, Lumpsum) -->
-                                <div class="row field-group" id="monthsPaymentGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="months" class="form-label">Months <span class="text-danger">*</span></label>
-                                        <input type="number" class="form-control" id="months" name="repayment_months" min="1" value="{{ old('repayment_months', $advance->repayment_months) }}">
-                                        @error('repayment_months')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label for="paymentStartDate" class="form-label">Payment Start Date <span class="text-danger">*</span></label>
-                                        <input type="date" class="form-control" id="paymentStartDate" name="principal_start_date" value="{{ old('principal_start_date', $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '') }}">
-                                        @error('principal_start_date')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                </div>
-
-                                <!-- Payment Start Date only (Reschedule) -->
-                                <div class="row field-group" id="reschedulePaymentGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="reschedulePaymentStartDate" class="form-label">Payment Start Date <span class="text-danger">*</span></label>
-                                        <input type="date" class="form-control" id="reschedulePaymentStartDate" name="principal_start_date" value="{{ old('principal_start_date', $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '') }}">
-                                        @error('principal_start_date')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                </div>
-
-                                <!-- Top Up (Top Up only) -->
-                                <div class="row field-group" id="topUpGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="topUp" class="form-label">Top up <span class="text-danger">*</span></label>
-                                        <input type="number" class="form-control" id="topUp" name="top_up" step="0.01" min="0" value="{{ old('top_up', $advance->top_up) }}">
-                                        @error('top_up')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                </div>
-
-                                <!-- Amount & Interest (New, Lumpsum) -->
+                                <!-- Amount & Interest -->
                                 <div class="row field-group" id="amountInterestGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
+                                    <div class="col-md-4 mb-3">
                                         <label for="amount" class="form-label">Amount <span class="text-danger">*</span></label>
                                         <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0" value="{{ old('amount', $advance->amount) }}">
                                         @error('amount')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
                                     </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label for="interestRate" class="form-label">Interest (%)</label>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="interestRate" class="form-label">Interest Rate (%)</label>
                                         <input type="number" class="form-control" id="interestRate" name="interest_rate" step="0.01" min="0" value="{{ old('interest_rate', $advance->interest_rate ?? '0.00') }}">
                                         @error('interest_rate')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
                                     </div>
-                                </div>
-
-                                <!-- Interest only (Top Up) -->
-                                <div class="row field-group" id="interestOnlyGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="interestRateTopUp" class="form-label">Interest (%)</label>
-                                        <input type="number" class="form-control" id="interestRateTopUp" name="interest_rate" step="0.01" min="0" value="{{ old('interest_rate', $advance->interest_rate ?? '0.00') }}">
-                                        @error('interest_rate')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
+                                    <div class="col-md-4 mb-3" id="interestInfoGroup" style="display: none;">
+                                        <label class="form-label">Interest Info</label>
+                                        <div class="p-2 bg-light border rounded small" id="interestCalcInfo">-</div>
                                     </div>
                                 </div>
 
-                                <!-- Narration (All except Reschedule) -->
+                                <!-- Repayment (Overpayment only) -->
+                                <div class="row field-group" id="repaymentGroup" style="display: none;">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="months" class="form-label">Repayment Months <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="months" name="repayment_months" min="1" value="{{ old('repayment_months', $advance->repayment_months ?? 3) }}">
+                                        @error('repayment_months')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="paymentStartDate" class="form-label">Payment Start Date <span class="text-danger">*</span></label>
+                                        <input type="date" class="form-control" id="paymentStartDate" name="principal_start_date" value="{{ old('principal_start_date', $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '') }}">
+                                        @error('principal_start_date')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <div class="p-2 bg-light border rounded small mt-4">Default: 3 months. Changes require authorization.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Cheque Charge (Client Payment & Overpayment) -->
+                                <div class="row field-group" id="chequeChargeGroup" style="display: none;">
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Cheque Processing Charge (KES)</label>
+                                        <input type="number" class="form-control" id="chequeChargeGeneral" name="charge_amount" step="0.01" value="{{ old('charge_amount', $advance->charge_amount ?? 100) }}" readonly>
+                                    </div>
+                                </div>
+
+                                <!-- Narration -->
                                 <div class="row field-group" id="narrationGroup" style="display: none;">
                                     <div class="col-md-12 mb-3">
                                         <label for="narration" class="form-label">Narration <span class="text-danger">*</span></label>
@@ -187,19 +185,6 @@
                                         @error('narration')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
-                                    </div>
-                                </div>
-
-                                <!-- One Off (All types) -->
-                                <div class="row">
-                                    <div class="col-md-12 mb-3">
-                                        <label class="form-label">One Off</label>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="oneOff" name="one_off" value="1" {{ old('one_off', $advance->one_off) ? 'checked' : '' }}>
-                                            <label class="form-check-label" for="oneOff">
-                                                Yes
-                                            </label>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -214,57 +199,40 @@
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 $(document).ready(function() {
-    // Store existing values
     const existingData = {
         client_id: {{ $advance->client_id }},
         property_id: {{ $advance->property_id }},
-        miscallenous_charge_id: {{ $advance->miscallenous_charge_id }},
-        previous_advance_id: {{ $advance->previous_advance_id ?? 'null' }},
         advance_type_id: {{ $advance->advance_type_id }}
     };
-    
-    // Load dropdowns on page load
+
+    // Cheque charge mapping by expense category
+    const chequeCharges = {
+        'repairs_maintenance': { charge: 100, billed_to: 'Client' },
+        'caretaker_salaries': { charge: 150, billed_to: 'Client' },
+        'garbage_collection': { charge: 100, billed_to: 'Client' },
+        'electricity_bills': { charge: 100, billed_to: 'Client' },
+        'water_bills': { charge: 100, billed_to: 'Client' },
+        'printing_photocopying': { charge: 100, billed_to: 'Client' },
+        'refund_tenant_deposits': { charge: 150, billed_to: 'Tenant' },
+        'eviction_costs': { charge: 100, billed_to: 'Client' },
+        'locking_devices': { charge: 100, billed_to: 'Client' },
+        'security_services': { charge: 100, billed_to: 'Client' }
+    };
+
     loadClients();
-    loadMiscCharges();
-    
+
     // Initialize Select2
     setTimeout(function() {
-        $('#client').select2({
-            placeholder: 'Select Client',
+        $('#client, #property, #advanceType, #expenseCategory, #paymentMethod').select2({
             allowClear: true,
             width: '100%'
         });
-        
-        $('#property').select2({
-            placeholder: 'Select Property',
-            allowClear: true,
-            width: '100%'
-        });
-        
-        $('#miscCharge').select2({
-            placeholder: 'Select Charge',
-            allowClear: true,
-            width: '100%'
-        });
-        
-        $('#advanceType').select2({
-            placeholder: 'Select Advance Type',
-            allowClear: true,
-            width: '100%'
-        });
-        
-        $('#previousReference').select2({
-            placeholder: 'Select Previous Reference',
-            allowClear: true,
-            width: '100%'
-        });
-        
-        // Trigger advance type change to show relevant fields
+
         setTimeout(function() {
             $('#advanceType').trigger('change');
         }, 500);
     }, 200);
-    
+
     // Load Clients
     function loadClients() {
         $.ajax({
@@ -279,18 +247,15 @@ $(document).ready(function() {
                     let lanClients = clients.filter(function(client) {
                         return client.reference_number && client.reference_number.startsWith('LAN');
                     });
-                    
                     lanClients.forEach(function(client) {
                         const selected = client.id === existingData.client_id ? 'selected' : '';
                         select.append(`<option value="${client.id}" ${selected}>${client.names} (${client.reference_number})</option>`);
                     });
                 }
                 select.trigger('change.select2');
-                
-                // Load properties for the selected client
+
                 if (existingData.client_id) {
                     loadProperties(existingData.client_id);
-                    loadPreviousAdvances(existingData.client_id);
                 }
             },
             error: function(xhr) {
@@ -300,34 +265,9 @@ $(document).ready(function() {
         });
     }
 
-    // Load Miscellaneous Charges
-    function loadMiscCharges() {
-        $.ajax({
-            url: '{{ route("property.advances.misc_charges") }}',
-            method: 'GET',
-            dataType: 'json',
-            success: function(charges) {
-                const select = $('#miscCharge');
-                select.empty().append('<option value="">Please select</option>');
-                if (charges && charges.length > 0) {
-                    charges.forEach(function(charge) {
-                        const selected = charge.id === existingData.miscallenous_charge_id ? 'selected' : '';
-                        select.append(`<option value="${charge.id}" ${selected}>${charge.text}</option>`);
-                    });
-                }
-                select.trigger('change.select2');
-            },
-            error: function(xhr, status, error) {
-                console.error('Error loading charges:', xhr);
-                toastr.error('Failed to load miscellaneous charges');
-            }
-        });
-    }
-
-    // Load Properties
+    // Load Properties (excludes merged/inactive source properties)
     function loadProperties(clientId) {
         const propertySelect = $('#property');
-        
         $.ajax({
             url: `/client/${clientId}/properties`,
             method: 'GET',
@@ -337,93 +277,124 @@ $(document).ready(function() {
                 if (response.properties && response.properties.length > 0) {
                     response.properties.forEach(function(property) {
                         const selected = property.id === existingData.property_id ? 'selected' : '';
-                        propertySelect.append(`<option value="${property.id}" ${selected}>${property.reference_number} - ${property.property_name}</option>`);
+                        const mergedTag = property.is_merged ? ' (Merged)' : '';
+                        propertySelect.append(`<option value="${property.id}" ${selected}>${property.reference_number} - ${property.property_name}${mergedTag}</option>`);
                     });
                     propertySelect.prop('disabled', false);
-                } else {
-                    propertySelect.append('<option value="">No properties found</option>');
                 }
                 propertySelect.trigger('change.select2');
             },
             error: function(xhr) {
                 console.error('Error loading properties:', xhr);
-                propertySelect.empty().append('<option value="">Error loading properties</option>');
-                propertySelect.trigger('change.select2');
                 toastr.error('Failed to load properties');
             }
         });
     }
 
-    // Load Previous Advances
-    function loadPreviousAdvances(clientId) {
-        const previousRefSelect = $('#previousReference');
-        
-        $.ajax({
-            url: '{{ route("property.advances.client-previous") }}',
-            method: 'GET',
-            data: { client_id: clientId },
-            dataType: 'json',
-            success: function(advances) {
-                previousRefSelect.empty().append('<option value="">Please select</option>');
-                if (advances && advances.length > 0) {
-                    advances.forEach(function(advance) {
-                        const selected = advance.id === existingData.previous_advance_id ? 'selected' : '';
-                        previousRefSelect.append(`<option value="${advance.id}" ${selected}>${advance.reference_number || 'Advance #' + advance.id}</option>`);
-                    });
-                    previousRefSelect.prop('disabled', false);
-                } else {
-                    previousRefSelect.append('<option value="">No previous advances found</option>');
-                }
-                previousRefSelect.trigger('change.select2');
-            },
-            error: function(xhr) {
-                console.error('Error loading previous advances:', xhr);
-                previousRefSelect.empty().append('<option value="">Error loading previous advances</option>');
-                previousRefSelect.trigger('change.select2');
+    // Expense Category change - auto-set cheque charge
+    $('#expenseCategory').on('change', function() {
+        const category = $(this).val();
+        if (category && chequeCharges[category]) {
+            $('#chequeChargeExpense').val(chequeCharges[category].charge);
+            $('#chargeBilledTo').val(chequeCharges[category].billed_to);
+        } else {
+            $('#chequeChargeExpense').val('');
+            $('#chargeBilledTo').val('');
+        }
+    });
+
+    // Payment Method change
+    $('#paymentMethod').on('change', function() {
+        if ($(this).val() === 'alternative') {
+            $('#paymentInstructionsGroup').show();
+        } else {
+            $('#paymentInstructionsGroup').hide();
+        }
+    });
+
+    // Interest calculation info
+    function calculateInterestInfo() {
+        const advanceType = $('#advanceType').val();
+        const issuedDate = $('#issuedDate').val();
+        const amount = parseFloat($('#amount').val()) || 0;
+        const rate = parseFloat($('#interestRate').val()) || 3;
+
+        if (!issuedDate || amount <= 0) {
+            $('#interestCalcInfo').html('-');
+            return;
+        }
+
+        const dateObj = new Date(issuedDate);
+        const day = dateObj.getDate();
+        const lastDay = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
+        const remainingDays = lastDay - day;
+
+        if (advanceType === '2') {
+            if (day < 20) {
+                const interest = amount * rate / 100;
+                $('#interestCalcInfo').html(`Before 20th: ${rate}% full = KSh ${interest.toLocaleString(undefined, {minimumFractionDigits:2})}`);
+            } else if (day >= 20 && day <= 25) {
+                const prorated = (amount * rate / 100) * (remainingDays / lastDay);
+                $('#interestCalcInfo').html(`20th-25th: ${rate}% prorated (${remainingDays}/${lastDay} days) = KSh ${prorated.toLocaleString(undefined, {minimumFractionDigits:2})}`);
+            } else {
+                $('#interestCalcInfo').html('After 25th: No interest charged');
+                $('#interestRate').val(0);
             }
-        });
+        } else if (advanceType === '3') {
+            if (day < 25) {
+                const prorated = (amount * rate / 100) * (remainingDays / lastDay);
+                $('#interestCalcInfo').html(`Before 25th: ${rate}% prorated (${remainingDays}/${lastDay} days) = KSh ${prorated.toLocaleString(undefined, {minimumFractionDigits:2})}`);
+            } else {
+                const interest = amount * rate / 100;
+                $('#interestCalcInfo').html(`${rate}% monthly (reducing balance) = KSh ${interest.toLocaleString(undefined, {minimumFractionDigits:2})}/month`);
+            }
+        }
     }
+
+    $('#issuedDate, #amount, #interestRate').on('change keyup', calculateInterestInfo);
 
     // Handle Advance Type change to show/hide fields
     $('#advanceType').on('change', function() {
         const advanceType = $(this).val();
-        
-        // Hide requisitions section if no type selected
+
         if (!advanceType) {
             $('#requisitionsSection').hide();
             return;
         }
-        
-        // Show requisitions section
+
         $('#requisitionsSection').show();
-        
-        // Hide all optional groups first
         $('.field-group').hide();
-        
-        // Remove required attributes from all conditional fields
-        $('#previousReference, #requisitionDate, #issuedDate, #months, #paymentStartDate, #reschedulePaymentStartDate, #topUp, #amount, #narration').prop('required', false);
-        
+
+        // Remove required from conditional fields
+        $('#expenseCategory, #paymentMethod, #requisitionDate, #issuedDate, #amount, #months, #paymentStartDate, #narration').prop('required', false);
+        $('#interestRate').prop('readonly', false);
+
         switch(advanceType) {
-            case '1': // New Advance
-                $('#requisitionDateGroup, #monthsPaymentGroup, #amountInterestGroup, #narrationGroup').show();
-                $('#requisitionDate, #issuedDate, #months, #paymentStartDate, #amount, #narration').prop('required', true);
+            case '1': // Expense Advance - No interest
+                $('#expenseCategoryGroup, #requisitionDateGroup, #amountInterestGroup, #narrationGroup').show();
+                $('#expenseCategory, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
+                $('#interestRate').val(0).prop('readonly', true);
+                $('#interestInfoGroup').hide();
                 break;
-                
-            case '2': // Top Up Advance
-                $('#previousReferenceGroup, #requisitionDateGroup, #monthsPaymentGroup, #topUpGroup, #interestOnlyGroup, #narrationGroup').show();
-                $('#previousReference, #requisitionDate, #issuedDate, #months, #paymentStartDate, #topUp, #narration').prop('required', true);
+
+            case '2': // Client Payment Advance
+                $('#paymentMethodGroup, #requisitionDateGroup, #amountInterestGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
+                $('#paymentMethod, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
+                $('#chequeChargeGeneral').val(100);
+                if ($('#paymentMethod').val() === 'alternative') {
+                    $('#paymentInstructionsGroup').show();
+                }
+                calculateInterestInfo();
                 break;
-                
-            case '3': // Reschedule Advance
-                $('#previousReferenceGroup, #reschedulePaymentGroup').show();
-                $('#previousReference, #reschedulePaymentStartDate').prop('required', true);
+
+            case '3': // Overpayment Advance
+                $('#requisitionDateGroup, #amountInterestGroup, #repaymentGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
+                $('#requisitionDate, #issuedDate, #amount, #months, #paymentStartDate, #narration').prop('required', true);
+                $('#months').val($('#months').val() || 3);
+                $('#chequeChargeGeneral').val(100);
+                calculateInterestInfo();
                 break;
-                
-            case '4': // Lumpsum Advance
-                $('#requisitionDateGroup, #monthsPaymentGroup, #amountInterestGroup, #narrationGroup').show();
-                $('#requisitionDate, #issuedDate, #months, #paymentStartDate, #amount, #narration').prop('required', true);
-                break;
-                
+
             default:
                 $('#requisitionsSection').hide();
                 break;
@@ -434,26 +405,19 @@ $(document).ready(function() {
     $('#client').on('change', function() {
         const clientId = $(this).val();
         const propertySelect = $('#property');
-        const previousRefSelect = $('#previousReference');
-        
-        // Reset property dropdown
+
         propertySelect.empty().append('<option value="">Please select client first</option>');
         propertySelect.prop('disabled', true);
-        
-        // Reset previous reference dropdown
-        previousRefSelect.empty().append('<option value="">Please select</option>');
-        previousRefSelect.prop('disabled', true);
-        
+
         if (clientId) {
             loadProperties(clientId);
-            loadPreviousAdvances(clientId);
         }
     });
 
     // Submit form with AJAX
     $('#advanceForm').submit(function(e) {
         e.preventDefault();
-        
+
         $.ajax({
             url: $(this).attr('action'),
             method: 'POST',
@@ -461,14 +425,14 @@ $(document).ready(function() {
             success: function(response) {
                 toastr.success(response.message || 'Client advance updated successfully');
                 setTimeout(function() {
-                    window.location.href = '{{ route("property.advances.index") }}';
+                    window.location.href = '{{ route("client.advances.index") }}';
                 }, 1500);
             },
             error: function(xhr) {
                 if (xhr.status === 422) {
                     const errors = xhr.responseJSON.errors;
                     $('.invalid-feedback').remove();
-                    
+
                     $.each(errors, function(field, messages) {
                         const input = $(`[name="${field}"]`);
                         input.addClass('is-invalid');

@@ -8,7 +8,7 @@
                 <div class="card card-no-border">
                     <div class="card-header pb-3 d-flex justify-content-between align-items-center">
                         <h5>Client Advance Details</h5>
-                        <a href="{{ route('property.advances.index') }}" class="btn btn-secondary btn-sm">
+                        <a href="{{ route('client.advances.index') }}" class="btn btn-secondary btn-sm">
                             <i class="fa fa-arrow-left"></i> Back to List
                         </a>
                     </div>
@@ -125,42 +125,38 @@
                                 <label class="text-muted small">Advance Type</label>
                                 <div class="fw-bold">
                                     @if($advance->advance_type_id == 1)
-                                    <span class="badge bg-primary">New Advance</span>
+                                    <span class="badge bg-warning">Expense Advance</span>
                                     @elseif($advance->advance_type_id == 2)
-                                    <span class="badge bg-info">Top Up Advance</span>
+                                    <span class="badge bg-primary">Client Payment Advance</span>
                                     @elseif($advance->advance_type_id == 3)
-                                    <span class="badge bg-primary">Reschedule Advance</span>
-                                    @elseif($advance->advance_type_id == 4)
-                                    <span class="badge bg-info">Lumpsum Advance</span>
+                                    <span class="badge bg-info">Overpayment Advance</span>
                                     @else
                                     -
                                     @endif
                                 </div>
                             </div>
+                            @if($advance->advance_type_id == 1 && $advance->expense_category)
                             <div class="col-md-3 mb-2">
-                                <label class="text-muted small">Previous Advance</label>
-                                <div class="fw-bold">
-                                    @if($advance->previous_advance_id)
-                                    {{ $advance->previousAdvance->reference_number ?? 'REF #' . $advance->previous_advance_id }}
-                                    @else
-                                    -
-                                    @endif
-                                </div>
+                                <label class="text-muted small">Expense Category</label>
+                                <div class="fw-bold">{{ str_replace('_', ' ', ucwords($advance->expense_category, '_')) }}</div>
                             </div>
                             <div class="col-md-3 mb-2">
-                                <label class="text-muted small">Top Up Amount</label>
-                                <div class="fw-bold">{{ $advance->top_up ? number_format($advance->top_up, 2) : '-' }}</div>
+                                <label class="text-muted small">Charge Billed To</label>
+                                <div class="fw-bold">{{ $advance->charge_billed_to ?? '-' }}</div>
                             </div>
+                            @endif
+                            @if($advance->advance_type_id == 2)
                             <div class="col-md-3 mb-2">
-                                <label class="text-muted small">One Off</label>
-                                <div class="fw-bold">
-                                    @if($advance->one_off)
-                                    <span class="badge bg-info">Yes</span>
-                                    @else
-                                    <span class="badge bg-secondary">No</span>
-                                    @endif
-                                </div>
+                                <label class="text-muted small">Payment Method</label>
+                                <div class="fw-bold">{{ $advance->payment_method == 'bank_transfer' ? 'Direct Bank Transfer' : ($advance->payment_method == 'alternative' ? 'Alternative Instructions' : '-') }}</div>
                             </div>
+                            @if($advance->payment_method == 'alternative' && $advance->payment_instructions)
+                            <div class="col-md-6 mb-2">
+                                <label class="text-muted small">Payment Instructions</label>
+                                <div class="fw-bold">{{ $advance->payment_instructions }}</div>
+                            </div>
+                            @endif
+                            @endif
                             <div class="col-md-3 mb-2">
                                 <label class="text-muted small">Status</label>
                                 <div class="fw-bold">
@@ -183,7 +179,7 @@
                                     @endif
                                 </div>
                             </div>
-                            <div class="col-md-6 mb-2">
+                            <div class="col-md-3 mb-2">
                                 <label class="text-muted small">Created By</label>
                                 <div class="fw-bold">{{ $advance->createdBy->name ?? '-' }}</div>
                             </div>
