@@ -448,18 +448,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/tenant/deposits', [App\Http\Controllers\InvoicingController::class, 'tenantDeposits'])->name('deposits.tenant.index');
     Route::get('/tenant/deposits/{id}', [App\Http\Controllers\InvoicingController::class, 'depositDetails'])->name('deposits.tenant.details');
 
-    // Client Advances
-    Route::get('/client/advances', [App\Http\Controllers\ClientAdvancesController::class, 'index'])->name('client.advances.index');
-    Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvancesController::class, 'create'])->name('client.advances.create');
-    Route::post('/client/advances/store', [App\Http\Controllers\ClientAdvancesController::class, 'store'])->name('client.advances.store');
-    Route::get('/client/advances/{encryptedId}/details', [App\Http\Controllers\ClientAdvancesController::class, 'show'])->name('client.advances.show');
-    Route::post('/client/advances/search', [App\Http\Controllers\ClientAdvancesController::class, 'searchAdvances'])->name('client.advances.search');
-    Route::post('/client/advances/calculate', [App\Http\Controllers\ClientAdvancesController::class, 'calculateAmortization'])->name('client.advances.calculate');
-    Route::post('/client/advances/{encryptedId}/approve', [App\Http\Controllers\ClientAdvancesController::class, 'approve'])->name('client.advances.approve');
-    Route::get('/client/advances/{encryptedId}/ajax', [App\Http\Controllers\ClientAdvancesController::class, 'getAdvanceDetails'])->name('client.advances.ajax');
-    Route::post('/ajax/deposits/search', [App\Http\Controllers\InvoicingController::class, 'searchDeposits'])->name('ajax.deposits.search');
-    Route::get('/ajax/deposits/details/{id}', [App\Http\Controllers\InvoicingController::class, 'getDepositDetails'])->name('ajax.deposits.details');
-
     // Tenant leases (MUST come before /tenants/{encryptedId} route)
     Route::get('/property/leases', [App\Http\Controllers\LeasesController::class, 'index'])->name('property.leases.index');
     Route::get('/property/leases/data', [App\Http\Controllers\LeasesController::class, 'getAllLeases'])->name('property.leases.data');
@@ -676,8 +664,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/settings/repairs/property-elements/dropdown', [App\Http\Controllers\PropertySettingsController::class, 'getPropertyElementsDropdown'])->name('property.settings.repairs.property-elements.dropdown');
 
     // Client Advances Routes
-    Route::get('/property/advances', [App\Http\Controllers\ClientAdvanceController::class, 'index'])->name('property.advances.index');
-    Route::get('/property/advances/create', [App\Http\Controllers\ClientAdvanceController::class, 'create'])->name('property.advances.create');
+    Route::get('/client/advances', [App\Http\Controllers\ClientAdvanceController::class, 'index'])->name('client.advances.index');
+    // Route::get('/client/advances', [App\Http\Controllers\ClientAdvancesController::class, 'index'])->name('client.advances.index');
+    Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvanceController::class, 'create'])->name('client.advances.create');
     Route::get('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'show'])->name('property.advances.show');
     Route::get('/property/advances/{encryptedId}/edit', [App\Http\Controllers\ClientAdvanceController::class, 'edit'])->name('property.advances.edit');
     Route::get('/property/data', [App\Http\Controllers\ClientAdvanceController::class, 'getAdvances'])->name('property.advances.data');
@@ -690,6 +679,18 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/advances', [App\Http\Controllers\ClientAdvanceController::class, 'store'])->name('property.advances.store');
     Route::put('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'update'])->name('property.advances.update');
     Route::delete('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'destroy'])->name('property.advances.destroy');
+
+    
+    // Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvancesController::class, 'create'])->name('client.advances.create');
+    // Route::post('/client/advances/store', [App\Http\Controllers\ClientAdvancesController::class, 'store'])->name('client.advances.store');
+    // Route::get('/client/advances/{encryptedId}/details', [App\Http\Controllers\ClientAdvancesController::class, 'show'])->name('client.advances.show');
+    // Route::post('/client/advances/search', [App\Http\Controllers\ClientAdvancesController::class, 'searchAdvances'])->name('client.advances.search');
+    // Route::post('/client/advances/calculate', [App\Http\Controllers\ClientAdvancesController::class, 'calculateAmortization'])->name('client.advances.calculate');
+    // Route::post('/client/advances/{encryptedId}/approve', [App\Http\Controllers\ClientAdvancesController::class, 'approve'])->name('client.advances.approve');
+    // Route::get('/client/advances/{encryptedId}/ajax', [App\Http\Controllers\ClientAdvancesController::class, 'getAdvanceDetails'])->name('client.advances.ajax');
+    // Route::post('/ajax/deposits/search', [App\Http\Controllers\InvoicingController::class, 'searchDeposits'])->name('ajax.deposits.search');
+    // Route::get('/ajax/deposits/details/{id}', [App\Http\Controllers\InvoicingController::class, 'getDepositDetails'])->name('ajax.deposits.details');
+
 
     Route::post('/property/listings', [App\Http\Controllers\PropertiesController::class, 'store'])->name('property.properties.store');
     Route::get('/property/listings/{encryptedId}', [App\Http\Controllers\PropertiesController::class, 'show'])->name('property.properties.show');

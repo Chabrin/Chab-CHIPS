@@ -215,3 +215,13 @@ Movements	/property/movements
 Blacklist	/property/blacklist
 R&M	/property/repairs
 Repairs	/property/settings/repairs
+
+
+
+#NEW 30th March 2026
+property/merge
+/property/escalations
+
+#permissions
+property_merge
+lease_escalations

@@ -81,15 +81,24 @@ class PropertiesController extends Controller
     {
         try {
 
+            // Get IDs of properties that are targets of completed merges for this client
+            $mergedTargetIds = DB::table('cb_property_merges')
+                ->where('client_id', $ClientId)
+                ->where('current_status_id', 2) // Completed
+                ->pluck('target_property_id')
+                ->toArray();
+
             $properties = Property::where('client_id', $ClientId)
+                ->where('current_status_id', '!=', 0) // Exclude merged/inactive source properties
                 ->select(['id', 'property_name', 'reference_number'])
                 ->orderBy('property_name', 'asc')
                 ->get()
-                ->map(function ($property) {
+                ->map(function ($property) use ($mergedTargetIds) {
                     return [
                         'id' => $property->id,
                         'property_name' => $property->property_name ?? '-',
                         'reference_number' => $property->reference_number ?? '-',
+                        'is_merged' => in_array($property->id, $mergedTargetIds),
                     ];
                 });
 
