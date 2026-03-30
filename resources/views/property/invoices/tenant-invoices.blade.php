@@ -89,23 +89,35 @@
                     <div class="card-body">
                         <!-- Search Form -->
                         <form id="searchForm">
+                            <!-- Row 1: Property search + Property select -->
                             <div class="row mb-2">
                                 <div class="col-md-6">
-                                    <label for="tenant_search_input" class="form-label">Search Tenant</label>
+                                    <label for="property_search_input" class="form-label">Search Property</label>
                                     <div class="input-group">
-                                        <input type="text" class="form-control" id="tenant_search_input"
-                                            placeholder="Search by Name, Mobile, PIN, or Ref">
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_tenant_btn">
-                                            <span class="material-symbols-outlined" id="search_tenant_icon">search</span>
-                                            <span class="spinner-border spinner-border-sm" role="status" id="search_tenant_spinner" style="display: none;"></span>
+                                        <input type="text" class="form-control" id="property_search_input"
+                                            placeholder="Search by Property Name or Ref">
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_property_btn">
+                                            <span class="material-symbols-outlined" id="search_property_icon">search</span>
+                                            <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display: none;"></span>
                                         </button>
                                     </div>
-                                    <small class="text-muted">Enter at least 2 characters to search</small>
+                                    <small class="text-muted">Search property first, then select tenant</small>
                                 </div>
                                 <div class="col-md-6">
+                                    <label for="property_select" class="form-label">Select Property</label>
+                                    <select class="form-select" id="property_select" disabled>
+                                        <option value="">-- Select Property --</option>
+                                    </select>
+                                    <input type="hidden" id="property_id" name="property_id">
+                                </div>
+                            </div>
+
+                            <!-- Row 2: Tenant select -->
+                            <div class="row mb-2">
+                                <div class="col-md-6">
                                     <label for="tenant_select" class="form-label">Select Tenant <span class="text-danger">*</span></label>
-                                    <select class="form-select" id="tenant_select" name="tenant_id" disabled required>
-                                        <option value="">-- Select Tenant --</option>
+                                    <select class="form-control" id="tenant_select" name="tenant_id" disabled required style="width: 100%;">
+                                        <option value="">-- Select Property First --</option>
                                     </select>
                                     <input type="hidden" id="tenant_id" name="tenant_id">
                                 </div>
@@ -296,15 +308,15 @@
 
                 <!-- Scrollable Table -->
                 <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                    <table class="table table-hover table-sm mb-0" id="statement_table" style="font-size: 0.875rem;">
-                        <thead class="sticky-top" style="background-color: #e9ecef; border-bottom: 2px solid #dee2e6;">
+                    <table class="table table-hover table-sm table-borderless mb-0" id="statement_table" style="font-size: 0.82rem; line-height: 1.2;">
+                        <thead class="sticky-top" style="background-color: #e9ecef; border-bottom: 2px solid #dee2e6; font-size: 0.82rem;">
                             <tr>
-                                <th class="py-2">Date</th>
-                                <th class="py-2">Reference</th>
-                                <th class="py-2" style="max-width: 200px;">Narration</th>
-                                <th class="py-2 text-end">Dr</th>
-                                <th class="py-2 text-end">Cr</th>
-                                <th class="py-2 text-end">Balance</th>
+                                <th class="py-1 px-2" style="white-space:nowrap;">Date</th>
+                                <th class="py-1 px-2" style="white-space:nowrap;">Reference</th>
+                                <th class="py-1 px-2">Narration</th>
+                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Dr</th>
+                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Cr</th>
+                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Balance</th>
                             </tr>
                         </thead>
                         <tbody id="statement_tbody" class="bg-white">
@@ -326,35 +338,95 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         let lineItemIndex = 1;
 
-        // Search tenant button
-        $('#search_tenant_btn').on('click', function() {
-            const searchTerm = $('#tenant_search_input').val().trim();
+        // Search property button
+        $('#search_property_btn').on('click', function() {
+            const searchTerm = $('#property_search_input').val().trim();
 
             if (searchTerm.length < 2) {
                 toastr.warning('Please enter at least 2 characters to search');
                 return;
             }
 
-            $('#search_tenant_icon').hide();
-            $('#search_tenant_spinner').show();
-            $('#search_tenant_btn').prop('disabled', true);
-            $('#tenant_search_input').prop('disabled', true);
+            $('#search_property_icon').hide();
+            $('#search_property_spinner').show();
+            $('#search_property_btn').prop('disabled', true);
 
             $.ajax({
-                url: '/tenants/search',
+                url: '/ajax/statements/properties',
                 method: 'GET',
                 data: {
                     search: searchTerm
                 },
                 success: function(response) {
-                    if (response.success && response.tenants && response.tenants.length > 0) {
-                        $('#tenant_select').empty().append('<option value="">-- Select Tenant --</option>');
+                    if (response.success && response.properties && response.properties.length > 0) {
+                        $('#property_select').empty().append('<option value="">-- Select Property --</option>');
+                        $.each(response.properties, function(index, prop) {
+                            $('#property_select').append(
+                                `<option value="${prop.id}">${prop.property_name} - ${prop.reference_number || ''}</option>`
+                            );
+                        });
+                        $('#property_select').prop('disabled', false);
+                        toastr.success(`Found ${response.properties.length} property(ies)`);
+                    } else {
+                        toastr.info('No properties found');
+                        $('#property_select').empty().append('<option value="">-- No Results --</option>').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error searching properties');
+                },
+                complete: function() {
+                    $('#search_property_icon').show();
+                    $('#search_property_spinner').hide();
+                    $('#search_property_btn').prop('disabled', false);
+                }
+            });
+        });
 
+        // Allow search property with Enter key
+        $('#property_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_property_btn').click();
+            }
+        });
+
+        // When property is selected, load tenants into Select2
+        $('#property_select').on('change', function() {
+            const propertyId = $(this).val();
+            $('#property_id').val(propertyId);
+
+            // Destroy existing Select2 if any
+            if ($('#tenant_select').hasClass('select2-hidden-accessible')) {
+                $('#tenant_select').select2('destroy');
+            }
+
+            // Reset tenant dropdown and details
+            $('#tenant_select').empty().append('<option value="">-- Select Property First --</option>').prop('disabled', true);
+            $('#tenant_id').val('');
+            $('#selected_tenant_name').text('-');
+            $('#selected_tenant_mobile').text('-');
+            $('#selected_tenant_email').text('-');
+            $('#selected_tenant_id').text('-');
+
+            if (!propertyId) return;
+
+            // Load tenants for this property
+            $('#tenant_select').empty().append('<option value="">Loading...</option>');
+
+            $.ajax({
+                url: '/ajax/statements/tenants-by-property',
+                method: 'GET',
+                data: {
+                    property_id: propertyId
+                },
+                success: function(response) {
+                    $('#tenant_select').empty().append('<option value="">-- Search / Select Tenant --</option>');
+                    if (response.success && response.tenants && response.tenants.length > 0) {
                         $.each(response.tenants, function(index, tenant) {
                             $('#tenant_select').append(
                                 `<option value="${tenant.encrypted_id}" 
@@ -362,55 +434,42 @@
                                          data-mobile="${tenant.mobile_number || 'N/A'}" 
                                          data-email="${tenant.email_address || 'N/A'}" 
                                          data-id-number="${tenant.national_id || 'N/A'}">
-                                    ${tenant.names} - Mobile: ${tenant.mobile_number || 'N/A'} - PIN: ${tenant.national_id || 'N/A'} - Ref: ${tenant.reference_number || 'N/A'}
+                                    ${tenant.names} - Unit: ${tenant.unit_code || 'N/A'} - ${tenant.mobile_number || ''}
                                 </option>`
                             );
                         });
-
-                        $('#tenant_select').prop('disabled', false);
-                        toastr.success(`Found ${response.tenants.length} tenant(s)`);
+                        toastr.success(`${response.tenants.length} tenant(s) loaded`);
                     } else {
-                        toastr.info('No tenants found');
-                        $('#tenant_select').empty().append('<option value="">-- No Results --</option>').prop('disabled', true);
+                        toastr.info('No tenants found for this property');
                     }
+                    $('#tenant_select').prop('disabled', false);
+                    // Init Select2 for searchable dropdown
+                    $('#tenant_select').select2({
+                        placeholder: '-- Search / Select Tenant --',
+                        allowClear: true,
+                        width: '100%',
+                        minimumResultsForSearch: 0
+                    });
                 },
-                error: function(xhr) {
-                    toastr.error('Error searching tenants');
-                    console.error(xhr);
-                },
-                complete: function() {
-                    $('#search_tenant_icon').show();
-                    $('#search_tenant_spinner').hide();
-                    $('#search_tenant_btn').prop('disabled', false);
-                    $('#tenant_search_input').prop('disabled', false);
+                error: function() {
+                    toastr.error('Error loading tenants');
+                    $('#tenant_select').empty().append('<option value="">-- Error --</option>');
                 }
             });
         });
 
-        // Allow search with Enter key
-        $('#tenant_search_input').on('keypress', function(e) {
-            if (e.which === 13) {
-                e.preventDefault();
-                $('#search_tenant_btn').click();
-            }
-        });
-
-        // When tenant is selected from dropdown
+        // When tenant is selected from Select2 dropdown
         $('#tenant_select').on('change', function() {
             const selectedOption = $(this).find('option:selected');
             const tenantId = $(this).val();
 
             if (tenantId) {
-                // Update inline tenant details
                 $('#selected_tenant_name').text(selectedOption.data('name'));
                 $('#selected_tenant_mobile').text(selectedOption.data('mobile'));
                 $('#selected_tenant_email').text(selectedOption.data('email'));
                 $('#selected_tenant_id').text(selectedOption.data('id-number'));
-
-                // Set hidden field for search
                 $('#tenant_id').val(tenantId);
             } else {
-                // Reset to dashes
                 $('#selected_tenant_name').text('-');
                 $('#selected_tenant_mobile').text('-');
                 $('#selected_tenant_email').text('-');
@@ -573,12 +632,13 @@
             $('#stmt_tenant_name').text($('#selected_tenant_name').text());
 
             // Load statement data
-            console.log('Loading statement for tenant:', tenantId, 'type:', dateType, 'from', dateFrom, 'to', dateTo);
+            const propertyId = $('#property_id').val();
+            console.log('Loading statement for tenant:', tenantId, 'property:', propertyId, 'type:', dateType, 'from', dateFrom, 'to', dateTo);
 
-            loadStatement(tenantId, dateFrom, dateTo, dateType);
+            loadStatement(tenantId, dateFrom, dateTo, dateType, propertyId);
         });
 
-        function loadStatement(tenantId, dateFrom, dateTo, dateType) {
+        function loadStatement(tenantId, dateFrom, dateTo, dateType, propertyId) {
             $('#statement_tbody').html(`
                 <tr>
                     <td colspan="6" class="text-center py-5">
@@ -595,6 +655,7 @@
                 type: 'POST',
                 data: {
                     tenant_id: tenantId,
+                    property_id: propertyId,
                     date_from: dateFrom,
                     date_to: dateTo,
                     date_type: dateType,
@@ -606,13 +667,13 @@
 
                         response.statement.forEach(function(entry) {
                             html += `
-                                <tr class="border-bottom">
-                                    <td class="py-2">${entry.date_formatted}</td>
-                                    <td class="py-2">${entry.reference}</td>
-                                    <td class="py-2" style="max-width: 200px; word-wrap: break-word; white-space: normal;">${entry.narration}</td>
-                                    <td class="py-2 text-end">${entry.debit_formatted}</td>
-                                    <td class="py-2 text-end">${entry.credit_formatted}</td>
-                                    <td class="py-2 text-end fw-semibold">${entry.balance_formatted}</td>
+                                <tr>
+                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.date_formatted}</td>
+                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.reference}</td>
+                                    <td class="py-1 px-2" style="word-wrap:break-word;white-space:normal;">${entry.narration}</td>
+                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.debit_formatted}</td>
+                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.credit_formatted}</td>
+                                    <td class="py-1 px-2 text-end fw-semibold" style="white-space:nowrap;">${entry.balance_formatted}</td>
                                 </tr>
                             `;
                         });
@@ -628,6 +689,7 @@
                         // Store data for export
                         window.statementData = {
                             tenant_id: tenantId,
+                            property_id: propertyId,
                             date_from: dateFrom,
                             date_to: dateTo,
                             date_type: dateType

@@ -10,25 +10,60 @@
                         <h5 class="mb-0">Processed Returns</h5>
                     </div>
                     <div class="card-body">
+                        <!-- Filters -->
+                        <div class="row mb-3 align-items-end">
+                            <div class="col-md-2">
+                                <label for="year_select" class="form-label mb-1">Year</label>
+                                <select class="form-control form-control-sm" id="year_select">
+                                    @foreach($years as $yr)
+                                    <option value="{{ $yr }}" {{ $yr == $currentYear ? 'selected' : '' }}>{{ $yr }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="month_select" class="form-label mb-1">Month</label>
+                                <select class="form-control form-control-sm" id="month_select">
+                                    <option value="1" {{ $currentMonth == 1 ? 'selected' : '' }}>January</option>
+                                    <option value="2" {{ $currentMonth == 2 ? 'selected' : '' }}>February</option>
+                                    <option value="3" {{ $currentMonth == 3 ? 'selected' : '' }}>March</option>
+                                    <option value="4" {{ $currentMonth == 4 ? 'selected' : '' }}>April</option>
+                                    <option value="5" {{ $currentMonth == 5 ? 'selected' : '' }}>May</option>
+                                    <option value="6" {{ $currentMonth == 6 ? 'selected' : '' }}>June</option>
+                                    <option value="7" {{ $currentMonth == 7 ? 'selected' : '' }}>July</option>
+                                    <option value="8" {{ $currentMonth == 8 ? 'selected' : '' }}>August</option>
+                                    <option value="9" {{ $currentMonth == 9 ? 'selected' : '' }}>September</option>
+                                    <option value="10" {{ $currentMonth == 10 ? 'selected' : '' }}>October</option>
+                                    <option value="11" {{ $currentMonth == 11 ? 'selected' : '' }}>November</option>
+                                    <option value="12" {{ $currentMonth == 12 ? 'selected' : '' }}>December</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex gap-2 align-items-end">
+                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
+                                    <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
+                                    <span class="material-symbols-outlined" id="search_icon">search</span>
+                                    <span class="ms-1">Search</span>
+                                </button>
+                            </div>
+                            <div class="col-md-5 d-flex justify-content-end align-items-end">
+                                <small class="text-muted" id="result_info" style="display:none;">Found <strong id="result_count">0</strong> records</small>
+                            </div>
+                        </div>
+
                         <div class="table-responsive custom-scrollbar">
-                            <table class="table table-sm" id="returns-table" style="font-size: 0.72rem;">
+                            <table class="display" id="returns-table" style="width:100%;">
                                 <thead>
                                     <tr>
-                                        <th>Period</th>
-                                        <th>Client</th>
+                                        <th>#</th>
                                         <th>Property</th>
+                                        <th>Landlord</th>
+                                        <th>Description</th>
                                         <th>Type</th>
-                                        <th class="text-end">Gross</th>
-                                        <th class="text-end">Comms</th>
-                                        <th class="text-end">VAT</th>
-                                        <th class="text-end">Rec</th>
-                                        <th class="text-end">Net</th>
-                                        <th>Status</th>
+                                        <th class="text-end">Paid</th>
+                                        <th>Voucher</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <!-- Loaded via Ajax -->
-                                </tbody>
+                                <tbody></tbody>
                             </table>
                         </div>
                     </div>
@@ -42,83 +77,104 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
-        let returnsTable;
-
-        function loadReturns() {
-            if ($.fn.DataTable.isDataTable('#returns-table')) {
-                $('#returns-table').DataTable().clear().destroy();
+        var tableColumns = [{
+                data: null,
+                orderable: false,
+                searchable: false,
+                render: function(d, t, r, m) {
+                    return m.row + 1;
+                }
+            },
+            {
+                data: 'property_code'
+            },
+            {
+                data: 'landlord_code'
+            },
+            {
+                data: 'return_description',
+                render: function(d) {
+                    return '<small>' + (d || '-') + '</small>';
+                }
+            },
+            {
+                data: 'return_type'
+            },
+            {
+                data: 'amount_paid',
+                className: 'text-end'
+            },
+            {
+                data: 'voucher_number'
+            },
+            {
+                data: null,
+                orderable: false,
+                searchable: false,
+                render: function(d, t, r) {
+                    return '<a href="/processed/returns/' + r.encrypted_id + '/details" class="btn btn-outline-primary btn-sm py-0 px-1" title="View Details">' +
+                        '<span class="material-symbols-outlined" style="font-size:16px;">visibility</span></a>';
+                }
             }
+        ];
 
-            returnsTable = $('#returns-table').DataTable({
-                processing: true,
-                ajax: {
-                    url: '{{ route("ajax.processed.returns.data") }}',
-                    dataSrc: 'data'
+        var table = $('#returns-table').DataTable({
+            data: [],
+            columns: tableColumns,
+            paging: true,
+            info: true,
+            lengthChange: true,
+            searching: true,
+            ordering: true,
+            order: [
+                [1, 'asc']
+            ],
+            pageLength: 50
+        });
+
+        function loadData() {
+            var year = $('#year_select').val();
+            var month = $('#month_select').val();
+
+            $('#search_spinner').show();
+            $('#search_icon').hide();
+            $('#search_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '{{ route("ajax.processed.returns.data") }}',
+                type: 'GET',
+                data: {
+                    year: year,
+                    month: month
                 },
-                columns: [{
-                        data: 'period'
-                    },
-                    {
-                        data: 'client_name',
-                        render: function(data, type, row) {
-                            return `<a href="/processed/returns/${row.encrypted_id}/details" class="text-primary" style="cursor:pointer;">${data}</a>`;
-                        }
-                    },
-                    {
-                        data: 'property'
-                    },
-                    {
-                        data: 'return_type'
-                    },
-                    {
-                        data: 'gross_amount',
-                        className: 'text-end'
-                    },
-                    {
-                        data: 'commission',
-                        className: 'text-end'
-                    },
-                    {
-                        data: 'vat',
-                        className: 'text-end'
-                    },
-                    {
-                        data: 'recoveries',
-                        className: 'text-end'
-                    },
-                    {
-                        data: 'net_amount',
-                        className: 'text-end',
-                        render: function(data, type, row) {
-                            return '<strong>' + data + '</strong>';
-                        }
-                    },
-                    {
-                        data: 'status',
-                        render: function(data, type, row) {
-                            if (data === 'Pending') {
-                                return '<span class="badge badge-light-info">Pending</span>';
-                            } else if (data === 'Approved') {
-                                return '<span class="badge badge-light-success">Approved</span>';
-                            } else if (data === 'Processed') {
-                                return '<span class="badge badge-light-success">OK</span>';
-                            }
-                            return '<span class="badge bg-secondary">' + data + '</span>';
-                        }
+                success: function(response) {
+                    if (response.success) {
+                        $('#result_info').show();
+                        $('#result_count').text(response.count);
+                        table.clear();
+                        table.rows.add(response.data);
+                        table.draw();
+                    } else {
+                        alert(response.message || 'Failed to load data.');
                     }
-                ],
-                order: [
-                    [0, 'desc']
-                ],
-                pageLength: 25,
-                lengthMenu: [
-                    [25, 50, 100, -1],
-                    [25, 50, 100, "All"]
-                ]
+                },
+                error: function(xhr) {
+                    var msg = 'Failed to load data.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    alert(msg);
+                },
+                complete: function() {
+                    $('#search_spinner').hide();
+                    $('#search_icon').show();
+                    $('#search_btn').prop('disabled', false);
+                }
             });
         }
 
-        loadReturns();
+        $('#search_btn').on('click', loadData);
+
+        // Auto-load on page load with current year/month
+        loadData();
     });
 </script>
 @endsection

@@ -181,8 +181,15 @@
         }
 
         // Set month restrictions
+        // allow 1 month ahead for testing
+        let maxMonth = currentMonth + 1;
+        let maxYear = currentYear;
+        if (maxMonth > 12) {
+            maxMonth = 1;
+            maxYear = currentYear + 1;
+        }
         const minDate = `${minYear}-${String(minMonth).padStart(2, '0')}`;
-        const maxDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        const maxDate = `${maxYear}-${String(maxMonth).padStart(2, '0')}`;
 
         $('#billing_month').attr('min', minDate);
         $('#billing_month').attr('max', maxDate);

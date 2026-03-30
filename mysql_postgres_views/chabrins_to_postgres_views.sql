@@ -37,7 +37,7 @@
     - CHOFFICERS: Field officers/staff    — maps to sys_staff or sys_set_system_users
     - CHTNTRS  : Tenant invoices/transactions (1,156,397 rows) — maps to sys_pm_debtors_invoices
     - CHTPAYS  : Tenant payments detail   (1,435,222 rows)   — maps to sys_pm_tenants_payments
-    - CHTACC   : Tenant account ledger    — maps to sys_pm_tenants_accounts_transactions
+    - CHTACC   : Tenant account ledger    — maps to sys_pm_tenants_accounts_trans
     - CHRHMS   : Returns master           — maps to sys_pm_clients_returns_master or returns_batches
     - CHSTFF   : Staff/employees          — maps to sys_staff
     - CHTAXES  : Tax rates (VAT)          — single row, VAT 16%
@@ -57,138 +57,59 @@
 */
 
 
--- ============================================================================
--- 1. BANKS: CHBANK -> sys_set_banks
--- ============================================================================
--- NOTE: Simple master data, no FK dependencies.
 
-CREATE OR ALTER VIEW vw_sys_set_banks AS
+-- ════════════════════════════════════════════════════════════════════════
+-- NUMBERED VIEWS (_001 to _010) — Migration-critical, ordered by suffix
+-- ════════════════════════════════════════════════════════════════════════
+
+-- ============================================================================
+-- NOTE: CHBLOCKS.LLORDID maps to landlords (CHLRDS) -> clients.
+-- LOOKUP: client_id from CHLRDS.LORDID (must load clients first — see view #6)
+--
+-- CHLRDS (Landlords) — now mapped via view #6 (vw_sys_pm_clients).
+--   client_id is resolved by LEFT JOIN to CHLRDS with ROW_NUMBER().
+--
+-- zone_id  resolved via CHBLOCKS.BLOC  -> vw_sys_set_zones  (view #7a)
+-- zone_area_id resolved via CHBLOCKS.BLOCAL -> vw_sys_set_zone_areas (view #7b)
+--
+-- EXTRA TABLE NEEDED: CHLRH (Landlord-Property link)
+--   CHLRH maps LORDID -> BLOCKID with status. Use to verify client_id assignment.
+--
+-- EXTRA TABLE NEEDED: CHOFFICERS (Field Officers)
+--   CHOFFICERS stores field officer IDs used as OFFID, SFOID, ZMGRID in CHBLOCKS.
+
+CREATE OR ALTER VIEW [vw_sys_pm_properties_001] AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY BANKCODE)          AS id,
-    GETDATE()                                       AS date_time,
-    RTRIM(LTRIM(BANKNAME))                          AS bank_name,
-    BANKCODE                                        AS address,      -- store code in address for reference
-    1                                               AS current_status_id  -- Active
-FROM CHABRINS.dbo.CHBANK
-WHERE BANKNAME IS NOT NULL AND BANKNAME <> '';
-GO
+    b.property_id                                       AS id,
+    NULL                                                AS date_time,
+    b.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id from CHLRDS via LLORDID
+    RTRIM(LTRIM(b.BLOCKID))                             AS reference_number,
+    RTRIM(LTRIM(b.BLOCKDESC))                           AS description,
+    NULL                                                AS lat_long,
+    NULL                                                AS photos_and_documents,
+    b.zone_id                                          AS zone_id,
+    -- PRE-STAMPED: zone_id from _mig_zones via BLOC
+    b.zone_area_id                                      AS zone_area_id,
+    -- PRE-STAMPED: zone_area_id from _mig_zone_areas via BLOCAL
+    RTRIM(LTRIM(b.BLOCKDESC))                           AS property_name,
+    RTRIM(LTRIM(b.LRNUM))                               AS lr_number,
+    NULL                                                AS usage_type_id,
+    CASE WHEN b.BSTATUS = 1 THEN 1 ELSE 2 END          AS current_status_id,
+    NULL                                                AS acquisition_date,
+    NULL                                                AS created_by,
+    NULL                                                AS bank_account_id,
+    b.field_officer_id                                  AS field_officer_id,
+    -- PRE-STAMPED: officer_id from CHOFFICERS via OFFID
+    b.zone_supervisor_id                                AS zone_supervisor_id,
+    -- PRE-STAMPED: officer_id from CHOFFICERS via SFOID
+    b.zone_manager_id                                   AS zone_manager_id,
+    -- PRE-STAMPED: officer_id from CHOFFICERS via ZMGRID
+    NULL                                                AS parent_property_id
+FROM CHABRINS.dbo.CHBLOCKS b
+WHERE b.BLOCKID IS NOT NULL;
 
 
--- ============================================================================
--- 2. BANK BRANCHES: CHBBRA -> sys_set_banks_branches
--- ============================================================================
--- NOTE: Requires sys_set_banks to be loaded first (bank_id FK).
--- LOOKUP: bank_id = (SELECT id FROM sys_set_banks WHERE address = CHBBRA.BANKCODE)
-
-CREATE OR ALTER VIEW vw_sys_set_banks_branches AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY b.BANKCODE, b.BRANCODE)    AS id,
-    GETDATE()                                               AS date_time,
-    bk.bank_row_id                                          AS bank_id,
-    -- JOINED: CHBANK via BANKCODE to get sequential bank id
-    RTRIM(LTRIM(b.BRANNAME))                                AS branch_name,
-    1                                                       AS current_status_id,
-    RTRIM(LTRIM(b.BRANCODE))                                AS branch_code
-FROM CHABRINS.dbo.CHBBRA b
-LEFT JOIN (
-    SELECT BANKCODE, ROW_NUMBER() OVER (ORDER BY BANKCODE) AS bank_row_id
-    FROM CHABRINS.dbo.CHBANK
-    WHERE BANKNAME IS NOT NULL AND BANKNAME <> ''
-) bk ON bk.BANKCODE = b.BANKCODE
-WHERE b.BRANNAME IS NOT NULL;
-GO
-
-
--- ============================================================================
--- 3. CHART OF ACCOUNTS (Master): CHACCTS -> sys_gl_chart_accounts_master
--- ============================================================================
--- NOTE: Also fed by CHFACTS and CHFACTV. Use CHFACTV as the most complete source.
--- CHACCTS has basic info; CHFACTV has status, currency, grouping.
--- Strategy: Use CHFACTV as primary, CHACCTS as fallback for missing accounts.
-
-CREATE OR ALTER VIEW vw_sys_gl_chart_accounts_master AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY ACCNUM)                AS id,
-    GETDATE()                                           AS date_time,
-    RTRIM(LTRIM(ACCDESC))                               AS account_name,
-    RTRIM(LTRIM(ACCNUM))                                AS account_code,
-    NULL                                                AS account_group_id,
-    NULL                                                AS category_id,
-    NULL                                                AS class_id,
-    CASE WHEN ACCSTAT = 'Active' THEN 1 ELSE 2 END     AS current_status_id,
-    NULL                                                AS financial_statement_id,
-    NULL                                                AS group_id,
-    NULL                                                AS sub_group_id,
-    CASE WHEN BALTYPE = 'D' THEN 'Debit'
-         WHEN BALTYPE = 'C' THEN 'Credit'
-         ELSE 'Debit' END                               AS normally
-FROM CHABRINS.dbo.CHFACTV
-WHERE ACCNUM IS NOT NULL AND ACCNUM <> '';
-GO
-
-/*
-  NOTE: CHACCTS and CHFACTS also map to this table.
-  - CHACCTS has: ACCNTNO (code), ACCNAME, GLCODE, GLACCNO — subset of CHFACTV
-  - CHFACTS has: ACCNUM, ACCDESC, LASTDR, LASTCR — similar to CHFACTV
-  - Recommendation: Load CHFACTV first (most complete), then UPSERT any missing
-    accounts from CHACCTS/CHFACTS using account_code as the match key.
-*/
--- ============================================================================
--- 4. INVOICEABLE ITEMS / CHARGES: CHCHRS -> sys_set_invoiceable_items
--- ============================================================================
--- NOTE: Standalone master data. CHRGID is the legacy charge code.
-
-
-CREATE OR ALTER VIEW vw_sys_set_invoiceable_items_008 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY CHRGID)                AS id,
-    GETDATE()                                           AS date_time,
-    RTRIM(LTRIM(CHRDSC))                                AS item_name,
-    RTRIM(LTRIM(CHRGID))                                AS billing_code,
-    NULL                                                AS feature,
-    NULL                                                AS payment_priority,
-    CASE WHEN CHRSTT = 'Commissionable' THEN 'Yes' ELSE 'No' END  AS commissionable,
-    NULL                                                AS default_cycle_id,
-    CASE WHEN CHRSTT IS NOT NULL THEN 1 ELSE 2 END     AS current_status_id,
-    NULL                                                AS default_expense_account_id,
-    NULL                                                AS advance_payable,
-    CASE WHEN CHRGTYP = 'BILL' THEN 'Yes' ELSE 'No' END  AS is_bill,
-    'Yes'                                               AS fixed_amount,
-    ISNULL(DEFAMT, 0)                                   AS amount
-FROM CHABRINS.dbo.CHCHRS
-WHERE CHRGID IS NOT NULL;
-
-
-
--- ============================================================================
--- 5. DEPENDENT CHARGES: CHCDC -> sys_set_clients_dependent_charges
--- ============================================================================
--- NOTE: Simple parent-child charge link.
--- LOOKUP: item_type_id would resolve from CHCHRS.CHRGID
-
-CREATE OR ALTER VIEW vw_sys_set_clients_dependent_charges AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY dc.PCHRGID, dc.DCHRGID)  AS id,
-    GETDATE()                                           AS date_time,
-    RTRIM(LTRIM(dc.PCHRGID)) + ' -> ' + RTRIM(LTRIM(dc.DCHRGID))  AS title,
-    ch.item_row_id                                      AS item_type_id,
-    -- JOINED: CHCHRS via PCHRGID to get parent charge sequential id
-    NULL                                                AS credit_account_id,
-    1                                                   AS current_status_id,
-    NULL                                                AS created_by_id,
-    0                                                   AS amount
-FROM CHABRINS.dbo.CHCDC dc
-LEFT JOIN (
-    SELECT CHRGID, ROW_NUMBER() OVER (ORDER BY CHRGID) AS item_row_id
-    FROM CHABRINS.dbo.CHCHRS
-    WHERE CHRGID IS NOT NULL
-) ch ON ch.CHRGID = dc.PCHRGID
-WHERE dc.PCHRGID IS NOT NULL;
-GO
-
-
--- ============================================================================
--- 6. CLIENTS / LANDLORDS: CHLRDS -> sys_pm_clients
 -- ============================================================================
 -- NOTE: CHLRDS is the landlord master table. In chips_db_v3, landlords = "clients".
 --   CHLRDS was NOT in the mapping CSV but is essential as the client source.
@@ -202,7 +123,7 @@ GO
 
 CREATE OR ALTER VIEW [vw_sys_pm_clients_landlords_002] AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY c.LORDID)               AS id,
+    c.client_id                                         AS id,
     CASE WHEN c.CURYRR IS NOT NULL AND c.CURMNTH IS NOT NULL
          THEN DATEFROMPARTS(c.CURYRR, c.CURMNTH, 1)
          ELSE NULL END                                  AS date_time,
@@ -236,7 +157,7 @@ SELECT
     CASE WHEN RTRIM(LTRIM(c.LANDSTT)) = 'Active' THEN 1
          ELSE 2 END                                     AS client_status_id,
     NULL                                                AS lead_id,
-    NULL                                                AS type_id,
+    1                                                   AS type_id,
     RTRIM(LTRIM(c.LORDID))                              AS client_id,
     NULL                                                AS second_name,
     NULL                                                AS last_name,
@@ -262,263 +183,17 @@ WHERE c.LORDID IS NOT NULL AND RTRIM(LTRIM(c.LORDID)) <> '';
 
 
 -- ============================================================================
--- 6b. CLIENTS (Tenants): CHTENS -> sys_pm_clients
--- ============================================================================
--- NOTE: CHTENS is the tenant master table. In chips_db_v3, tenants are also
---   stored in sys_pm_clients, distinguished by reference_number prefix 'TEN-'.
---   The Client model uses scopeTenants() -> WHERE reference_number LIKE 'TEN%'.
---   CHTENS has 133,710 rows (IN: 40,892 / OUT: 92,816 / NULL: 2).
---   TENID is a national ID / passport number (68,165 unique, 49,151 NULL).
---   TENANTID is a composite: BLOCKNO+UNITNO+TENNAME+TSTATUS (not a clean key).
---   reference_number = 'TEN-' + ROW_NUMBER to generate unique TEN-xxxxx codes.
---   BLOCKNO/UNITNO are used to resolve property_id and unit_id via JOINs.
---   TSTATUS: 'IN' (active) = status 1, 'OUT' (vacated) = status 2.
-
-CREATE OR ALTER VIEW vw_sys_pm_clients_tenants_004 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY t.TENNAME, t.BLOCKNO, t.UNITNO)  AS id,
-    GETDATE()                                           AS date_time,
-    RTRIM(LTRIM(t.TENNAME))                             AS names,
-    RTRIM(LTRIM(t.TENADDR))                             AS address,
-    NULL                                                AS vat_number,
-    NULL                                                AS pin_number,
-    RTRIM(LTRIM(CAST(t.TELMOB AS VARCHAR(200))))        AS mobile_number,
-    RTRIM(LTRIM(t.TENEMAIL))                            AS email_address,
-    NULL                                                AS bank_id,
-    NULL                                                AS account_name,
-    NULL                                                AS account_number,
-    NULL                                                AS username,
-    NULL                                                AS client_password,
-    RTRIM(LTRIM(t.TENID))                               AS uid,
-    NULL                                                AS group_id,
-    t.LEASSDAT                                          AS registered_date,
-    'TEN-' + RIGHT('00000' + CAST(
-        ROW_NUMBER() OVER (ORDER BY t.TENNAME, t.BLOCKNO, t.UNITNO)
-        AS VARCHAR(10)), 6)                             AS reference_number,
-    -- Generates TEN-000001, TEN-000002, ... to match scopeTenants() pattern
-    NULL                                                AS created_by,
-    NULL                                                AS nationality_id,
-    RTRIM(LTRIM(t.TENID))                               AS national_id,
-    NULL                                                AS passport_number,
-    RTRIM(LTRIM(t.TENTYPE))                             AS client_type_id,
-    NULL                                                AS photo,
-    NULL                                                AS documents,
-    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN' THEN 1
-         ELSE 2 END                                     AS current_status_id,
-    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN' THEN 1
-         ELSE 2 END                                     AS client_status_id,
-    NULL                                                AS lead_id,
-    RTRIM(LTRIM(t.TYPLEAS))                             AS type_id,
-    RTRIM(LTRIM(t.TENANTID))                            AS client_id,
-    NULL                                                AS second_name,
-    NULL                                                AS last_name,
-    NULL                                                AS title,
-    NULL                                                AS gender,
-    NULL                                                AS prefered_messages_language_id,
-    blk.block_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKNO to get property sequential id
-    NULL                                                AS sla_id,
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKNO+UNITNO to get unit sequential id
-    t.LEASSDAT                                          AS lease_start_date,
-    t.LEASELEN                                          AS lease_years,
-    t.CURBAL                                            AS rent_amount,
-    t.LEASEREN                                          AS escalation_rate,
-    RTRIM(LTRIM(t.LEASLETY))                            AS frequency,
-    RTRIM(LTRIM(t.TENTWN))                              AS address_2,
-    RTRIM(LTRIM(t.TENNAT))                              AS address_3,
-    NULL                                                AS promas_id,
-    NULL                                                AS properties,
-    NULL                                                AS overdraft_penalty
-FROM CHABRINS.dbo.CHTENS t
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS block_row_id
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) blk ON RTRIM(LTRIM(blk.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
-LEFT JOIN (
-    -- WHERE matches vw_sys_pm_units_003 exactly (UNITNO IS NOT NULL only, no BLOCKID filter)
-    -- so unit_row_id aligns with the id that will be inserted into sys_pm_units.
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
-      AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(t.UNITNO))
-WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '';
-
-
-
--- ============================================================================
--- 7a. ZONES: CHBLOCKS.BLOC -> sys_set_zones
--- ============================================================================
--- NOTE: CHABRINS has NO dedicated zone table. Zone codes (A–G) are stored
---   in CHBLOCKS.BLOC. The 7 distinct values exactly match sys_set_zones in
---   chips_db_v3 (zones A, B, C, D, E, F, G).
---   SOURCE: CHBLOCKS.BLOC (distinct values)
---   TARGET: sys_set_zones (id, zone_name, current_status_id)
-
-CREATE OR ALTER VIEW vw_sys_set_zones_006 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY BLOC)                   AS id,
-    GETDATE()                                           AS date_time,
-    NULL                                                AS estates_id,
-    RTRIM(LTRIM(BLOC))                                  AS zone_name,
-    1                                                   AS current_status_id
-FROM (
-    SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
-) z;
-
-
-
--- ============================================================================
--- 7b. ZONE AREAS: CHBLOCKS.BLOCAL -> sys_set_zone_areas
--- ============================================================================
--- NOTE: CHBLOCKS.BLOCAL contains locality/area names (e.g. "Githurai 45",
---   "Kasarani", "Zimmerman"). These map to sys_set_zone_areas.area_name.
---   zone_id is resolved by matching BLOC to the zone ROW_NUMBER (view #7a).
---   115 distinct BLOCAL values exist in CHBLOCKS; chips_2 MySQL has 75
---   zone_areas — manual review may be needed for unmapped localities.
---   SOURCE: CHBLOCKS.BLOCAL (distinct values, grouped with their BLOC)
---   TARGET: sys_set_zone_areas (id, area_name, zone_id)
-
-CREATE OR ALTER VIEW vw_sys_set_zone_areas_007 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY ar.BLOCAL)              AS id,
-    GETDATE()                                           AS date_time,
-    RTRIM(LTRIM(ar.BLOCAL))                             AS area_name,
-    zn.zone_row_id                                      AS zone_id
-    -- JOINED: CHBLOCKS distinct BLOC values via same ROW_NUMBER as vw_sys_set_zones
-FROM (
-    SELECT DISTINCT
-        RTRIM(LTRIM(BLOCAL)) AS BLOCAL,
-        RTRIM(LTRIM(BLOC))   AS BLOC
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCAL IS NOT NULL AND RTRIM(LTRIM(BLOCAL)) <> ''
-) ar
-LEFT JOIN (
-    -- DISTINCT in subquery first, THEN ROW_NUMBER — avoids SQL Server
-    -- executing ROW_NUMBER before DISTINCT.
-    SELECT BLOC, ROW_NUMBER() OVER (ORDER BY BLOC) AS zone_row_id
-    FROM (
-        SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
-        FROM CHABRINS.dbo.CHBLOCKS
-        WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
-    ) zd
-) zn ON zn.BLOC = ar.BLOC;
-
-
-
--- ============================================================================
--- 8. PROPERTIES / BLOCKS: CHBLOCKS -> sys_pm_properties
--- ============================================================================
--- NOTE: CHBLOCKS.LLORDID maps to landlords (CHLRDS) -> clients.
--- LOOKUP: client_id from CHLRDS.LORDID (must load clients first — see view #6)
---
--- CHLRDS (Landlords) — now mapped via view #6 (vw_sys_pm_clients).
---   client_id is resolved by LEFT JOIN to CHLRDS with ROW_NUMBER().
---
--- zone_id  resolved via CHBLOCKS.BLOC  -> vw_sys_set_zones  (view #7a)
--- zone_area_id resolved via CHBLOCKS.BLOCAL -> vw_sys_set_zone_areas (view #7b)
---
--- EXTRA TABLE NEEDED: CHLRH (Landlord-Property link)
---   CHLRH maps LORDID -> BLOCKID with status. Use to verify client_id assignment.
---
--- EXTRA TABLE NEEDED: CHOFFICERS (Field Officers)
---   CHOFFICERS stores field officer IDs used as OFFID, SFOID, ZMGRID in CHBLOCKS.
-
-CREATE OR ALTER VIEW [vw_sys_pm_properties_001] AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY b.BLOCKID)              AS id,
-    NULL                                                AS date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHLRDS via LLORDID to get landlord/client sequential id
-    -- NOTE: lord_row_id uses identical ROW_NUMBER logic as vw_sys_pm_clients_landlords_002
-    --       (ORDER BY LORDID, no GROUP BY dedup) so FK will align correctly.
-    RTRIM(LTRIM(b.BLOCKID))                             AS reference_number,
-    RTRIM(LTRIM(b.BLOCKDESC))                           AS description,
-    NULL                                                AS lat_long,
-    NULL                                                AS photos_and_documents,
-    zn.zone_row_id                                      AS zone_id,
-    -- JOINED: CHBLOCKS.BLOC -> vw_sys_set_zones ROW_NUMBER (view #7a)
-    za.zone_area_row_id                                 AS zone_area_id,
-    -- JOINED: CHBLOCKS.BLOCAL -> vw_sys_set_zone_areas ROW_NUMBER (view #7b)
-    RTRIM(LTRIM(b.BLOCKDESC))                           AS property_name,
-    RTRIM(LTRIM(b.LRNUM))                               AS lr_number,
-    NULL                                                AS usage_type_id,
-    CASE WHEN b.BSTATUS = 1 THEN 1 ELSE 2 END          AS current_status_id,
-    NULL                                                AS acquisition_date,
-    NULL                                                AS created_by,
-    NULL                                                AS bank_account_id,
-    fo.off_row_id                                       AS field_officer_id,
-    -- JOINED: CHOFFICERS via OFFID
-    sfo.off_row_id                                      AS zone_supervisor_id,
-    -- JOINED: CHOFFICERS via SFOID
-    zm.off_row_id                                       AS zone_manager_id,
-    -- JOINED: CHOFFICERS via ZMGRID
-    NULL                                                AS parent_property_id
-FROM CHABRINS.dbo.CHBLOCKS b
-LEFT JOIN (
-    -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
-    -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
-    SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-           ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
-    FROM CHABRINS.dbo.CHLRDS
-    WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-) lr ON lr.lordid_clean = RTRIM(LTRIM(b.LLORDID))           -- exact match first
-     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(b.LLORDID)), 'LAN-', '')  -- fallback: strip LAN- prefix from LLORDID
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) fo ON RTRIM(LTRIM(fo.OFFID)) = RTRIM(LTRIM(b.OFFID))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) sfo ON RTRIM(LTRIM(sfo.OFFID)) = RTRIM(LTRIM(b.SFOID))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) zm ON RTRIM(LTRIM(zm.OFFID)) = RTRIM(LTRIM(b.ZMGRID))
-LEFT JOIN (
-    -- Zone id: DISTINCT in subquery first, THEN ROW_NUMBER — avoids SQL Server
-    -- executing ROW_NUMBER before DISTINCT (which would return 1842 rows not 7).
-    SELECT BLOC, ROW_NUMBER() OVER (ORDER BY BLOC) AS zone_row_id
-    FROM (
-        SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
-        FROM CHABRINS.dbo.CHBLOCKS
-        WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
-    ) zd
-) zn ON zn.BLOC = RTRIM(LTRIM(b.BLOC))
-LEFT JOIN (
-    -- Zone area id: DISTINCT in subquery first, THEN ROW_NUMBER.
-    SELECT BLOCAL, ROW_NUMBER() OVER (ORDER BY BLOCAL) AS zone_area_row_id
-    FROM (
-        SELECT DISTINCT RTRIM(LTRIM(BLOCAL)) AS BLOCAL
-        FROM CHABRINS.dbo.CHBLOCKS
-        WHERE BLOCAL IS NOT NULL AND RTRIM(LTRIM(BLOCAL)) <> ''
-    ) zad
-) za ON za.BLOCAL = RTRIM(LTRIM(b.BLOCAL))
-WHERE b.BLOCKID IS NOT NULL;
-
-
--- ============================================================================
--- 9. UNITS: CHBUNITS -> sys_pm_units
--- ============================================================================
 -- NOTE: CHBUNITS.BLOCKID is FK to CHBLOCKS -> property_id in PG.
 -- LOOKUP: property_id from sys_pm_properties WHERE reference_number = CHBUNITS.BLOCKID
 
 CREATE OR ALTER VIEW vw_sys_pm_units_003 AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY u.BLOCKID, u.UNITNO)   AS id,
+    u.unit_id                                           AS id,
     GETDATE()                                           AS date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKID -> LLORDID -> LORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID to get property sequential id
+    u.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id from CHBLOCKS->CHLRDS chain via BLOCKID
+    u.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKID
     RTRIM(LTRIM(u.UNITTYP))                             AS unit_type_id,
     NULL                                                AS usage_type_id,
     RTRIM(LTRIM(u.BLOCKID)) + '-' + RTRIM(LTRIM(u.UNITNO))  AS unit_code,
@@ -540,46 +215,483 @@ SELECT
     NULL                                                AS topology_id,
     NULL                                                AS block_owner_tenant_id
 FROM CHABRINS.dbo.CHBUNITS u
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(u.BLOCKID))
-LEFT JOIN (
-    -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
-    -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
-    SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-           ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
-    FROM CHABRINS.dbo.CHLRDS
-    WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-) lr ON lr.lordid_clean = RTRIM(LTRIM(prop.LLORDID))           -- exact match first
-     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', '')  -- fallback: strip LAN- prefix from LLORDID
-WHERE u.UNITNO IS NOT NULL;
+WHERE u.unit_id IS NOT NULL;
 
 
 
+-- ============================================================================
+-- NOTE: CHTENS is the tenant master table. In chips_db_v3, tenants are also
+--   stored in sys_pm_clients, distinguished by reference_number prefix 'TEN-'.
+--   The Client model uses scopeTenants() -> WHERE reference_number LIKE 'TEN%'.
+--   CHTENS has 133,710 rows (IN: 40,892 / OUT: 92,816 / NULL: 2).
+--   TENID is a national ID / passport number (68,165 unique, 49,151 NULL).
+--   TENANTID is a composite: BLOCKNO+UNITNO+TENNAME+TSTATUS (not a clean key).
+--   reference_number = 'TEN-' + ROW_NUMBER to generate unique TEN-xxxxx codes.
+--   BLOCKNO/UNITNO are used to resolve property_id and unit_id via JOINs.
+--   TSTATUS: 'IN' (active) = status 1, 'OUT' (vacated) = status 2.
+
+CREATE OR ALTER VIEW vw_sys_pm_clients_tenants_004 AS
+SELECT
+    t.tenant_id                                         AS id,
+    GETDATE()                                           AS date_time,
+    RTRIM(LTRIM(t.TENNAME))                             AS names,
+    RTRIM(LTRIM(t.TENADDR))                             AS address,
+    NULL                                                AS vat_number,
+    NULL                                                AS pin_number,
+    RTRIM(LTRIM(CAST(t.TELMOB AS VARCHAR(200))))        AS mobile_number,
+    RTRIM(LTRIM(t.TENEMAIL))                            AS email_address,
+    NULL                                                AS bank_id,
+    NULL                                                AS account_name,
+    NULL                                                AS account_number,
+    NULL                                                AS username,
+    NULL                                                AS client_password,
+    RTRIM(LTRIM(t.TENID))                               AS uid,
+    NULL                                                AS group_id,
+    t.LEASSDAT                                          AS registered_date,
+    'TEN-' + RIGHT('00000' + CAST(t.tenant_id
+        AS VARCHAR(10)), 6)                             AS reference_number,
+    -- Uses pre-stamped tenant_id to generate TEN-000001, TEN-000002, ...
+    NULL                                                AS created_by,
+    NULL                                                AS nationality_id,
+    RTRIM(LTRIM(t.TENID))                               AS national_id,
+    NULL                                                AS passport_number,
+    RTRIM(LTRIM(t.TENTYPE))                             AS client_type_id,
+    NULL                                                AS photo,
+    NULL                                                AS documents,
+    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN' THEN 1
+         ELSE 2 END                                     AS current_status_id,
+    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN' THEN 1
+         ELSE 2 END                                     AS client_status_id,
+    NULL                                                AS lead_id,
+    2                                                   AS type_id,
+    RTRIM(LTRIM(t.TENANTID))                            AS client_id,
+    NULL                                                AS second_name,
+    NULL                                                AS last_name,
+    NULL                                                AS title,
+    NULL                                                AS gender,
+    NULL                                                AS prefered_messages_language_id,
+    t.property_id                                      AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKNO
+    NULL                                                AS sla_id,
+    t.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id from CHBUNITS via BLOCKNO+UNITNO
+    t.LEASSDAT                                          AS lease_start_date,
+    t.LEASELEN                                          AS lease_years,
+    t.CURBAL                                            AS rent_amount,
+    t.LEASEREN                                          AS escalation_rate,
+    RTRIM(LTRIM(t.LEASLETY))                            AS frequency,
+    RTRIM(LTRIM(t.TENTWN))                              AS address_2,
+    RTRIM(LTRIM(t.TENNAT))                              AS address_3,
+    NULL                                                AS promas_id,
+    NULL                                                AS properties,
+    NULL                                                AS overdraft_penalty
+FROM CHABRINS.dbo.CHTENS t
+WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '';
+
+
+
+-- ============================================================================
+-- NOTE: CHTENS is the authoritative source for lease agreements.
+--   Previous version drove from CHCNAM (4,222 rows) which joined to CHTENS
+--   on TENNAME+BLOCKNO+UNITNO — producing millions of rows because that combo
+--   is not unique in CHTENS (multiple historical records per unit).
+--   Driving directly from CHTENS gives exactly 133,710 rows:
+--     IN  (active)     : 40,892
+--     OUT (terminated) : 92,816
+--     NULL             :      2
+--   tenant_id self-joins back to CHTENS with identical ORDER BY so FK aligns
+--   with vw_sys_pm_clients_tenants_004 row numbers.
+--   CHTENS columns used for lease fields:
+--     LEASSDAT  -> date_start (lease start date)
+--     EXDAT     -> date_end   (lease expiry / exit date)
+--     LEASELEN  -> years
+--     LEASEREN  -> escalation_rate
+--     LEASLETY  -> escalation_frequency
+--     TSTATUS   -> lease_status / current_status_id
+
+CREATE OR ALTER VIEW vw_sys_pm_lease_agreements_005 AS
+SELECT
+    t.tenant_id                                         AS id,
+    GETDATE()                                           AS date_time,
+    blk.client_id                                       AS client_id,
+    -- PRE-STAMPED: client_id via CHBLOCKS (BLOCKNO -> CHBLOCKS chain)
+    t.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKNO
+    t.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id from CHBUNITS via BLOCKNO+UNITNO
+    t.tenant_id                                         AS tenant_id,
+    -- PRE-STAMPED: tenant_id (same ORDER BY as vw_sys_pm_clients_tenants_004)
+    t.LEASSDAT                                          AS date_start,
+    t.EXDAT                                             AS date_end,
+    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN'  THEN 'Active'
+         WHEN RTRIM(LTRIM(t.TSTATUS)) = 'OUT' THEN 'Terminated'
+         ELSE 'Active' END                              AS lease_status,
+    RTRIM(LTRIM(t.BLOCKNO)) + '-' + RTRIM(LTRIM(t.UNITNO)) + '-' + LEFT(RTRIM(LTRIM(t.TENNAME)), 20)  AS ref_number,
+    NULL                                                AS created_by_id,
+    NULL                                                AS sla_id,
+    -- NOTE: sla_id populated post-migration from sys_pm_service_agreements
+    -- (view _018) by matching on property_id.
+    blk.zone_id                                         AS zone_id,
+    -- PRE-STAMPED: zone_id from CHBLOCKS via BLOC -> _mig_zones
+    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN'  THEN 1
+         WHEN RTRIM(LTRIM(t.TSTATUS)) = 'OUT' THEN 2
+         ELSE 1 END                                     AS current_status_id,
+    'No'                                                AS auto_renewal,
+    t.LEASELEN                                          AS years,
+    0                                                   AS initial_water_meter_reading,
+    ISNULL(t.LEASEREN, 0)                               AS escalation_rate,
+    RTRIM(LTRIM(t.LEASLETY))                            AS escalation_frequency,
+    NULL                                                AS documents,
+    NULL                                                AS linked_lease_id,
+    'No'                                                AS override_rent_calc
+FROM CHABRINS.dbo.CHTENS t
+LEFT JOIN CHABRINS.dbo.CHBLOCKS blk
+  ON RTRIM(LTRIM(blk.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
+WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '';
+
+
+
+/*
+  NOTE: Source changed from CHCNAM to CHTENS.
+  CHCNAM (4,222 rows) caused a row explosion when joined to CHTENS because
+  TENNAME+BLOCKNO+UNITNO is not unique in CHTENS (history records).
+  Driving from CHTENS directly gives one row per tenancy record (133,710 total).
+  Lease dates come directly from CHTENS columns (LEASSDAT, EXDAT).
+  client_id resolved via CHBLOCKS.LLORDID -> CHLRDS.LORDID chain.
+  property_id, unit_id, tenant_id resolved via direct JOINs.
+*/
+
+
+-- ============================================================================
+-- SERVICE LEVEL AGREEMENTS (SLA): CHBLOCKS -> sys_pm_service_agreements
+-- ============================================================================
+-- SOURCE: CHBLOCKS (1,842 rows) — one SLA per property.
+--   CHABRINS has NO dedicated SLA table, but CHBLOCKS stores commission rate
+--   (COMRATE) and VAT applicability (VATABL) per property/block.
+--   QRYCOMMS (10,009 rows) has monthly commission history but CHBLOCKS.COMRATE
+--   holds the current/latest rate directly.
+--
+-- TARGET: sys_pm_service_agreements (20 columns)
+--   Maps one SLA per property with commission_percentage from CHBLOCKS.COMRATE.
+--
+-- FK RESOLUTION:
+--   client_id    → PRE-STAMPED on CHBLOCKS via LLORDID -> CHLRDS chain
+--   property_id  → PRE-STAMPED on CHBLOCKS
+--   zone_id      → PRE-STAMPED on CHBLOCKS via BLOC -> _mig_zones
+--
+-- POST-MIGRATION: After loading this, update sys_pm_lease_agreements.sla_id:
+--   UPDATE sys_pm_lease_agreements l
+--   SET sla_id = s.id
+--   FROM sys_pm_service_agreements s
+--   WHERE s.property_id = l.property_id;
+
+CREATE OR ALTER VIEW vw_sys_pm_service_agreements_018 AS
+SELECT
+    GETDATE()                                           AS date_time,
+    b.client_id                                         AS client_d,
+    -- PRE-STAMPED: client_id from CHLRDS via LLORDID
+    NULL                                                AS zone_area_id,
+    b.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id
+    ISNULL(b.COMRATE, 0)                                AS commission_percentage,
+    CASE WHEN RTRIM(LTRIM(b.VATABL)) = 'Yes' THEN 'Yes'
+         ELSE 'No' END                                  AS vat,
+    NULL                                                AS date_start,
+    NULL                                                AS date_end,
+    b.zone_id                                           AS zone_id,
+    -- PRE-STAMPED: zone_id from _mig_zones via BLOC
+    NULL                                                AS [select],
+    'SLA-' + RTRIM(LTRIM(b.BLOCKID))                    AS reference_number,
+    NULL                                                AS created_by_id,
+    NULL                                                AS sla_documents,
+    NULL                                                AS landlord_payment_date,
+    CASE WHEN b.BSTATUS = 1 THEN 1 ELSE 2 END          AS current_status_id,
+    'No'                                                AS auto_renewal,
+    NULL                                                AS years,
+    16.00                                               AS vat_per,
+    0                                                   AS flat_rate_vat
+FROM CHABRINS.dbo.CHBLOCKS b
+WHERE b.BLOCKID IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- NOTE: CHABRINS has NO dedicated zone table. Zone codes (A–G) are stored
+--   in CHBLOCKS.BLOC. The 7 distinct values exactly match sys_set_zones in
+--   chips_db_v3 (zones A, B, C, D, E, F, G).
+--   SOURCE: CHBLOCKS.BLOC (distinct values)
+--   TARGET: sys_set_zones (id, zone_name, current_status_id)
+
+CREATE OR ALTER VIEW vw_sys_set_zones_006 AS
+SELECT
+    z.zone_id                                           AS id,
+    GETDATE()                                           AS date_time,
+    NULL                                                AS estates_id,
+    RTRIM(LTRIM(z.bloc))                                AS zone_name,
+    1                                                   AS current_status_id
+FROM CHABRINS.dbo._mig_zones z;
+
+
+
+-- ============================================================================
+-- NOTE: CHBLOCKS.BLOCAL contains locality/area names (e.g. "Githurai 45",
+--   "Kasarani", "Zimmerman"). These map to sys_set_zone_areas.area_name.
+--   zone_id is resolved by matching BLOC to the zone ROW_NUMBER (view #7a).
+--   115 distinct BLOCAL values exist in CHBLOCKS; chips_2 MySQL has 75
+--   zone_areas — manual review may be needed for unmapped localities.
+--   SOURCE: CHBLOCKS.BLOCAL (distinct values, grouped with their BLOC)
+--   TARGET: sys_set_zone_areas (id, area_name, zone_id)
+
+CREATE OR ALTER VIEW vw_sys_set_zone_areas_007 AS
+SELECT
+    za.zone_area_id                                     AS id,
+    GETDATE()                                           AS date_time,
+    RTRIM(LTRIM(za.blocal))                             AS area_name,
+    z.zone_id                                           AS zone_id
+    -- PRE-STAMPED: zone_id from _mig_zones via bloc
+FROM CHABRINS.dbo._mig_zone_areas za
+LEFT JOIN CHABRINS.dbo._mig_zones z ON z.bloc = za.bloc;
+
+
+
+-- ============================================================================
+-- NOTE: Standalone master data. CHRGID is the legacy charge code.
+
+
+CREATE OR ALTER VIEW vw_sys_set_invoiceable_items_008 AS
+SELECT
+    item_id                                             AS id,
+    GETDATE()                                           AS date_time,
+    RTRIM(LTRIM(CHRDSC))                                AS item_name,
+    RTRIM(LTRIM(CHRGID))                                AS billing_code,
+    NULL                                                AS feature,
+    NULL                                                AS payment_priority,
+    CASE WHEN CHRSTT = 'Commissionable' THEN 'Yes' ELSE 'No' END  AS commissionable,
+    NULL                                                AS default_cycle_id,
+    CASE WHEN CHRSTT IS NOT NULL THEN 1 ELSE 2 END     AS current_status_id,
+    NULL                                                AS default_expense_account_id,
+    NULL                                                AS advance_payable,
+    CASE WHEN CHRGTYP = 'BILL' THEN 'Yes' ELSE 'No' END  AS is_bill,
+    'Yes'                                               AS fixed_amount,
+    ISNULL(DEFAMT, 0)                                   AS amount
+FROM CHABRINS.dbo.CHCHRS
+WHERE CHRGID IS NOT NULL;
+
+
+
+-- ============================================================================
+-- NOTE: CHTNTRS is the tenant transactions table (1,156,397 rows).
+--   Each row is a charge or allocation against a tenant/unit combo.
+--   TRANSTYP values: RENT (796K), NULL (317K), House Deposit, Service Charge,
+--   Water Bill, Water Deposit, Electricity Deposit, Electricity Bill, etc.
+--   Maps to sys_pm_debtors_invoices (279,413 rows in MySQL chips_2).
+--   All TRANSTYP rows are migrated — the system determines invoice vs payment
+--   by other flags (INVPRT, BALAMT, TSTATUS, RECOVD).
+--
+--   FK RESOLUTION:
+--   client_id   → CHBLOCKS.LLORDID → CHLRDS ROW_NUMBER (ORDER BY LORDID)
+--   property_id → CHBLOCKS ROW_NUMBER (ORDER BY BLOCKID)
+--   unit_id     → CHBUNITS ROW_NUMBER (ORDER BY BLOCKID, UNITNO)
+--   tenant_id   → CHTENS ROW_NUMBER (ORDER BY TENNAME, BLOCKNO, UNITNO)
+--   zone_id     → CHBLOCKS.BLOC → same DISTINCT subquery as vw_sys_set_zones_006
+--   field/zone officers → CHOFFICERS via CHBLOCKS.OFFID, SFOID, ZMGRID
+
+CREATE OR ALTER VIEW vw_sys_pm_debtors_invoices_009 AS
+SELECT
+    n.invoice_id                                        AS id,
+    n.TRADATE                                           AS date_time,
+    TRY_CAST(NULLIF(RTRIM(LTRIM(n.DATEDUE)), '') AS DATETIME)  AS date_due,
+    -- DATEDUE is varchar(50) in CHTNTRS — TRY_CAST handles malformed values
+    n.zone_id                                           AS zone_id,
+    -- PRE-STAMPED: zone_id via CHBLOCKS.BLOC -> _mig_zones
+    n.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id via CHBLOCKS (BLOCKID)
+    n.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id via CHBUNITS (BLOCKID + UNITNO)
+    n.tenant_id                                         AS lease_id,
+    -- PRE-STAMPED: tenant_id via CHTENS — same as lease_agreements id
+    n.tenant_id                                         AS tenant_id,
+    -- PRE-STAMPED: tenant_id via CHTENS (TENNAME + BLOCKID + UNITNO)
+    n.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id via CHBLOCKS -> CHLRDS chain
+    NULL                                                AS created_by,
+    -- ENTRYBY is a free-text staff name; cannot reliably JOIN to sys_staff ids
+    RTRIM(LTRIM(n.INVONUM))                             AS reference_number,
+    RTRIM(LTRIM(n.TRANSDESC))                           AS narration,
+    2                                                   AS debtor_type_id,
+    ISNULL(n.TRANSAMT, 0)                               AS total_amount,
+    RTRIM(LTRIM(n.TRANSDESC))                           AS trans_details,
+    CASE WHEN RTRIM(LTRIM(n.DELSTAT)) = 'Del' THEN 2
+         WHEN RTRIM(LTRIM(n.TSTATUS)) = 'OUT' THEN 2
+         ELSE 1 END                                     AS current_status_id,
+    NULL                                                AS sla_id,
+    CASE WHEN ISNULL(n.INVPRT, 0) = 1 THEN 'Yes' ELSE 'No' END  AS processed,
+    NULL                                                AS comm_ammount,
+    CAST(ISNULL(n.PAYPERC, 0) AS VARCHAR(50))           AS comm_per,
+    NULL                                                AS vat_ammount,
+    NULL                                                AS vat_per,
+    NULL                                                AS commisionable_amount,
+    ISNULL(n.AMTPAY, 0)                                 AS payable_amount,
+    NULL                                                AS item_type_id,
+    NULL                                                AS cycle_id,
+    ISNULL(n.BALAMT, 0)                                 AS current_balance,
+    NULL                                                AS client_remittable,
+    NULL                                                AS distributions_allocation_id,
+    RTRIM(LTRIM(n.TRANSTYP))                            AS return_type_id,
+    n.field_officer_id                                  AS field_officer_id,
+    -- PRE-STAMPED: field_officer_id via CHBLOCKS -> CHOFFICERS (OFFID)
+    n.zone_supervisor_id                                AS zone_supervisor_id,
+    -- PRE-STAMPED: zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
+    n.zone_manager_id                                   AS zone_manager_id,
+    -- PRE-STAMPED: zone_manager_id via CHBLOCKS -> CHOFFICERS (ZMGRID)
+    NULL                                                AS paid_to_client,
+    NULL                                                AS occupancy_status_id,
+    NULL                                                AS vat_on_commission,
+    1                                                   AS returns_status_id,
+    NULL                                                AS return_report_id,
+    NULL                                                AS is_arrear_id,
+    NULL                                                AS lease_status_id,
+    NULL                                                AS remarks_id,
+    1                                                   AS return_report_type_id,
+    NULL                                                AS parent_invoice_id,
+    NULL                                                AS parent_invoice_rpt_id,
+    NULL                                                AS override_period_check,
+    CASE WHEN n.TRAYR > 0 AND n.TRAMNTH BETWEEN 1 AND 12
+         THEN TRY_CONVERT(DATE, CAST(n.TRAYR AS VARCHAR(4)) + '-' + RIGHT('0' + CAST(n.TRAMNTH AS VARCHAR(2)), 2) + '-01')
+         ELSE NULL END                                  AS returns_period
+FROM CHABRINS.dbo.CHTNTRS n
+WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
+
+
+
+-- ════════════════════════════════════════════════════════════════════════
+-- REMAINING VIEWS — Supporting / supplementary
+-- ════════════════════════════════════════════════════════════════════════
+
+-- ============================================================================
+-- 1. BANKS: CHBANK -> sys_set_banks
+-- ============================================================================
+-- NOTE: Simple master data, no FK dependencies.
+
+CREATE OR ALTER VIEW vw_sys_set_banks AS
+SELECT
+    bank_id                                         AS id,
+    GETDATE()                                       AS date_time,
+    RTRIM(LTRIM(BANKNAME))                          AS bank_name,
+    BANKCODE                                        AS address,      -- store code in address for reference
+    1                                               AS current_status_id  -- Active
+FROM CHABRINS.dbo.CHBANK
+WHERE bank_id IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 2. BANK BRANCHES: CHBBRA -> sys_set_banks_branches
+-- ============================================================================
+-- NOTE: Requires sys_set_banks to be loaded first (bank_id FK).
+-- LOOKUP: bank_id = (SELECT id FROM sys_set_banks WHERE address = CHBBRA.BANKCODE)
+
+CREATE OR ALTER VIEW vw_sys_set_banks_branches AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY b.BANKCODE, b.BRANCODE)    AS id,
+    GETDATE()                                               AS date_time,
+    b.bank_id                                               AS bank_id,
+    -- PRE-STAMPED: bank_id from CHBANK via BANKCODE
+    RTRIM(LTRIM(b.BRANNAME))                                AS branch_name,
+    1                                                       AS current_status_id,
+    RTRIM(LTRIM(b.BRANCODE))                                AS branch_code
+FROM CHABRINS.dbo.CHBBRA b
+WHERE b.BRANNAME IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 3. CHART OF ACCOUNTS (Master): CHACCTS -> sys_gl_chart_accounts_master
+-- ============================================================================
+-- NOTE: Also fed by CHFACTS and CHFACTV. Use CHFACTV as the most complete source.
+-- CHACCTS has basic info; CHFACTV has status, currency, grouping.
+-- Strategy: Use CHFACTV as primary, CHACCTS as fallback for missing accounts.
+
+CREATE OR ALTER VIEW vw_sys_gl_chart_accounts_master AS
+SELECT
+    account_id                                          AS id,
+    GETDATE()                                           AS date_time,
+    RTRIM(LTRIM(ACCDESC))                               AS account_name,
+    RTRIM(LTRIM(ACCNUM))                                AS account_code,
+    NULL                                                AS account_group_id,
+    NULL                                                AS category_id,
+    NULL                                                AS class_id,
+    CASE WHEN ACCSTAT = 'Active' THEN 1 ELSE 2 END     AS current_status_id,
+    NULL                                                AS financial_statement_id,
+    NULL                                                AS group_id,
+    NULL                                                AS sub_group_id,
+    CASE WHEN BALTYPE = 'D' THEN 'Debit'
+         WHEN BALTYPE = 'C' THEN 'Credit'
+         ELSE 'Debit' END                               AS normally
+FROM CHABRINS.dbo.CHFACTV
+WHERE ACCNUM IS NOT NULL AND ACCNUM <> '';
+GO
+
+/*
+  NOTE: CHACCTS and CHFACTS also map to this table.
+  - CHACCTS has: ACCNTNO (code), ACCNAME, GLCODE, GLACCNO — subset of CHFACTV
+  - CHFACTS has: ACCNUM, ACCDESC, LASTDR, LASTCR — similar to CHFACTV
+  - Recommendation: Load CHFACTV first (most complete), then UPSERT any missing
+    accounts from CHACCTS/CHFACTS using account_code as the match key.
+*/
+-- ============================================================================
+-- 4. INVOICEABLE ITEMS / CHARGES: CHCHRS -> sys_set_invoiceable_items
+-- ============================================================================
+-- 5. DEPENDENT CHARGES: CHCDC -> sys_set_clients_dependent_charges
+-- ============================================================================
+-- NOTE: Simple parent-child charge link.
+-- LOOKUP: item_type_id would resolve from CHCHRS.CHRGID
+
+CREATE OR ALTER VIEW vw_sys_set_clients_dependent_charges AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY dc.PCHRGID, dc.DCHRGID)  AS id,
+    GETDATE()                                           AS date_time,
+    RTRIM(LTRIM(dc.PCHRGID)) + ' -> ' + RTRIM(LTRIM(dc.DCHRGID))  AS title,
+    dc.item_id                                          AS item_type_id,
+    -- PRE-STAMPED: item_id from CHCHRS via PCHRGID
+    NULL                                                AS credit_account_id,
+    1                                                   AS current_status_id,
+    NULL                                                AS created_by_id,
+    0                                                   AS amount
+FROM CHABRINS.dbo.CHCDC dc
+WHERE dc.PCHRGID IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 6. CLIENTS / LANDLORDS: CHLRDS -> sys_pm_clients
+-- ============================================================================
+-- 6b. CLIENTS (Tenants): CHTENS -> sys_pm_clients
+-- ============================================================================
+-- 7a. ZONES: CHBLOCKS.BLOC -> sys_set_zones
+-- ============================================================================
+-- 7b. ZONE AREAS: CHBLOCKS.BLOCAL -> sys_set_zone_areas
+-- ============================================================================
+-- 8. PROPERTIES / BLOCKS: CHBLOCKS -> sys_pm_properties
+-- ============================================================================
+-- 9. UNITS: CHBUNITS -> sys_pm_units
 -- ============================================================================
 -- 10. CHEQUE BOOKS: CHCHQ -> sys_fin_cheque_books
 -- ============================================================================
 
 CREATE OR ALTER VIEW vw_sys_fin_cheque_books AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY cq.CHQNO)              AS id,
+    cq.cheque_id                                        AS id,
     GETDATE()                                           AS date_time,
-    bk.bank_row_id                                      AS bank_account_id,
-    -- JOINED: CHBANK via LEFT(CHQACC,2) matching BANKCODE (first 2 chars = bank code)
+    cq.bank_id                                          AS bank_account_id,
+    -- PRE-STAMPED: bank_id from CHBANK via LEFT(CHQACC,2)
     RTRIM(LTRIM(cq.CHQNO))                              AS first_cheque_number,
     1                                                   AS leafs,
     NULL                                                AS created_by_id,
     CASE WHEN cq.CHQSTAT = 1 THEN 1 ELSE 2 END         AS current_status_id,
     RTRIM(LTRIM(ISNULL(cq.CHQBKNO, cq.CHQNO)))         AS reference_number
 FROM CHABRINS.dbo.CHCHQ cq
-LEFT JOIN (
-    SELECT BANKCODE, ROW_NUMBER() OVER (ORDER BY BANKCODE) AS bank_row_id
-    FROM CHABRINS.dbo.CHBANK
-    WHERE BANKNAME IS NOT NULL AND BANKNAME <> ''
-) bk ON bk.BANKCODE = LEFT(cq.CHQACC, 2)
-WHERE cq.CHQNO IS NOT NULL;
+WHERE cq.cheque_id IS NOT NULL;
 GO
 
 
@@ -648,116 +760,6 @@ GO
 -- ============================================================================
 -- 12. LEASE AGREEMENTS: CHTENS -> sys_pm_lease_agreements
 -- ============================================================================
--- NOTE: CHTENS is the authoritative source for lease agreements.
---   Previous version drove from CHCNAM (4,222 rows) which joined to CHTENS
---   on TENNAME+BLOCKNO+UNITNO — producing millions of rows because that combo
---   is not unique in CHTENS (multiple historical records per unit).
---   Driving directly from CHTENS gives exactly 133,710 rows:
---     IN  (active)     : 40,892
---     OUT (terminated) : 92,816
---     NULL             :      2
---   tenant_id self-joins back to CHTENS with identical ORDER BY so FK aligns
---   with vw_sys_pm_clients_tenants_004 row numbers.
---   CHTENS columns used for lease fields:
---     LEASSDAT  -> date_start (lease start date)
---     EXDAT     -> date_end   (lease expiry / exit date)
---     LEASELEN  -> years
---     LEASEREN  -> escalation_rate
---     LEASLETY  -> escalation_frequency
---     TSTATUS   -> lease_status / current_status_id
-
-CREATE OR ALTER VIEW vw_sys_pm_lease_agreements_005 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY t.TENNAME, t.BLOCKNO, t.UNITNO)  AS id,
-    GETDATE()                                           AS date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKNO -> LLORDID -> LORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKNO to get property sequential id
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKNO + UNITNO to get unit sequential id
-    ten.ten_row_id                                      AS tenant_id,
-    -- SELF-JOIN: CHTENS with same ORDER BY as vw_sys_pm_clients_tenants_004
-    t.LEASSDAT                                          AS date_start,
-    t.EXDAT                                             AS date_end,
-    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN'  THEN 'Active'
-         WHEN RTRIM(LTRIM(t.TSTATUS)) = 'OUT' THEN 'Terminated'
-         ELSE 'Active' END                              AS lease_status,
-    RTRIM(LTRIM(t.BLOCKNO)) + '-' + RTRIM(LTRIM(t.UNITNO)) + '-' + LEFT(RTRIM(LTRIM(t.TENNAME)), 20)  AS ref_number,
-    NULL                                                AS created_by_id,
-    NULL                                                AS sla_id,
-    -- NOTE: No SLA/service-agreement table exists in CHABRINS.
-    -- sla_id must be assigned manually post-migration by matching
-    -- sys_pm_service_agreements.property_id to the migrated property.
-    cnzn.zone_row_id                                    AS zone_id,
-    -- JOINED: CHBLOCKS.BLOC -> vw_sys_set_zones ROW_NUMBER (view #7a)
-    CASE WHEN RTRIM(LTRIM(t.TSTATUS)) = 'IN'  THEN 1
-         WHEN RTRIM(LTRIM(t.TSTATUS)) = 'OUT' THEN 2
-         ELSE 1 END                                     AS current_status_id,
-    'No'                                                AS auto_renewal,
-    t.LEASELEN                                          AS years,
-    0                                                   AS initial_water_meter_reading,
-    ISNULL(t.LEASEREN, 0)                               AS escalation_rate,
-    RTRIM(LTRIM(t.LEASLETY))                            AS escalation_frequency,
-    NULL                                                AS documents,
-    NULL                                                AS linked_lease_id,
-    'No'                                                AS override_rent_calc
-FROM CHABRINS.dbo.CHTENS t
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID, BLOC
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
-LEFT JOIN (
-    -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
-    -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
-    SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-           ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
-    FROM CHABRINS.dbo.CHLRDS
-    WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-) lr ON lr.lordid_clean = RTRIM(LTRIM(prop.LLORDID))
-     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(t.UNITNO))
-LEFT JOIN (
-    -- tenant_id: ROW_NUMBER matches vw_sys_pm_clients_tenants_004 exactly
-    -- (same source table, same ORDER BY, same WHERE — row numbers align 1:1)
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL AND RTRIM(LTRIM(TENNAME)) <> ''
-) ten ON ten.TENNAME = t.TENNAME
-      AND ten.BLOCKNO = t.BLOCKNO
-      AND ten.UNITNO  = t.UNITNO
-LEFT JOIN (
-    -- zone_id: DISTINCT in subquery first, THEN ROW_NUMBER — avoids SQL Server
-    -- executing ROW_NUMBER before DISTINCT (which would return 1842 rows not 7).
-    SELECT BLOC, ROW_NUMBER() OVER (ORDER BY BLOC) AS zone_row_id
-    FROM (
-        SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
-        FROM CHABRINS.dbo.CHBLOCKS
-        WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
-    ) zd
-) cnzn ON cnzn.BLOC = RTRIM(LTRIM(prop.BLOC))
-WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '';
-
-
-/*
-  NOTE: Source changed from CHCNAM to CHTENS.
-  CHCNAM (4,222 rows) caused a row explosion when joined to CHTENS because
-  TENNAME+BLOCKNO+UNITNO is not unique in CHTENS (history records).
-  Driving from CHTENS directly gives one row per tenancy record (133,710 total).
-  Lease dates come directly from CHTENS columns (LEASSDAT, EXDAT).
-  client_id resolved via CHBLOCKS.LLORDID -> CHLRDS.LORDID chain.
-  property_id, unit_id, tenant_id resolved via direct JOINs.
-*/
-
-
--- ============================================================================
 -- 13. DEPOSITS: CHDPAY -> sys_pm_deposits
 -- ============================================================================
 -- LOOKUP: tenant_id, property_id, unit_id from CHTENS/CHBLOCKS/CHBUNITS
@@ -767,16 +769,16 @@ SELECT
     ROW_NUMBER() OVER (ORDER BY d.BLOCKID, d.UNITNO, d.TENNAME)  AS id,
     GETDATE()                                           AS date_time,
     GETDATE()                                           AS deposit_date,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKID -> LLORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID
+    d.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id via CHBLOCKS chain
+    d.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKID
     NULL                                                AS sla_id,
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKID + UNITNO
+    d.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id from CHBUNITS via BLOCKID+UNITNO
     NULL                                                AS lease_id,
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENNAME + BLOCKID + UNITNO
+    d.tenant_id                                         AS tenant_id,
+    -- PRE-STAMPED: tenant_id from CHTENS via TENNAME+BLOCKID+UNITNO
     NULL                                                AS invoice_id,
     NULL                                                AS item_id,
     ISNULL(d.TOTPAY, 0)                                 AS amount,
@@ -787,33 +789,6 @@ SELECT
     0                                                   AS invoice_balance,
     RTRIM(LTRIM(d.TRANSDESC))                           AS narration
 FROM CHABRINS.dbo.CHDPAY d
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(d.BLOCKID))
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(d.BLOCKID))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(d.UNITNO))
-LEFT JOIN (
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL
-) ten ON ten.TENNAME = d.TENNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(d.BLOCKID))
-     AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(d.UNITNO))
 WHERE d.TENNAME IS NOT NULL;
 GO
 
@@ -827,15 +802,15 @@ SELECT
     ROW_NUMBER() OVER (ORDER BY d.TENNAME, d.BLOCKID, d.UNITNO)  AS id,
     GETDATE()                                           AS date_time,
     d.PAYDATE                                           AS request_date,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKID -> LLORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKID + UNITNO
+    d.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id via CHBLOCKS chain
+    d.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKID
+    d.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id from CHBUNITS via BLOCKID+UNITNO
     NULL                                                AS lease_id,
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENNAME + BLOCKID + UNITNO
+    d.tenant_id                                         AS tenant_id,
+    -- PRE-STAMPED: tenant_id from CHTENS via TENNAME+BLOCKID+UNITNO
     ISNULL(d.PAYAMT, 0)                                 AS current_total_balance,
     NULL                                                AS created_by,
     NULL                                                AS vacating_date,
@@ -846,33 +821,6 @@ SELECT
     ISNULL(d.PAYAMT, 0)                                 AS total_deposits_amount,
     ISNULL(d.PAYAMT, 0)                                 AS net_balance
 FROM CHABRINS.dbo.CHDPS d
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(d.BLOCKID))
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(d.BLOCKID))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(d.UNITNO))
-LEFT JOIN (
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL
-) ten ON ten.TENNAME = d.TENNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(d.BLOCKID))
-     AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(d.UNITNO))
 WHERE d.TENNAME IS NOT NULL;
 GO
 
@@ -883,12 +831,12 @@ GO
 
 CREATE OR ALTER VIEW vw_sys_fin_payment_vouchers AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY h.BTCHID)              AS id,
+    h.voucher_id                                        AS id,
     GETDATE()                                           AS date_time,
     CAST(h.BTCHDAT AS DATETIME)                         AS trans_date_time,
     NULL                                                AS recepient_id,
-    stf.staff_row_id                                    AS entered_by,
-    -- JOINED: CHSTFF via EMPNUMB matching BTCRBY
+    h.staff_id                                          AS entered_by,
+    -- PRE-STAMPED: staff_id from CHSTFF via BTCRBY
     CAST(h.BTCHID AS VARCHAR(20))                       AS origin_id,
     'PV-' + CAST(h.BTCHID AS VARCHAR(20))               AS reference_number,
     NULL                                                AS transaction_type_id,
@@ -917,11 +865,6 @@ SELECT
     CAST(h.BTCHID AS INT)                               AS batch_id,
     NULL                                                AS cheque_leaf_id
 FROM CHABRINS.dbo.CHBCTH h
-LEFT JOIN (
-    SELECT EMPNUMB, ROW_NUMBER() OVER (ORDER BY EMPNUMB) AS staff_row_id
-    FROM CHABRINS.dbo.CHSTFF
-    WHERE EMPNUMB IS NOT NULL AND RTRIM(LTRIM(EMPNUMB)) <> ''
-) stf ON RTRIM(LTRIM(stf.EMPNUMB)) = RTRIM(LTRIM(h.BTCRBY))
 WHERE h.BTCHID IS NOT NULL;
 GO
 
@@ -936,8 +879,8 @@ GO
 CREATE OR ALTER VIEW vw_sys_fin_payment_vouchers_264_repeat_FROM_CHBCTD AS
 SELECT
     ROW_NUMBER() OVER (ORDER BY d.BTCHID, d.ENTRYID)  AS id,
-    pv.pv_row_id                                       AS parent_id,
-    -- JOINED: CHBCTH via BTCHID to get payment voucher sequential id
+    d.voucher_id                                       AS parent_id,
+    -- PRE-STAMPED: voucher_id from CHBCTH via BTCHID
     NULL                                                AS transaction_type_id,
     ISNULL(d.RCAMT, 0)                                  AS amount,
     RTRIM(LTRIM(d.ACCNO))                               AS debit_account_id,
@@ -946,22 +889,12 @@ SELECT
     NULL                                                AS cash_custodian_id,
     NULL                                                AS client_id,
     NULL                                                AS client_account_id,
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID
+    d.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKID
     RTRIM(LTRIM(d.TRANSDESC))                           AS narration,
     'No'                                                AS charge_client,
     NULL                                                AS cheque_number_id
 FROM CHABRINS.dbo.CHBCTD d
-LEFT JOIN (
-    SELECT BTCHID, ROW_NUMBER() OVER (ORDER BY BTCHID) AS pv_row_id
-    FROM CHABRINS.dbo.CHBCTH
-    WHERE BTCHID IS NOT NULL
-) pv ON pv.BTCHID = d.BTCHID
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(d.BLOCKID))
 WHERE d.BTCHID IS NOT NULL;
 GO
 
@@ -973,8 +906,8 @@ GO
 CREATE OR ALTER VIEW vw_sys_fin_payment_vouchers_264_repeat_FROM_CHCHD AS
 SELECT
     ROW_NUMBER() OVER (ORDER BY h.CHQNO, h.ENTRYID)   AS id,
-    pv.pv_row_id                                       AS parent_id,
-    -- JOINED: CHBCTH via PAYVOUC matching BTCHID
+    h.voucher_id                                       AS parent_id,
+    -- PRE-STAMPED: voucher_id from CHBCTH via PAYVOUC
     NULL                                                AS transaction_type_id,
     ISNULL(h.ENTRYAMT, 0)                               AS amount,
     RTRIM(LTRIM(h.PACCNUM))                             AS debit_account_id,
@@ -986,507 +919,239 @@ SELECT
     NULL                                                AS property_id,
     RTRIM(LTRIM(h.ENTDESC))                             AS narration,
     'No'                                                AS charge_client,
-    cq.chq_row_id                                       AS cheque_number_id
-    -- JOINED: CHCHQ via CHQNO + CHQACC
+    h.cheque_id                                         AS cheque_number_id
+    -- PRE-STAMPED: cheque_id from CHCHQ via CHQNO+CHQACC
 FROM CHABRINS.dbo.CHCHD h
-LEFT JOIN (
-    SELECT BTCHID, ROW_NUMBER() OVER (ORDER BY BTCHID) AS pv_row_id
-    FROM CHABRINS.dbo.CHBCTH
-    WHERE BTCHID IS NOT NULL
-) pv ON CAST(pv.BTCHID AS VARCHAR(20)) = RTRIM(LTRIM(h.PAYVOUC))
-LEFT JOIN (
-    SELECT CHQNO, CHQACC, ROW_NUMBER() OVER (ORDER BY CHQNO) AS chq_row_id
-    FROM CHABRINS.dbo.CHCHQ
-    WHERE CHQNO IS NOT NULL
-) cq ON RTRIM(LTRIM(cq.CHQNO)) = RTRIM(LTRIM(h.CHQNO))
-     AND RTRIM(LTRIM(cq.CHQACC)) = RTRIM(LTRIM(h.CHQACC))
 WHERE h.CHQNO IS NOT NULL;
 GO
 
 
 -- ============================================================================
--- 18. TENANT PAYMENTS: CHIPAYS -> sys_pm_tenants_payments
+-- 18. ALLOCATED PAYMENTS: CHTPAYS -> sys_pm_tenants_payments_allocated
 -- ============================================================================
--- NOTE: CHIPAYS has summary payment records.
+-- SOURCE: CHTPAYS (1,435,222 rows) — payments received and allocated to tenants.
+-- TARGET: sys_pm_tenants_payments_allocated (new clean DDL, id auto-generated).
 --
--- EXTRA TABLE NEEDED: CHTPAYS — NOT IN CSV MAPPING (1,435,222 rows)
---   CHTPAYS has detailed tenant payment records with RCNO, amounts, batch info.
---   CHTPAYS is the PRIMARY payment source; CHIPAYS appears to be a summary.
---   Consider migrating CHTPAYS instead of (or in addition to) CHIPAYS.
+-- Simple straight mapping — no joins. Text name columns (TENNAME, BLOCKID,
+-- UNITNO) dropped in favour of pre-stamped integer FKs.
+-- PDTOLL, TSTATUS, ADSH, PAYDATF dropped (empty/zero in all rows).
+--
+-- All FK integer IDs PRE-STAMPED by generate_migration_ids.py:
+--   property_id, client_id, zone_id, unit_id, tenant_id,
+--   field_officer_id, zone_supervisor_id, zone_manager_id
 
-CREATE OR ALTER VIEW vw_sys_pm_tenants_payments AS
+CREATE OR ALTER VIEW vw_sys_pm_tenants_payments_allocated_011 AS
 SELECT
-    ROW_NUMBER() OVER (ORDER BY p.CHECKNO)             AS id,
-    GETDATE()                                           AS date_time,
-    p.RCDATE                                            AS payment_date,
-    CAST(p.RCNO AS VARCHAR(50))                         AS reference,
-    RTRIM(LTRIM(p.RCMARK))                              AS narration,
-    NULL                                                AS created_by,
-    NULL                                                AS zone_id,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKNO -> LLORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKNO
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKNO + UNITNO
-    NULL                                                AS lease_id,
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENNAME + BLOCKNO + UNITNO
-    1                                                   AS current_status_id,
+    p.TRANSDAT                                          AS date_time,
+    p.PAYDATE                                           AS payment_date,
+    p.BATCHID                                           AS batch_id,
+    p.ENTRYID                                           AS entry_id,
+    CAST(p.RCNO AS VARCHAR(50))                         AS receipt_number,
     ISNULL(p.RCAMT, 0)                                  AS amount,
-    NULL                                                AS invoice_id,
-    RTRIM(LTRIM(p.RACTION))                             AS trans_details,
-    NULL                                                AS sla_id,
-    NULL                                                AS channel_id,
-    CAST(p.CHECKNO AS VARCHAR(50))                      AS receipt_number,
-    NULL                                                AS recovery_type_id,
-    NULL                                                AS field_officer_id,
-    NULL                                                AS zone_supervisor_id,
-    NULL                                                AS zone_manager_id,
-    NULL                                                AS extract_id,
-    NULL                                                AS tenant_aid
-FROM CHABRINS.dbo.CHIPAYS p
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(p.BLOCKNO))
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(p.BLOCKNO))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(p.UNITNO))
-LEFT JOIN (
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL
-) ten ON ten.TENNAME = p.TENNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(p.BLOCKNO))
-     AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(p.UNITNO))
-WHERE p.CHECKNO IS NOT NULL;
+    p.TRANSDESC                                         AS narration,
+    p.PAYFOR                                            AS pay_for,
+    p.TRAMNTH                                           AS payment_month,
+    p.TRAYR                                             AS payment_year,
+    p.PYMOD                                             AS payment_mode,
+    p.PAYMOD                                            AS payment_channel,
+    p.SECURCD                                           AS security_code,
+    p.REFNUM                                            AS reference_number,
+    p.ENTRYREF                                          AS entry_ref,
+    ISNULL(p.TRANAMT, 0)                                AS trans_amount,
+    p.TRANTYP                                           AS trans_type,
+    p.TRANRMK                                           AS trans_remarks,
+    p.TRANPART                                          AS trans_part,
+    p.RMONTH                                            AS receipt_month,
+    p.RYEAR                                             AS receipt_year,
+    p.RECOVD                                            AS is_recovery,
+    p.INRACC                                            AS is_in_account,
+    p.property_id                                       AS property_id,
+    p.client_id                                         AS client_id,
+    p.unit_id                                           AS unit_id,
+    p.tenant_id                                         AS tenant_id,
+    p.zone_id                                           AS zone_id,
+    p.field_officer_id                                  AS field_officer_id,
+    p.zone_supervisor_id                                AS zone_supervisor_id,
+    p.zone_manager_id                                   AS zone_manager_id,
+    1                                                   AS current_status_id
+    -- NOTE: cancelled receipts (CHRCS) are updated post-migration
+    -- see Post_Migration_Scripts.sql
+FROM CHABRINS.dbo.CHTPAYS p
+WHERE p.TENNAME IS NOT NULL
+  AND p.BLOCKID IS NOT NULL;
 GO
 
-/*
-  EXTRA TABLE: CHTPAYS (Tenant Payments Detail)
-    - 1,435,222 rows — the main payment transaction table
-    - Key columns: TENNAME, BLOCKID, UNITNO, RCNO, RCAMT, PAYDATE, PYMOD,
-                   SECURCD (security code/reference), ENTRYREF, TRANTYP
-    - CHTPAYS.RCNO is the receipt number
-    - CHTPAYS.SECURCD is the MPESA/bank reference code
-    - CHTPAYS.TRANTYP = payment type (IBAPS, PAYBILL, etc.)
-    - This table should be the PRIMARY migration source for tenant payments.
-    - A separate view for CHTPAYS is recommended:
 
-    CREATE VIEW vw_sys_pm_tenants_payments_FROM_CHTPAYS AS
-    SELECT
-        ROW_NUMBER() OVER (ORDER BY BATCHID, ENTRYID) AS id,
-        GETDATE()           AS date_time,
-        PAYDATE             AS payment_date,
-        SECURCD             AS reference,
-        TRANSDESC           AS narration,
-        ...
-    FROM CHABRINS.dbo.CHTPAYS;
-*/
+-- ============================================================================
+-- 18b. UNALLOCATED PAYMENTS: CHBCTD -> sys_pm_tenants_payments_unallocated
+-- ============================================================================
+-- SOURCE: CHBCTD (1,472,942 rows) — raw bank batch detail lines (pre-posting).
+-- TARGET: sys_pm_tenants_payments_unallocated (new clean DDL, id auto-generated).
+--
+-- Simple straight mapping — no joins. Text name columns (TENNAME, BLOCKID,
+-- UNITNO, OFFID, SFOID, ZMGRID, PRPBY, PSTDBY, SVRFBY) dropped.
+-- DSPNO, SFID, ENTRYREF2 dropped (empty in all/most rows).
+--
+-- PRE-STAMPED FK columns: voucher_id, property_id
+
+CREATE OR ALTER VIEW vw_sys_pm_tenants_payments_unallocated_012 AS
+SELECT
+    d.TRANSDAT                                          AS date_time,
+    d.BTCHID                                            AS batch_id,
+    d.ENTRYID                                           AS entry_id,
+    d.ENTRYREF                                          AS entry_ref,
+    d.HSECODE                                           AS house_code,
+    d.ENTDAT                                            AS entry_date,
+    d.CHZONE                                            AS zone_code,
+    d.RCNO                                              AS receipt_number,
+    ISNULL(d.RCAMT, 0)                                  AS amount,
+    d.TRANSDESC                                         AS narration,
+    d.PAYFOR                                            AS pay_for,
+    d.PAYMNTH                                           AS pay_month,
+    d.PAYYEAR                                           AS pay_year,
+    d.SECURNO                                           AS security_code,
+    d.TRANSTYP                                          AS trans_type,
+    d.PYMOD                                             AS payment_mode,
+    d.TRNRMKS                                           AS trans_remarks,
+    d.TRNPART                                           AS trans_part,
+    d.ACCNO                                             AS gl_account,
+    d.BANKC                                             AS bank_code,
+    d.SUBYR                                             AS sub_year,
+    d.SUBMNTH                                           AS sub_month,
+    ISNULL(d.SPSTD, 0)                                  AS is_posted,
+    d.SPSTDAT                                           AS posted_date,
+    ISNULL(d.SVRFY, 0)                                  AS is_verified,
+    d.SVRDAT                                            AS verified_date,
+    ISNULL(d.BASEAMT, 0)                                AS base_amount,
+    d.SHEETCNT                                          AS sheet_count,
+    d.ENTRMKS                                           AS entry_remarks,
+    d.voucher_id                                        AS voucher_id,
+    d.property_id                                       AS property_id,
+    1                                                   AS current_status_id
+FROM CHABRINS.dbo.CHBCTD d
+WHERE d.BTCHID IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 18c. TENANT ACCOUNT LEDGER: CHTACC -> sys_pm_tenants_accounts_trans
+-- ============================================================================
+-- SOURCE: CHTACC (2,598,893 rows — DR: 1,162,255 + CR: 1,436,637).
+--
+-- Full tenant DR/CR ledger. Preserves every original column except TENNAME,
+-- BLOCKID, and UNITNO which are replaced by pre-stamped integer FK equivalents.
+--
+-- DRCR = 'DR' → invoice / charge posting (TRANAMT populated, TRANSAMT = 0)
+-- DRCR = 'CR' → payment / receipt posting (TRANSAMT populated, TRANAMT = 0)
+--
+-- NOTE: id is NOT included in this view — PostgreSQL auto-generates it
+--   via BIGSERIAL / IDENTITY on the destination table.
+--
+-- All FK integer IDs are PRE-STAMPED by generate_migration_ids.py:
+--   CHTACC.property_id         via CHBLOCKS (BLOCKID)
+--   CHTACC.client_id           via CHBLOCKS -> CHLRDS chain
+--   CHTACC.zone_id             via CHBLOCKS.BLOC -> _mig_zones
+--   CHTACC.field_officer_id    via CHBLOCKS -> CHOFFICERS (OFFID)
+--   CHTACC.zone_supervisor_id  via CHBLOCKS -> CHOFFICERS (SFOID)
+--   CHTACC.zone_manager_id     via CHBLOCKS -> CHOFFICERS (ZMGRID)
+--   CHTACC.unit_id             via CHBUNITS (BLOCKID + UNITNO)
+--   CHTACC.tenant_id           via CHTENS   (TENNAME + BLOCKID + UNITNO)
+--   CHTACC.invoice_id          via INVONUM  -> CHTNTRS.invoice_id
+--   CHTACC.payment_id          via RCNO     -> CHTPAYS.payment_id (CR rows only; NULL on DR)
+
+CREATE OR ALTER VIEW vw_sys_pm_tenants_accounts_transactions_013 AS
+SELECT
+    a.TRANSDATE                                         AS date_time,
+    -- TRANSDATE = date the transaction was posted to the tenant account
+    RTRIM(LTRIM(a.TRANSDESC))                           AS narration,
+    -- TRANSDESC = free-text description (e.g. "RENT FOR May 2025", "Payment")
+    RTRIM(LTRIM(a.PAYFOR))                              AS pay_for,
+    -- PAYFOR = charge category (RENT, Water Bill, Service Charge, etc.)
+    RTRIM(LTRIM(a.DRCR))                                AS dr_cr,
+    -- DR = invoice/charge posted; CR = payment/receipt applied
+    ISNULL(a.TRANAMT, 0)                                AS debit_amount,
+    -- TRANAMT = amount on DR rows (invoice/charge face value); 0 on CR rows
+    ISNULL(a.TRANSAMT, 0)                               AS credit_amount,
+    -- TRANSAMT = amount on CR rows (payment allocated); 0 on DR rows
+    a.RCNO                                              AS receipt_number,
+    -- RCNO = receipt number for CR rows; NULL on DR rows; links to CHRCS/CHTPAYS
+    RTRIM(LTRIM(a.PYMOD))                               AS payment_mode,
+    -- PYMOD = payment mode code (CA=Cash, PO=PostOffice, REC=Receipt)
+    RTRIM(LTRIM(a.ENTRYREF))                            AS entry_ref,
+    -- ENTRYREF = entry reference / batch channel identifier
+    RTRIM(LTRIM(a.ENTRYBY))                             AS entry_by,
+    -- ENTRYBY = free-text staff name who created the entry
+    RTRIM(LTRIM(a.DELSTAT))                             AS del_status,
+    -- DELSTAT = deletion status flag ('Del' = soft-deleted)
+    RTRIM(LTRIM(a.INVONUM))                             AS invoice_number,
+    -- INVONUM = invoice reference string linking to CHTNTRS
+    a.invoice_id                                        AS invoice_id,
+    -- PRE-STAMPED: invoice_id via INVONUM -> CHTNTRS.invoice_id
+    a.payment_id                                        AS payment_id,
+    -- PRE-STAMPED: payment_id via RCNO -> CHTPAYS.payment_id (NULL on DR rows)
+    a.zone_id                                           AS zone_id,
+    -- PRE-STAMPED: zone_id via CHBLOCKS.BLOC -> _mig_zones
+    a.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id via CHBLOCKS (BLOCKID)
+    a.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id via CHBUNITS (BLOCKID + UNITNO)
+    a.tenant_id                                         AS lease_id,
+    -- PRE-STAMPED: tenant_id via CHTENS — same sequence as lease_agreements id
+    a.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id via BLOCKID -> CHBLOCKS -> CHLRDS chain
+    a.tenant_id                                         AS tenant_id,
+    -- PRE-STAMPED: tenant_id via CHTENS (TENNAME + BLOCKID + UNITNO)
+    NULL                                                AS sla_id,
+    a.field_officer_id                                  AS field_officer_id,
+    -- PRE-STAMPED: field_officer_id via CHBLOCKS -> CHOFFICERS (OFFID)
+    a.zone_supervisor_id                                AS zone_supervisor_id,
+    -- PRE-STAMPED: zone_supervisor_id via CHBLOCKS -> CHOFFICERS (SFOID)
+    a.zone_manager_id                                   AS zone_manager_id,
+    -- PRE-STAMPED: zone_manager_id via CHBLOCKS -> CHOFFICERS (ZMGRID)
+    CASE WHEN RTRIM(LTRIM(a.DELSTAT)) = 'Del' THEN 2
+         ELSE 1 END                                     AS current_status_id
+    -- Active (1) unless soft-deleted (2)
+FROM CHABRINS.dbo.CHTACC a
+WHERE a.DRCR IS NOT NULL;
+GO
+
+
+-- ============================================================================
+-- 18d. RECEIPT BOOK: CHRCS -> cb_receipts
+-- ============================================================================
+-- SOURCE: CHRCS (1,969,089 rows) — receipt register.
+-- TARGET: cb_receipts (new clean DDL, id auto-generated).
+--
+-- Simple straight mapping — all columns lowercase, no joins.
+-- RCSTATUS: OK (1,824,410), CANCELLED (144,678), 0 (1).
+-- Post-migration: UPDATE sys_pm_tenants_payments_allocated SET current_status_id=2
+--   WHERE receipt_number IN (SELECT rcno FROM cb_receipts WHERE rcstatus='CANCELLED')
+
+CREATE OR ALTER VIEW vw_cb_receipts_014 AS
+SELECT
+    r.RCNO                                              AS rcno,
+    r.RCOF                                              AS rcof,
+    r.SUBDATE                                           AS subdate,
+    r.SUBMTH                                            AS submth,
+    r.SUBYR                                             AS subyr,
+    ISNULL(r.SUBAMT, 0)                                 AS subamt,
+    r.DPSNO                                             AS dpsno,
+    r.RUSED                                             AS rused,
+    r.HOUSE                                             AS house,
+    r.ACCNO                                             AS accno,
+    r.ACCBANK                                           AS accbank,
+    r.RCSTATUS                                          AS rcstatus,
+    r.CANBY                                             AS canby,
+    r.CANREASON                                         AS canreason,
+    r.CANDATE                                           AS candate
+FROM CHABRINS.dbo.CHRCS r;
+GO
 
 
 -- ============================================================================
 -- 19. DEBTORS INVOICES: CHTNTRS -> sys_pm_debtors_invoices
 -- ============================================================================
--- NOTE: CHTNTRS is the tenant transactions table (1,156,397 rows).
---   Each row is a charge or allocation against a tenant/unit combo.
---   TRANSTYP values: RENT (796K), NULL (317K), House Deposit, Service Charge,
---   Water Bill, Water Deposit, Electricity Deposit, Electricity Bill, etc.
---   Maps to sys_pm_debtors_invoices (279,413 rows in MySQL chips_2).
---   All TRANSTYP rows are migrated — the system determines invoice vs payment
---   by other flags (INVPRT, BALAMT, TSTATUS, RECOVD).
---
---   FK RESOLUTION:
---   client_id   → CHBLOCKS.LLORDID → CHLRDS ROW_NUMBER (ORDER BY LORDID)
---   property_id → CHBLOCKS ROW_NUMBER (ORDER BY BLOCKID)
---   unit_id     → CHBUNITS ROW_NUMBER (ORDER BY BLOCKID, UNITNO)
---   tenant_id   → CHTENS ROW_NUMBER (ORDER BY TENNAME, BLOCKNO, UNITNO)
---   zone_id     → CHBLOCKS.BLOC → same DISTINCT subquery as vw_sys_set_zones_006
---   field/zone officers → CHOFFICERS via CHBLOCKS.OFFID, SFOID, ZMGRID
-
-CREATE OR ALTER VIEW vw_sys_pm_debtors_invoices_009 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY n.BATCHID, n.ENTRYNO)  AS id,
-    n.TRADATE                                           AS date_time,
-    TRY_CAST(NULLIF(RTRIM(LTRIM(n.DATEDUE)), '') AS DATETIME)  AS date_due,
-    -- DATEDUE is varchar(50) in CHTNTRS — TRY_CAST handles malformed values
-    cnzn.zone_row_id                                    AS zone_id,
-    -- JOINED: CHBLOCKS.BLOC -> vw_sys_set_zones_006 ROW_NUMBER
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKID + UNITNO
-    ten.ten_row_id                                      AS lease_id,
-    -- JOINED: CHTENS via TENNAME+BLOCKNO+UNITNO — same ROW_NUMBER ORDER BY as
-    -- vw_sys_pm_lease_agreements_005 (both ORDER BY TENNAME, BLOCKNO, UNITNO from CHTENS)
-    -- so this row number maps directly to sys_pm_lease_agreements.id
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENNAME + BLOCKNO + UNITNO (same ORDER BY as tenants view)
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKID -> LLORDID -> LORDID
-    NULL                                                AS created_by,
-    -- ENTRYBY is a free-text staff name; cannot reliably JOIN to sys_staff ids
-    RTRIM(LTRIM(n.INVONUM))                             AS reference_number,
-    RTRIM(LTRIM(n.TRANSDESC))                           AS narration,
-    RTRIM(LTRIM(n.TRANSTYP))                            AS debtor_type_id,
-    ISNULL(n.TRANSAMT, 0)                               AS total_amount,
-    RTRIM(LTRIM(n.TRANSDESC))                           AS trans_details,
-    CASE WHEN RTRIM(LTRIM(n.DELSTAT)) = 'Del' THEN 2
-         WHEN RTRIM(LTRIM(n.TSTATUS)) = 'OUT' THEN 2
-         ELSE 1 END                                     AS current_status_id,
-    NULL                                                AS sla_id,
-    CASE WHEN ISNULL(n.INVPRT, 0) = 1 THEN 'Yes' ELSE 'No' END  AS processed,
-    NULL                                                AS comm_ammount,
-    CAST(ISNULL(n.PAYPERC, 0) AS VARCHAR(50))           AS comm_per,
-    NULL                                                AS vat_ammount,
-    NULL                                                AS vat_per,
-    NULL                                                AS commisionable_amount,
-    ISNULL(n.AMTPAY, 0)                                 AS payable_amount,
-    NULL                                                AS item_type_id,
-    NULL                                                AS cycle_id,
-    ISNULL(n.BALAMT, 0)                                 AS current_balance,
-    NULL                                                AS client_remittable,
-    NULL                                                AS distributions_allocation_id,
-    RTRIM(LTRIM(n.TRANSTYP))                            AS return_type_id,
-    fo.off_row_id                                       AS field_officer_id,
-    -- JOINED: CHOFFICERS via CHBLOCKS.OFFID
-    sfo.off_row_id                                      AS zone_supervisor_id,
-    -- JOINED: CHOFFICERS via CHBLOCKS.SFOID
-    zm.off_row_id                                       AS zone_manager_id,
-    -- JOINED: CHOFFICERS via CHBLOCKS.ZMGRID
-    NULL                                                AS paid_to_client,
-    NULL                                                AS occupancy_status_id,
-    NULL                                                AS vat_on_commission,
-    1                                                   AS returns_status_id,
-    NULL                                                AS return_report_id,
-    NULL                                                AS is_arrear_id,
-    NULL                                                AS lease_status_id,
-    NULL                                                AS remarks_id,
-    1                                                   AS return_report_type_id,
-    NULL                                                AS parent_invoice_id,
-    NULL                                                AS parent_invoice_rpt_id,
-    NULL                                                AS override_period_check,
-    CASE WHEN n.TRAYR > 0 AND n.TRAMNTH > 0
-         THEN DATEFROMPARTS(n.TRAYR, n.TRAMNTH, 1)
-         ELSE NULL END                                  AS returns_period
-FROM CHABRINS.dbo.CHTNTRS n
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id,
-           LLORDID, BLOC, OFFID, SFOID, ZMGRID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(n.BLOCKID))
-LEFT JOIN (
-    -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
-    -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
-    SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-           ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
-    FROM CHABRINS.dbo.CHLRDS
-    WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-) lr ON lr.lordid_clean = RTRIM(LTRIM(prop.LLORDID))
-     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(n.BLOCKID))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(n.UNITNO))
-LEFT JOIN (
-    -- tenant_id: ROW_NUMBER matches vw_sys_pm_clients_tenants_004 exactly
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL AND RTRIM(LTRIM(TENNAME)) <> ''
-) ten ON ten.TENNAME  = n.TENNAME
-      AND ten.BLOCKNO = n.BLOCKID
-      AND ten.UNITNO  = n.UNITNO
-LEFT JOIN (
-    -- zone_id: DISTINCT first, then ROW_NUMBER — avoids SQL Server DISTINCT+ROW_NUMBER bug
-    SELECT BLOC, ROW_NUMBER() OVER (ORDER BY BLOC) AS zone_row_id
-    FROM (
-        SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
-        FROM CHABRINS.dbo.CHBLOCKS
-        WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
-    ) zd
-) cnzn ON cnzn.BLOC = RTRIM(LTRIM(prop.BLOC))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) fo  ON RTRIM(LTRIM(fo.OFFID))  = RTRIM(LTRIM(prop.OFFID))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) sfo ON RTRIM(LTRIM(sfo.OFFID)) = RTRIM(LTRIM(prop.SFOID))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) zm  ON RTRIM(LTRIM(zm.OFFID))  = RTRIM(LTRIM(prop.ZMGRID))
-WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
-
-
-
--- ============================================================================
 -- 20. CLIENT RETURNS: CHRTXS + CHRHMS -> sys_pm_clients_returns
--- ============================================================================
--- NOTE: CHRTXS is the returns DETAIL table (1,470,210 rows) — pre-aggregation.
---   Each row is one charge line within a monthly landlord return, at unit/tenant
---   level. CHRHMS (35,217) is the property-level HEADER (one row per return).
---   sys_pm_clients_returns in MySQL (288,196 rows) is at unit/tenant granularity,
---   with unit_id, tenant_id, lease_id all populated — matching CHRTXS rows.
---
---   CHRTXS ENTRYTYP distribution:
---     RENT CURRENT (786,954) | Commission (135,389) | Water Bill (132,699+36,543)
---     Service Charge (112,349+41,879) | Advance Payments (76,475)
---     VAT (51,248) | RENT ARREARS (24,021) | Recoveries (21,315) etc.
---   Commission lines (ENTRYTYP='Commission') have NULL UNITNO/TENNAME — they
---   are property-level deduction lines; unit_id/tenant_id will be NULL for them.
---
---   FK RESOLUTION:
---   client_id   → h.LORDID → CHLRDS ROW_NUMBER (same ORDER BY as clients_landlords view)
---   property_id → x.BLOCKID → CHBLOCKS ROW_NUMBER
---   unit_id     → x.BLOCKID + x.UNITNO → CHBUNITS ROW_NUMBER
---   tenant_id   → x.TENNAME + x.BLOCKID + x.UNITNO → CHTENS ROW_NUMBER
---   lease_id    → same CHTENS ROW_NUMBER (aligns with vw_sys_pm_lease_agreements_005)
---   zone_id     → h.RETZON (BLOC letter A–G) → zones DISTINCT-first subquery
---   field/zone officers → CHOFFICERS via CHBLOCKS.OFFID, SFOID, ZMGRID
---
---   CHRTXS columns → sys_pm_clients_returns fields:
---   TRANSNUM    → ref_number (unique per line)
---   RETNPRD     → date_time (YYYYMM int → DATEFROMPARTS)
---   SRCDATE     → return_date
---   ENTRYDESC   → narration
---   ENTRYTYP    → trans_type_id
---   TRANSCODE   → return_type_id
---   RESAMTNT    → trans_amount (gross amount on this line)
---   AMTPAYBL    → payable_amount (landlord's share)
---   RESAMTNT - AMTPAYBL → comm_amount (commission deducted from this line)
---   COMMBL      → commisionable flag (Yes/No)
---   VATAMT      → vat_amount
---   h.COMMRATE  → comm_perc (from CHRHMS header)
---   h.LORDID    → client_id
---   h.RETZON    → zone_id
---   h.RETSTAT   → current_status_id
---   h.PAIDST    → paid_status_id
---   h.APPST     → approval_status
---   h.VOUCHERNO → batch_id
---   h.PREPDAT   → invoice_date
---   h.PAYDAT    → date_paid_out (varchar 30, TRY_CAST)
-
-CREATE OR ALTER VIEW vw_sys_pm_clients_returns_10 AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY x.RETURNID, x.TRANSNUM) AS id,
-    CASE WHEN x.RETNPRD > 0
-         THEN DATEFROMPARTS(
-                  CAST(LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) AS INT),
-                  CAST(RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2) AS INT),
-                  1)
-         ELSE NULL END                                  AS date_time,
-    -- RETNPRD is YYYYMM integer (e.g. 202502 → 2025-02-01)
-    RTRIM(LTRIM(x.TRANSNUM))                            AS ref_number,
-    -- TRANSNUM is the unique transaction number for this detail line
-    inv.inv_row_id                                      AS invoice_id,
-    -- JOINED: CHTNTRS via BLOCKID+UNITNO+TENNAME+TRAYR+TRAMNTH+TRANSTYP
-    -- Row number uses same ORDER BY as vw_sys_pm_debtors_invoices_009 (BATCHID,ENTRYNO)
-    -- so inv_row_id directly maps to sys_pm_debtors_invoices.id. MIN() deduplicates
-    -- the rare combos that have multiple CHTNTRS rows for same period+unit+type.
-    x.SRCDATE                                           AS return_date,
-    -- SRCDATE = the source date of the charge (when the transaction originated)
-    RTRIM(LTRIM(x.ENTRYDESC))                           AS narration,
-    -- ENTRYDESC e.g. "RENT FOR February 2025", "MONTHLY COMMISSION (10%)"
-    NULL                                                AS created_by,
-    cnzn.zone_row_id                                    AS zone_id,
-    -- JOINED: CHBLOCKS.BLOC (via x.BLOCKID) -> vw_sys_set_zones_006 ROW_NUMBER
-    -- NOTE: uses prop.BLOC not h.RETZON — works for ALL rows, not just those with CHRHMS match
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHLRDS via prop.LLORDID (CHBLOCKS) — same ROW_NUMBER as vw_sys_pm_clients_landlords_002
-    -- NOTE: uses prop.LLORDID not h.LORDID — works for ALL rows, not just those with CHRHMS match
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via x.BLOCKID
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via x.BLOCKID + x.UNITNO (NULL for commission/summary lines)
-    ten.ten_row_id                                      AS lease_id,
-    -- JOINED: CHTENS via TENNAME+BLOCKID+UNITNO — same ROW_NUMBER as lease_agreements view
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENNAME + BLOCKID + UNITNO (NULL for commission/summary lines)
-    RTRIM(LTRIM(x.ENTRYTYP))                            AS trans_type_id,
-    -- ENTRYTYP: 'RENT CURRENT', 'Commission', 'Water Bill', 'Service Charge',
-    --           'RENT ARREARS', 'Recoveries', 'VAT', 'House Deposit' etc.
-    RTRIM(LTRIM(x.COMMBL))                              AS commisionable,
-    -- COMMBL: 'Yes' or 'No' — whether this line is subject to commission
-    RTRIM(LTRIM(h.VOUCHERNO))                           AS batch_id,
-    -- From CHRHMS header: payment voucher number for this return
-    NULL                                                AS unit_status_id,
-    NULL                                                AS threshold_percentage,
-    0                                                   AS abstract_threshold,
-    NULL                                                AS anomally_type_id,
-    NULL                                                AS anomally_orig_id,
-    ISNULL(h.RETSTAT, 2)                                AS current_status_id,
-    -- From CHRHMS header: 1 = processed, 0/NULL = pending
-    ISNULL(x.RESAMTNT, 0)                               AS trans_amount,
-    -- RESAMTNT = net/gross amount of this charge line
-    ISNULL(x.AMTPAYBL, 0)                               AS payable_amount,
-    -- AMTPAYBL = landlord's payable share of this line (after comm deduction)
-    NULL                                                AS sla_id,
-    ISNULL(x.RESAMTNT, 0) - ISNULL(x.AMTPAYBL, 0)     AS comm_amount,
-    -- comm_amount = gross line amount minus landlord payable = commission on this line
-    CASE WHEN RTRIM(LTRIM(x.COMMBL)) = 'Yes'
-         THEN ISNULL(x.RESAMTNT, 0)
-         ELSE 0 END                                     AS commissionable_amount,
-    -- commissionable_amount = RESAMTNT when the line is subject to commission
-    ISNULL(x.VATAMT, 0)                                 AS vat_amount,
-    CAST(ISNULL(h.COMMRATE, 0) AS VARCHAR(50))          AS comm_perc,
-    -- From CHRHMS header: commission rate % for this return (e.g. 10.00)
-    NULL                                                AS vat_per,
-    NULL                                                AS item_id,
-    NULL                                                AS payable_status_id,
-    ISNULL(h.APPST, 0)                                  AS approval_status,
-    -- From CHRHMS header: 0=pending, 1=approved
-    NULL                                                AS charge_id,
-    ISNULL(h.PAIDST, 0)                                 AS paid_status_id,
-    -- From CHRHMS header: 1 = paid out to landlord, 0 = not yet paid
-    NULL                                                AS tenant_payment_id,
-    NULL                                                AS tenant_payment_date,
-    0                                                   AS tenant_payment_amount,
-    0                                                   AS allocated_total,
-    ISNULL(x.RESAMTDR, 0)                               AS invoice_balance,
-    -- RESAMTDR = residual debit amount on this line (outstanding balance component)
-    fo.off_row_id                                       AS fo_id,
-    -- JOINED: CHOFFICERS via CHBLOCKS.OFFID
-    NULL                                                AS is_bill,
-    ISNULL(x.AMTPAYTN, 0)                               AS paid_out,
-    -- AMTPAYTN = amount paid (tenant-side payment amount on this line)
-    sfo.off_row_id                                      AS zone_supervisor_id,
-    -- JOINED: CHOFFICERS via CHBLOCKS.SFOID
-    zm.off_row_id                                       AS zone_manager_id,
-    -- JOINED: CHOFFICERS via CHBLOCKS.ZMGRID
-    NULL                                                AS comm_vat,
-    NULL                                                AS distributions_allocation_id,
-    RTRIM(LTRIM(x.TRANSCODE))                           AS return_type_id,
-    -- TRANSCODE: 'RENT', 'COMMISSION', 'Water Bill', 'Service Charge',
-    --            'House Deposit', 'VAT AMOUNT', 'Recovery' etc.
-    TRY_CAST(NULLIF(RTRIM(LTRIM(h.PAYDAT)), '') AS DATETIME)  AS date_paid_out,
-    -- From CHRHMS header: PAYDAT is varchar(30) — TRY_CAST handles malformed dates
-    h.PREPDAT                                           AS invoice_date
-    -- From CHRHMS header: preparation/creation date of the return
-FROM CHABRINS.dbo.CHRTXS x
-LEFT JOIN CHABRINS.dbo.CHRHMS h ON h.RETURNID = x.RETURNID
-    -- Join CHRHMS header for landlord-level fields (status, dates, comm rate, voucher)
-LEFT JOIN (
-    -- invoice_id: pre-number CHTNTRS with same ORDER BY as vw_sys_pm_debtors_invoices_009
-    -- then GROUP BY the natural join key to collapse duplicates (some BLOCKID+UNITNO+
-    -- TENNAME+period combos have multiple CHTNTRS rows; MIN picks the first/canonical one).
-    -- TRANSCODE on CHRTXS maps to TRANSTYP on CHTNTRS (RENT=RENT, Water Bill=Water Bill etc.)
-    SELECT BLOCKID, UNITNO, TENNAME, TRAYR, TRAMNTH, TRANSTYP,
-           MIN(inv_row_id) AS inv_row_id
-    FROM (
-        SELECT BLOCKID, UNITNO, TENNAME, TRAYR, TRAMNTH, TRANSTYP,
-               ROW_NUMBER() OVER (ORDER BY BATCHID, ENTRYNO) AS inv_row_id
-        FROM CHABRINS.dbo.CHTNTRS
-        WHERE TENNAME IS NOT NULL AND BLOCKID IS NOT NULL AND UNITNO IS NOT NULL
-    ) rn
-    GROUP BY BLOCKID, UNITNO, TENNAME, TRAYR, TRAMNTH, TRANSTYP
-) inv ON inv.BLOCKID  = RTRIM(LTRIM(x.BLOCKID))
-      AND inv.UNITNO  = RTRIM(LTRIM(x.UNITNO))
-      AND inv.TENNAME = x.TENNAME
-      AND inv.TRAYR   = CAST(LEFT(CAST(x.RETNPRD AS VARCHAR(10)), 4) AS INT)
-      AND inv.TRAMNTH = CAST(RIGHT(CAST(x.RETNPRD AS VARCHAR(10)), 2) AS INT)
-      AND inv.TRANSTYP = RTRIM(LTRIM(x.TRANSCODE))
-      -- TRANSCODE in CHRTXS mirrors TRANSTYP in CHTNTRS (RENT, Water Bill, Service Charge etc.)
-      -- Commission/VAT/summary lines will not match (NULL invoice_id) — those are
-      -- property-level deductions with no corresponding tenant invoice row.
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id,
-           LLORDID, BLOC, OFFID, SFOID, ZMGRID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(x.BLOCKID))
-LEFT JOIN (
-    -- ROW_NUMBER matches vw_sys_pm_clients_landlords_002 exactly:
-    -- same ORDER BY LORDID, same WHERE, no GROUP BY deduplication.
-    -- Join via prop.LLORDID (CHBLOCKS) — works for ALL rows regardless of CHRHMS match.
-    -- CHBLOCKS.LLORDID typically has no LAN- prefix; OR fallback handles any that do.
-    SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-           ROW_NUMBER() OVER (ORDER BY LORDID) AS lord_row_id
-    FROM CHABRINS.dbo.CHLRDS
-    WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-) lr ON lr.lordid_clean = RTRIM(LTRIM(prop.LLORDID))
-     OR lr.lordid_clean = REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(x.BLOCKID))
-     AND RTRIM(LTRIM(unt.UNITNO))  = RTRIM(LTRIM(x.UNITNO))
-LEFT JOIN (
-    -- tenant_id + lease_id: ROW_NUMBER matches vw_sys_pm_clients_tenants_004 and
-    -- vw_sys_pm_lease_agreements_005 exactly (same ORDER BY TENNAME, BLOCKNO, UNITNO)
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL AND RTRIM(LTRIM(TENNAME)) <> ''
-) ten ON ten.TENNAME = x.TENNAME
-      AND ten.BLOCKNO = x.BLOCKID
-      AND ten.UNITNO  = x.UNITNO
-LEFT JOIN (
-    -- zone_id: DISTINCT in subquery first, THEN ROW_NUMBER — avoids SQL Server
-    -- executing ROW_NUMBER before DISTINCT (which would return 1842 rows not 7).
-    SELECT BLOC, ROW_NUMBER() OVER (ORDER BY BLOC) AS zone_row_id
-    FROM (
-        SELECT DISTINCT RTRIM(LTRIM(BLOC)) AS BLOC
-        FROM CHABRINS.dbo.CHBLOCKS
-        WHERE BLOC IS NOT NULL AND RTRIM(LTRIM(BLOC)) <> ''
-    ) zd
-) cnzn ON cnzn.BLOC = RTRIM(LTRIM(prop.BLOC))
--- zone_id uses prop.BLOC (CHBLOCKS) not h.RETZON (CHRHMS) — works for ALL rows with a BLOCKID
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) fo  ON RTRIM(LTRIM(fo.OFFID))  = RTRIM(LTRIM(prop.OFFID))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) sfo ON RTRIM(LTRIM(sfo.OFFID)) = RTRIM(LTRIM(prop.SFOID))
-LEFT JOIN (
-    SELECT OFFID, ROW_NUMBER() OVER (ORDER BY OFFID) AS off_row_id
-    FROM CHABRINS.dbo.CHOFFICERS
-    WHERE OFFID IS NOT NULL AND RTRIM(LTRIM(OFFID)) <> ''
-) zm  ON RTRIM(LTRIM(zm.OFFID))  = RTRIM(LTRIM(prop.ZMGRID))
-WHERE x.RETURNID IS NOT NULL;
-
-
-/*
-  NOTE: Source changed from CHRHMS to CHRTXS (detail lines) joined to CHRHMS (header).
-  CHRHMS (35,217 rows) is property-level summary — unit_id/tenant_id were always NULL.
-  CHRTXS (1,470,210 rows) is the per-unit pre-aggregation detail that feeds CHRHMS.
-  sys_pm_clients_returns in MySQL has unit_id, tenant_id, lease_id populated —
-  confirming it maps to CHRTXS, not the summary CHRHMS.
-  Commission lines (ENTRYTYP='Commission') have NULL BLOCKID/UNITNO/TENNAME —
-  unit_id/tenant_id will be NULL for those rows (property-level deduction entries).
-  The CHRHMS header join provides: client_id (via LORDID), zone_id (via RETZON),
-  current_status_id (RETSTAT), paid_status_id (PAIDST), approval_status (APPST),
-  batch_id (VOUCHERNO), invoice_date (PREPDAT), comm_perc (COMMRATE), date_paid_out (PAYDAT).
-*/
-
-
 -- ============================================================================
 -- 20. GL JOURNAL VOUCHER HEADERS: CHJVH -> sys_gl_transactions
 -- ============================================================================
@@ -1508,18 +1173,13 @@ SELECT
     JVNUM                                               AS journal_id,
     CASE WHEN STPOST = 1 THEN 1 ELSE 2 END             AS current_status_id,
     NULL                                                AS trans_type_id,
-    stf.staff_row_id                                    AS entered_by
-    -- JOINED: CHSTFF via EMPNUMB matching CREATEDBY
+    combined.staff_id                                   AS entered_by
+    -- PRE-STAMPED: staff_id via CHSTFF (CREATEDBY -> EMPNUMB) on both CHJVH and CHJVHP
 FROM (
     SELECT *, 'H' AS src FROM CHABRINS.dbo.CHJVH
     UNION ALL
     SELECT *, 'P' AS src FROM CHABRINS.dbo.CHJVHP
 ) combined
-LEFT JOIN (
-    SELECT EMPNUMB, ROW_NUMBER() OVER (ORDER BY EMPNUMB) AS staff_row_id
-    FROM CHABRINS.dbo.CHSTFF
-    WHERE EMPNUMB IS NOT NULL AND RTRIM(LTRIM(EMPNUMB)) <> ''
-) stf ON RTRIM(LTRIM(stf.EMPNUMB)) = RTRIM(LTRIM(combined.CREATEDBY))
 WHERE BATCHID IS NOT NULL;
 GO
 
@@ -1544,8 +1204,8 @@ SELECT
     ROW_NUMBER() OVER (ORDER BY d.BATCHID, d.JVNUM, d.ENTRYNO)  AS id,
     jv.jv_row_id                                        AS parent_id,
     -- JOINED: CHJVH+CHJVHP union via BATCHID+JVNUM to get journal header sequential id
-    acct.acct_row_id                                    AS account_id,
-    -- JOINED: CHFACTV via ACCNUM to get chart of accounts sequential id
+    d.account_id                                        AS account_id,
+    -- PRE-STAMPED: account_id via CHFACTV (ACCNUM)
     CASE WHEN ISNULL(d.AMTDR, 0) > 0 THEN 'Debit'
          WHEN ISNULL(d.AMTCR, 0) > 0 THEN 'Credit'
          ELSE 'Debit' END                               AS entry_type,
@@ -1561,11 +1221,6 @@ LEFT JOIN (
         SELECT BATCHID, JVNUM, 'P' AS src FROM CHABRINS.dbo.CHJVHP
     ) jv_all
 ) jv ON jv.BATCHID = d.BATCHID AND jv.JVNUM = d.JVNUM
-LEFT JOIN (
-    SELECT ACCNUM, ROW_NUMBER() OVER (ORDER BY ACCNUM) AS acct_row_id
-    FROM CHABRINS.dbo.CHFACTV
-    WHERE ACCNUM IS NOT NULL AND ACCNUM <> ''
-) acct ON RTRIM(LTRIM(acct.ACCNUM)) = RTRIM(LTRIM(d.ACCNUM))
 WHERE d.BATCHID IS NOT NULL AND d.STDEL = 0;
 GO
 
@@ -1660,13 +1315,11 @@ SELECT
     NULL                                                AS lease_id,
     NULL                                                AS tenant_id,
     NULL                                                AS supplier_id,
-    bk.bank_row_id                                      AS bank_id,
-    -- JOINED: CHBANK via LEFT(BANKACC,2) matching BANKCODE
+    cb.bank_id                                          AS bank_id,
+    -- PRE-STAMPED: bank_id via CHBANK (LEFT(BANKACC,2) -> BANKCODE)
     RTRIM(LTRIM(cb.CBODOCNO))                           AS origin_id,
     NULL                                                AS transaction_type_id,
-    CASE WHEN cb.ENTTYPE = 'CSH' THEN 'Cash'
-         WHEN cb.ENTTYPE = 'BNK' THEN 'Bank'
-         ELSE 'General' END                             AS ledger_type_id,
+    RTRIM(LTRIM(cb.ENTTYPE))                             AS ledger_type_id,
     NULL                                                AS control_account_id,
     RTRIM(LTRIM(cb.ENTDESC))                            AS narration,
     CASE WHEN ISNULL(cb.AMTCSHDR, 0) + ISNULL(cb.AMTBNKDR, 0) > 0 THEN 'Debit'
@@ -1675,11 +1328,6 @@ SELECT
          THEN ISNULL(cb.AMTCSHDR, 0) + ISNULL(cb.AMTBNKDR, 0)
          ELSE ISNULL(cb.AMTCSHCR, 0) + ISNULL(cb.AMTBNKCR, 0) END  AS amount
 FROM CHABRINS.dbo.CHCBDE cb
-LEFT JOIN (
-    SELECT BANKCODE, ROW_NUMBER() OVER (ORDER BY BANKCODE) AS bank_row_id
-    FROM CHABRINS.dbo.CHBANK
-    WHERE BANKNAME IS NOT NULL AND BANKNAME <> ''
-) bk ON bk.BANKCODE = LEFT(cb.BANKACC, 2)
 WHERE cb.BANKACC IS NOT NULL;
 GO
 
@@ -1690,212 +1338,28 @@ SELECT
     GETDATE()                                           AS date_time,
     g.ENTDATE                                           AS trans_date_time,
     NULL                                                AS client_id,
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKID
+    g.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id via CHBLOCKS (BLOCKID)
     NULL                                                AS sla_id,
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKID + UNITNO
+    g.unit_id                                           AS unit_id,
+    -- PRE-STAMPED: unit_id via CHBUNITS (BLOCKID + UNITNO)
     NULL                                                AS lease_id,
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENNAME + BLOCKID + UNITNO
+    g.tenant_id                                         AS tenant_id,
+    -- PRE-STAMPED: tenant_id via CHTENS (TENNAME + BLOCKID + UNITNO)
     NULL                                                AS supplier_id,
     NULL                                                AS bank_id,
     RTRIM(LTRIM(g.BANKACC))                             AS origin_id,
     NULL                                                AS transaction_type_id,
     'General'                                           AS ledger_type_id,
-    acct.acct_row_id                                    AS control_account_id,
-    -- JOINED: CHFACTV via ACCNUM to get chart of accounts sequential id
+    g.account_id                                        AS control_account_id,
+    -- PRE-STAMPED: account_id via CHFACTV (ACCNUM)
     RTRIM(LTRIM(g.ENTDESC))                             AS narration,
     CASE WHEN ISNULL(g.AMTDR, 0) > 0 THEN 'Debit'
          ELSE 'Credit' END                              AS amount_type,
     CASE WHEN ISNULL(g.AMTDR, 0) > 0 THEN g.AMTDR
          ELSE g.AMTCR END                               AS amount
 FROM CHABRINS.dbo.CHGLAC g
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(g.BLOCKID))
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(g.BLOCKID))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(g.UNITNO))
-LEFT JOIN (
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL
-) ten ON ten.TENNAME = g.TENNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(g.BLOCKID))
-     AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(g.UNITNO))
-LEFT JOIN (
-    SELECT ACCNUM, ROW_NUMBER() OVER (ORDER BY ACCNUM) AS acct_row_id
-    FROM CHABRINS.dbo.CHFACTV
-    WHERE ACCNUM IS NOT NULL AND ACCNUM <> ''
-) acct ON RTRIM(LTRIM(acct.ACCNUM)) = RTRIM(LTRIM(g.ACCNUM))
 WHERE g.ACCNUM IS NOT NULL;
-GO
-
-
--- ============================================================================
--- 24. LANDLORD ACCOUNT TRANSACTIONS: CHLACC -> sys_pm_landlord_accounts_transaction
--- ============================================================================
--- NOTE: Also fed by CHIBALS and CHLCAC.
---   CHLACC  = Full landlord transaction ledger (primary)
---   CHIBALS = Tenant balance records
---   CHLCAC  = Closing balance summaries
--- Strategy: Use CHLACC as primary. CHIBALS and CHLCAC are supplementary.
---
--- EXTRA TABLE NEEDED: CHLRDS (Landlords) — NOT IN CSV MAPPING
---   client_id must be resolved from CHLRDS.LORDID
-
-CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction_FROM_CHLACC AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY l.YEARR, l.MONTHH, l.LORDID, l.ENTRYNU)  AS id,
-    GETDATE()                                           AS date_time,
-    l.ENTRYDA                                           AS trans_date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHLRDS via LORDID to get landlord/client sequential id
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via HOUSEID to get property sequential id
-    NULL                                                AS unit_id,
-    NULL                                                AS lease_id,
-    NULL                                                AS tenant_id,
-    RTRIM(LTRIM(l.ENTRYID))                             AS origin_id,
-    NULL                                                AS transaction_type_id,
-    RTRIM(LTRIM(l.ENTRYDE))                             AS narration,
-    CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN 'Debit'
-         ELSE 'Credit' END                              AS amount_type,
-    CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN l.AMTDR
-         ELSE l.AMTCR END                               AS amount,
-    NULL                                                AS sla_id,
-    CAST(ISNULL(l.AMTTOT, 0) AS VARCHAR(50))            AS balance,
-    CASE WHEN l.ACCSTAT = 1 THEN 1 ELSE 2 END          AS current_status_id,
-    NULL                                                AS invoice_id,
-    CASE WHEN ISNULL(l.AMTDR, 0) > 0 THEN l.AMTDR
-         ELSE l.AMTCR END                               AS amount_internal,
-    NULL                                                AS payable_status,
-    l.YEARR * 100 + l.MONTHH                            AS period_id,
-    NULL                                                AS period_status_id,
-    NULL                                                AS zone_id
-FROM CHABRINS.dbo.CHLACC l
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(l.LORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
--- NOTE: CHLACC.LORDID format is 'LAN-00024', CHLRDS.LORDID format is '00024'
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(l.HOUSEID))
-WHERE l.LORDID IS NOT NULL;
-GO
-
-
-CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction_FROM_CHIBALS AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY ib.TENANTNAME, ib.BLOCKNO, ib.ROOMNO)  AS id,
-    GETDATE()                                           AS date_time,
-    CAST(ib.TRANSDATE AS DATETIME)                      AS trans_date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHBLOCKS -> CHLRDS chain via BLOCKNO -> LLORDID
-    prop.prop_row_id                                    AS property_id,
-    -- JOINED: CHBLOCKS via BLOCKNO
-    unt.unit_row_id                                     AS unit_id,
-    -- JOINED: CHBUNITS via BLOCKNO + ROOMNO
-    NULL                                                AS lease_id,
-    ten.ten_row_id                                      AS tenant_id,
-    -- JOINED: CHTENS via TENANTNAME + BLOCKNO + ROOMNO
-    'BAL-' + ib.BLOCKNO + '-' + ib.ROOMNO               AS origin_id,
-    NULL                                                AS transaction_type_id,
-    RTRIM(LTRIM(ib.TRANSDESC))                          AS narration,
-    CASE WHEN ISNULL(ib.CURRENTBAL, 0) >= 0 THEN 'Debit' ELSE 'Credit' END  AS amount_type,
-    ABS(ISNULL(ib.CURRENTBAL, 0))                       AS amount,
-    NULL                                                AS sla_id,
-    CAST(ISNULL(ib.CURRENTBAL, 0) AS VARCHAR(50))       AS balance,
-    1                                                   AS current_status_id,
-    NULL                                                AS invoice_id,
-    ABS(ISNULL(ib.CURRENTBAL, 0))                       AS amount_internal,
-    NULL                                                AS payable_status,
-    NULL                                                AS period_id,
-    NULL                                                AS period_status_id,
-    NULL                                                AS zone_id
-FROM CHABRINS.dbo.CHIBALS ib
-LEFT JOIN (
-    SELECT BLOCKID, ROW_NUMBER() OVER (ORDER BY BLOCKID) AS prop_row_id, LLORDID
-    FROM CHABRINS.dbo.CHBLOCKS
-    WHERE BLOCKID IS NOT NULL
-) prop ON RTRIM(LTRIM(prop.BLOCKID)) = RTRIM(LTRIM(ib.BLOCKNO))
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(prop.LLORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
-LEFT JOIN (
-    SELECT BLOCKID, UNITNO, ROW_NUMBER() OVER (ORDER BY BLOCKID, UNITNO) AS unit_row_id
-    FROM CHABRINS.dbo.CHBUNITS
-    WHERE UNITNO IS NOT NULL
-) unt ON RTRIM(LTRIM(unt.BLOCKID)) = RTRIM(LTRIM(ib.BLOCKNO))
-     AND RTRIM(LTRIM(unt.UNITNO)) = RTRIM(LTRIM(ib.ROOMNO))
-LEFT JOIN (
-    SELECT TENNAME, BLOCKNO, UNITNO,
-           ROW_NUMBER() OVER (ORDER BY TENNAME, BLOCKNO, UNITNO) AS ten_row_id
-    FROM CHABRINS.dbo.CHTENS
-    WHERE TENNAME IS NOT NULL
-) ten ON ten.TENNAME = ib.TENANTNAME AND RTRIM(LTRIM(ten.BLOCKNO)) = RTRIM(LTRIM(ib.BLOCKNO))
-     AND RTRIM(LTRIM(ten.UNITNO)) = RTRIM(LTRIM(ib.ROOMNO))
-WHERE ib.TENANTNAME IS NOT NULL;
-GO
-
-
-CREATE OR ALTER VIEW vw_sys_pm_landlord_accounts_transaction_FROM_CHLCAC AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY c.YEARR, c.MONTHH, c.LORDID)  AS id,
-    GETDATE()                                           AS date_time,
-    c.CLDAT                                             AS trans_date_time,
-    lr.lord_row_id                                      AS client_id,
-    -- JOINED: CHLRDS via LORDID to get landlord/client sequential id
-    NULL                                                AS property_id,
-    NULL                                                AS unit_id,
-    NULL                                                AS lease_id,
-    NULL                                                AS tenant_id,
-    'CLOSE-' + CAST(c.YEARR AS VARCHAR) + '-' + CAST(c.MONTHH AS VARCHAR)  AS origin_id,
-    NULL                                                AS transaction_type_id,
-    'Period closing balance'                            AS narration,
-    CASE WHEN ISNULL(c.SUMBL, 0) >= 0 THEN 'Debit' ELSE 'Credit' END  AS amount_type,
-    ABS(ISNULL(c.SUMBL, 0))                             AS amount,
-    NULL                                                AS sla_id,
-    CAST(ISNULL(c.SUMBL, 0) AS VARCHAR(50))             AS balance,
-    CASE WHEN c.CLSTAT = 1 THEN 1 ELSE 2 END           AS current_status_id,
-    NULL                                                AS invoice_id,
-    ABS(ISNULL(c.SUMBL, 0))                             AS amount_internal,
-    NULL                                                AS payable_status,
-    c.YEARR * 100 + c.MONTHH                            AS period_id,
-    NULL                                                AS period_status_id,
-    NULL                                                AS zone_id
-FROM CHABRINS.dbo.CHLCAC c
-LEFT JOIN (
-    SELECT lordid_clean, lord_row_id FROM (
-        SELECT RTRIM(LTRIM(LORDID)) AS lordid_clean,
-               ROW_NUMBER() OVER (ORDER BY MIN(LORDID)) AS lord_row_id
-        FROM CHABRINS.dbo.CHLRDS
-        WHERE LORDID IS NOT NULL AND RTRIM(LTRIM(LORDID)) <> ''
-        GROUP BY RTRIM(LTRIM(LORDID))
-    ) lrd
-) lr ON lr.lordid_clean = REPLACE(REPLACE(REPLACE(RTRIM(LTRIM(c.LORDID)), 'LAN-', ''), 'LAN-', ''), 'LAN-', '')
--- NOTE: CHLCAC.LORDID format is 'LAN-00024', CHLRDS.LORDID format is '00024'
-WHERE c.LORDID IS NOT NULL;
 GO
 
 
@@ -1986,16 +1450,14 @@ GO
   Phase 6 — Operations (after tenants, properties, leases):
     23. vw_sys_pm_deposits                            (CHDPAY)
     24. vw_sys_pm_deposits_requests                   (CHDPS)
-    25. vw_sys_pm_tenants_payments                    (CHIPAYS)
-    26. ** CHTPAYS migration needed **                        (Main payments - NOT IN CSV)
-    27. vw_sys_pm_clients_returns                     (CHCCRST)
-    28. ** CHRHMS migration needed **                         (Returns master - NOT IN CSV)
+    25. vw_sys_pm_tenants_payments_011               (CHTPAYS + CHRCS join)
+    26. vw_sys_pm_tenants_payments_invoices_012       (CHTACC CR rows + CHTNTRS join)
+    27. vw_sys_pm_tenants_accounts_transactions_013  (CHTACC full ledger — DR + CR)  → pg: sys_pm_tenants_accounts_trans
+    28. vw_cb_receipts_014                            (CHRCS)
 
   Phase 7 — Landlord Accounts:
-    29. vw_sys_pm_landlord_accounts_transaction_FROM_CHLACC   (CHLACC)
-    30. vw_sys_pm_landlord_accounts_transaction_FROM_CHIBALS  (CHIBALS)
-    31. vw_sys_pm_landlord_accounts_transaction_FROM_CHLCAC   (CHLCAC)
-    32. vw_sys_pm_clients_advances_requisitions       (CHLNTR)
+    29. vw_sys_pm_landlord_accounts_transaction        (CHLACC + CHIBALS + CHLCAC combined)
+    30. vw_sys_pm_clients_advances_requisitions        (CHLNTR)
 
   Phase 8 — Post-Migration FK Resolution:
     - Run UPDATE scripts to resolve text-based FK references to integer IDs
@@ -2017,15 +1479,300 @@ GO
   CHRHMS        | varies    | Returns master with full workflow        | CHCCRST (complete returns data)
   CHTNTRS       | 1,156,397 | Tenant invoice transactions              | Maps to sys_pm_debtors_invoices
   CHTPAYS       | 1,435,222 | Tenant payment details                   | Maps to sys_pm_tenants_payments
-  CHTACC        | varies    | Tenant account ledger                    | Maps to sys_pm_tenants_accounts_transactions
+  CHTACC        | varies    | Tenant account ledger                    | Maps to sys_pm_tenants_accounts_trans
   CHSTFF        | varies    | Staff/employee master                    | Maps to sys_staff
   CHTYPES       | varies    | Unit type lookup codes                   | CHBUNITS.UNITTYP
   CHTAXES       | 1         | Tax rates (VAT 16%)                      | Various VAT calculations
+
 
   NOTE: CHLRDS is now mapped via view #6 (vw_sys_pm_clients).
         CHTENS is now mapped via view #6b (vw_sys_pm_clients_from_chtenants).
   Recommendation: Create migration views for at minimum CHTNTRS,
   CHTPAYS, and CHRHMS to ensure complete data migration.
 
+  Phase 9 — Returns (clean destination tables):
+    33. vw_cb_returns_summary_015                      (CHRHMS → cb_returns_summary)
+    34. vw_cb_returns_clients_016                      (CHRTXS → cb_returns_clients)
+    35. vw_chofficers_to_josya_users_017               (CHOFFICERS → josya_users)
+    36. vw_cb_landlord_account_019                     (CHLACC → cb_landlord_account)
+    37. vw_cb_money_recoveries_020                     (CHRACT → cb_money_recoveries)
+
 ================================================================================
 */
+
+
+-- ════════════════════════════════════════════════════════════════════════
+-- Phase 9: Returns & Landlord Account (clean destination tables)
+-- ════════════════════════════════════════════════════════════════════════
+-- These views map the CHABRINS returns tables directly to new
+-- PostgreSQL tables with clean column names. Replaces the old
+-- vw_sys_pm_clients_returns_10 (which flattened CHRTXS+CHRHMS into
+-- 40+ columns with many NULLs) and the old
+-- vw_sys_pm_landlord_accounts_transaction_FROM_CHLACC.
+-- ════════════════════════════════════════════════════════════════════════
+
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 33. vw_cb_returns_summary_015  (CHRHMS → cb_returns_summary, 35,217 rows)
+-- ────────────────────────────────────────────────────────────────────────
+-- Return header/summary: one row per property per period.
+-- Workflow: prepared → checked → finalized → approved → paid.
+
+CREATE OR ALTER VIEW vw_cb_returns_summary_015 AS
+SELECT
+    h.return_id                                         AS id,
+    RTRIM(LTRIM(h.RETURNID))                            AS return_code,
+    RTRIM(LTRIM(h.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(h.BLOCKID))                             AS property_code,
+    h.YEARR                                             AS year,
+    h.MONTHH                                            AS month,
+    RTRIM(LTRIM(h.RETDESC))                             AS return_description,
+    RTRIM(LTRIM(h.RETNPRD))                             AS return_period,
+    RTRIM(LTRIM(h.RETTYPE))                             AS return_type,
+    ISNULL(h.COMMRATE, 0)                               AS commission_rate,
+    ISNULL(h.TOTALCR, 0)                                AS total_credit,
+    ISNULL(h.SUMCOM, 0)                                 AS commission_total,
+    ISNULL(h.SUMVATBL, 0)                               AS vatable_total,
+    ISNULL(h.TOTALCOM, 0)                               AS commission_amount,
+    ISNULL(h.TOTALDR, 0)                                AS total_debit,
+    ISNULL(h.NETAMT, 0)                                 AS net_amount,
+    ISNULL(h.TRXAMT, 0)                                 AS transaction_amount,
+    ISNULL(h.NETBAL, 0)                                 AS net_balance,
+    RTRIM(LTRIM(h.PREPBY))                              AS prepared_by,
+    ISNULL(h.PREPST, 0)                                 AS prepared_status,
+    h.PREPDAT                                           AS prepared_date,
+    RTRIM(LTRIM(h.CHKBY))                               AS checked_by,
+    ISNULL(h.CHKST, 0)                                  AS checked_status,
+    h.CHKDAT                                            AS checked_date,
+    ISNULL(h.SAVDST, 0)                                 AS saved_status,
+    ISNULL(h.FINAST, 0)                                 AS finalized_status,
+    RTRIM(LTRIM(h.FINABY))                              AS finalized_by,
+    h.FINADAT                                           AS finalized_date,
+    RTRIM(LTRIM(h.APPBY))                               AS approved_by,
+    ISNULL(h.APPST, 0)                                  AS approved_status,
+    h.APPDAT                                            AS approved_date,
+    ISNULL(h.PAIDST, 0)                                 AS paid_status,
+    RTRIM(LTRIM(h.VOUCHERNO))                           AS voucher_number,
+    RTRIM(LTRIM(h.RETRMKS))                             AS remarks,
+    RTRIM(LTRIM(h.RETRMKS2))                            AS remarks_2,
+    h.REBYRR                                            AS rebate_year,
+    h.REBMNTH                                           AS rebate_month,
+    RTRIM(LTRIM(h.RETURNT))                             AS return_tag,
+    ISNULL(h.RETSTAT, 0)                                AS return_status,
+    RTRIM(LTRIM(h.CHQNO))                               AS cheque_number,
+    RTRIM(LTRIM(h.BANKACC))                             AS bank_account,
+    ISNULL(h.AMTPAYD, 0)                                AS amount_paid,
+    ISNULL(h.AMTOVD, 0)                                 AS amount_overdraft,
+    RTRIM(LTRIM(h.PAYDAT))                              AS payment_date,
+    RTRIM(LTRIM(h.RETZON))                              AS return_zone,
+    h.AUTH2M                                            AS auth_2m,
+    h.AUTHUN                                            AS auth_un,
+    ISNULL(h.OVDPER, 0)                                 AS overdraft_percentage,
+    h.return_id                                         AS return_id
+FROM CHABRINS.dbo.CHRHMS h
+WHERE h.RETURNID IS NOT NULL;
+GO
+
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 34. vw_cb_returns_clients_016  (CHRTXS → cb_returns_clients, 1,470,210 rows)
+-- ────────────────────────────────────────────────────────────────────────
+-- Return detail lines: per unit, per tenant, per charge type within a return.
+-- Join to cb_returns_summary via return_code (RETURNID).
+
+CREATE OR ALTER VIEW vw_cb_returns_clients_016 AS
+SELECT
+    x.return_line_id                                    AS id,
+    RTRIM(LTRIM(x.RETURNID))                            AS return_code,
+    x.RETNPRD                                           AS return_period,
+    RTRIM(LTRIM(x.TRANSNUM))                            AS transaction_number,
+    RTRIM(LTRIM(x.TRANSDAT))                            AS transaction_date,
+    x.TRANSDATF                                         AS transaction_date_num,
+    RTRIM(LTRIM(x.ENTRYDE))                             AS entry_description,
+    RTRIM(LTRIM(x.ENTRYTYP))                            AS entry_type,
+    RTRIM(LTRIM(x.TRANSCODE))                           AS transaction_code,
+    RTRIM(LTRIM(x.ENTRYDESC))                           AS narration,
+    RTRIM(LTRIM(x.TRANSREF))                            AS transaction_ref,
+    x.SRCDATE                                           AS source_date,
+    RTRIM(LTRIM(x.BLOCKID))                             AS property_code,
+    RTRIM(LTRIM(x.UNITNO))                              AS unit_code,
+    x.UNITID                                            AS unit_seq_id,
+    RTRIM(LTRIM(x.DRCR))                                AS dr_cr,
+    RTRIM(LTRIM(x.TENNAME))                             AS tenant_name,
+    RTRIM(LTRIM(x.TENSTAT))                             AS tenant_status,
+    RTRIM(LTRIM(x.ENTAMTT))                             AS amount_text,
+    ISNULL(x.AMTPAYBL, 0)                               AS amount_payable_landlord,
+    ISNULL(x.AMTPAYTN, 0)                               AS amount_payable_tenant,
+    ISNULL(x.RESAMTDR, 0)                               AS residual_debit,
+    ISNULL(x.RESAMTCR, 0)                               AS residual_credit,
+    ISNULL(x.RESAMTNT, 0)                               AS net_amount,
+    RTRIM(LTRIM(x.TREMARKS))                            AS remarks,
+    RTRIM(LTRIM(x.TRANSSRC))                            AS transaction_source,
+    x.DEDPNT                                            AS deduction_point,
+    RTRIM(LTRIM(x.VATABL))                              AS is_vatable,
+    RTRIM(LTRIM(x.COMMBL))                              AS is_commissionable,
+    RTRIM(LTRIM(x.DEDPNT2))                             AS deduction_point_2,
+    x.PPERIOD                                           AS payment_period,
+    RTRIM(LTRIM(x.CHQNO))                               AS cheque_number,
+    RTRIM(LTRIM(x.BANKACC))                             AS bank_account,
+    ISNULL(x.VATAMT, 0)                                 AS vat_amount,
+    x.AUTH2M                                            AS auth_2m,
+    x.AUTHUN                                            AS auth_un,
+    RTRIM(LTRIM(x.PAYPERC))                             AS pay_percentage,
+    x.return_line_id                                    AS return_line_id,
+    x.property_id                                       AS property_id,
+    x.client_id                                         AS client_id,
+    x.zone_id                                           AS zone_id,
+    x.field_officer_id                                  AS field_officer_id,
+    x.zone_supervisor_id                                AS zone_supervisor_id,
+    x.zone_manager_id                                   AS zone_manager_id,
+    x.unit_id                                           AS unit_id,
+    x.tenant_id                                         AS tenant_id,
+    x.return_id                                         AS return_id,
+    x.invoice_id                                        AS invoice_id
+FROM CHABRINS.dbo.CHRTXS x
+WHERE x.RETURNID IS NOT NULL;
+GO
+
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 35. vw_chofficers_to_josya_users_017  (CHOFFICERS → josya_users, 158 rows)
+-- ────────────────────────────────────────────────────────────────────────
+-- CHOFFICERS stores field officers / zone managers / property managers
+-- with a ROW_NUMBER-generated officer_id (1–158).
+-- This view inserts them into josya_users using officer_id as id,
+-- so FK references in sys_pm_properties match automatically.
+
+CREATE OR ALTER VIEW vw_chofficers_to_josya_users_017 AS
+SELECT
+    o.officer_id                                        AS id,
+    RTRIM(LTRIM(o.OFFFNAME))                            AS name,
+    RTRIM(LTRIM(o.OFFTYPE))
+        + CASE WHEN RTRIM(LTRIM(ISNULL(o.OFFZON, ''))) <> ''
+               THEN ' | ' + RTRIM(LTRIM(o.OFFZON))
+               ELSE '' END                              AS username,
+    LOWER(
+        REPLACE(RTRIM(LTRIM(o.OFFONAME)), ' ', '.')
+        + '.' + REPLACE(RTRIM(LTRIM(o.OFFSNAME)), ' ', '')
+        + '@chabrinagencies.co.ke'
+    )                                                   AS email,
+    '$2y$12$i5DCIlg1wO9KrQerpL0UDuws7SnJnSOZ2W0Xcrdlz/z8pAMVjhJuq'
+                                                        AS password,
+    0                                                   AS block,
+    0                                                   AS "sendEmail",
+    GETDATE()                                           AS "registerDate",
+    NULL                                                AS "lastvisitDate",
+    ''                                                  AS activation,
+    ''                                                  AS params,
+    NULL                                                AS "lastResetTime",
+    0                                                   AS "resetCount",
+    ''                                                  AS "otpKey",
+    NULL                                                AS reset_token,
+    NULL                                                AS reset_token_expires_at,
+    ''                                                  AS otep,
+    0                                                   AS "requireReset",
+    o.officer_id                                        AS officer_id
+FROM CHABRINS.dbo.CHOFFICERS o
+WHERE o.officer_id IS NOT NULL;
+GO
+
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 36. vw_cb_landlord_account_019  (CHLACC → cb_landlord_account, 128,423 rows)
+-- ────────────────────────────────────────────────────────────────────────
+-- Landlord account ledger: debit/credit entries for landlord accounts.
+-- Links to cb_returns_summary via return_code (RETURNID) when entry
+-- originates from a return. Direct charges (banking, garbage, etc.)
+-- have NULL return_code.
+
+CREATE OR ALTER VIEW vw_cb_landlord_account_019 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY l.YEARR, l.MONTHH, l.LORDID, l.ENTRYNU)  AS id,
+    l.YEARR                                             AS year,
+    l.MONTHH                                            AS month,
+    RTRIM(LTRIM(l.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(l.LFNAME))                              AS landlord_name,
+    RTRIM(LTRIM(l.HOUSEID))                             AS property_code,
+    RTRIM(LTRIM(l.GTTCNUM))                             AS transaction_number,
+    RTRIM(LTRIM(l.ENTRYID))                             AS entry_type_code,
+    l.ENTRYNU                                           AS entry_sequence,
+    RTRIM(LTRIM(l.ENTRYDE))                             AS entry_description,
+    l.ENTRYDA                                           AS entry_date,
+    ISNULL(l.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(l.AMTCR, 0)                                  AS credit_amount,
+    ISNULL(l.AMTTOT, 0)                                 AS total_amount,
+    l.ACCSTAT                                           AS account_status,
+    RTRIM(LTRIM(l.PAYREF))                              AS payment_ref,
+    RTRIM(LTRIM(l.PAYREFT))                             AS payment_ref_type,
+    ISNULL(l.INTRATE, 0)                                AS interest_rate,
+    RTRIM(LTRIM(l.AUDTUSR))                             AS audit_user,
+    RTRIM(LTRIM(l.ENTPART))                             AS entry_particulars,
+    RTRIM(LTRIM(l.PVNO))                                AS pv_number,
+    RTRIM(LTRIM(l.FINACC))                              AS gl_account,
+    RTRIM(LTRIM(l.VENDORID))                            AS vendor_id,
+    ISNULL(l.RECOVD, 0)                                 AS is_recovered,
+    l.RECOYR                                            AS recovery_year,
+    l.RECOMN                                            AS recovery_month,
+    RTRIM(LTRIM(l.RETTRANS))                            AS return_transaction,
+    RTRIM(LTRIM(l.RETURNID))                            AS return_code,
+    l.client_id                                         AS client_id,
+    l.property_id                                       AS property_id
+FROM CHABRINS.dbo.CHLACC l
+WHERE l.LORDID IS NOT NULL;
+GO
+
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 37. vw_cb_money_recoveries_020  (CHRACT → cb_money_recoveries, 221,468 rows)
+-- ────────────────────────────────────────────────────────────────────────
+-- Returns account transactions: both CREDIT entries (rent/charges collected
+-- for landlord) and DEBIT/DEDUCTION entries (recoveries deducted from
+-- landlord: SAT DEPOSIT, PAID OWNER, ABSCONDED, OVERPAID, PAID VACANT).
+-- TRACLASS = CR (218,213 credits) | DR (3,255 deductions/recoveries).
+-- Links to cb_returns_summary via return_id (CHRHMS.RETURNID = CHRACT.RETNPRD).
+
+CREATE OR ALTER VIEW vw_cb_money_recoveries_020 AS
+SELECT
+    r.recovery_id                                       AS id,
+    r.GTTCNUM                                           AS transaction_number,
+    r.property_id                                       AS property_id,
+    r.client_id                                         AS client_id,
+    r.unit_id                                           AS unit_id,
+    r.tenant_id                                         AS tenant_id,
+    r.return_id                                         AS return_id,
+    r.zone_id                                           AS zone_id,
+    r.field_officer_id                                  AS field_officer_id,
+    r.zone_supervisor_id                                AS zone_supervisor_id,
+    r.zone_manager_id                                   AS zone_manager_id,
+    r.UNITNO                                            AS unit_code,
+    r.ACYEAR                                            AS year,
+    r.ACMNTH                                            AS month,
+    r.RETNPRD                                           AS return_period,
+    r.RTYPE                                             AS return_type,
+    r.TENNAME                                           AS tenant_name,
+    r.TENSTAT                                           AS tenant_status,
+    r.TRATYPE                                           AS transaction_type,
+    r.TRACATEG                                          AS transaction_category,
+    r.TRACLASS                                          AS transaction_class,
+    r.TRASRC                                            AS transaction_source,
+    r.PYMOD                                             AS payment_mode,
+    r.TRANSREF                                          AS transaction_ref,
+    r.TRANSDAT                                          AS transaction_date,
+    r.TRANSDESC                                         AS transaction_description,
+    ISNULL(r.AMTPAYBL, 0)                               AS amount_payable,
+    ISNULL(r.AMTDR, 0)                                  AS debit_amount,
+    ISNULL(r.AMTCR, 0)                                  AS credit_amount,
+    r.RPERIOD                                           AS return_period_num,
+    r.PPERIOD                                           AS payment_period_num,
+    ISNULL(r.PRRATE, 0)                                 AS prorate_rate,
+    ISNULL(r.AMTRETRN, 0)                               AS amount_returned,
+    ISNULL(r.AMTBAL, 0)                                 AS balance_amount,
+    CAST(CASE WHEN r.VATABL = 'Yes' THEN 1 ELSE 0 END AS BIT)  AS is_vatable,
+    CAST(CASE WHEN r.COMMBL = 'Yes' THEN 1 ELSE 0 END AS BIT)  AS is_commissionable,
+    r.DEDPNT2                                           AS deduction_point_2,
+    r.PLSTATUS                                          AS processing_status,
+    r.RSTATUS                                           AS record_status,
+    CAST(ISNULL(r.LOCKD, 0) AS BIT)                     AS is_locked
+FROM CHABRINS.dbo.CHRACT r
+WHERE r.recovery_id IS NOT NULL;
+GO

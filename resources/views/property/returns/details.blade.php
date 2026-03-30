@@ -557,6 +557,7 @@
                         // Show action buttons if user can approve
                         if (data.can_approve) {
                             $('#action-buttons-section').show();
+                            $('#waiting-message').remove();
 
                             // Show reject button only if can_reject is true
                             if (data.can_reject) {
@@ -577,6 +578,10 @@
                             }
                         } else {
                             $('#action-buttons-section').hide();
+                            $('#waiting-message').remove();
+                            if (data.waiting_for_previous && data.waiting_message) {
+                                $('#comments-trail').after('<div id="waiting-message" class="alert alert-info mt-2 py-2" style="font-size:0.78rem;"><i class="fa fa-hourglass-half me-2"></i>' + escapeHtml(data.waiting_message) + '</div>');
+                            }
                         }
 
                         $('#approvals-main-content').show();

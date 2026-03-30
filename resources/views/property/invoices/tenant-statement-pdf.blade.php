@@ -100,6 +100,14 @@
             background-color: #f9f9f9;
         }
 
+        .totals-row td {
+            font-weight: bold;
+            background-color: #3598db !important;
+            color: white;
+            border-top: 1.5px solid #2a7ab5;
+            padding: 5px 6px;
+        }
+
         .statement-table tbody tr:last-child {
             font-weight: bold;
             background-color: #e8f4f8;
@@ -172,12 +180,25 @@
                 <td>{{ $entry['date_formatted'] }}</td>
                 <td>{{ $entry['reference'] }}</td>
                 <td class="narration-cell">{{ $entry['narration'] }}</td>
-                <td class="text-right">{{ $entry['debit_formatted'] }}</td>
-                <td class="text-right">{{ $entry['credit_formatted'] }}</td>
+                <td class="text-right">{{ $entry['debit_formatted'] === '-' ? '' : $entry['debit_formatted'] }}</td>
+                <td class="text-right">{{ $entry['credit_formatted'] === '-' ? '' : $entry['credit_formatted'] }}</td>
                 <td class="balance-cell">{{ $entry['balance_formatted'] }}</td>
             </tr>
             @endforeach
         </tbody>
+        <tfoot>
+            @php
+            $totalDebit = collect($statement)->sum('debit');
+            $totalCredit = collect($statement)->sum('credit');
+            $closingBalance = collect($statement)->last()['balance'] ?? 0;
+            @endphp
+            <tr class="totals-row">
+                <td colspan="3" style="text-align:right;">Closing Balance</td>
+                <td class="text-right">{{ $totalDebit > 0 ? number_format($totalDebit, 2) : '' }}</td>
+                <td class="text-right">{{ $totalCredit > 0 ? number_format($totalCredit, 2) : '' }}</td>
+                <td class="text-right">{{ number_format($closingBalance, 2) }}</td>
+            </tr>
+        </tfoot>
     </table>
 
     <div class="footer">

@@ -8,12 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        \Illuminate\Support\Facades\DB::statement("SET SESSION sql_mode = ''");
-
         Schema::table('sys_pm_properties_repairs_requests_49_repeat', function (Blueprint $table) {
             $table->enum('repair_scope', ['general', 'unit_specific'])
-                  ->default('unit_specific')
-                  ->after('parent_id');
+                ->default('unit_specific')
+                ->after('parent_id');
         });
     }
 

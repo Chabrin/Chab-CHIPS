@@ -4,12 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\TenantPayment;
 use App\Models\TenantPaymentAllocation;
+use App\Models\TenantPaymentAllocated;
 use App\Models\DebtorInvoice;
 use App\Models\Client;
+use App\Models\Property;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\TenantPaymentsAllocatedExport;
 
 class TenantPaymentsController extends Controller
 {
@@ -18,7 +22,9 @@ class TenantPaymentsController extends Controller
      */
     public function index()
     {
-        return view('property.payments.tenant-payments');
+        $properties = Property::select('id', 'property_name', 'reference_number')
+            ->orderBy('property_name')->get();
+        return view('property.payments.tenant-payments', compact('properties'));
     }
 
     /**
@@ -721,6 +727,132 @@ class TenantPaymentsController extends Controller
                 'success' => false,
                 'message' => 'Error allocating payment: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Search allocated payments (AJAX)
+     */
+    public function searchAllocatedPayments(Request $request)
+    {
+        try {
+            if (!$request->filled('property_id')) {
+                return response()->json(['success' => false, 'message' => 'Please select a property'], 400);
+            }
+
+            if (!$request->filled('date_from') || !$request->filled('date_to')) {
+                return response()->json(['success' => false, 'message' => 'Both dates are required'], 400);
+            }
+
+            // Validate 32-day limit
+            $from = strtotime($request->date_from);
+            $to = strtotime($request->date_to);
+            if (($to - $from) > (32 * 86400)) {
+                return response()->json(['success' => false, 'message' => 'Date range cannot exceed 32 days'], 400);
+            }
+
+            $query = TenantPaymentAllocated::with('tenant')
+                ->where('property_id', $request->property_id)
+                ->where('current_status_id', 1)
+                ->whereDate('date_time', '>=', $request->date_from)
+                ->whereDate('date_time', '<=', $request->date_to)
+                ->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc');
+
+            $payments = $query->get();
+
+            return response()->json([
+                'success' => true,
+                'payments' => $payments->map(function ($p) {
+                    return [
+                        'id' => $p->id,
+                        'date_time' => $p->date_time ? $p->date_time->format('d-m-Y H:i') : '-',
+                        'payment_date' => $p->payment_date ? $p->payment_date->format('d-m-Y') : '-',
+                        'tenant_name' => $p->tenant->names ?? '-',
+                        'amount' => number_format($p->amount, 2),
+                        'amount_raw' => $p->amount,
+                        'trans_amount' => number_format($p->trans_amount, 2),
+                        'trans_amount_raw' => $p->trans_amount,
+                        'narration' => $p->narration ?? '-',
+                        'pay_for' => $p->pay_for ?? '-',
+                        'payment_mode' => $p->payment_mode ?? '-',
+                        'payment_channel' => $p->payment_channel ?? '-',
+                        'security_code' => $p->security_code ?? '-',
+                        'trans_remarks' => $p->trans_remarks ?? '-',
+                        'trans_type' => $p->trans_type ?? '-',
+                        'payment_year' => $p->payment_year ?? '-',
+                        'payment_month' => $p->payment_month ?? '-',
+                    ];
+                }),
+                'count' => $payments->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error searching allocated payments: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to search payments'], 500);
+        }
+    }
+
+    /**
+     * Export allocated payments to Excel
+     */
+    public function exportAllocatedPayments(Request $request)
+    {
+        try {
+            if (!$request->filled('property_id') || !$request->filled('date_from') || !$request->filled('date_to')) {
+                return redirect()->back()->with('error', 'Property and date range are required');
+            }
+
+            $property = Property::find($request->property_id);
+            $propertyName = $property->property_name ?? 'Unknown';
+
+            $payments = TenantPaymentAllocated::with('tenant')
+                ->where('property_id', $request->property_id)
+                ->where('current_status_id', 1)
+                ->whereDate('date_time', '>=', $request->date_from)
+                ->whereDate('date_time', '<=', $request->date_to)
+                ->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $fileName = 'Allocated_Payments_' . str_replace(' ', '_', $propertyName) . '_' . $request->date_from . '_to_' . $request->date_to . '.xlsx';
+
+            return Excel::download(new TenantPaymentsAllocatedExport($payments, $propertyName, $request->date_from, $request->date_to), $fileName);
+        } catch (\Exception $e) {
+            Log::error('Error exporting allocated payments: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to export payments');
+        }
+    }
+
+    /**
+     * Get properties for allocated payments Select2 (AJAX)
+     */
+    public function getPropertiesForPayments(Request $request)
+    {
+        try {
+            $search = $request->input('q', '');
+
+            $query = Property::select('id', 'property_name', 'reference_number');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('property_name', 'ILIKE', "%{$search}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$search}%");
+                });
+            }
+
+            $properties = $query->orderBy('property_name')->limit(50)->get();
+
+            return response()->json([
+                'results' => $properties->map(function ($p) {
+                    return [
+                        'id' => $p->id,
+                        'text' => $p->property_name . ' (' . ($p->reference_number ?? '') . ')',
+                    ];
+                })
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error loading properties for payments: ' . $e->getMessage());
+            return response()->json(['results' => []]);
         }
     }
 }

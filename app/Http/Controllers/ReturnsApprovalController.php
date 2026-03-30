@@ -8,6 +8,10 @@ use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\ClientReturnsBatch;
+use App\Models\ReturnSummary;
+use App\Models\PaymentVoucherHeader;
+use App\Models\PaymentVoucherLine;
+use App\Models\ReturnClient;
 use App\Traits\HandlesApprovalWorkflow;
 use App\Traits\HandlesReturnApprovalWorkflow;
 use App\Jobs\ProcessReturnsFinalApprovalJob;
@@ -69,6 +73,8 @@ class ReturnsApprovalController extends Controller
             $userApproverLevel = null;
             $isFirstLevel = false;
             $availableRejectLevels = [];
+            $waitingForPrevious = false;
+            $waitingMessage = null;
 
             foreach ($approvers as $approver) {
                 if ($approver->approver_id == $currentUserId) {
@@ -101,6 +107,15 @@ class ReturnsApprovalController extends Controller
                                 }
                             }
                         }
+                    } elseif (
+                        $userApproverLevel > $approvalItem->current_level
+                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
+                        && $approver->approval_status == 'Pending'
+                    ) {
+                        $waitingForPrevious = true;
+                        $pendingApprover = collect($approvers)->firstWhere('approver_level', $approvalItem->current_level);
+                        $pendingName = $pendingApprover->approver_name ?? ('Level ' . $approvalItem->current_level);
+                        $waitingMessage = 'Waiting for Level ' . $approvalItem->current_level . ' (' . $pendingName . ') to approve before you can action.';
                     }
                     break;
                 }
@@ -144,7 +159,9 @@ class ReturnsApprovalController extends Controller
                     'available_reject_levels' => $availableRejectLevels,
                     'user_level' => $userApproverLevel,
                     'is_first_level' => $isFirstLevel,
-                    'current_user_id' => $currentUserId
+                    'current_user_id' => $currentUserId,
+                    'waiting_for_previous' => $waitingForPrevious,
+                    'waiting_message' => $waitingMessage
                 ]
             ]);
         } catch (Exception $e) {
@@ -385,13 +402,23 @@ class ReturnsApprovalController extends Controller
                             'updated_at' => now()
                         ]);
 
-                    // If this is level 1 (first approval), update batch status to in progress
-                    if ($itemApprover->approver_level == 1) {
-                        DB::table('sys_pm_clients_returns_batches')
-                            ->where('id', $batch->id)
-                            ->update([
-                                'approval_status' => 101 // In progress
-                            ]);
+                    // Update batch status to in progress
+                    DB::table('sys_pm_clients_returns_batches')
+                        ->where('id', $batch->id)
+                        ->update([
+                            'approval_status' => 101 // In progress
+                        ]);
+
+                    // Mark all return summaries under this batch as InProgress (2)
+                    $propertyRef = DB::table('sys_pm_properties')
+                        ->where('id', $batch->property_id)
+                        ->value('reference_number');
+                    if ($propertyRef) {
+                        DB::table('cb_returns_summary')
+                            ->where('property_code', $propertyRef)
+                            ->where('return_period', $batch->batch_id)
+                            ->where('approved_status', 0)
+                            ->update(['approved_status' => 2]);
                     }
 
                     // Add next level approver automatically
@@ -415,6 +442,409 @@ class ReturnsApprovalController extends Controller
                 'success' => false,
                 'message' => 'Failed to approve batch'
             ], 500);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RETURN-SUMMARY LEVEL APPROVAL METHODS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * Get return approvals data for timeline display (AJAX)
+     */
+    public function getReturnApprovals($encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $returnSummary = ReturnSummary::findOrFail($id);
+
+            $approvalItem = DB::table('cb_approval_items')
+                ->where('item_type', 'return_summary')
+                ->where('item_id', $returnSummary->id)
+                ->first();
+
+            if (!$approvalItem) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No approval workflow found for this return'
+                ]);
+            }
+
+            $approvers = DB::table('cb_item_approvers as ia')
+                ->leftJoin('josya_users as u', 'u.id', '=', 'ia.approver_id')
+                ->where('ia.approval_item_id', $approvalItem->id)
+                ->select('ia.*', 'u.name as approver_name', 'u.email as approver_email')
+                ->orderBy('ia.approver_level', 'asc')
+                ->get();
+
+            foreach ($approvers as $approver) {
+                $approver->actions = DB::table('cb_approval_actions')
+                    ->where('item_approver_id', $approver->id)
+                    ->orderBy('sequence_number', 'asc')
+                    ->get();
+            }
+
+            $currentUserId = auth()->id();
+            $canApprove = false;
+            $canReject = false;
+            $userApproverLevel = null;
+            $availableRejectLevels = [];
+            $waitingForPrevious = false;
+            $waitingMessage = null;
+
+            foreach ($approvers as $approver) {
+                if ($approver->approver_id == $currentUserId) {
+                    $userApproverLevel = $approver->approver_level;
+                    if (
+                        $approvalItem->current_level == $userApproverLevel
+                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
+                        && $approver->approval_status == 'Pending'
+                    ) {
+                        $canApprove = true;
+                        if ($userApproverLevel >= 2) {
+                            $canReject = true;
+                            for ($i = 1; $i < $userApproverLevel; $i++) {
+                                $lowerApprover = collect($approvers)->firstWhere('approver_level', $i);
+                                if ($lowerApprover) {
+                                    $availableRejectLevels[] = [
+                                        'level' => $i,
+                                        'approver_name' => $lowerApprover->approver_name ?? 'Level ' . $i
+                                    ];
+                                }
+                            }
+                        }
+                    } elseif (
+                        $userApproverLevel > $approvalItem->current_level
+                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
+                        && $approver->approval_status == 'Pending'
+                    ) {
+                        $waitingForPrevious = true;
+                        $pendingApprover = collect($approvers)->firstWhere('approver_level', $approvalItem->current_level);
+                        $pendingName = $pendingApprover->approver_name ?? ('Level ' . $approvalItem->current_level);
+                        $waitingMessage = 'Waiting for Level ' . $approvalItem->current_level . ' (' . $pendingName . ') to approve before you can action.';
+                    }
+                    break;
+                }
+            }
+
+            $timeline = [];
+            foreach ($approvers as $approver) {
+                $actions = [];
+                foreach ($approver->actions as $action) {
+                    $actions[] = [
+                        'action' => $action->action,
+                        'comments' => $action->comments ?? '',
+                        'action_timestamp' => $action->action_timestamp,
+                        'sequence_number' => $action->sequence_number,
+                        'returned_to_level' => $action->returned_to_level ?? null
+                    ];
+                }
+                $timeline[] = [
+                    'level' => $approver->approver_level,
+                    'approver_name' => $approver->approver_name ?? 'Unknown',
+                    'approver_email' => $approver->approver_email ?? '',
+                    'status' => $approver->approval_status,
+                    'assigned_at' => $approver->assigned_at,
+                    'actioned_at' => $approver->actioned_at,
+                    'actions' => $actions,
+                    'is_current' => ($approver->approver_level == $approvalItem->current_level),
+                    'is_user' => ($approver->approver_id == $currentUserId)
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'approval_item' => $approvalItem,
+                    'timeline' => $timeline,
+                    'can_approve' => $canApprove,
+                    'can_reject' => $canReject,
+                    'available_reject_levels' => $availableRejectLevels,
+                    'user_level' => $userApproverLevel,
+                    'current_user_id' => $currentUserId,
+                    'waiting_for_previous' => $waitingForPrevious,
+                    'waiting_message' => $waitingMessage
+                ]
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading return approvals: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load approval data'], 500);
+        }
+    }
+
+    /**
+     * Approve a return summary
+     */
+    public function approveReturn($encryptedId, Request $request)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $returnSummary = ReturnSummary::findOrFail($id);
+
+            $request->validate(['comments' => 'nullable|string|max:1000']);
+
+            $approvalItem = DB::table('cb_approval_items')
+                ->where('item_type', 'return_summary')
+                ->where('item_id', $returnSummary->id)
+                ->first();
+
+            if (!$approvalItem) {
+                return response()->json(['success' => false, 'message' => 'No approval workflow found'], 404);
+            }
+
+            if (!in_array($approvalItem->status, ['Pending', 'InProgress'])) {
+                return response()->json(['success' => false, 'message' => 'This return has already been processed'], 400);
+            }
+
+            $itemApprover = DB::table('cb_item_approvers')
+                ->where('approval_item_id', $approvalItem->id)
+                ->where('approver_id', auth()->id())
+                ->where('approver_level', $approvalItem->current_level)
+                ->first();
+
+            if (!$itemApprover) {
+                return response()->json(['success' => false, 'message' => 'You are not authorized to approve at this level'], 403);
+            }
+
+            if ($itemApprover->approval_status === 'Approved') {
+                return response()->json(['success' => false, 'message' => 'You have already approved this return'], 400);
+            }
+
+            DB::beginTransaction();
+            try {
+                DB::table('cb_item_approvers')->where('id', $itemApprover->id)
+                    ->update(['approval_status' => 'Approved', 'actioned_at' => now(), 'updated_at' => now()]);
+
+                DB::table('cb_approval_actions')->insert([
+                    'item_approver_id' => $itemApprover->id,
+                    'approval_item_id' => $approvalItem->id,
+                    'actor_id' => auth()->id(),
+                    'from_level' => $itemApprover->approver_level,
+                    'to_level' => $itemApprover->approver_level + 1,
+                    'action' => 'Approved',
+                    'comments' => $request->comments,
+                    'action_timestamp' => now(),
+                    'ip_address' => request()->ip(),
+                    'sequence_number' => DB::table('cb_approval_actions')
+                        ->where('approval_item_id', $approvalItem->id)->max('sequence_number') + 1,
+                    'is_current' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                $isAccountant = DB::table('cb_role_user as ru')
+                    ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                    ->where('ru.user_id', auth()->id())
+                    ->where('r.name', 'accountants')
+                    ->exists();
+
+                if ($isAccountant) {
+                    DB::table('cb_approval_items')->where('id', $approvalItem->id)
+                        ->update([
+                            'status' => 'Approved',
+                            'current_level' => $itemApprover->approver_level,
+                            'approved_by' => auth()->id(),
+                            'approved_at' => now(),
+                            'updated_at' => now()
+                        ]);
+
+                    DB::table('cb_returns_summary')->where('id', $returnSummary->id)
+                        ->update([
+                            'approved_status' => 1,
+                            'approved_by' => auth()->user()->name,
+                            'approved_date' => now()
+                        ]);
+
+                    // Generate payment voucher for the approved return
+                    $voucherNumber = $this->generatePaymentVoucher($returnSummary);
+
+                    $message = 'Return approved successfully (Final Approval). Voucher: ' . $voucherNumber;
+                } else {
+                    DB::table('cb_approval_items')->where('id', $approvalItem->id)
+                        ->update(['current_level' => $itemApprover->approver_level + 1, 'status' => 'InProgress', 'updated_at' => now()]);
+
+                    // Mark return summary as InProgress (2)
+                    DB::table('cb_returns_summary')->where('id', $returnSummary->id)
+                        ->update(['approved_status' => 2]);
+
+                    $property = DB::table('sys_pm_properties')
+                        ->where('reference_number', $returnSummary->property_code)->first(['id']);
+                    if ($property) {
+                        $fakeObj = (object)['id' => $returnSummary->id, 'property_id' => $property->id];
+                        $this->addNextLevelApprover($approvalItem, $fakeObj, $itemApprover->approver_level);
+                    }
+
+                    $message = 'Return approved successfully. Moved to Level ' . ($itemApprover->approver_level + 1);
+                }
+
+                DB::commit();
+                return response()->json(['success' => true, 'message' => $message]);
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error approving return: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to approve return'], 500);
+        }
+    }
+
+    /**
+     * Reject a return summary
+     */
+    public function rejectReturn($encryptedId, Request $request)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $returnSummary = ReturnSummary::findOrFail($id);
+
+            $request->validate([
+                'reason' => 'required|string|max:1000',
+                'return_to_level' => 'required|integer|min:1'
+            ]);
+
+            $approvalItem = DB::table('cb_approval_items')
+                ->where('item_type', 'return_summary')
+                ->where('item_id', $returnSummary->id)
+                ->first();
+
+            if (!$approvalItem) {
+                return response()->json(['success' => false, 'message' => 'No approval workflow found'], 404);
+            }
+
+            if (!in_array($approvalItem->status, ['Pending', 'InProgress'])) {
+                return response()->json(['success' => false, 'message' => 'This return has already been processed'], 400);
+            }
+
+            $itemApprover = DB::table('cb_item_approvers')
+                ->where('approval_item_id', $approvalItem->id)
+                ->where('approver_id', auth()->id())
+                ->where('approver_level', $approvalItem->current_level)
+                ->first();
+
+            if (!$itemApprover) {
+                return response()->json(['success' => false, 'message' => 'You are not authorized to reject at this level'], 403);
+            }
+
+            if ($itemApprover->approver_level < 2) {
+                return response()->json(['success' => false, 'message' => 'Only level 2 and above can reject'], 403);
+            }
+
+            if ($request->return_to_level >= $itemApprover->approver_level) {
+                return response()->json(['success' => false, 'message' => 'Can only return to a lower level'], 400);
+            }
+
+            DB::beginTransaction();
+            try {
+                DB::table('cb_item_approvers')->where('id', $itemApprover->id)
+                    ->update(['approval_status' => 'Rejected', 'actioned_at' => now(), 'updated_at' => now()]);
+
+                $returnToApprover = DB::table('cb_item_approvers')
+                    ->where('approval_item_id', $approvalItem->id)
+                    ->where('approver_level', $request->return_to_level)
+                    ->first();
+
+                if ($returnToApprover) {
+                    DB::table('cb_item_approvers')->where('id', $returnToApprover->id)
+                        ->update(['approval_status' => 'Pending', 'actioned_at' => null, 'updated_at' => now()]);
+                }
+
+                DB::table('cb_approval_actions')->insert([
+                    'item_approver_id' => $itemApprover->id,
+                    'approval_item_id' => $approvalItem->id,
+                    'actor_id' => auth()->id(),
+                    'from_level' => $itemApprover->approver_level,
+                    'to_level' => $request->return_to_level,
+                    'action' => 'Returned',
+                    'returned_to_approver_id' => $returnToApprover ? $returnToApprover->approver_id : null,
+                    'returned_to_level' => $request->return_to_level,
+                    'comments' => $request->reason,
+                    'action_timestamp' => now(),
+                    'ip_address' => request()->ip(),
+                    'sequence_number' => DB::table('cb_approval_actions')
+                        ->where('approval_item_id', $approvalItem->id)->max('sequence_number') + 1,
+                    'is_current' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                DB::table('cb_approval_items')->where('id', $approvalItem->id)
+                    ->update(['status' => 'InProgress', 'current_level' => $request->return_to_level, 'updated_at' => now()]);
+
+                DB::commit();
+                return response()->json(['success' => true, 'message' => 'Return sent back to Level ' . $request->return_to_level . ' for revision']);
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error rejecting return: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to reject return'], 500);
+        }
+    }
+
+    /**
+     * Add a comment to return approval
+     */
+    public function addReturnApprovalComment($encryptedId, Request $request)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $returnSummary = ReturnSummary::findOrFail($id);
+
+            $request->validate(['comment' => 'required|string|max:1000']);
+
+            $approvalItem = DB::table('cb_approval_items')
+                ->where('item_type', 'return_summary')
+                ->where('item_id', $returnSummary->id)
+                ->first();
+
+            if (!$approvalItem) {
+                return response()->json(['success' => false, 'message' => 'No approval workflow found'], 404);
+            }
+
+            $itemApprover = DB::table('cb_item_approvers')
+                ->where('approval_item_id', $approvalItem->id)
+                ->where('approver_id', auth()->id())
+                ->first();
+
+            if (!$itemApprover) {
+                return response()->json(['success' => false, 'message' => 'You are not an approver for this return'], 403);
+            }
+
+            DB::table('cb_approval_actions')->insert([
+                'item_approver_id' => $itemApprover->id,
+                'approval_item_id' => $approvalItem->id,
+                'actor_id' => auth()->id(),
+                'from_level' => $itemApprover->approver_level,
+                'to_level' => null,
+                'action' => 'Commented',
+                'comments' => $request->comment,
+                'action_timestamp' => now(),
+                'ip_address' => request()->ip(),
+                'sequence_number' => DB::table('cb_approval_actions')
+                    ->where('approval_item_id', $approvalItem->id)->max('sequence_number') + 1,
+                'is_current' => 1,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Comment added successfully',
+                'data' => [
+                    'comment' => $request->comment,
+                    'user_name' => auth()->user()->name,
+                    'timestamp' => now()->format('d M Y, H:i')
+                ]
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error adding return approval comment: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to add comment'], 500);
         }
     }
 
@@ -560,5 +990,89 @@ class ReturnsApprovalController extends Controller
                 'message' => 'Failed to reject batch'
             ], 500);
         }
+    }
+
+    /**
+     * Generate a payment voucher for an approved return summary.
+     *
+     * Creates a header in cb_payment_vouchers_headers_new and
+     * property-level summary lines in cb_payment_vouchers_lines_new.
+     * Updates cb_returns_summary.voucher_number.
+     *
+     * Voucher number format: PV{YYYY}{MM}{sequence}
+     */
+    protected function generatePaymentVoucher(ReturnSummary $return): string
+    {
+        $year = (int) $return->year;
+        $month = (int) $return->month;
+
+        // Next global sequence
+        $maxSeq = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
+        $nextSeq = $maxSeq + 1;
+
+        $voucherNumber = 'PV' . $year . str_pad($month, 2, '0', STR_PAD_LEFT) . $nextSeq;
+
+        // Resolve landlord name from cb_landlord_account
+        $landlordName = DB::table('cb_landlord_account')
+            ->where('landlord_code', $return->landlord_code)
+            ->value('landlord_name') ?? $return->landlord_code;
+
+        // Resolve property name
+        $propertyName = DB::table('sys_pm_properties')
+            ->where('reference_number', $return->property_code)
+            ->value('property_name') ?? $return->property_code;
+
+        // Create voucher header
+        $header = PaymentVoucherHeader::create([
+            'voucher_sequence' => $nextSeq,
+            'voucher_number'   => $voucherNumber,
+            'year'             => $year,
+            'month'            => $month,
+            'voucher_date'     => now(),
+            'description'      => 'Return Payment ' . str_pad($month, 2, '0', STR_PAD_LEFT) . '/' . $year,
+            'vendor_id'        => $return->landlord_code,
+            'vendor_name'      => $landlordName,
+            'vendor_type'      => 'Landlord',
+            'debit_amount'     => $return->net_amount ?? 0,
+            'credit_amount'    => 0,
+            'entry_count'      => 0,
+            'voucher_status'   => 'Pending',
+            'is_deleted'       => 0,
+            'prepared_by'      => auth()->user()->name,
+            'is_printed'       => 0,
+        ]);
+
+        // Single line: final net amount from the return summary
+        PaymentVoucherLine::create([
+            'voucher_number'       => $voucherNumber,
+            'entry_number'         => 1,
+            'entry_year'           => $year,
+            'entry_month'          => $month,
+            'property_code'        => $return->property_code,
+            'dr_cr'                => 'DR',
+            'entry_id'             => $return->return_code,
+            'entry_description'    => 'Net Payable - ' . $propertyName,
+            'is_approved'          => 'Yes',
+            'amount'               => abs($return->net_amount ?? 0),
+            'gl_account'           => $return->landlord_code,
+            'payee_name'           => $landlordName,
+            'property_description' => $propertyName,
+        ]);
+
+        // Update header with line count
+        $header->update(['entry_count' => 1]);
+
+        // Stamp voucher number on the return summary
+        $return->update(['voucher_number' => $voucherNumber]);
+
+        Log::info('Payment voucher generated', [
+            'voucher_number' => $voucherNumber,
+            'return_code'    => $return->return_code,
+            'landlord'       => $return->landlord_code,
+            'net_amount'     => $return->net_amount,
+            'lines'          => 1,
+        ]);
+
+        return $voucherNumber;
     }
 }

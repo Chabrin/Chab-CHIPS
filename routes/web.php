@@ -423,6 +423,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/tenants/statements', [App\Http\Controllers\InvoicingController::class, 'tenantInvoices'])->name('invoices.tenant.index');
     Route::get('/tenants/statements/create', [App\Http\Controllers\InvoicingController::class, 'createTenantInvoice'])->name('invoices.tenant.create');
     Route::post('/ajax/invoices/tenant/search', [App\Http\Controllers\InvoicingController::class, 'searchTenantInvoices'])->name('ajax.invoices.tenant.search');
+    Route::get('/ajax/statements/properties', [App\Http\Controllers\InvoicingController::class, 'getPropertiesForStatements'])->name('ajax.statements.properties');
+    Route::get('/ajax/statements/tenants-by-property', [App\Http\Controllers\InvoicingController::class, 'getTenantsByProperty'])->name('ajax.statements.tenants.by.property');
     Route::post('/ajax/invoices/tenant/store', [App\Http\Controllers\InvoicingController::class, 'storeTenantInvoice'])->name('ajax.invoices.tenant.store');
     Route::get('/invoices/tenant/export', [App\Http\Controllers\InvoicingController::class, 'exportTenantInvoices'])->name('invoices.tenant.export');
     Route::get('/invoices/tenant/statement/export/excel', [App\Http\Controllers\InvoicingController::class, 'exportTenantStatementExcel'])->name('invoices.tenant.statement.export.excel');
@@ -537,6 +539,11 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Parameterized route AFTER specific routes
     Route::post('/ajax/tenant/payments/{id}/allocate', [App\Http\Controllers\TenantPaymentsController::class, 'allocatePayment'])->name('ajax.tenant.payments.allocate');
 
+    // Allocated Payments
+    Route::post('/ajax/payments/allocated/search', [App\Http\Controllers\TenantPaymentsController::class, 'searchAllocatedPayments'])->name('ajax.payments.allocated.search');
+    Route::get('/ajax/payments/allocated/export', [App\Http\Controllers\TenantPaymentsController::class, 'exportAllocatedPayments'])->name('ajax.payments.allocated.export');
+    Route::get('/ajax/payments/properties', [App\Http\Controllers\TenantPaymentsController::class, 'getPropertiesForPayments'])->name('ajax.payments.properties');
+
     // Client Invoices
     Route::get('/client/invoices', [App\Http\Controllers\InvoicingController::class, 'clientInvoices'])->name('invoices.client.index');
     Route::get('/client/invoices/create', [App\Http\Controllers\InvoicingController::class, 'createClientInvoice'])->name('invoices.client.create');
@@ -553,11 +560,24 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/returns/batches/{id}', [App\Http\Controllers\ClientReturnsController::class, 'getBatchDetails'])->name('ajax.returns.batches.details.ajax');
     Route::get('/ajax/returns/batches/{id}/returns', [App\Http\Controllers\ClientReturnsController::class, 'getBatchReturnsData'])->name('ajax.returns.batches.returns');
 
-    // Returns Approval Routes
+    // Unprocessed Returns
+    Route::get('/returns/{id}/details', [App\Http\Controllers\ClientReturnsController::class, 'showUnprocessedReturnDetails'])->name('returns.details');
+    Route::get('/ajax/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnUnitsData'])->name('ajax.returns.units');
+    Route::get('/ajax/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnSummaryData'])->name('ajax.returns.summary');
+    Route::get('/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedExcel'])->name('returns.excel');
+    Route::post('/ajax/returns/lines/{lineId}/recovery', [App\Http\Controllers\ClientReturnsController::class, 'setRecoveryStatus'])->name('ajax.returns.lines.recovery');
+
+    // Returns Approval Routes (Batch-level)
     Route::get('/ajax/returns/batches/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getBatchApprovals'])->name('ajax.returns.batches.approvals');
     Route::post('/ajax/returns/batches/{id}/approvals/comment', [App\Http\Controllers\ReturnsApprovalController::class, 'addApprovalComment'])->name('ajax.returns.batches.approvals.comment');
     Route::post('/ajax/returns/batches/{id}/approvals/approve', [App\Http\Controllers\ReturnsApprovalController::class, 'approveBatch'])->name('ajax.returns.batches.approvals.approve');
     Route::post('/ajax/returns/batches/{id}/approvals/reject', [App\Http\Controllers\ReturnsApprovalController::class, 'rejectBatch'])->name('ajax.returns.batches.approvals.reject');
+
+    // Returns Approval Routes (Return-summary-level)
+    Route::get('/ajax/returns/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getReturnApprovals'])->name('ajax.returns.approvals');
+    Route::post('/ajax/returns/{id}/approvals/approve', [App\Http\Controllers\ReturnsApprovalController::class, 'approveReturn'])->name('ajax.returns.approvals.approve');
+    Route::post('/ajax/returns/{id}/approvals/reject', [App\Http\Controllers\ReturnsApprovalController::class, 'rejectReturn'])->name('ajax.returns.approvals.reject');
+    Route::post('/ajax/returns/{id}/approvals/comment', [App\Http\Controllers\ReturnsApprovalController::class, 'addReturnApprovalComment'])->name('ajax.returns.approvals.comment');
 
     Route::get('/ajax/returns/invoice-history/{leaseId}', [App\Http\Controllers\ClientReturnsController::class, 'getInvoiceHistory'])->name('ajax.returns.invoice.history');
     Route::get('/ajax/returns/properties', [App\Http\Controllers\ClientReturnsController::class, 'getProperties'])->name('ajax.returns.properties');
@@ -576,8 +596,23 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/processed/returns/data', [App\Http\Controllers\ClientReturnsController::class, 'getProcessedReturnsData'])->name('ajax.processed.returns.data');
     Route::get('/processed/returns/{id}/details', [App\Http\Controllers\ClientReturnsController::class, 'showReturnDetails'])->name('processed.returns.details');
     Route::get('/ajax/processed/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getReturnUnitsData'])->name('ajax.processed.returns.units');
+    Route::get('/ajax/processed/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getReturnSummaryData'])->name('ajax.processed.returns.summary');
     Route::get('/processed/returns/{id}/pdf', [App\Http\Controllers\ClientReturnsController::class, 'downloadPdf'])->name('processed.returns.pdf');
     Route::get('/processed/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadExcel'])->name('processed.returns.excel');
+
+    // Landlord Account Statement
+    Route::get('/landlord/account/statement', [App\Http\Controllers\LandlordController::class, 'accountStatement'])->name('landlord.account.statement');
+    Route::get('/ajax/landlord/properties', [App\Http\Controllers\LandlordController::class, 'getProperties'])->name('ajax.landlord.properties');
+    Route::get('/ajax/landlord/landlords-by-property', [App\Http\Controllers\LandlordController::class, 'getLandlordsByProperty'])->name('ajax.landlord.landlords.by.property');
+    Route::post('/ajax/landlord/statement/search', [App\Http\Controllers\LandlordController::class, 'searchStatement'])->name('ajax.landlord.statement.search');
+    Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
+    Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
+
+    // Payment Vouchers
+    Route::get('/payment/vouchers', [App\Http\Controllers\PaymentVouchersController::class, 'index'])->name('payment.vouchers.index');
+    Route::get('/ajax/payment/vouchers/data', [App\Http\Controllers\PaymentVouchersController::class, 'getVouchersData'])->name('ajax.payment.vouchers.data');
+    Route::get('/payment/vouchers/{id}/details', [App\Http\Controllers\PaymentVouchersController::class, 'show'])->name('payment.vouchers.details');
+    Route::get('/ajax/payment/vouchers/{id}/lines', [App\Http\Controllers\PaymentVouchersController::class, 'getVoucherLines'])->name('ajax.payment.vouchers.lines');
 
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
@@ -740,17 +775,17 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/{propertyId}/units', [InspectionsController::class, 'getUnitsByProperty'])->name('property.units');
     Route::get('/property/{propertyId}/all_units', [InspectionsController::class, 'getAllUnitsByProperty'])->name('property.units');
 
-        // Property Merge
-        Route::get('/property/merge', [App\Http\Controllers\PropertyMergeController::class, 'index'])->name('property.merge.index');
-        Route::get('/property/merge/create', [App\Http\Controllers\PropertyMergeController::class, 'create'])->name('property.merge.create');
-        Route::get('/property/merge/{encryptedId}', [App\Http\Controllers\PropertyMergeController::class, 'show'])->name('property.merge.show');
-        Route::get('/ajax/property/merge/list', [App\Http\Controllers\PropertyMergeController::class, 'list'])->name('ajax.property.merge.list');
-        Route::get('/ajax/property/merge/client/{clientId}/properties', [App\Http\Controllers\PropertyMergeController::class, 'getClientProperties'])->name('ajax.property.merge.client.properties');
-        Route::get('/ajax/property/merge/property/{propertyId}/units', [App\Http\Controllers\PropertyMergeController::class, 'getPropertyUnits'])->name('ajax.property.merge.property.units');
-        Route::get('/ajax/property/merge/client/{clientId}/bank-accounts', [App\Http\Controllers\PropertyMergeController::class, 'getClientBankAccounts'])->name('ajax.property.merge.client.bank.accounts');
-        Route::post('/ajax/property/merge/preview', [App\Http\Controllers\PropertyMergeController::class, 'preview'])->name('ajax.property.merge.preview');
-        Route::post('/property/merge/store', [App\Http\Controllers\PropertyMergeController::class, 'store'])->name('property.merge.store');
-        Route::post('/property/merge/{encryptedId}/reverse', [App\Http\Controllers\PropertyMergeController::class, 'reverse'])->name('property.merge.reverse');
+    // Property Merge
+    Route::get('/property/merge', [App\Http\Controllers\PropertyMergeController::class, 'index'])->name('property.merge.index');
+    Route::get('/property/merge/create', [App\Http\Controllers\PropertyMergeController::class, 'create'])->name('property.merge.create');
+    Route::get('/property/merge/{encryptedId}', [App\Http\Controllers\PropertyMergeController::class, 'show'])->name('property.merge.show');
+    Route::get('/ajax/property/merge/list', [App\Http\Controllers\PropertyMergeController::class, 'list'])->name('ajax.property.merge.list');
+    Route::get('/ajax/property/merge/client/{clientId}/properties', [App\Http\Controllers\PropertyMergeController::class, 'getClientProperties'])->name('ajax.property.merge.client.properties');
+    Route::get('/ajax/property/merge/property/{propertyId}/units', [App\Http\Controllers\PropertyMergeController::class, 'getPropertyUnits'])->name('ajax.property.merge.property.units');
+    Route::get('/ajax/property/merge/client/{clientId}/bank-accounts', [App\Http\Controllers\PropertyMergeController::class, 'getClientBankAccounts'])->name('ajax.property.merge.client.bank.accounts');
+    Route::post('/ajax/property/merge/preview', [App\Http\Controllers\PropertyMergeController::class, 'preview'])->name('ajax.property.merge.preview');
+    Route::post('/property/merge/store', [App\Http\Controllers\PropertyMergeController::class, 'store'])->name('property.merge.store');
+    Route::post('/property/merge/{encryptedId}/reverse', [App\Http\Controllers\PropertyMergeController::class, 'reverse'])->name('property.merge.reverse');
 
     ###### PROPERTY MANAGEMENT SECTION END ########
 

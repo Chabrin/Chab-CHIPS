@@ -1,0 +1,143 @@
+﻿Group,Table,Description,Rows,PG Target / Notes
+PM Mapped,CHBLOCKS,Property blocks master,1868,sys_pm_properties + sys_pm_service_agreements
+PM Mapped,CHLRDS,Landlord clients master,1202,sys_pm_clients (landlords)
+PM Mapped,CHBUNITS,Property units master,49960,sys_pm_units
+PM Mapped,CHTENS,Tenant clients + leases,68660,sys_pm_clients (tenants) + sys_pm_lease_agreements
+PM Mapped,_mig_zones,Zone migration helper,7,sys_set_zones
+PM Mapped,_mig_zone_areas,Zone area migration helper,123,sys_set_zone_areas
+PM Mapped,CHCHRS,Invoiceable charge types,36,sys_set_invoiceable_items
+PM Mapped,CHTNTRS,Debtor invoices / charges,747489,sys_pm_debtors_invoices
+PM Mapped,CHTPAYS,Allocated tenant payments,944927,sys_pm_tenants_payments_allocated
+PM Mapped,CHBCTD,Unallocated payment batch details,976420,sys_pm_tenants_payments_unallocated
+PM Mapped,CHTACC,Tenant full account ledger (DR+CR),1697237,sys_pm_tenants_accounts_trans
+PM Mapped,CHRCS,Receipts master,1439659,cb_receipts
+PM Mapped,CHRHMS,Returns summary per period,23451,cb_returns_summary
+PM Mapped,CHRTXS,Returns client transaction lines,1054862,cb_returns_clients
+PM Mapped,CHOFFICERS,Officers / staff users,163,josya_users
+PM Mapped,CHLACC,Landlord account ledger,83154,cb_landlord_account
+PM Mapped,CHRACT,Money recoveries,6939,cb_money_recoveries
+PM Mapped,CHPVHH,Payment voucher headers (new),32625,cb_payment_vouchers_headers_new
+PM Mapped,CHPVH,Payment voucher headers (old),1777,cb_payment_vouchers_headers_old
+PM Mapped,CHPVDD,Payment voucher lines (new),52907,cb_payment_vouchers_lines_new
+PM Mapped,CHPVD,Payment voucher lines (old),1906,cb_payment_vouchers_lines_old
+PM Mapped,CHCDC,Landlord charge pairing config,12,cb_landlord_charge_pairs
+HR Mapped,CHDEPT,HR departments,4,sys_set_departments
+HR Mapped,CHDESN,Staff positions / designations,17,sys_set_staff_positions
+HR Mapped,CHBANK,Banks master,45,sys_set_banks
+HR Mapped,CHBBRA,Bank branches,609,sys_set_banks_branches
+HR Mapped,CHSTFF,Staff / employees master,250,sys_staff
+HR Mapped,CHSNOK,Staff next of kin,423,sys_staff_next_of_kin
+HR Mapped,CHPREDS,Payroll elements / earning types,24,sys_hr_payroll_elements
+HR Mapped,CHPTABS,Tax bands + payroll calendar,1000,um_tax_bands + sys_hr_payroll_calendar
+HR Mapped,CHPRDS,Payroll periods,210,sys_hr_payroll_periods
+HR Mapped,CHPYSL,Payroll payslips  core payroll table,176513,sys_hr_payroll_summary + payslip_elements + p9a + deductions + statutory reports
+HR Mapped,CHLOAN,HELB / staff loans and deductions,1036,sys_helb_deductions + sys_hr_employee_amortized_deductions
+HR Mapped,CHP9A,P9A tax return records,13505,sys_hr_p9a
+HR Mapped,CHSCNTS,Employee contracts,178,sys_hr_employee_contracts
+Pending_1,CHBCTH,Batch headers for payment channel transactions,1672,No view yet  to be created
+Pending_1,CHLRH,Landlord-property links,1795,No view yet  to be created
+Pending_1,CHRMES,Returns scheduler / run schedule,37066,No view yet  to be created
+Pending_1,CHREST,Bank statement reconciliation entries,188,No view yet  to be created
+Pending_1,CHRDED,Deduction configuration,3,No view yet  to be created
+Pending_1,CHCHQ,Cheques register,44987,No view yet  to be created
+Pending_1 (empty),CHLAP,Landlord advance payments  empty,0,Skipped  empty table
+Pending_1 (empty),CHRHMT,Returns header summary temp  empty,0,Skipped  empty table
+Pending_1 (empty),CHRTXT,Returns transaction temp  empty,0,Skipped  empty table
+Pending_1 (empty),CHPAYMENTS,Payments misc  negligible,4,Skipped  4 rows only
+Un_Mapped  Landlord Loans,CHLNTR,Landlord loan/advance amortised repayment schedule,5593, KEY missing  propose cb_landlord_loans
+Un_Mapped  Landlord Loans,CHLCAC,Landlord account period-close summary,58797,propose cb_landlord_account_period_close
+Un_Mapped  Landlord Loans,CHLSTM,Landlord statement entry lines (legacy),49238,Possibly superseded by CHLACC
+Un_Mapped  Accounting GL,CHJVH,Journal voucher headers,179007,
+Un_Mapped  Accounting GL,CHJVD,Journal voucher detail lines,888791,
+Un_Mapped  Accounting GL,CHACCE,Main accounting ledger entries (Dr/Cr),16777,Core GL  full double-entry
+Un_Mapped  Accounting GL,CHFACTV,Chart of accounts master,854,Account number / name / type / group
+Un_Mapped  Accounting GL,CHACINV,Account-level invoice entries per landlord,6557,
+Un_Mapped  Accounting GL,CHGLAC,GL account ledger entries,1118,GL-level Dr/Cr (similar to CHACCE)
+Un_Mapped  Accounting GL,CHTPJV,Tenant payment auto-generated JV lines,54,
+Un_Mapped  Accounting GL,CHIACCT,Income account config (single-row mapping),1,
+Un_Mapped  Cashbook & Recon,CHCBDE,Cashbook detail entries,779124,Bank vs cash amounts; recon status per entry
+Un_Mapped  Cashbook & Recon,CHCBMN,Cashbook main/header entries,166,
+Un_Mapped  Cashbook & Recon,CHACCTS,Company bank accounts master,3,
+Un_Mapped  Cashbook & Recon,CHBEFTS,Outgoing EFT payment records,1,
+Un_Mapped  Tenant Payments,CHSUBS,Recurring subscription / direct debit payments,774116, Very significant  INVONUM PAYFOR PAYMNTH
+Un_Mapped  Tenant Payments,CHDPAY,Tenant deposit payment tracker,127157,Outstanding deposits per tenant/unit
+Un_Mapped  Tenant Payments,CHDPS,Security deposit records,36307,Per-tenant deposit type / receipt / deposit no
+Un_Mapped  Tenant Payments,CHIPAYS,Receipt inspection / verification checks,12874,Marks receipts checked before posting
+Un_Mapped  Tenant Payments,CHPOS,POS / walk-in receipts,17826,Front-desk quick payment entries
+Un_Mapped  Tenant Payments,CHUNPD,Unpaid arrears register snapshot,41776,
+Un_Mapped  Tenant Payments,CHIBALS,Opening migration balances for tenants,332,
+Un_Mapped  Tenant Payments,CHCCRST,EFT / online payment status tracker,1828,Tracks success/failure of electronic receipts
+Un_Mapped  Tenant Account History,CHTTAB,Tenant transaction report snapshot (denormalised),3095597,Reporting table  period / officer / block / unit / amounts
+Un_Mapped  Tenant Account History,CHRACC,Returns rent actual vs payable summary,451927,Per-period per-unit rent payable / paid / deposits / balance
+Un_Mapped  Tenant Account History,CHRINC,Rent increment log,137886,Records each rent increase per unit (old/new amount / date)
+Un_Mapped  Tenant Account History,CHRVAT,Returns VAT lines per unit,3326,VAT rate / base / credit per period per unit
+Un_Mapped  Tenant Account History,CHRCVS,Returns cross-verification snapshot,3756,Invoice vs payment cross-check for returns period
+Un_Mapped  Tenant Account History,CHTENH,Tenant notes / history entries,66172,Free-text history per tenant (date / description / by)
+Un_Mapped  Tenant Account History,CHCNAM,Tenant name change log,4222,Old-name to new-name per unit
+Un_Mapped  Tenant Account History,CHTRX,Tenant unit transfer log,10742,Moves tenant between units carrying balance
+Un_Mapped  Tenant Account History,CHTNHF,Tenant housing fund rate bands,8607,Band-based rates (min / max / rate) by period
+Un_Mapped  Landlord Batches,CHPBCTH,Landlord payment batch headers,183272,Remittance batches: date / amount / post status / source
+Un_Mapped  Landlord Batches,CHPBCTG,Landlord payment batch lines,857,Detail lines per batch: payee / amount / cheque / bank
+Un_Mapped  Landlord Batches,CHBTCH,Tenant receipt posting batch headers,7645,Batch control for posting receipts (zone / amount / status)
+Un_Mapped  Landlord Batches,CHBTDD,Tenant receipt batch lines (legacy),3,Near-empty  legacy
+Un_Mapped  Landlord Batches,CHBTDR,Receipt batch headers variant (legacy),15,Near-empty  legacy
+Un_Mapped  Cheques & Petty Cash,CHCHD,Cheque register detail,32967,Per-cheque: account / voucher link / payee / EFT / verify status
+Un_Mapped  Cheques & Petty Cash,CHPCVH,Petty cash voucher headers,2511,
+Un_Mapped  Cheques & Petty Cash,CHPCVD,Petty cash voucher lines,2487,
+Un_Mapped  Cheques & Petty Cash,CHPCENT,Petty cash entries posted to bank/GL,2545,
+Un_Mapped  Commission,CHHCOM,Commission rate history per block/zone per period,10041,Commission % applied per block per period
+Un_Mapped  Commission,CHCOMH,Commission adjustment log,9458,Adjustment records (from/to rate / by / date) per block/month
+Un_Mapped  Commission,CHCOMA,Commission per invoice/period,259,Expected vs actual vs paid commission per invoice
+Un_Mapped  Commission,CHRRUN,Returns processing run log,110,Records each returns generation run (month / year)
+Un_Mapped  Vendors,CHVENDS,Vendor / supplier master,1787,Vendor name / type / address / bank account / balance
+Un_Mapped  Vendors,CHEXPS,Property expense entries,10,Expenses paid to/by landlord per unit
+Un_Mapped  Setup Config,CHOFALL,Officer-property allocation,5363,Links officer to property (OFFID / BLOCKID / ALLTYPE)
+Un_Mapped  Setup Config,CHTAXES,Tax / VAT rate config,1,
+Un_Mapped  Setup Config,CHTCHRG,Tenant charge type to GL account mapping,7,
+Un_Mapped  Setup Config,CHTYPES,Transaction type codes,9,
+Un_Mapped  Setup Config,CHUOMS,Units of measurement,2,
+Un_Mapped  Setup Config,CHPSEQ,Payment posting sequence rules,10,Defines how receipts auto-allocate across accounts
+Un_Mapped  Setup Config,CHPSTQ,Posting category codes,7,
+Un_Mapped  Setup Config,CHRCODE,Returns reference codes,8,
+Un_Mapped  Setup Config,CHLOC,Office locations,7,Address and contact person per office
+Un_Mapped  Setup Config,CHSECTS,HR department sections,32,
+Un_Mapped  Setup Config,CHEXS,Allocation/exchange settings,6,
+Un_Mapped  HR Extras,CHPEED,Per-employee extra deductions per period,153660,One-off / recurring deductions beyond payroll elements
+Un_Mapped  HR Extras,CHGRDS,Salary grades,2,
+Un_Mapped  HR Extras,CHEMPT,Employment types,3,
+Un_Mapped  HR Extras,CHSTFFE,Staff employment change history,74,
+Un_Mapped  HR Extras,CHPYRP,Payroll report config entries,6,
+Un_Mapped  System,USERLOG,System activity audit log,754564,User / IP / module / timestamp per action
+Un_Mapped  System,SCUSERSN,System users (new app),21,
+Un_Mapped  System,SCUSERSS,System users (shared/legacy),2,
+Un_Mapped  System,CHSGRP,Security groups,15,
+Un_Mapped  System,CHSGRPA,Security group menu access,206,
+Un_Mapped  System,MNURAN,Menu access ranges,121,
+Un_Mapped  System,SMCINF,Company / system config,1,
+Un_Mapped  System,CHNXD,Auto-number sequences (main),1,
+Un_Mapped  System,CHNXDE,Auto-number sequences (E-series),1,
+Un_Mapped  System,CHNXDI,Auto-number sequences (I-series),1,
+Un_Mapped  System,CHNXDL,Auto-number sequences (L-series),1,
+Un_Mapped  System,CHRPID,Returns process ID log,14,
+Un_Mapped  System,CLEANE,GTT cleanup tracker,665,
+Un_Mapped  Junk/Artifacts,Sheet2,Excel import artifact,117,Skip
+Un_Mapped  Junk/Artifacts,CHFACTS,Old chart of accounts (replaced by CHFACTV),13,Skip
+Un_Mapped  Junk/Artifacts,CHBINF,Block info notes,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHCAPI,Capital advance payments (unused),0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHEAPI,EFT advance payments (unused),0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHEDITS,Receipt edit log,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHICH,Internal check records,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHJVDP,JV lines staging duplicate,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHJVHP,JV headers staging duplicate,2,Near-empty  skip
+Un_Mapped  Junk/Artifacts,CHBTDD,Receipt batch lines (legacy),3,Near-empty  skip
+Un_Mapped  Junk/Artifacts,CHTN,Tenant quick-name ref,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHVACT,Vacated tenants,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHRCSD,Receipt banking/deposit records,0,Empty  skip
+Un_Mapped  Junk/Artifacts,CHPUSS,PV approval chain users,0,Empty  skip
+
+Un_Mapped -- Property/Unit Info,CHUINF,Unit info notes and status entries per unit,20820,--
+Un_Mapped -- Property/Unit Info,CHUNICO,Unit recurring non-rental charges,42,--
+Un_Mapped -- Property/Unit Info,CHISRE,Property issue and complaint register,1,--
+Un_Mapped -- Junk/Artifacts,CHJVHP,JV headers staging duplicate,2,Skip
+Un_Mapped -- Junk/Artifacts,CHLOCA,Office locations variant,1,Skip
+Un_Mapped -- Junk/Artifacts,CHPSEQv,Payment sequence variant (duplicate of CHPSEQ),0,Skip
