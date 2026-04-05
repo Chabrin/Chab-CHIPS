@@ -39,7 +39,7 @@ class PayrollPeriod extends Model
     // Relationships
     public function calendar()
     {
-        return $this->belongsTo(PayrollCalendar::class, 'calendar_id');
+        return $this->belongsTo(PayrollCalendar::class, 'calendar_id', 'id');
     }
 
     public function createdBy()
