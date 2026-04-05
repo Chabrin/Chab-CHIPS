@@ -36,7 +36,7 @@ class PayrollCalendar extends Model
 
     public function periods()
     {
-        return $this->hasMany(PayrollPeriod::class, 'calendar_id')->orderBy('period_number');
+        return $this->hasMany(PayrollPeriod::class, 'id', 'calendar_id');
     }
 
     // Helper to get formatted month

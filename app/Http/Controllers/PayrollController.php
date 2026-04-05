@@ -418,7 +418,7 @@ class PayrollController extends Controller
 
     public function calendarList()
     {
-        try {
+        // try {
             $calendars = PayrollCalendar::with(['createdBy', 'periods'])
                 ->orderBy('payroll_month_date', 'desc')
                 ->get()
@@ -440,14 +440,14 @@ class PayrollController extends Controller
                 });
 
             return response()->json(['calendars' => $calendars]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['error' => 'Failed to load payroll calendar'], 500);
-        }
+        // } catch (\Exception $e) {
+        //     try {
+        //         ErrorDispatcher::dispatch($e);
+        //     } catch (\Exception $ex) {
+        //         Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+        //     }
+        //     return response()->json(['error' => 'Failed to load payroll calendar'], 500);
+        // }
     }
 
     public function calendarStore(Request $request)
