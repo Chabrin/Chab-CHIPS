@@ -178,6 +178,7 @@
 <script>
     $(document).ready(function() {
         let currentCalendarId = null;
+        let currentCalendarMonthDate = null;
         let calendarTable, periodsTable;
 
         // Initialize Calendar Table
@@ -212,7 +213,7 @@
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
-                        buttons += `<button class="btn btn-xs btn-info view-periods" data-id="${row.id}" data-month="${row.month_formatted}" style="padding:1px 2px;" title="View Periods">
+                        buttons += `<button class="btn btn-xs btn-info view-periods" data-id="${row.id}" data-month="${row.month_formatted}" data-month-date="${row.payroll_month_date}" style="padding:1px 2px;" title="View Periods">
                             <span class="material-symbols-outlined" style="font-size:18px;">calendar_month</span>
                         </button>`;
                         if (row.can_update) {
@@ -295,6 +296,7 @@
         // View Periods
         $(document).on('click', '.view-periods', function() {
             currentCalendarId = $(this).data('id');
+            currentCalendarMonthDate = String($(this).data('month-date'));
             const month = $(this).data('month');
             $('#selectedCalendarMonth').text(month);
             $('#periodsSection').slideDown();
@@ -305,6 +307,7 @@
         $('#closePeriodsBtn').on('click', function() {
             $('#periodsSection').slideUp();
             currentCalendarId = null;
+            currentCalendarMonthDate = null;
         });
 
         // Load Periods
@@ -374,7 +377,7 @@
 
         // Edit Calendar
         $(document).on('click', '.edit-calendar', function() {
-            const payrollMonthDate = $(this).data('payroll_month_date');
+            const payrollMonthDate = String($(this).data('payroll_month_date'));
             if (payrollMonthDate && payrollMonthDate.length === 6) {
                 const year = payrollMonthDate.substring(0, 4);
                 const month = payrollMonthDate.substring(4, 6);
@@ -427,6 +430,18 @@
             $('#periodId').val('');
             $('#periodCalendarId').val(currentCalendarId);
             $('#periodModalTitle').text('Add Payroll Period');
+
+            // Pre-fill and constrain dates to the calendar's month
+            if (currentCalendarMonthDate && currentCalendarMonthDate.length === 6) {
+                const year = parseInt(currentCalendarMonthDate.substring(0, 4));
+                const month = parseInt(currentCalendarMonthDate.substring(4, 6));
+                const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
+                const lastDayNum = new Date(year, month, 0).getDate();
+                const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
+                $('#period_start_date').val(firstDay).attr('min', firstDay).attr('max', lastDay);
+                $('#period_end_date').val(lastDay).attr('min', firstDay).attr('max', lastDay);
+            }
+
             $('#addPeriodModal').modal('show');
         });
 
