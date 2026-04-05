@@ -363,6 +363,9 @@ class StaffController extends Controller
     {
         try {
             $contracts = Contract::with('employee', 'position', 'createdBy', 'elements.payrollElement')
+                ->whereHas('employee', function ($query) {
+                    $query->where('current_status_id', 5);
+                })
                 ->orderBy('date_time', 'desc')
                 ->get()
                 ->map(function ($contract) {
