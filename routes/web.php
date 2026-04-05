@@ -124,6 +124,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
+    Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
     Route::delete('/hr/employees/{id}', [StaffController::class, 'destroy'])->name('staff.destroy');
 
     // AJAX Routes for Staff
@@ -132,6 +133,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Employee Contracts
     Route::get('/hr/contracts', [StaffController::class, 'contractsIndex'])->name('contract.index');
     Route::get('/hr/contracts/create', [StaffController::class, 'contractsCreate'])->name('contract.create');
+    Route::get('/hr/contracts/bulk-edit', [StaffController::class, 'bulkEditContractsIndex'])->name('contract.bulk.edit');
+    Route::put('/hr/contracts/bulk-update', [StaffController::class, 'bulkUpdateContracts'])->name('contract.bulk.update');
+    Route::put('/hr/contracts/{id}/elements', [StaffController::class, 'bulkUpdateContractElements'])->name('contract.elements.update');
     Route::get('/hr/contracts/{id}/edit', [StaffController::class, 'contractsEdit'])->name('contract.edit');
     Route::put('/hr/contracts/{id}', [StaffController::class, 'contractUpdate'])->name('contract.update');
     Route::get('/ajax/hr/contracts/list', [StaffController::class, 'contractList'])->name('ajax.contract.list');

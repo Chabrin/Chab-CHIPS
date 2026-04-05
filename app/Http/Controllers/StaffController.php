@@ -33,15 +33,60 @@ class StaffController extends Controller
      */
     public function index()
     {
-        $staff = Staff::with('position')
+        $activeStaff = Staff::with('position')
             ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id')
             ->orderBy('full_names', 'asc')
+            ->where('current_status_id', 5)
             ->get()
             ->map(function ($member) {
                 $member->encrypted_id = Crypt::encrypt($member->id);
                 return $member;
             });
-        return view('staff.index', compact('staff'));
+
+        $otherStaff = Staff::with('position')
+            ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id', 'current_status_id')
+            ->orderBy('full_names', 'asc')
+            ->where('current_status_id', '!=', 5)
+            ->get()
+            ->map(function ($member) {
+                $member->encrypted_id = Crypt::encrypt($member->id);
+                return $member;
+            });
+
+        return view('staff.index', compact('activeStaff', 'otherStaff'));
+    }
+
+    /**
+     * Update staff member status
+     */
+    public function updateStatus(Request $request, $encryptedId)
+    {
+        if (!auth()->user()->hasPermission('update_staff')) {
+            abort(403);
+        }
+
+        $validStatuses = [4, 5, 28, 36];
+        $validated = $request->validate([
+            'status_id' => 'required|integer|in:4,5,28,36',
+        ]);
+
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $staff = Staff::findOrFail($id);
+            $staff->current_status_id = $validated['status_id'];
+            $staff->save();
+
+            $statusLabels = [4 => 'Suspended', 5 => 'Approved', 28 => 'Terminated', 36 => 'Absconded'];
+
+            return response()->json([
+                'success' => true,
+                'status_id' => $validated['status_id'],
+                'status_label' => $statusLabels[$validated['status_id']],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error updating staff status: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to update status'], 500);
+        }
     }
 
     /**
@@ -1192,6 +1237,137 @@ class StaffController extends Controller
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return back()->with('error', 'Failed to update employee termination')->withInput();
+        }
+    }
+
+    // Contracts Bulk Edit
+    public function bulkEditContractsIndex()
+    {
+        if (!auth()->user()->hasPermission('update_contracts')) {
+            abort(403);
+        }
+
+        try {
+            $positions = Position::orderBy('position_name')->get(['id', 'position_name']);
+        } catch (\Exception $e) {
+            Log::error('Error loading positions for bulk edit: ' . $e->getMessage());
+            $positions = collect();
+        }
+
+        $contractStatuses = [
+            1  => 'Pending',
+            5  => 'Approved',
+            3  => 'Cancelled',
+            22 => 'Expired',
+            41 => 'Rejected',
+            28 => 'Terminated',
+        ];
+
+        return view('staff.contracts.contracts_bulk_edit', compact('positions', 'contractStatuses'));
+    }
+
+    public function bulkUpdateContracts(Request $request)
+    {
+        if (!auth()->user()->hasPermission('update_contracts')) {
+            abort(403);
+        }
+
+        $contracts = $request->input('contracts', []);
+
+        if (empty($contracts)) {
+            return response()->json(['success' => false, 'error' => 'No contracts provided'], 422);
+        }
+
+        $results = [];
+
+        foreach ($contracts as $data) {
+            $id = $data['id'] ?? null;
+            if (!$id) {
+                $results[] = ['id' => null, 'ok' => false, 'error' => 'Missing contract ID'];
+                continue;
+            }
+
+            try {
+                // Client-side already validates, but re-check server-side
+                if (!empty($data['date_start']) && !empty($data['date_end'])) {
+                    if (strtotime($data['date_start']) > strtotime($data['date_end'])) {
+                        $results[] = ['id' => $id, 'ok' => false, 'error' => 'date_start must be before date_end'];
+                        continue;
+                    }
+                }
+
+                if (isset($data['basic_salary']) && $data['basic_salary'] < 0) {
+                    $results[] = ['id' => $id, 'ok' => false, 'error' => 'basic_salary must be 0 or greater'];
+                    continue;
+                }
+
+                $contract = Contract::findOrFail($id);
+
+                if (!empty($data['date_start'])) {
+                    $contract->date_start = $data['date_start'] . ' 00:00:00';
+                }
+                if (!empty($data['date_end'])) {
+                    $contract->date_end = $data['date_end'] . ' 00:00:00';
+                }
+                if (isset($data['basic_salary']) && $data['basic_salary'] !== '') {
+                    $contract->basic_salary = $data['basic_salary'];
+                }
+                if (!empty($data['position_id'])) {
+                    $contract->position_id = $data['position_id'];
+                }
+                if (!empty($data['current_status_id'])) {
+                    $contract->current_status_id = $data['current_status_id'];
+                }
+
+                $contract->save();
+                $results[] = ['id' => $id, 'ok' => true];
+
+            } catch (\Exception $e) {
+                Log::error("Bulk contract update failed for ID {$id}: " . $e->getMessage());
+                $results[] = ['id' => $id, 'ok' => false, 'error' => 'Save failed: ' . $e->getMessage()];
+            }
+        }
+
+        $failCount = count(array_filter($results, fn($r) => !$r['ok']));
+        return response()->json([
+            'success' => $failCount < count($results),
+            'results' => $results,
+            'updated' => count($results) - $failCount,
+            'failed'  => $failCount,
+        ]);
+    }
+
+    public function bulkUpdateContractElements(Request $request, $contractId)
+    {
+        if (!auth()->user()->hasPermission('update_contracts')) {
+            abort(403);
+        }
+
+        try {
+            $contract = Contract::findOrFail($contractId);
+
+            $elements = $request->input('elements', []);
+
+            // Delete existing elements
+            $contract->elements()->delete();
+
+            // Insert new elements
+            foreach ($elements as $element) {
+                if (empty($element['element_id'])) {
+                    continue;
+                }
+                \App\Models\ContractElement::create([
+                    'parent_id'     => $contract->id,
+                    'element_id'    => $element['element_id'],
+                    'entry_type_id' => $element['entry_type_id'] ?? 1,
+                    'amount'        => $element['amount'] ?? 0,
+                ]);
+            }
+
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            Log::error("Error updating elements for contract {$contractId}: " . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to update elements'], 500);
         }
     }
 

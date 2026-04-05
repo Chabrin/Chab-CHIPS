@@ -14,6 +14,12 @@ $canUpdateStaff = auth()->user()->hasPermission('update_contracts');
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Contracts</h5>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('update_contracts')
+                                <a class="btn btn-secondary btn-sm d-flex align-items-center" href="{{ route('contract.bulk.edit') }}">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">table_edit</span>
+                                    <span class="ms-1">Bulk Edit</span>
+                                </a>
+                            @endpermission
                             @permission('create_contracts')
                                 <a class="btn btn-primary btn-sm d-flex align-items-center" href="{{ route('contract.create') }}">
                                     <span class="material-symbols-outlined">add_circle</span>
