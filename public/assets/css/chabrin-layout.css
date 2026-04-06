@@ -13,11 +13,7 @@
     font-size: 20px !important;
 }
 
-.card-header {
-    padding: 1.25rem 1.5rem;
-    box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.15);
-    border-bottom: none;
-}
+/* card-header — now handled by borrowed styles section below */
 
 .employee-details-table td,
 .employee-details-table tr {
@@ -397,8 +393,7 @@
 }
 
 .page-body .card {
-    margin-bottom: 20px !important;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    margin-bottom: 12px !important;
 }
 
 /* Ensure container-fluid inside content doesn't add extra padding */
@@ -447,31 +442,297 @@
     line-height: 1 !important;
 }
 
-/* ---- TABLES ---- */
-table.dataTable tbody td,
-table.dataTable tbody th {
-    padding: 2px 4px !important;
-    font-size: 14px !important;
+/* ============================================ */
+/* BORROWED STRUCTURAL STYLES (from ref.css)    */
+/* Font, Typography, Tables, Cards, Modals,     */
+/* Buttons, Form Controls — NO COLORS           */
+/* ============================================ */
+
+/* ---- FONT & BASE TYPOGRAPHY ---- */
+body {
+    font-family:
+        "Segoe UI",
+        "Segoe UI Web (West European)",
+        -apple-system,
+        BlinkMacSystemFont,
+        Roboto,
+        "Helvetica Neue",
+        sans-serif !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    font-weight: 400 !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-table.dataTable thead th {
-    padding: 8px 10px !important;
+p,
+span,
+label,
+a,
+td,
+th,
+li,
+input,
+select,
+textarea,
+button {
+    font-family:
+        "Segoe UI",
+        "Segoe UI Web (West European)",
+        -apple-system,
+        BlinkMacSystemFont,
+        Roboto,
+        "Helvetica Neue",
+        sans-serif !important;
+}
+
+h1,
+.h1 {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+}
+h2,
+.h2 {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+}
+h3,
+.h3 {
+    font-size: 18px !important;
+    font-weight: 600 !important;
+}
+h4,
+.h4 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+}
+h5,
+.h5 {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+}
+h6,
+.h6 {
     font-size: 13px !important;
     font-weight: 600 !important;
 }
 
+/* ---- TABLES ---- */
+.table,
 table.dataTable {
-    font-size: 13px !important;
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
+.table > thead > tr > th,
+table.dataTable > thead > tr > th {
+    text-align: left;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    padding: 4px 8px !important;
+    border-bottom: 1px solid #e1e1e1 !important;
+    border-right: 1px solid #f5f5f5;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    user-select: none;
+    line-height: 1.2;
+    z-index: 1;
+    height: 32px;
+    vertical-align: bottom;
+}
+
+.table > thead > tr > th:last-child,
+table.dataTable > thead > tr > th:last-child {
+    border-right: none;
+}
+
+.table > tbody > tr > td,
+table.dataTable > tbody > tr > td {
+    padding: 2px 8px !important;
+    font-size: 12px !important;
+    border-bottom: 1px solid #eee !important;
+    line-height: 1.3;
+    vertical-align: middle;
+    height: 24px;
+}
+
+/* Alternating row stripe */
+.table tbody tr:nth-child(even),
+table.dataTable tbody tr:nth-child(even) {
+    background-color: #f5f5f4 !important;
+}
+
+/* Table action icons */
+.table td .material-symbols-outlined,
+table.dataTable td .material-symbols-outlined {
+    font-size: 16px !important;
+    padding: 0 !important;
+    vertical-align: middle;
+}
+
+/* DataTables wrapper controls */
 .dataTables_info,
 .dataTables_length,
-.dataTables_filter {
+.dataTables_filter,
+.dt-info,
+.dt-length,
+.dt-search {
+    font-size: 11px !important;
+}
+
+.dataTables_paginate,
+.dt-paging {
+    font-size: 11px !important;
+}
+
+.dataTables_paginate .paginate_button,
+.dt-paging .dt-paging-button {
+    font-size: 11px !important;
+    padding: 2px 8px !important;
+    border-radius: 0 !important;
+    min-height: 24px !important;
+    line-height: 20px !important;
+}
+
+/* ---- CARDS ---- */
+.card {
+    border: 1px solid #d1d1d1 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 12px !important;
+}
+
+.card .card-header {
+    padding: 6px 12px !important;
+    border-bottom: 1px solid #edebe9 !important;
+    box-shadow: none !important;
+}
+
+.card .card-header .card-title,
+.card .card-header h5,
+.card .card-header h6 {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.3px !important;
+    margin: 0 !important;
+}
+
+/* ---- MODALS ---- */
+.modal .modal-content {
+    border-radius: 0 !important;
+    border: 1px solid #d1d1d1 !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.modal .modal-header {
+    background: #fafafa !important;
+    border-bottom: 1px solid #e1dfdd !important;
+    padding: 10px 20px !important;
+}
+
+.modal .modal-title {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+
+.modal .modal-body {
+    padding: 20px !important;
+}
+
+.modal .modal-footer {
+    border-top: 1px solid #eee !important;
+    padding: 10px 15px !important;
+}
+
+/* ---- BUTTONS ---- */
+.btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 6px 16px !important;
+    font-size: 14px !important;
+    font-family:
+        "Segoe UI",
+        -apple-system,
+        BlinkMacSystemFont,
+        Roboto,
+        "Helvetica Neue",
+        sans-serif !important;
+    border-radius: 2px !important;
+    cursor: pointer !important;
+    transition: all 0.15s !important;
+    line-height: 1.5 !important;
+    text-decoration: none !important;
+}
+
+.btn .material-symbols-outlined {
+    font-size: 18px !important;
+}
+
+.btn-sm {
+    padding: 4px 10px !important;
     font-size: 12px !important;
 }
 
-.dataTables_paginate {
-    font-size: 12px !important;
+/* ---- FORM CONTROLS ---- */
+.form-control,
+.form-select,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="tel"],
+input[type="url"],
+input[type="search"],
+select,
+textarea {
+    height: 28px !important;
+    padding: 0 8px !important;
+    font-size: 13px !important;
+    font-family:
+        "Segoe UI",
+        -apple-system,
+        BlinkMacSystemFont,
+        Roboto,
+        "Helvetica Neue",
+        sans-serif !important;
+    border: 1px solid #d1d1d1 !important;
+    border-radius: 0 !important;
+    transition: border-color 0.15s !important;
+}
+
+textarea {
+    height: auto !important;
+    padding: 6px 8px !important;
+}
+
+.form-control:focus,
+.form-select:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none !important;
+    border-color: var(--accent) !important;
+    box-shadow: none !important;
+}
+
+.form-control::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: #a19f9d !important;
+}
+
+.form-label,
+label {
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    margin-bottom: 2px !important;
 }
 
 /* ============================================ */

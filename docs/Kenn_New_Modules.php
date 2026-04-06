@@ -94,3 +94,13 @@ New Sub Module --> Under Client Trans: /landlord/account/statement
 
 6th April 2026
 New Sub Module --> Under IT settings: /modules/mapper (Modules Mapper)
+
+### Super Modules
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('Management', 'admin_panel_settings', 1, '2026-04-06 06:12:16.000', '2026-04-06 06:12:16.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('Accounting', 'account_balance', 2, '2026-04-06 06:12:16.000', '2026-04-06 06:12:16.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('HR', 'groups', 3, '2026-04-06 06:12:16.000', '2026-04-06 06:12:16.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('Auditing', 'verified', 4, '2026-04-06 06:12:16.000', '2026-04-06 06:12:16.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('GIS', 'map', 5, '2026-04-06 06:12:16.000', '2026-04-06 06:12:16.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('Configurations', 'tune', 6, '2026-04-06 06:12:16.000', '2026-04-06 06:12:16.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('System Setup', 'settings', 7, '2026-04-06 06:12:17.000', '2026-04-06 06:12:17.000');
+INSERT INTO cb_super_modules ("name", icon, "order", created_at, updated_at) VALUES('Reports', 'analytics', 8, '2026-04-06 06:12:17.000', '2026-04-06 06:12:17.000');
