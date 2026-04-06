@@ -57,7 +57,7 @@
     /* MASTER LAYOUT — overrides theme completely   */
     /* ============================================ */
     :root {
-        --sidebar-width: 190px;
+        --sidebar-width: 160px;
         --header-height: 42px;
         --accent: #3598db;
         --accent-dark: #217dbb;
@@ -527,16 +527,16 @@
         flex-direction: column !important;
         align-items: center !important;
         justify-content: center !important;
-        padding: 14px 6px !important;
+        padding: 10px 4px !important;
         text-align: center !important;
-        gap: 5px !important;
+        gap: 4px !important;
         cursor: pointer;
         border-radius: 8px;
         transition: background 0.15s ease;
     }
 
     .super-module-item .sidebar-link .sm-icon {
-        font-size: 44px !important;
+        font-size: 38px !important;
         color: var(--accent) !important;
         line-height: 1;
         transition: transform 0.15s ease, color 0.15s ease;
@@ -595,7 +595,7 @@
         position: fixed;
         top: var(--header-height);
         left: var(--sidebar-width);
-        width: 320px;
+        width: 270px;
         bottom: 0;
         background: #ffffff;
         border-right: 1px solid #e8ecf1;
@@ -877,7 +877,7 @@
             top: 0 !important;
             left: 0 !important;
             width: 85% !important;
-            max-width: 340px !important;
+            max-width: 300px !important;
             height: 100vh !important;
             bottom: auto !important;
         }
@@ -1423,14 +1423,29 @@
                     activeSuperModuleId = null;
                 }
 
-                // Hover on super module items
+                // Hover on super module items (desktop) + click/tap (mobile)
                 superModuleItems.forEach(function(item) {
                     item.addEventListener('mouseenter', function() {
-                        var smId = item.getAttribute('data-super-module-id');
-                        openFlyout(smId);
+                        if (window.innerWidth >= 992) {
+                            var smId = item.getAttribute('data-super-module-id');
+                            openFlyout(smId);
+                        }
                     });
                     item.addEventListener('mouseleave', function() {
-                        scheduleClose();
+                        if (window.innerWidth >= 992) {
+                            scheduleClose();
+                        }
+                    });
+                    // Click/tap for mobile (and fallback for desktop)
+                    item.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var smId = item.getAttribute('data-super-module-id');
+                        if (activeSuperModuleId === smId) {
+                            closeFlyout();
+                        } else {
+                            openFlyout(smId);
+                        }
                     });
                 });
 
