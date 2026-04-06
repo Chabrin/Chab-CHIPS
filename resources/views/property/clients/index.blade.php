@@ -43,6 +43,16 @@
                                         <th>Registered Date</th>
                                         <th>Action</th>
                                     </tr>
+                                    <tr class="column-filters">
+                                        <th></th>
+                                        <th></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th></th>
+                                        <th></th>
+                                    </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -127,9 +137,20 @@
             lengthChange: true,
             searching: true,
             ordering: true,
+            orderCellsTop: true,
             order: [
                 [2, 'asc']
             ] // Sort by names
+        });
+
+        // Per-column filtering
+        $('#clients-table thead .column-filters th').each(function(i) {
+            $('input', this).on('keyup change', function() {
+                var col = table.column(i);
+                if (col.search() !== this.value) {
+                    col.search(this.value).draw();
+                }
+            });
         });
 
         // Handle row-level spinner on client link click

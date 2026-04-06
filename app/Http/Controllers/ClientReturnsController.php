@@ -69,7 +69,7 @@ class ClientReturnsController extends Controller
                 });
             }
 
-            // Get property names in one lookup
+            // Get property names and client names in one lookup
             $returns = $query->orderBy('property_code')
                 ->orderBy('landlord_code')
                 ->get();
@@ -79,15 +79,23 @@ class ClientReturnsController extends Controller
                 ->whereIn('reference_number', $propertyCodes)
                 ->pluck('property_name', 'reference_number');
 
+            $landlordCodes = $returns->pluck('landlord_code')->unique()->filter();
+            $clientNames = DB::table('sys_pm_clients')
+                ->whereIn('reference_number', $landlordCodes)
+                ->pluck('names', 'reference_number');
+
             return response()->json([
                 'success' => true,
                 'count' => $returns->count(),
-                'data' => $returns->map(function ($r) use ($propertyNames) {
+                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames) {
+                    $name = $clientNames[$r->landlord_code] ?? '-';
+                    $num = preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '');
                     return [
                         'id' => $r->id,
                         'encrypted_id' => encrypt($r->id),
                         'return_code' => $r->return_code,
                         'landlord_code' => $r->landlord_code,
+                        'client_name' => $name . ' (' . $num . ')',
                         'property_code' => $r->property_code ?? '-',
                         'property_name' => $propertyNames[$r->property_code] ?? '-',
                         'return_type' => $r->return_type ?? '-',

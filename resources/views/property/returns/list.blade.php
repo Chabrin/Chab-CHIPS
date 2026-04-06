@@ -63,16 +63,23 @@
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Code</th>
-                                        <th>Landlord</th>
+                                        <th>Client Name</th>
                                         <th>Property</th>
                                         <th>Type</th>
-                                        <th class="text-end">Credit</th>
-                                        <th class="text-end">Debit</th>
                                         <th class="text-end">Net</th>
                                         <th>Units</th>
                                         <th>Status</th>
                                         <th>Action</th>
+                                    </tr>
+                                    <tr class="column-filters">
+                                        <th></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -100,31 +107,18 @@
                     }
                 },
                 {
-                    data: 'property_code'
+                    data: 'client_name'
                 },
                 {
-                    data: 'landlord_code'
-                },
-                {
-                    data: 'property_name',
-                    render: function(d) {
-                        return '<small>' + (d || '-') + '</small>';
-                    }
+                    data: 'property_name'
                 },
                 {
                     data: 'return_type'
                 },
                 {
-                    data: 'total_credit',
-                    className: 'text-end'
-                },
-                {
-                    data: 'total_debit',
-                    className: 'text-end'
-                },
-                {
                     data: 'net_amount',
-                    className: 'text-end fw-bold'
+                    className: 'text-end',
+                    searchable: false
                 },
                 {
                     data: 'payable_units',
@@ -150,8 +144,8 @@
                     orderable: false,
                     searchable: false,
                     render: function(d, t, r) {
-                        return '<a href="/returns/' + r.encrypted_id + '/details" title="View Details" style="color:#7366ff;">' +
-                            '<span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span></a>';
+                        return '<a href="/returns/' + r.encrypted_id + '/details" title="View Details">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">folder_eye</span></a>';
                     }
                 }
             ],
@@ -160,11 +154,22 @@
             lengthChange: true,
             searching: true,
             ordering: true,
+            orderCellsTop: true,
             order: [
-                [9, 'desc'],
+                [6, 'desc'],
                 [1, 'asc']
             ],
             pageLength: 50
+        });
+
+        // Per-column filtering
+        $('#returns-table thead .column-filters th').each(function(i) {
+            $('input', this).on('keyup change', function() {
+                var col = table.column(i);
+                if (col.search() !== this.value) {
+                    col.search(this.value).draw();
+                }
+            });
         });
 
         function loadData() {
@@ -208,7 +213,7 @@
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
             var selected = $('#status_filter').val();
             if (!selected) return true;
-            var cellText = $(data[9]).text() || data[9];
+            var cellText = $(data[6]).text() || data[6];
             return cellText === selected;
         });
 
