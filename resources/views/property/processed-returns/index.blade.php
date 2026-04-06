@@ -54,13 +54,21 @@
                                 <thead>
                                     <tr>
                                         <th>#</th>
+                                        <th>Client Name</th>
                                         <th>Property</th>
-                                        <th>Landlord</th>
                                         <th>Description</th>
                                         <th>Type</th>
                                         <th class="text-end">Paid</th>
-                                        <th>Voucher</th>
                                         <th>Action</th>
+                                    </tr>
+                                    <tr class="column-filters">
+                                        <th></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" placeholder="Filter..." /></th>
+                                        <th></th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -86,10 +94,10 @@
                 }
             },
             {
-                data: 'property_code'
+                data: 'client_name'
             },
             {
-                data: 'landlord_code'
+                data: 'property_name'
             },
             {
                 data: 'return_description',
@@ -102,18 +110,16 @@
             },
             {
                 data: 'amount_paid',
-                className: 'text-end'
-            },
-            {
-                data: 'voucher_number'
+                className: 'text-end',
+                searchable: false
             },
             {
                 data: null,
                 orderable: false,
                 searchable: false,
                 render: function(d, t, r) {
-                    return '<a href="/processed/returns/' + r.encrypted_id + '/details" class="btn btn-outline-primary btn-sm py-0 px-1" title="View Details">' +
-                        '<span class="material-symbols-outlined" style="font-size:16px;">visibility</span></a>';
+                    return '<a href="/processed/returns/' + r.encrypted_id + '/details" title="View Details">' +
+                        '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">folder_eye</span></a>';
                 }
             }
         ];
@@ -126,10 +132,21 @@
             lengthChange: true,
             searching: true,
             ordering: true,
+            orderCellsTop: true,
             order: [
                 [1, 'asc']
             ],
             pageLength: 50
+        });
+
+        // Per-column filtering
+        $('#returns-table thead .column-filters th').each(function(i) {
+            $('input', this).on('keyup change', function() {
+                var col = table.column(i);
+                if (col.search() !== this.value) {
+                    col.search(this.value).draw();
+                }
+            });
         });
 
         function loadData() {

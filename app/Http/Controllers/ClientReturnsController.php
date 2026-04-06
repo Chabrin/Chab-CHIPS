@@ -1325,10 +1325,13 @@ class ClientReturnsController extends Controller
             $month = $request->input('month', date('m'));
 
             $returns = ReturnSummary::paid()
-                ->where('year', $year)
-                ->where('month', $month)
-                ->orderBy('property_code')
-                ->orderBy('landlord_code')
+                ->leftJoin('sys_pm_clients', 'sys_pm_clients.reference_number', '=', 'cb_returns_summary.landlord_code')
+                ->leftJoin('sys_pm_properties', 'sys_pm_properties.reference_number', '=', 'cb_returns_summary.property_code')
+                ->where('cb_returns_summary.year', $year)
+                ->where('cb_returns_summary.month', $month)
+                ->orderBy('cb_returns_summary.property_code')
+                ->orderBy('cb_returns_summary.landlord_code')
+                ->select('cb_returns_summary.*', 'sys_pm_clients.names as client_name', 'sys_pm_properties.property_name')
                 ->get();
 
             return response()->json([
@@ -1340,7 +1343,9 @@ class ClientReturnsController extends Controller
                         'encrypted_id' => encrypt($r->id),
                         'return_code' => $r->return_code,
                         'landlord_code' => $r->landlord_code,
+                        'client_name' => ($r->client_name ?? '-') . ' (' . preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '') . ')',
                         'property_code' => $r->property_code ?? '-',
+                        'property_name' => $r->property_name ?? '-',
                         'return_description' => $r->return_description ?? '-',
                         'return_type' => $r->return_type ?? '-',
                         'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
