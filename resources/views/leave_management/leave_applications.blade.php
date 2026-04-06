@@ -1,4 +1,8 @@
 @extends('layouts.main')
+@section('styles')
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css' rel='stylesheet' />
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+@endsection
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -9,10 +13,10 @@
                         <h5 class="mb-0">Leave Applications</h5>
                         <div class="ms-auto d-flex gap-2">
                             @permission('create_leave_applications')
-                                <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addLeaveApplicationModal">
-                                    <span class="material-symbols-outlined">add_circle</span>
-                                    <span class="ms-1">Add Leave Application</span>
-                                </button>
+                            <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addLeaveApplicationModal">
+                                <span class="material-symbols-outlined">add_circle</span>
+                                <span class="ms-1">Add Leave Application</span>
+                            </button>
                             @endpermission
                         </div>
                     </div>
@@ -81,7 +85,7 @@
             <div class="modal-body">
                 <form id="leaveApplicationForm">
                     <input type="hidden" name="id" id="leaveApplicationId">
-                    
+
                     <div class="row">
                         <div class="col-lg-6 mb-3">
                             <label for="staff_id" class="form-label">Staff <span style="color:red">*</span></label>
@@ -107,7 +111,7 @@
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">calendar_today</span>
                                     Full Day(s)
                                 </label>
-                                
+
                                 <input type="radio" class="btn-check" name="leave_duration_type" id="partial_day" value="partial_day">
                                 <label class="btn btn-outline-primary" for="partial_day">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">schedule</span>
@@ -195,7 +199,7 @@
                     </div>
 
                     <h3 class="mb-3 mt-4">Leave Allowance</h3>
-                    <hr class="mb-3 mt-3"/>
+                    <hr class="mb-3 mt-3" />
                     <div class="row">
                         <div class="col-lg-6 mb-3">
                             <label for="allowance_type" class="form-label">Allowance Type</label>
@@ -300,7 +304,7 @@
     #leave-calendar .fc-event:hover {
         opacity: 0.85;
         transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transition: all 0.2s ease;
     }
 
@@ -343,16 +347,16 @@
             flex-direction: column;
             gap: 10px;
         }
-        
+
         #leave-calendar .fc-toolbar-chunk {
             display: flex;
             justify-content: center;
         }
-        
+
         #leave-calendar .fc-daygrid-day {
             min-height: 70px;
         }
-        
+
         #leave-calendar .fc-event {
             font-size: 0.7rem;
         }
@@ -367,15 +371,15 @@
         // Toggle between leave duration types
         $('input[name="leave_duration_type"]').on('change', function() {
             const durationType = $(this).val();
-            
+
             // Hide all sections first
             $('#full-days-section, #hours-only-section, #days-hours-section').hide();
-            
+
             // Clear and reset required attributes
             $('#start_date, #requested_days').prop('required', false);
             $('#leave_date_hours, #start_time_only, #end_time_only').prop('required', false);
             $('#start_date_combined, #start_time_combined, #end_date_combined, #end_time_combined').prop('required', false);
-            
+
             if (durationType === 'full_day') {
                 $('#full-days-section').show();
                 $('#start_date, #requested_days').prop('required', true);
@@ -392,11 +396,11 @@
         $('#start_time_only, #end_time_only').on('change', function() {
             let startTime = $('#start_time_only').val();
             let endTime = $('#end_time_only').val();
-            
+
             if (startTime && endTime) {
                 let start = new Date('2000-01-01 ' + startTime);
                 let end = new Date('2000-01-01 ' + endTime);
-                
+
                 if (end > start) {
                     let diff = (end - start) / 1000 / 60 / 60; // difference in hours
                     $('#hours_requested_only').val(diff.toFixed(2));
@@ -414,11 +418,11 @@
         //     let endDate = $('#end_date_combined').val();
         //     let endTime = $('#end_time_combined').val();
         //     let leaveTypeId = $('#leave_type_id').val();
-            
+
         //     if (startDate && startTime && endDate && endTime) {
         //         let start = new Date(startDate + ' ' + startTime);
         //         let end = new Date(endDate + ' ' + endTime);
-                
+
         //         if (end > start) {
         //             // Fetch leave type, public holidays, and work days configuration
         //             $.when(
@@ -441,16 +445,16 @@
         //                 let leaveTypes = leaveTypesResp[0].leave_types || [];
         //                 let publicHolidays = holidaysResp[0].public_holidays || [];
         //                 let workDays = workDaysResp[0].work_days || [];
-                        
+
         //                 // Find the current leave type
         //                 let currentLeaveType = leaveTypes.find(lt => lt.id == leaveTypeId);
-                        
+
         //                 // Check if this is maternity leave (adjust ID as needed)
         //                 // Typically maternity leave type_name contains "maternity" or has specific ID
         //                 let isMaternityLeave = currentLeaveType && 
         //                     (currentLeaveType.type_name.toLowerCase().includes('maternity') || 
         //                      currentLeaveType.id == 5); // Adjust ID based on your system
-                        
+
         //                 // Build map of non-working days (day 7 = Sunday in ISO format)
         //                 let nonWorkingDays = new Set();
         //                 workDays.forEach(function(wd) {
@@ -458,27 +462,27 @@
         //                         nonWorkingDays.add(wd.week_day);
         //                     }
         //                 });
-                        
+
         //                 // Helper function to check if a date is a public holiday
         //                 function isPublicHoliday(date) {
         //                     let checkDay = date.getDate();
         //                     let checkMonth = date.getMonth() + 1;
-                            
+
         //                     return publicHolidays.some(function(holiday) {
         //                         let holidayStart = new Date(holiday.start_date);
         //                         let holidayEnd = new Date(holiday.end_date);
-                                
+
         //                         let holidayStartDay = holidayStart.getDate();
         //                         let holidayStartMonth = holidayStart.getMonth() + 1;
         //                         let holidayEndDay = holidayEnd.getDate();
         //                         let holidayEndMonth = holidayEnd.getMonth() + 1;
-                                
+
         //                         if (holidayStartMonth == holidayEndMonth) {
         //                             return checkMonth == holidayStartMonth && 
         //                                    checkDay >= holidayStartDay && 
         //                                    checkDay <= holidayEndDay;
         //                         }
-                                
+
         //                         if (checkMonth == holidayStartMonth && checkDay >= holidayStartDay) {
         //                             return true;
         //                         }
@@ -492,45 +496,45 @@
         //                         }
         //                     });
         //                 }
-                        
+
         //                 let current = new Date(start);
         //                 let totalWorkingHours = 0;
-                        
+
         //                 const workStartHour = 8;
         //                 const workEndHour = 17;
         //                 const hoursPerDay = workEndHour - workStartHour;
-                        
+
         //                 // Loop through each day
         //                 while (current < end) {
         //                     let dayOfWeek = current.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
         //                     let isoDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convert to ISO (1-7)
-                            
+
         //                     let isNonWorkingDay = nonWorkingDays.has(isoDayOfWeek);
         //                     let isHoliday = isPublicHoliday(current);
-                            
+
         //                     // For maternity leave: count all days except public holidays
         //                     // For other leave: exclude non-working days and public holidays
         //                     let shouldCount = isMaternityLeave ? !isHoliday : (!isNonWorkingDay && !isHoliday);
-                            
+
         //                     if (shouldCount) {
         //                         let dayStart = new Date(current);
         //                         let dayEnd = new Date(current);
-                                
+
         //                         dayStart.setHours(workStartHour, 0, 0, 0);
         //                         dayEnd.setHours(workEndHour, 0, 0, 0);
-                                
+
         //                         if (current.toDateString() === start.toDateString()) {
         //                             dayStart = new Date(start);
         //                         }
-                                
+
         //                         let nextDay = new Date(current);
         //                         nextDay.setDate(nextDay.getDate() + 1);
         //                         nextDay.setHours(0, 0, 0, 0);
-                                
+
         //                         if (end < nextDay) {
         //                             dayEnd = new Date(end);
         //                         }
-                                
+
         //                         if (dayStart < dayEnd) {
         //                             if (dayStart.getHours() < workStartHour) {
         //                                 dayStart.setHours(workStartHour, 0, 0, 0);
@@ -539,21 +543,21 @@
         //                                 (dayEnd.getHours() === workEndHour && dayEnd.getMinutes() > 0)) {
         //                                 dayEnd.setHours(workEndHour, 0, 0, 0);
         //                             }
-                                    
+
         //                             if (dayStart.getHours() < workEndHour) {
         //                                 let hoursThisDay = (dayEnd - dayStart) / (1000 * 60 * 60);
         //                                 totalWorkingHours += Math.max(0, hoursThisDay);
         //                             }
         //                         }
         //                     }
-                            
+
         //                     current.setDate(current.getDate() + 1);
         //                     current.setHours(0, 0, 0, 0);
         //                 }
-                        
+
         //                 let fullDays = Math.floor(totalWorkingHours / hoursPerDay);
         //                 let remainingHours = totalWorkingHours % hoursPerDay;
-                        
+
         //                 $('#total_days_display').text(fullDays);
         //                 $('#total_hours_display').text(remainingHours.toFixed(2));
         //             }).fail(function() {
@@ -568,9 +572,9 @@
         //         }
         //     }
         // }
-        
+
         // $('#start_date_combined, #start_time_combined, #end_date_combined, #end_time_combined').on('change', calculateCombinedDuration);
-        
+
         // // Also trigger recalculation when leave type changes
         // $('#leave_type_id').on('change', function() {
         //     // Recalculate if dates are already filled
@@ -579,7 +583,7 @@
         //     }
         // });
 
-        
+
         let table = $('#leave-applications-table').DataTable({
             processing: true,
             serverSide: false,
@@ -593,16 +597,40 @@
                 dataType: 'json',
                 dataSrc: 'leave_applications'
             },
-            columns: [
-                { data: null, orderable: false, searchable: false, render: (data, type, row, meta) => meta.row + 1 },
-                { data: 'employee', title: 'Staff', render: data => data && data.name ? data.name : '-' },
-                { data: 'position', title: 'Designation', render: data => data && data.position_name ? data.position_name : '-' },
-                { data: 'leave_type', title: 'Leave Type', render: data => data && data.type_name ? data.type_name : '-' },
-                { data: 'start_date', title: 'Start Date', render: data => data ? data : '-' },
-                { data: 'end_date', title: 'End Date', render: data => data ? data : '-' },
-                { 
-                    data: 'current_status_id', 
-                    title: 'Current Status', 
+            columns: [{
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: (data, type, row, meta) => meta.row + 1
+                },
+                {
+                    data: 'employee',
+                    title: 'Staff',
+                    render: data => data && data.name ? data.name : '-'
+                },
+                {
+                    data: 'position',
+                    title: 'Designation',
+                    render: data => data && data.position_name ? data.position_name : '-'
+                },
+                {
+                    data: 'leave_type',
+                    title: 'Leave Type',
+                    render: data => data && data.type_name ? data.type_name : '-'
+                },
+                {
+                    data: 'start_date',
+                    title: 'Start Date',
+                    render: data => data ? data : '-'
+                },
+                {
+                    data: 'end_date',
+                    title: 'End Date',
+                    render: data => data ? data : '-'
+                },
+                {
+                    data: 'current_status_id',
+                    title: 'Current Status',
                     render: function(data) {
                         if (data == 1) {
                             return '<span class="badge bg-warning">Pending</span>';
@@ -623,7 +651,7 @@
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
-                        if(row.can_view) {
+                        if (row.can_view) {
                             buttons += `
                                 <a href="{{ url('/hr/leave-management/leave-applications/') }}/${row.encrypted_leave_application_id}" class="btn btn-xs btn-light" style="padding:1px 2px;">
                                     <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
@@ -671,7 +699,7 @@
         // Initialize FullCalendar
         let calendar;
         let calendarEl = document.getElementById('leave-calendar');
-        
+
         function initCalendar() {
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
@@ -694,11 +722,11 @@
                                     if (app.current_status_id == 5) color = '#28a745';
                                     else if (app.current_status_id == 41) color = '#dc3545';
                                     else if (app.current_status_id == 1) color = '#ffc107';
-                                    
+
                                     events.push({
                                         id: app.id,
-                                        title: (app.employee && app.employee.name ? app.employee.name : 'Unknown') + 
-                                               ' - ' + (app.leave_type && app.leave_type.type_name ? app.leave_type.type_name : ''),
+                                        title: (app.employee && app.employee.name ? app.employee.name : 'Unknown') +
+                                            ' - ' + (app.leave_type && app.leave_type.type_name ? app.leave_type.type_name : ''),
                                         start: app.start_date,
                                         end: app.end_date ? new Date(new Date(app.end_date).setDate(new Date(app.end_date).getDate() + 1)) : app.start_date,
                                         backgroundColor: color,
@@ -752,24 +780,24 @@
                             </div>
                         </div>
                     `;
-                    
+
                     $('#eventDetailsBody').html(content);
-                    
+
                     if (event.extendedProps.encrypted_id) {
                         $('#viewDetailsLink').attr('href', "{{ url('/hr/leave-management/leave-applications/') }}/" + event.extendedProps.encrypted_id);
                         $('#viewDetailsLink').show();
                     } else {
                         $('#viewDetailsLink').hide();
                     }
-                    
+
                     $('#eventDetailsModal').modal('show');
                 }
             });
             calendar.render();
         }
-        
+
         // Initialize calendar when calendar tab is shown
-        $('button[data-bs-target="#calendar"]').on('shown.bs.tab', function (e) {
+        $('button[data-bs-target="#calendar"]').on('shown.bs.tab', function(e) {
             if (!calendar) {
                 initCalendar();
             } else {
@@ -777,7 +805,7 @@
                 calendar.refetchEvents();
             }
         });
-        
+
         // Refresh calendar when table reloads
         let originalReload = table.ajax.reload;
         table.ajax.reload = function(callback, resetPaging) {
@@ -788,7 +816,7 @@
         };
 
         // Populate selects on modal show
-        $('#addLeaveApplicationModal').on('show.bs.modal', function () {
+        $('#addLeaveApplicationModal').on('show.bs.modal', function() {
             $.ajax({
                 url: "{{ url('/ajax/hr/staff/list') }}",
                 type: 'GET',
@@ -814,7 +842,7 @@
                     if ($staff_id.hasClass("select2-hidden-accessible")) {
                         $staff_id.select2('destroy');
                     }
-                    
+
                     $staff_id.select2({
                         dropdownParent: $('#addLeaveApplicationModal'),
                         placeholder: 'Select Staff',
@@ -851,7 +879,7 @@
                     if ($leave_type_id.hasClass("select2-hidden-accessible")) {
                         $leave_type_id.select2('destroy');
                     }
-                    
+
                     $leave_type_id.select2({
                         dropdownParent: $('#addLeaveApplicationModal'),
                         placeholder: 'Select leave type',
@@ -878,12 +906,12 @@
                             toastr.warning(response.error);
                         } else if (response.available_days !== undefined && response.available_days !== null) {
                             $('#available_days').val(response.available_days);
-                            
+
                             // Set the date range constraints
                             if (response.start_date && response.end_date) {
                                 let startDateOnly = response.start_date.split(' ')[0]; // Extract date part (YYYY-MM-DD)
                                 let endDateOnly = response.end_date.split(' ')[0]; // Extract date part (YYYY-MM-DD)
-                                
+
                                 // Set min and max attributes for all date inputs
                                 $('#start_date').attr('min', startDateOnly).attr('max', endDateOnly);
                                 $('#leave_date_hours').attr('min', startDateOnly).attr('max', endDateOnly);
@@ -893,11 +921,11 @@
                         } else {
                             $('#available_days').val('');
                             toastr.warning('Annual leave calendar must be created and approved for this employee');
-                            
+
                             // Clear staff and leave type selections
                             $('#staff_id').val('').trigger('change');
                             $('#leave_type_id').val('').trigger('change');
-                            
+
                             // Clear min/max constraints
                             $('#start_date, #leave_date_hours, #start_date_combined, #end_date_combined').removeAttr('min').removeAttr('max');
                         }
@@ -913,7 +941,7 @@
                         // Clear staff and leave type selections
                         $('#staff_id').val('').trigger('change');
                         $('#leave_type_id').val('').trigger('change');
-                        
+
                         // Clear min/max constraints
                         $('#start_date, #leave_date_hours, #start_date_combined, #end_date_combined').removeAttr('min').removeAttr('max');
                     }
@@ -924,16 +952,16 @@
                 $('#start_date, #leave_date_hours, #start_date_combined, #end_date_combined').removeAttr('min').removeAttr('max');
             }
         }
-        
+
         $('#staff_id, #leave_type_id').on('change', fetchAvailableDays);
 
         $('#leaveApplicationForm').on('submit', function(e) {
             e.preventDefault();
-            
+
             let formData = new FormData();
             let durationType = $('input[name="leave_duration_type"]:checked').val();
             let id = $('#leaveApplicationId').val();
-            
+
             // Common fields
             formData.append('staff_id', $('#staff_id').val());
             formData.append('leave_type_id', $('#leave_type_id').val());
@@ -942,23 +970,23 @@
             formData.append('amount', $('#amount').val() || 0);
             formData.append('leave_duration_type', durationType);
             formData.append('_token', '{{ csrf_token() }}');
-            
+
             if (id) {
                 formData.append('id', id);
             }
-            
+
             if (durationType === 'full_day') {
                 // Full days only
                 formData.append('start_date', $('#start_date').val());
                 formData.append('requested_days', $('#requested_days').val());
                 formData.append('is_partial_day', '0');
-                
+
             } else if (durationType === 'partial_day') {
                 // Hours only
                 let leaveDate = $('#leave_date_hours').val();
                 let startTime = $('#start_time_only').val();
                 let endTime = $('#end_time_only').val();
-                
+
                 formData.append('start_date', leaveDate + ' ' + startTime);
                 formData.append('end_date', leaveDate + ' ' + endTime);
                 formData.append('start_time', startTime);
@@ -966,29 +994,29 @@
                 formData.append('hours_requested', $('#hours_requested_only').val());
                 formData.append('requested_days', '0');
                 formData.append('is_partial_day', '1');
-                
+
             } else if (durationType === 'days_and_hours') {
                 // Days + Hours combined
                 let startDate = $('#start_date_combined').val();
                 let startTime = $('#start_time_combined').val();
                 let endDate = $('#end_date_combined').val();
                 let endTime = $('#end_time_combined').val();
-                
+
                 formData.append('start_date', startDate + ' ' + startTime);
                 formData.append('end_date', endDate + ' ' + endTime);
                 formData.append('start_time', startTime);
                 formData.append('end_time', endTime);
-                
+
                 // Calculate total hours
                 let start = new Date(startDate + ' ' + startTime);
                 let end = new Date(endDate + ' ' + endTime);
                 let totalHours = (end - start) / 1000 / 60 / 60;
-                
+
                 formData.append('hours_requested', totalHours.toFixed(2));
                 formData.append('requested_days', Math.floor(totalHours / 8));
                 formData.append('is_partial_day', '1');
             }
-            
+
             let url = id ? "{{ url('/ajax/leave-management/leave-applications') }}/" + id : "{{ url('/ajax/leave-management/leave-applications') }}";
             let $btn = $('#saveLeaveApplicationBtn');
             let $icon = $btn.find('.material-symbols-outlined');
@@ -1038,65 +1066,65 @@
 
         $(document).on('click', '.edit-leave-application', function() {
             let $btn = $(this);
-            
+
             $('#leaveApplicationId').val($btn.data('id'));
             $('#amount').val($btn.data('amount'));
             $('#allowance_type').val($btn.data('allowance_type_id')).trigger('change');
-            
+
             // Determine leave duration type from the data
             let startDate = $btn.data('start_date');
             let endDate = $btn.data('end_date');
             let isPartialDay = $btn.data('is_partial_day');
             let hoursRequested = $btn.data('hours_requested');
-            
+
             // Parse dates
             let startDateTime = startDate ? new Date(startDate) : null;
             let endDateTime = endDate ? new Date(endDate) : null;
-            
+
             let durationType = 'full_day';
-            
+
             if (startDateTime && endDateTime) {
                 let startDateOnly = startDateTime.toISOString().split('T')[0];
                 let endDateOnly = endDateTime.toISOString().split('T')[0];
                 let startTimeOnly = startDateTime.toTimeString().slice(0, 5);
                 let endTimeOnly = endDateTime.toTimeString().slice(0, 5);
-                
+
                 // Check if same day and has custom times (not 08:00 to 17:00)
                 if (startDateOnly === endDateOnly && !(startTimeOnly === '08:00' && endTimeOnly === '17:00')) {
                     durationType = 'partial_day';
-                    
+
                     // Set partial day fields
                     $('#leave_date_hours').val(startDateOnly);
                     $('#start_time_only').val(startTimeOnly);
                     $('#end_time_only').val(endTimeOnly);
                     $('#hours_requested_only').val(hoursRequested || '');
-                    
+
                 } else if (startDateOnly !== endDateOnly && !(startTimeOnly === '08:00' && endTimeOnly === '17:00')) {
                     durationType = 'days_and_hours';
-                    
+
                     // Set days + hours fields
                     $('#start_date_combined').val(startDateOnly);
                     $('#start_time_combined').val(startTimeOnly);
                     $('#end_date_combined').val(endDateOnly);
                     $('#end_time_combined').val(endTimeOnly);
-                    
+
                     // Trigger calculation
                     calculateCombinedDuration();
-                    
+
                 } else {
                     durationType = 'full_day';
-                    
+
                     // Set full day fields
                     $('#start_date').val(startDateOnly);
                     $('#requested_days').val($btn.data('requested_days'));
                 }
             }
-            
+
             // Set the radio button and trigger change to show/hide appropriate sections
             $(`input[name="leave_duration_type"][value="${durationType}"]`).prop('checked', true).trigger('change');
-            
+
             $('#addLeaveApplicationModal').modal('show');
-        
+
             // Load staff list
             $.ajax({
                 url: "{{ url('/ajax/hr/staff/list') }}",
@@ -1118,18 +1146,18 @@
                             }));
                         });
                     }
-                    
+
                     // Destroy and reinitialize select2
                     if ($staff_id.hasClass("select2-hidden-accessible")) {
                         $staff_id.select2('destroy');
                     }
-                    
+
                     $staff_id.select2({
                         dropdownParent: $('#addLeaveApplicationModal'),
                         placeholder: 'Select Staff',
                         allowClear: true
                     });
-                    
+
                     // Set selected value
                     let selectedStaffId = $btn.data('staff_id');
                     $staff_id.val(selectedStaffId).trigger('change');
@@ -1138,7 +1166,7 @@
                     toastr.error('Failed to load staff.');
                 }
             });
-        
+
             // Load leave types
             $.ajax({
                 url: "{{ url('/ajax/hr/leave_types/list') }}",
@@ -1160,22 +1188,22 @@
                             }));
                         });
                     }
-                    
+
                     // Destroy and reinitialize select2
                     if ($leave_type_id.hasClass("select2-hidden-accessible")) {
                         $leave_type_id.select2('destroy');
                     }
-                    
+
                     $leave_type_id.select2({
                         dropdownParent: $('#addLeaveApplicationModal'),
                         placeholder: 'Select leave type',
                         allowClear: true
                     });
-                    
+
                     // Set selected value
                     let selectedLeaveTypeId = $btn.data('leave_type_id');
                     $leave_type_id.val(selectedLeaveTypeId).trigger('change');
-                    
+
                     // Fetch available days after setting leave type
                     fetchAvailableDays();
                 },
