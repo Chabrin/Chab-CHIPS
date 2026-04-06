@@ -1,69 +1,40 @@
 @extends('layouts.main')
 
-@section('styles')
-<link rel="stylesheet" href="{{ asset('assets/css/chabrin.css') }}">
-<style>
-    .card-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(255, 255, 255, 0.85);
-        z-index: 10;
-        display: none;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .card-overlay.active {
-        display: flex;
-    }
-
-    .card.position-relative {
-        position: relative;
-    }
-</style>
-@endsection
-
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card position-relative">
-                    <div class="card-overlay" id="card-overlay">
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-3 text-muted">Loading tenant details...</p>
-                        </div>
-                    </div>
-                    <div class="card-header card-no-border d-flex align-items-center">
+                <div class="card">
+                    <div class="card-header card-no-border d-flex align-items-center justify-content-between">
                         <h5 class="mb-0">Tenant Management</h5>
+                        <small class="text-muted" id="result_info" style="display:none;">Showing <strong id="result_count">0</strong> tenants (max 1000)</small>
                     </div>
                     <div class="card-body">
-                        <!-- Search Form -->
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="tenant_search_input" class="form-label">Search Tenant</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="tenant_search_input"
-                                        placeholder="Search by Name, Mobile Number, PIN Number, or Reference Number">
-                                    <button type="button" class="btn btn-primary" id="search_tenant_btn">
-                                        <span class="material-symbols-outlined" id="search_icon">search</span>
-                                        <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display: none;"></span>
-                                    </button>
-                                </div>
-                                <small class="text-muted">Enter at least 2 characters to search</small>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="tenant_select" class="form-label">Select Tenant</label>
-                                <select class="form-select" id="tenant_select" name="tenant_id" required>
-                                    <option value="">-- Select Tenant --</option>
-                                </select>
-                            </div>
+                        <div class="table-responsive custom-scrollbar">
+                            <table class="display" id="tenants-table" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Names</th>
+                                        <th>Phone</th>
+                                        <th>ID Number</th>
+                                        <th>Property</th>
+                                        <th>Landlord</th>
+                                        <th>Action</th>
+                                    </tr>
+                                    <tr class="column-filters">
+                                        <th></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_names" placeholder="-- Search --" /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_phone" placeholder="-- Search --" /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_id_number" placeholder="-- Search --" /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_property" placeholder="-- Search --" /></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-filter="filter_landlord" placeholder="-- Search --" /></th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -73,83 +44,144 @@
 </div>
 @endsection
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+@section('scripts')
+<style>
+    .col-filter-wrap {
+        position: relative;
+    }
+
+    .col-filter-wrap .col-filter {
+        padding-right: 22px;
+    }
+
+    .col-filter-wrap .filter-spinner {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        margin-top: -7px;
+        width: 14px;
+        height: 14px;
+        border: 2px solid #ccc;
+        border-top-color: var(--accent, #3598db);
+        border-radius: 50%;
+        animation: filterspin .6s linear infinite;
+        display: none;
+    }
+
+    .col-filter-wrap.loading .filter-spinner {
+        display: block;
+    }
+
+    @keyframes filterspin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+</style>
 <script>
     $(document).ready(function() {
-        // Search tenant button click
-        $('#search_tenant_btn').on('click', function() {
-            const searchTerm = $('#tenant_search_input').val().trim();
-            const $btn = $(this);
-            const $icon = $('#search_icon');
-            const $spinner = $('#search_spinner');
-
-            if (searchTerm.length < 2) {
-                toastr.error('Please enter at least 2 characters to search');
-                return;
-            }
-
-            // Disable button, hide icon, show spinner
-            $btn.prop('disabled', true);
-            $icon.hide();
-            $spinner.show();
-            $('#tenant_search_input').prop('disabled', true);
-            $('#tenant_select').prop('disabled', true);
-
-            $.ajax({
-                url: '/tenants/search',
-                method: 'GET',
-                data: {
-                    search: searchTerm
-                },
-                success: function(response) {
-                    if (response.tenants && response.tenants.length > 0) {
-                        let options = '<option value="">-- Select Tenant --</option>';
-                        response.tenants.forEach(function(tenant) {
-                            options += `<option value="${tenant.encrypted_id}">
-                                ${tenant.names} - Mobile: ${tenant.mobile_number || 'N/A'} - PIN: ${tenant.national_id || 'N/A'} - Ref: ${tenant.reference_number || 'N/A'}
-                            </option>`;
-                        });
-                        $('#tenant_select').html(options);
-                        toastr.success(`Found ${response.tenants.length} tenant(s)`);
-                    } else {
-                        toastr.info('No tenants found');
-                        $('#tenant_select').html('<option value="">-- Select Tenant --</option>');
+        var table = $('#tenants-table').DataTable({
+            data: [],
+            columns: [{
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(d, t, r, m) {
+                        return m.row + 1;
                     }
                 },
-                error: function() {
-                    toastr.error('Search failed');
+                {
+                    data: 'names'
                 },
-                complete: function() {
-                    // Re-enable button, hide spinner, show icon
-                    $btn.prop('disabled', false);
-                    $spinner.hide();
-                    $icon.show();
-                    $('#tenant_search_input').prop('disabled', false);
-                    $('#tenant_select').prop('disabled', false);
+                {
+                    data: 'mobile_number'
+                },
+                {
+                    data: 'national_id'
+                },
+                {
+                    data: 'property_name'
+                },
+                {
+                    data: 'landlord_name'
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(d, t, r) {
+                        return '<a href="/tenants/' + r.encrypted_id + '" title="View Details">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">folder_eye</span></a>';
+                    }
+                }
+            ],
+            paging: true,
+            info: true,
+            lengthChange: true,
+            searching: false,
+            ordering: true,
+            orderCellsTop: true,
+            order: [
+                [1, 'asc']
+            ],
+            pageLength: 50
+        });
+
+        // Wrap each filter input with a spinner element
+        $('#tenants-table thead .column-filters input.col-filter').each(function() {
+            $(this).wrap('<div class="col-filter-wrap"></div>');
+            $(this).after('<span class="filter-spinner"></span>');
+        });
+
+        var debounceTimer;
+
+        function loadData() {
+            var $activeFilters = $('#tenants-table thead .column-filters .col-filter-wrap').filter(function() {
+                return $(this).find('input').val().trim().length >= 3;
+            });
+            $activeFilters.addClass('loading');
+            var params = {};
+            $('#tenants-table thead .column-filters input.col-filter').each(function() {
+                var key = $(this).data('filter');
+                var val = $(this).val().trim();
+                if (val.length >= 3) {
+                    params[key] = val;
                 }
             });
+
+            $.ajax({
+                url: '{{ route("ajax.tenants.listing.data") }}',
+                type: 'GET',
+                data: params,
+                success: function(response) {
+                    $activeFilters.removeClass('loading');
+                    if (response.success) {
+                        $('#result_info').show();
+                        $('#result_count').text(response.count);
+                        table.clear();
+                        table.rows.add(response.data);
+                        table.draw();
+                    }
+                },
+                error: function(xhr) {
+                    $activeFilters.removeClass('loading');
+                    var msg = 'Failed to load tenants.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    toastr.error(msg);
+                }
+            });
+        }
+
+        // Server-side filter on keyup with debounce (3+ chars)
+        $('#tenants-table thead .column-filters input.col-filter').on('keyup', function() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function() {
+                loadData();
+            }, 400);
         });
 
-        // Allow search on Enter key
-        $('#tenant_search_input').on('keypress', function(e) {
-            if (e.which === 13) {
-                e.preventDefault();
-                $('#search_tenant_btn').click();
-            }
-        });
-
-        // Redirect on tenant selection
-        $('#tenant_select').on('change', function() {
-            const tenantId = $(this).val();
-            if (tenantId) {
-                // Show card overlay spinner, disable controls
-                $('#card-overlay').addClass('active');
-                $('#search_tenant_btn').prop('disabled', true);
-                $('#tenant_search_input').prop('disabled', true);
-                $('#tenant_select').prop('disabled', true);
-                // Navigate to tenant details page
-                window.location.href = `/tenants/${tenantId}`;
-            }
-        });
+        // Initial load
+        loadData();
     });
 </script>
+@endsection

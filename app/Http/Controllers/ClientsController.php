@@ -421,6 +421,68 @@ class ClientsController extends Controller
     }
 
     /**
+     * Get tenants listing data for DataTable (server-side filtering)
+     */
+    public function getTenantsListingData(Request $request)
+    {
+        try {
+            $query = Client::where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
+                ->leftJoin('sys_pm_properties', 'sys_pm_properties.id', '=', 'sys_pm_clients.property_id')
+                ->leftJoin('sys_pm_clients as landlord', 'landlord.id', '=', 'sys_pm_properties.client_id')
+                ->select(
+                    'sys_pm_clients.id',
+                    'sys_pm_clients.names',
+                    'sys_pm_clients.mobile_number',
+                    'sys_pm_clients.national_id',
+                    'sys_pm_properties.property_name',
+                    'landlord.names as landlord_name'
+                );
+
+            // Column filters (only apply when 3+ characters)
+            if ($request->filled('filter_names') && strlen($request->filter_names) >= 3) {
+                $query->where('sys_pm_clients.names', 'ILIKE', '%' . $request->filter_names . '%');
+            }
+            if ($request->filled('filter_phone') && strlen($request->filter_phone) >= 3) {
+                $query->where('sys_pm_clients.mobile_number', 'ILIKE', '%' . $request->filter_phone . '%');
+            }
+            if ($request->filled('filter_id_number') && strlen($request->filter_id_number) >= 3) {
+                $query->where('sys_pm_clients.national_id', 'ILIKE', '%' . $request->filter_id_number . '%');
+            }
+            if ($request->filled('filter_property') && strlen($request->filter_property) >= 3) {
+                $query->where('sys_pm_properties.property_name', 'ILIKE', '%' . $request->filter_property . '%');
+            }
+            if ($request->filled('filter_landlord') && strlen($request->filter_landlord) >= 3) {
+                $query->where('landlord.names', 'ILIKE', '%' . $request->filter_landlord . '%');
+            }
+
+            $tenants = $query->orderBy('sys_pm_clients.names')
+                ->limit(1000)
+                ->get()
+                ->map(function ($t) {
+                    return [
+                        'id' => $t->id,
+                        'encrypted_id' => Crypt::encrypt($t->id),
+                        'names' => $t->names ?? '-',
+                        'mobile_number' => $t->mobile_number ?? '-',
+                        'national_id' => $t->national_id ?? '-',
+                        'property_name' => $t->property_name ?? '-',
+                        'landlord_name' => $t->landlord_name ?? '-',
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'count' => $tenants->count(),
+                'data' => $tenants,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching tenants listing data: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch tenants'], 500);
+        }
+    }
+
+    /**
      * Search tenants (AJAX)
      */
     public function searchTenants(Request $request)

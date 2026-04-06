@@ -61,6 +61,17 @@
                                             <th>Channel</th>
                                             <th>Remarks</th>
                                         </tr>
+                                        <tr class="column-filters">
+                                            <th></th>
+                                            <th></th>
+                                            <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                            <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                            <th></th>
+                                            <th></th>
+                                            <th></th>
+                                            <th></th>
+                                            <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                        </tr>
                                     </thead>
                                     <tbody></tbody>
                                 </table>
@@ -128,10 +139,17 @@
             lengthChange: true,
             searching: true,
             ordering: true,
+            orderCellsTop: true,
             order: [
                 [1, 'asc']
             ],
             pageLength: 50
+        });
+
+        // Client-side column filters
+        $('#payments-table thead .column-filters input').on('keyup change', function() {
+            var colIdx = $(this).closest('th').index();
+            table.column(colIdx).search(this.value).draw();
         });
 
         // Init Select2 for property

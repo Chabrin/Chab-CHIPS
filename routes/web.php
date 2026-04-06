@@ -420,6 +420,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Tenants
     Route::get('/tenants/listing', [App\Http\Controllers\ClientsController::class, 'tenantsListing'])->name('property.tenants.listing');
+    Route::get('/ajax/tenants/listing/data', [App\Http\Controllers\ClientsController::class, 'getTenantsListingData'])->name('ajax.tenants.listing.data');
     Route::get('/tenants/search', [App\Http\Controllers\UtilityController::class, 'searchTenants'])->name('utility.tenants.search');
     Route::get('/tenants/{id}/details', [App\Http\Controllers\UtilityController::class, 'getTenantDetails'])->name('utility.tenants.details');
 

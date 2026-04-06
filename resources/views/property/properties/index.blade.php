@@ -42,6 +42,14 @@
                                         <th>Client Name</th>
                                         <th>Actions</th>
                                     </tr>
+                                    <tr class="column-filters">
+                                        <th></th>
+                                        <th></th>
+                                        <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                        <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                        <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                        <th></th>
+                                    </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -127,9 +135,16 @@
             ],
             pageLength: 10,
             responsive: true,
+            orderCellsTop: true,
             order: [
                 [2, 'asc']
             ]
+        });
+
+        // Client-side column filters
+        $('#propertiesTable thead .column-filters input').on('keyup change', function() {
+            var colIdx = $(this).closest('th').index();
+            table.column(colIdx).search(this.value).draw();
         });
 
         // Handle clicks on property links
