@@ -2,11 +2,8 @@
 
 namespace App\Providers;
 
-use App\Models\Menu;
-use App\Models\SubMenu;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -17,8 +14,8 @@ class ViewServiceProvider extends ServiceProvider
         View::composer('layouts.main', function ($view) {
             $user = Auth::user();
             if (!$user) {
-                // Handle the case where no user is logged in
                 $view->with('menus', []);
+                $view->with('superModuleMenus', []);
                 return;
             }
 
@@ -32,19 +29,54 @@ class ViewServiceProvider extends ServiceProvider
                 ->orderBy('cb_sub_modules.order')
                 ->get();
             $submenusGrouped = $allowedSubmenus->groupBy('module_id');
-            $menus = DB::table('cb_modules')->orderBy('module_order')->get();
+            $modules = DB::table('cb_modules')->orderBy('module_order')->get();
+
+            // Build menu data for each module the user has access to
             $menuData = [];
-            foreach ($menus as $menu) {
+            foreach ($modules as $menu) {
                 if ($submenusGrouped->has($menu->id)) {
                     $menuData[$menu->id] = [
                         'module_name' => $menu->module_name,
                         'icon' => $menu->icon,
                         'module_url' => $menu->module_url,
+                        'super_module_id' => $menu->super_module_id ?? null,
                         'submenus' => $submenusGrouped[$menu->id],
                     ];
                 }
             }
-            $view->with('menus', $menuData);
+
+            // Group into super modules
+            $superModules = DB::table('cb_super_modules')->orderBy('order')->get();
+            $superModuleMenus = [];
+
+            foreach ($superModules as $sm) {
+                // Collect modules that belong to this super module AND have accessible submenus
+                $smModules = [];
+                foreach ($menuData as $moduleId => $mod) {
+                    if (isset($mod['super_module_id']) && (int) $mod['super_module_id'] === (int) $sm->id) {
+                        $smModules[$moduleId] = $mod;
+                    }
+                }
+                // Only include super module if it has at least one accessible module
+                if (!empty($smModules)) {
+                    $superModuleMenus[$sm->id] = [
+                        'name' => $sm->name,
+                        'icon' => $sm->icon,
+                        'modules' => $smModules,
+                    ];
+                }
+            }
+
+            // Collect ungrouped modules (no super_module_id)
+            $ungroupedMenus = [];
+            foreach ($menuData as $moduleId => $mod) {
+                if (empty($mod['super_module_id'])) {
+                    $ungroupedMenus[$moduleId] = $mod;
+                }
+            }
+
+            $view->with('menus', $ungroupedMenus);
+            $view->with('superModuleMenus', $superModuleMenus);
         });
     }
 }

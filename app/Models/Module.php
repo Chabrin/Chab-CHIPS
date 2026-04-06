@@ -21,6 +21,7 @@ class Module extends Model
         'module_url',
         'icon',
         'module_order',
+        'super_module_id',
         'added_by',
         'added_on',
         'deleted',
@@ -31,5 +32,10 @@ class Module extends Model
     public function submodules()
     {
         return $this->hasMany(Submodule::class, 'module_id');
+    }
+
+    public function superModule()
+    {
+        return $this->belongsTo(SuperModule::class, 'super_module_id');
     }
 }

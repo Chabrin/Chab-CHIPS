@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Module;
 use App\Models\Submodule;
+use App\Models\SuperModule;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -88,6 +89,40 @@ class ModuleController extends Controller
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error adding submodule: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function mapper()
+    {
+        $superModules = SuperModule::orderBy('order')->get();
+        $modules = Module::where('deleted', 0)->orderBy('module_order')->get();
+        return view('modules.mapper', compact('superModules', 'modules'));
+    }
+
+    public function saveMapper(Request $request)
+    {
+        try {
+            $mappings = $request->input('mappings', []);
+
+            if (empty($mappings)) {
+                return response()->json(['success' => false, 'error' => 'No mappings provided.']);
+            }
+
+            foreach ($mappings as $mapping) {
+                $moduleId = (int) ($mapping['module_id'] ?? 0);
+                $superModuleId = !empty($mapping['super_module_id']) ? (int) $mapping['super_module_id'] : null;
+
+                if ($moduleId > 0) {
+                    Module::where('id', $moduleId)
+                        ->update(['super_module_id' => $superModuleId]);
+                }
+            }
+
+            return response()->json(['success' => true, 'message' => 'Module mappings saved successfully!']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error saving module mappings: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()]);
         }
     }

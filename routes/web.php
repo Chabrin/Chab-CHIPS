@@ -684,7 +684,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'update'])->name('property.advances.update');
     Route::delete('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'destroy'])->name('property.advances.destroy');
 
-    
+
     // Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvancesController::class, 'create'])->name('client.advances.create');
     // Route::post('/client/advances/store', [App\Http\Controllers\ClientAdvancesController::class, 'store'])->name('client.advances.store');
     // Route::get('/client/advances/{encryptedId}/details', [App\Http\Controllers\ClientAdvancesController::class, 'show'])->name('client.advances.show');
@@ -902,6 +902,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Module routes
     Route::get('/add/module', [ModuleController::class, 'addModule'])->name('modules.add');
     Route::get('/add/submodule', [ModuleController::class, 'addSubmodule'])->name('submodules.add');
+    Route::get('/modules/mapper', [ModuleController::class, 'mapper'])->name('modules.mapper');
 
     // Companies management
     Route::get('/list/companies', [CompaniesController::class, 'listCompanies'])->name('listcompanies');
@@ -1016,6 +1017,7 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
 
     Route::post('/add/module', [ModuleController::class, 'storeModule'])->name('modules.store');
     Route::post('/add/submodule', [ModuleController::class, 'storeSubmodule'])->name('submodules.store');
+    Route::post('/modules/mapper/save', [ModuleController::class, 'saveMapper'])->name('modules.mapper.save');
 
     Route::post('/roles/permissionsaccess/save/{id}', [RolesController::class, 'savePermissionsAccess'])->name('roles.permissionsaccess.save');
     Route::post('/permissions/add', [RolesController::class, 'addPermission'])->name('permissions.add');
