@@ -543,11 +543,23 @@ table.dataTable {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 4px 8px;
+    padding: 4px 0 4px 8px;
 }
 
 .super-modules-grid .super-module-item {
     list-style: none;
+    position: relative;
+}
+
+/* Invisible bridge extending hover zone to flyout edge */
+.super-modules-grid .super-module-item::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: -20px;
+    width: 20px;
+    height: 100%;
+    background: transparent;
 }
 
 /* ============================================ */
@@ -732,21 +744,28 @@ table.dataTable {
 }
 
 /* ============================================ */
-/* MOBILE — sidebar as drawer                   */
+/* MOBILE — sidebar as simple slide-in           */
 /* ============================================ */
 @media (max-width: 991px) {
-    .sidebar-wrapper {
-        top: 0 !important;
-        left: -280px !important;
-        width: 280px !important;
-        height: 100vh !important;
-        z-index: 9999 !important;
-        transition: left 0.3s ease !important;
-        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1) !important;
+    /* Kill theme overlays */
+    .bg-overlay,
+    .drawer-overlay {
+        display: none !important;
     }
 
-    .sidebar-wrapper.sidebar-open {
-        left: 0 !important;
+    /* Hide close button — hamburger toggles instead */
+    .drawer-close-btn {
+        display: none !important;
+    }
+
+    .sidebar-wrapper {
+        top: var(--header-height) !important;
+        left: -280px !important;
+        width: 280px !important;
+        height: calc(100vh - var(--header-height)) !important;
+        z-index: 1000 !important;
+        transition: left 0.25s ease !important;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1) !important;
     }
 
     .page-wrapper.compact-wrapper .sidebar-wrapper.close_icon {
@@ -812,60 +831,26 @@ table.dataTable {
         display: none !important;
     }
 
-    .drawer-overlay {
-        position: fixed !important;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5) !important;
-        z-index: 9998 !important;
-        display: none !important;
-    }
-
-    .drawer-overlay.active {
-        display: block !important;
-    }
-
-    .drawer-close-btn {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        position: absolute !important;
-        top: 12px !important;
-        right: 12px !important;
-        width: 34px !important;
-        height: 34px !important;
-        background: var(--accent) !important;
-        color: #fff !important;
-        border-radius: 50% !important;
-        cursor: pointer !important;
-        z-index: 10 !important;
-        border: none !important;
-    }
-
-    .drawer-close-btn:hover {
-        background: var(--accent-dark) !important;
-    }
-
-    .drawer-close-btn .material-symbols-outlined {
-        font-size: 18px !important;
-        color: #fff !important;
-    }
-
     .sidebar-wrapper .logo-wrapper {
-        padding-right: 48px !important;
+        padding-right: 12px !important;
         position: relative !important;
     }
 
+    /* Flyout replaces sidebar on mobile */
     .super-module-flyout {
-        top: 0 !important;
+        top: var(--header-height) !important;
         left: 0 !important;
         width: 280px !important;
         max-width: 280px !important;
-        height: 100vh !important;
+        height: calc(100vh - var(--header-height)) !important;
         bottom: auto !important;
-        transition: left 0.25s ease !important;
+        z-index: 1001 !important;
+        transition: none !important;
+    }
+
+    .super-module-flyout.open {
+        opacity: 1 !important;
+        visibility: visible !important;
     }
 
     .flyout-back-btn {

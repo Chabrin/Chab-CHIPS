@@ -327,157 +327,77 @@
         (function() {
             function setupResponsiveSidebar() {
                 var headerToggleButton = document.querySelector('.mobile-hamburger .toggle-sidebar');
-                var sidebarToggleButton = document.querySelector('.sidebar-wrapper .logo-wrapper .toggle-sidebar');
-                var drawerCloseButton = document.querySelector('.drawer-close-btn');
                 var sidebarWrapper = document.querySelector('.sidebar-wrapper');
-                var drawerOverlay = document.querySelector('.drawer-overlay');
-                var sidebarMenus = document.querySelectorAll('ul.sidebar-submenu');
 
-                if (!sidebarWrapper) {
-                    console.log('Sidebar wrapper not found');
-                    return;
-                }
+                if (!sidebarWrapper) return;
 
-                console.log('Responsive sidebar setup successful');
-
-                // Function to open drawer (mobile only)
-                function openDrawer() {
-                    if (window.innerWidth < 992) {
-                        sidebarWrapper.classList.remove('close_icon');
-                        drawerOverlay.classList.add('active');
-                        document.body.style.overflow = 'hidden';
-                    }
-                }
-
-                // Function to close drawer (mobile only)
-                function closeDrawer() {
-                    if (window.innerWidth < 992) {
-                        sidebarWrapper.classList.add('close_icon');
-                        drawerOverlay.classList.remove('active');
-                        document.body.style.overflow = '';
-
-                        // Collapse all submenus
-                        sidebarMenus.forEach(function(submenu) {
-                            submenu.style.display = 'none';
-                        });
-                    }
-                }
-
-                // Function to collapse menus on desktop
-                function collapseMenusDesktop() {
-                    if (window.innerWidth >= 992) {
-                        // Collapse all open submenus
-                        sidebarMenus.forEach(function(submenu) {
-                            submenu.style.display = 'none';
-                        });
-                    }
-                }
-
-                // Header hamburger button (mobile only)
+                // Mobile: hamburger toggles sidebar open/closed (simple slide)
                 if (headerToggleButton) {
                     headerToggleButton.addEventListener('click', function(e) {
                         e.preventDefault();
-                        e.stopPropagation();
-                        openDrawer();
-                    });
+                        e.stopImmediatePropagation();
+                        if (window.innerWidth < 992) {
+                            sidebarWrapper.classList.toggle('close_icon');
+                            // Remove theme's bg-overlay if any
+                            document.querySelectorAll('.bg-overlay').forEach(function(el) {
+                                el.remove();
+                            });
+                        }
+                    }, true);
                 }
 
-                // Sidebar toggle button (desktop only - collapses menus)
-                if (sidebarToggleButton) {
-                    sidebarToggleButton.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        collapseMenusDesktop();
-                    });
-                }
-
-                // Drawer close button (mobile only)
-                if (drawerCloseButton) {
-                    drawerCloseButton.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        closeDrawer();
-                    });
-                }
-
-                // Overlay click closes drawer (mobile only)
-                if (drawerOverlay) {
-                    drawerOverlay.addEventListener('click', function() {
-                        closeDrawer();
-                    });
-                }
-
-                // Handle window resize
-                window.addEventListener('resize', function() {
-                    if (window.innerWidth >= 992) {
-                        // On desktop, ensure drawer is visible and remove mobile states
-                        sidebarWrapper.classList.remove('close_icon');
-                        drawerOverlay.classList.remove('active');
-                        document.body.style.overflow = '';
-                    } else {
-                        // On mobile, ensure drawer starts closed
-                        if (!sidebarWrapper.classList.contains('close_icon')) {
-                            closeDrawer();
+                // Close sidebar when clicking outside it on mobile
+                document.addEventListener('click', function(e) {
+                    if (window.innerWidth < 992 && !sidebarWrapper.classList.contains('close_icon')) {
+                        // If click is outside sidebar and outside hamburger and outside flyout
+                        if (!e.target.closest('.sidebar-wrapper') &&
+                            !e.target.closest('.mobile-hamburger') &&
+                            !e.target.closest('.super-module-flyout')) {
+                            sidebarWrapper.classList.add('close_icon');
                         }
                     }
                 });
 
-                // Initialize proper state on load
-                if (window.innerWidth < 992) {
-                    // Mobile: ensure drawer starts closed
-                    if (!sidebarWrapper.classList.contains('close_icon')) {
-                        sidebarWrapper.classList.add('close_icon');
+                // Handle window resize
+                window.addEventListener('resize', function() {
+                    if (window.innerWidth >= 992) {
+                        sidebarWrapper.classList.remove('close_icon');
+                    } else {
+                        if (!sidebarWrapper.classList.contains('close_icon')) {
+                            sidebarWrapper.classList.add('close_icon');
+                        }
                     }
-                    drawerOverlay.classList.remove('active');
-                    document.body.style.overflow = '';
+                });
+
+                // Initialize state
+                if (window.innerWidth < 992) {
+                    sidebarWrapper.classList.add('close_icon');
                 } else {
-                    // Desktop: remove close_icon to show sidebar normally
                     sidebarWrapper.classList.remove('close_icon');
                     var pageHeader = document.querySelector('.page-header');
-                    if (pageHeader) {
-                        pageHeader.classList.remove('close_icon');
-                    }
-                    drawerOverlay.classList.remove('active');
+                    if (pageHeader) pageHeader.classList.remove('close_icon');
                 }
 
-                // Monitor and prevent close_icon on desktop only
+                // Desktop: keep sidebar open, remove bg-overlay
                 if (window.innerWidth >= 992) {
                     var desktopInterval = setInterval(function() {
                         if (sidebarWrapper.classList.contains('close_icon')) {
                             sidebarWrapper.classList.remove('close_icon');
                         }
-                        var pageHeader = document.querySelector('.page-header');
-                        if (pageHeader && pageHeader.classList.contains('close_icon')) {
-                            pageHeader.classList.remove('close_icon');
+                        var ph = document.querySelector('.page-header');
+                        if (ph && ph.classList.contains('close_icon')) {
+                            ph.classList.remove('close_icon');
                         }
-                        var bgOverlay = document.querySelector('.bg-overlay');
-                        if (bgOverlay) {
-                            bgOverlay.remove();
-                        }
+                        var bg = document.querySelector('.bg-overlay');
+                        if (bg) bg.remove();
                     }, 100);
 
-                    // Clear interval on resize to mobile
                     window.addEventListener('resize', function() {
-                        if (window.innerWidth < 992) {
-                            clearInterval(desktopInterval);
-                        }
+                        if (window.innerWidth < 992) clearInterval(desktopInterval);
                     });
                 }
-
-                // Remove bg-overlay on desktop
-                document.addEventListener('click', function(e) {
-                    if (window.innerWidth >= 992) {
-                        if (e.target.classList.contains('bg-overlay')) {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            e.target.remove();
-                            return false;
-                        }
-                    }
-                }, true);
             }
 
-            // Setup after DOM is ready
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', setupResponsiveSidebar);
             } else {
@@ -498,7 +418,7 @@
                 var superModuleItems = document.querySelectorAll('.super-module-item');
                 var activeSuperModuleId = null;
                 var closeTimer = null;
-                var CLOSE_DELAY = 200; // ms delay before closing
+                var CLOSE_DELAY = 500; // ms delay before closing on mouse-out
 
                 if (!flyout || !superModuleItems.length) return;
 
@@ -539,7 +459,7 @@
                     }
 
                     // Mark active
-                    superModuleItems.forEach(function(el) {
+                    document.querySelectorAll('.super-module-item').forEach(function(el) {
                         el.classList.remove('active');
                     });
                     if (triggerItem) triggerItem.classList.add('active');
@@ -553,26 +473,42 @@
                     cancelClose();
                     flyout.classList.remove('open');
                     flyoutOverlay.classList.remove('active');
-                    superModuleItems.forEach(function(el) {
+                    document.querySelectorAll('.super-module-item').forEach(function(el) {
                         el.classList.remove('active');
                     });
                     activeSuperModuleId = null;
                 }
 
-                // Hover on super module items (desktop) + click/tap (mobile)
-                superModuleItems.forEach(function(item) {
-                    item.addEventListener('mouseenter', function() {
-                        if (window.innerWidth >= 992) {
+                // Desktop hover — use event delegation via mouseover/mouseout
+                // (more robust than mouseenter on individual items, handles
+                //  SimpleBar DOM wrapping and dynamic content)
+                var smGrid = document.querySelector('.super-modules-grid');
+                if (smGrid) {
+                    smGrid.addEventListener('mouseover', function(e) {
+                        if (window.innerWidth < 992) return;
+                        var item = e.target.closest('.super-module-item');
+                        if (item) {
                             var smId = item.getAttribute('data-super-module-id');
-                            openFlyout(smId);
+                            if (activeSuperModuleId !== smId) {
+                                openFlyout(smId);
+                            } else {
+                                cancelClose();
+                            }
                         }
                     });
-                    item.addEventListener('mouseleave', function() {
-                        if (window.innerWidth >= 992) {
-                            scheduleClose();
+                    smGrid.addEventListener('mouseout', function(e) {
+                        if (window.innerWidth < 992) return;
+                        var related = e.relatedTarget;
+                        // Don't close if mouse moved to another item or to the flyout
+                        if (related && (related.closest('.super-module-item') || related.closest('.super-module-flyout'))) {
+                            return;
                         }
+                        scheduleClose();
                     });
-                    // Click/tap for mobile (and fallback for desktop)
+                }
+
+                // Click/tap for mobile + desktop fallback
+                superModuleItems.forEach(function(item) {
                     item.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -599,7 +535,11 @@
                 flyout.addEventListener('mouseenter', function() {
                     cancelClose();
                 });
-                flyout.addEventListener('mouseleave', function() {
+                flyout.addEventListener('mouseleave', function(e) {
+                    // Don't close if mouse went back to a super module item
+                    if (e.relatedTarget && e.relatedTarget.closest('.super-module-item')) {
+                        return;
+                    }
                     scheduleClose();
                 });
 
