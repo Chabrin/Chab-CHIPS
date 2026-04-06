@@ -89,41 +89,127 @@
                     <div class="card-body">
                         <!-- Search Form -->
                         <form id="searchForm">
-                            <!-- Row 1: Property search + Property select -->
-                            <div class="row mb-2">
-                                <div class="col-md-6">
-                                    <label for="property_search_input" class="form-label">Search Property</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="property_search_input"
-                                            placeholder="Search by Property Name or Ref">
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_property_btn">
-                                            <span class="material-symbols-outlined" id="search_property_icon">search</span>
-                                            <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display: none;"></span>
-                                        </button>
+                            <!-- Search Mode Toggle -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <label class="form-label d-block">Search By <span class="text-danger">*</span></label>
+                                    <div class="btn-group" role="group" aria-label="Search mode">
+                                        <input type="radio" class="btn-check" name="search_mode" id="mode_property" value="property" checked autocomplete="off">
+                                        <label class="btn btn-outline-primary date-filter-radio" for="mode_property">
+                                            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">apartment</span>
+                                            Property
+                                        </label>
+                                        <input type="radio" class="btn-check" name="search_mode" id="mode_landlord" value="landlord" autocomplete="off">
+                                        <label class="btn btn-outline-primary date-filter-radio" for="mode_landlord">
+                                            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span>
+                                            Landlord
+                                        </label>
+                                        <input type="radio" class="btn-check" name="search_mode" id="mode_tenant" value="tenant" autocomplete="off">
+                                        <label class="btn btn-outline-primary date-filter-radio" for="mode_tenant">
+                                            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">group</span>
+                                            Tenant
+                                        </label>
                                     </div>
-                                    <small class="text-muted">Search property first, then select tenant</small>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="property_select" class="form-label">Select Property</label>
-                                    <select class="form-select" id="property_select" disabled>
-                                        <option value="">-- Select Property --</option>
-                                    </select>
-                                    <input type="hidden" id="property_id" name="property_id">
                                 </div>
                             </div>
 
-                            <!-- Row 2: Tenant select -->
-                            <div class="row mb-2">
-                                <div class="col-md-6">
-                                    <label for="tenant_select" class="form-label">Select Tenant <span class="text-danger">*</span></label>
-                                    <select class="form-control" id="tenant_select" name="tenant_id" disabled required style="width: 100%;">
-                                        <option value="">-- Select Property First --</option>
-                                    </select>
-                                    <input type="hidden" id="tenant_id" name="tenant_id">
+                            <!-- MODE: Search by Property -->
+                            <div id="property_mode_section">
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="property_search_input" class="form-label mb-1">Search Property</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" id="property_search_input"
+                                                placeholder="-- Search --">
+                                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_property_btn">
+                                                <span class="material-symbols-outlined" id="search_property_icon" style="font-size:18px;">search</span>
+                                                <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display:none;"></span>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Search by property name or reference</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="property_select" class="form-label mb-1">Select Property</label>
+                                        <select class="form-select form-select-sm" id="property_select" disabled>
+                                            <option value="">-- Select Property --</option>
+                                        </select>
+                                        <input type="hidden" id="property_id" name="property_id">
+                                    </div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="tenant_select" class="form-label mb-1">Select Tenant <span class="text-danger">*</span></label>
+                                        <select class="form-control form-control-sm" id="tenant_select" name="tenant_id" disabled required style="width:100%;">
+                                            <option value="">-- Select Property First --</option>
+                                        </select>
+                                        <input type="hidden" id="tenant_id" name="tenant_id">
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Tenant Details - Pre-shown with labels -->
+                            <!-- MODE: Search by Landlord -->
+                            <div id="landlord_mode_section" style="display:none;">
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="landlord_search_input" class="form-label mb-1">Search Landlord</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" id="landlord_search_input"
+                                                placeholder="-- Search --">
+                                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_landlord_btn">
+                                                <span class="material-symbols-outlined" id="search_landlord_icon" style="font-size:18px;">search</span>
+                                                <span class="spinner-border spinner-border-sm" role="status" id="search_landlord_spinner" style="display:none;"></span>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Search by name, reference, phone, email or ID number</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="landlord_direct_select" class="form-label mb-1">Select Landlord</label>
+                                        <select class="form-select form-select-sm" id="landlord_direct_select" disabled>
+                                            <option value="">-- Search First --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="landlord_property_select" class="form-label mb-1">Select Property</label>
+                                        <select class="form-select form-select-sm" id="landlord_property_select" disabled>
+                                            <option value="">-- Select Landlord First --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="landlord_tenant_select" class="form-label mb-1">Select Tenant <span class="text-danger">*</span></label>
+                                        <select class="form-control form-control-sm" id="landlord_tenant_select" disabled style="width:100%;">
+                                            <option value="">-- Select Property First --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- MODE: Search by Tenant -->
+                            <div id="tenant_mode_section" style="display:none;">
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="tenant_search_input" class="form-label mb-1">Search Tenant</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" id="tenant_search_input"
+                                                placeholder="-- Search --">
+                                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_tenant_btn">
+                                                <span class="material-symbols-outlined" id="search_tenant_icon" style="font-size:18px;">search</span>
+                                                <span class="spinner-border spinner-border-sm" role="status" id="search_tenant_spinner" style="display:none;"></span>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Search by name, reference, phone, email or ID number</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="tenant_direct_select" class="form-label mb-1">Select Tenant <span class="text-danger">*</span></label>
+                                        <select class="form-select form-select-sm" id="tenant_direct_select" disabled>
+                                            <option value="">-- Search First --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tenant Details (shared) -->
                             <div class="row mb-3">
                                 <div class="col-12">
                                     <small class="text-muted">
@@ -342,10 +428,39 @@
     $(document).ready(function() {
         let lineItemIndex = 1;
 
-        // Search property button
+        // Helper to clear tenant details
+        function clearTenantDetails() {
+            $('#selected_tenant_name').text('-');
+            $('#selected_tenant_mobile').text('-');
+            $('#selected_tenant_email').text('-');
+            $('#selected_tenant_id').text('-');
+            $('#tenant_id').val('');
+        }
+
+        // Helper to set tenant details from a selected option
+        function setTenantDetails(opt) {
+            $('#selected_tenant_name').text(opt.data('name'));
+            $('#selected_tenant_mobile').text(opt.data('mobile'));
+            $('#selected_tenant_email').text(opt.data('email'));
+            $('#selected_tenant_id').text(opt.data('id-number'));
+            $('#tenant_id').val(opt.val());
+        }
+
+        // ─── Mode toggle ───────────────────────────────────
+        $('input[name="search_mode"]').on('change', function() {
+            var mode = $(this).val();
+            clearTenantDetails();
+            $('#property_mode_section, #landlord_mode_section, #tenant_mode_section').hide();
+            if (mode === 'property') $('#property_mode_section').show();
+            if (mode === 'landlord') $('#landlord_mode_section').show();
+            if (mode === 'tenant') $('#tenant_mode_section').show();
+        });
+
+        // ═══════════════════════════════════════════════════
+        // MODE 1: SEARCH BY PROPERTY (existing)
+        // ═══════════════════════════════════════════════════
         $('#search_property_btn').on('click', function() {
             const searchTerm = $('#property_search_input').val().trim();
-
             if (searchTerm.length < 2) {
                 toastr.warning('Please enter at least 2 characters to search');
                 return;
@@ -386,8 +501,6 @@
                 }
             });
         });
-
-        // Allow search property with Enter key
         $('#property_search_input').on('keypress', function(e) {
             if (e.which === 13) {
                 e.preventDefault();
@@ -395,29 +508,19 @@
             }
         });
 
-        // When property is selected, load tenants into Select2
+        // Property selected → load tenants
         $('#property_select').on('change', function() {
             const propertyId = $(this).val();
             $('#property_id').val(propertyId);
 
-            // Destroy existing Select2 if any
             if ($('#tenant_select').hasClass('select2-hidden-accessible')) {
                 $('#tenant_select').select2('destroy');
             }
-
-            // Reset tenant dropdown and details
             $('#tenant_select').empty().append('<option value="">-- Select Property First --</option>').prop('disabled', true);
-            $('#tenant_id').val('');
-            $('#selected_tenant_name').text('-');
-            $('#selected_tenant_mobile').text('-');
-            $('#selected_tenant_email').text('-');
-            $('#selected_tenant_id').text('-');
-
+            clearTenantDetails();
             if (!propertyId) return;
 
-            // Load tenants for this property
             $('#tenant_select').empty().append('<option value="">Loading...</option>');
-
             $.ajax({
                 url: '/ajax/statements/tenants-by-property',
                 method: 'GET',
@@ -443,7 +546,6 @@
                         toastr.info('No tenants found for this property');
                     }
                     $('#tenant_select').prop('disabled', false);
-                    // Init Select2 for searchable dropdown
                     $('#tenant_select').select2({
                         placeholder: '-- Search / Select Tenant --',
                         allowClear: true,
@@ -458,23 +560,237 @@
             });
         });
 
-        // When tenant is selected from Select2 dropdown
+        // Property mode: tenant selected
         $('#tenant_select').on('change', function() {
-            const selectedOption = $(this).find('option:selected');
-            const tenantId = $(this).val();
-
-            if (tenantId) {
-                $('#selected_tenant_name').text(selectedOption.data('name'));
-                $('#selected_tenant_mobile').text(selectedOption.data('mobile'));
-                $('#selected_tenant_email').text(selectedOption.data('email'));
-                $('#selected_tenant_id').text(selectedOption.data('id-number'));
-                $('#tenant_id').val(tenantId);
+            var $sel = $(this).find('option:selected');
+            if ($(this).val()) {
+                setTenantDetails($sel);
             } else {
-                $('#selected_tenant_name').text('-');
-                $('#selected_tenant_mobile').text('-');
-                $('#selected_tenant_email').text('-');
-                $('#selected_tenant_id').text('-');
-                $('#tenant_id').val('');
+                clearTenantDetails();
+            }
+        });
+
+        // ═══════════════════════════════════════════════════
+        // MODE 2: SEARCH BY LANDLORD
+        // ═══════════════════════════════════════════════════
+        $('#search_landlord_btn').on('click', function() {
+            var searchTerm = $('#landlord_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                toastr.warning('Please enter at least 2 characters to search');
+                return;
+            }
+            $('#search_landlord_icon').hide();
+            $('#search_landlord_spinner').show();
+            $('#search_landlord_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/landlord/search-landlords',
+                method: 'GET',
+                data: {
+                    search: searchTerm
+                },
+                success: function(response) {
+                    $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');
+                    if (response.success && response.landlords && response.landlords.length > 0) {
+                        $.each(response.landlords, function(i, l) {
+                            $('#landlord_direct_select').append(
+                                '<option value="' + l.encrypted_id + '"' +
+                                ' data-name="' + (l.names || '') + '">' +
+                                (l.names || '') + ' - ' + (l.reference_number || '') +
+                                '</option>'
+                            );
+                        });
+                        $('#landlord_direct_select').prop('disabled', false);
+                        toastr.success('Found ' + response.landlords.length + ' landlord(s)');
+                    } else {
+                        toastr.info('No landlords found');
+                        $('#landlord_direct_select').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error searching landlords');
+                },
+                complete: function() {
+                    $('#search_landlord_icon').show();
+                    $('#search_landlord_spinner').hide();
+                    $('#search_landlord_btn').prop('disabled', false);
+                }
+            });
+        });
+        $('#landlord_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_landlord_btn').click();
+            }
+        });
+
+        // Landlord selected → load their properties
+        $('#landlord_direct_select').on('change', function() {
+            var landlordId = $(this).val();
+            // Reset downstream
+            $('#landlord_property_select').empty().append('<option value="">-- Select Landlord First --</option>').prop('disabled', true);
+            if ($('#landlord_tenant_select').hasClass('select2-hidden-accessible')) {
+                $('#landlord_tenant_select').select2('destroy');
+            }
+            $('#landlord_tenant_select').empty().append('<option value="">-- Select Property First --</option>').prop('disabled', true);
+            clearTenantDetails();
+            if (!landlordId) return;
+
+            $('#landlord_property_select').empty().append('<option value="">Loading...</option>');
+            $.ajax({
+                url: '/ajax/statements/properties-by-landlord',
+                method: 'GET',
+                data: {
+                    landlord_id: landlordId
+                },
+                success: function(response) {
+                    $('#landlord_property_select').empty().append('<option value="">-- Select Property --</option>');
+                    if (response.success && response.properties && response.properties.length > 0) {
+                        $.each(response.properties, function(i, prop) {
+                            $('#landlord_property_select').append(
+                                '<option value="' + prop.id + '">' + prop.property_name + ' - ' + (prop.reference_number || '') + '</option>'
+                            );
+                        });
+                        $('#landlord_property_select').prop('disabled', false);
+                        toastr.success(response.properties.length + ' property(ies) found');
+                        // Auto-select if only one
+                        if (response.properties.length === 1) {
+                            $('#landlord_property_select').val(response.properties[0].id).trigger('change');
+                        }
+                    } else {
+                        toastr.info('No properties found for this landlord');
+                    }
+                },
+                error: function() {
+                    toastr.error('Error loading properties');
+                }
+            });
+        });
+
+        // Landlord mode: property selected → load tenants
+        $('#landlord_property_select').on('change', function() {
+            var propertyId = $(this).val();
+            if ($('#landlord_tenant_select').hasClass('select2-hidden-accessible')) {
+                $('#landlord_tenant_select').select2('destroy');
+            }
+            $('#landlord_tenant_select').empty().append('<option value="">-- Select Property First --</option>').prop('disabled', true);
+            clearTenantDetails();
+            if (!propertyId) return;
+
+            $('#landlord_tenant_select').empty().append('<option value="">Loading...</option>');
+            $.ajax({
+                url: '/ajax/statements/tenants-by-property',
+                method: 'GET',
+                data: {
+                    property_id: propertyId
+                },
+                success: function(response) {
+                    $('#landlord_tenant_select').empty().append('<option value="">-- Search / Select Tenant --</option>');
+                    if (response.success && response.tenants && response.tenants.length > 0) {
+                        $.each(response.tenants, function(i, t) {
+                            $('#landlord_tenant_select').append(
+                                `<option value="${t.encrypted_id}" 
+                                         data-name="${t.names}" 
+                                         data-mobile="${t.mobile_number || 'N/A'}" 
+                                         data-email="${t.email_address || 'N/A'}" 
+                                         data-id-number="${t.national_id || 'N/A'}">
+                                    ${t.names} - Unit: ${t.unit_code || 'N/A'} - ${t.mobile_number || ''}
+                                </option>`
+                            );
+                        });
+                        toastr.success(response.tenants.length + ' tenant(s) loaded');
+                    } else {
+                        toastr.info('No tenants found for this property');
+                    }
+                    $('#landlord_tenant_select').prop('disabled', false);
+                    $('#landlord_tenant_select').select2({
+                        placeholder: '-- Search / Select Tenant --',
+                        allowClear: true,
+                        width: '100%',
+                        minimumResultsForSearch: 0
+                    });
+                },
+                error: function() {
+                    toastr.error('Error loading tenants');
+                    $('#landlord_tenant_select').empty().append('<option value="">-- Error --</option>');
+                }
+            });
+        });
+
+        // Landlord mode: tenant selected
+        $('#landlord_tenant_select').on('change', function() {
+            var $sel = $(this).find('option:selected');
+            if ($(this).val()) {
+                setTenantDetails($sel);
+            } else {
+                clearTenantDetails();
+            }
+        });
+
+        // ═══════════════════════════════════════════════════
+        // MODE 3: SEARCH BY TENANT DIRECTLY
+        // ═══════════════════════════════════════════════════
+        $('#search_tenant_btn').on('click', function() {
+            var searchTerm = $('#tenant_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                toastr.warning('Please enter at least 2 characters to search');
+                return;
+            }
+            $('#search_tenant_icon').hide();
+            $('#search_tenant_spinner').show();
+            $('#search_tenant_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/statements/search-tenants',
+                method: 'GET',
+                data: {
+                    search: searchTerm
+                },
+                success: function(response) {
+                    $('#tenant_direct_select').empty().append('<option value="">-- Select Tenant --</option>');
+                    if (response.success && response.tenants && response.tenants.length > 0) {
+                        $.each(response.tenants, function(i, t) {
+                            $('#tenant_direct_select').append(
+                                '<option value="' + t.encrypted_id + '"' +
+                                ' data-name="' + (t.names || '') + '"' +
+                                ' data-mobile="' + (t.mobile_number || 'N/A') + '"' +
+                                ' data-email="' + (t.email_address || 'N/A') + '"' +
+                                ' data-id-number="' + (t.national_id || 'N/A') + '">' +
+                                (t.names || '') + ' - ' + (t.reference_number || '') +
+                                '</option>'
+                            );
+                        });
+                        $('#tenant_direct_select').prop('disabled', false);
+                        toastr.success('Found ' + response.tenants.length + ' tenant(s)');
+                    } else {
+                        toastr.info('No tenants found');
+                        $('#tenant_direct_select').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error searching tenants');
+                },
+                complete: function() {
+                    $('#search_tenant_icon').show();
+                    $('#search_tenant_spinner').hide();
+                    $('#search_tenant_btn').prop('disabled', false);
+                }
+            });
+        });
+        $('#tenant_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_tenant_btn').click();
+            }
+        });
+
+        // Tenant mode: tenant selected
+        $('#tenant_direct_select').on('change', function() {
+            var $sel = $(this).find(':selected');
+            if ($(this).val()) {
+                setTenantDetails($sel);
+            } else {
+                clearTenantDetails();
             }
         });
 
@@ -604,7 +920,7 @@
 
         // View Statement
         $('#search_btn').on('click', function() {
-            // Validate required fields
+            const mode = $('input[name="search_mode"]:checked').val();
             const tenantId = $('#tenant_id').val();
             const dateType = $('input[name="date_type"]:checked').val();
             const dateFrom = $('#date_from').val();
@@ -625,15 +941,12 @@
                 return;
             }
 
-            // Show modal
             $('#statementModal').modal('show');
-
-            // Set statement header info
             $('#stmt_tenant_name').text($('#selected_tenant_name').text());
 
-            // Load statement data
-            const propertyId = $('#property_id').val();
-            console.log('Loading statement for tenant:', tenantId, 'property:', propertyId, 'type:', dateType, 'from', dateFrom, 'to', dateTo);
+            let propertyId = '';
+            if (mode === 'property') propertyId = $('#property_id').val();
+            else if (mode === 'landlord') propertyId = $('#landlord_property_select').val() || '';
 
             loadStatement(tenantId, dateFrom, dateTo, dateType, propertyId);
         });

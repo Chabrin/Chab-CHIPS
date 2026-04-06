@@ -344,6 +344,77 @@ class InvoicingController extends Controller
     }
 
     /**
+     * Search tenants directly by name/reference/phone/email/ID (AJAX)
+     */
+    public function searchTenantsDirectly(Request $request)
+    {
+        try {
+            $search = $request->input('search', '');
+            if (strlen($search) < 2) {
+                return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
+            }
+
+            $tenants = Client::tenants()
+                ->select('id', 'names', 'mobile_number', 'email_address', 'national_id', 'reference_number')
+                ->where(function ($q) use ($search) {
+                    $q->where('names', 'ILIKE', "%{$search}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('mobile_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('email_address', 'ILIKE', "%{$search}%")
+                        ->orWhere('national_id', 'ILIKE', "%{$search}%");
+                })
+                ->orderBy('names')
+                ->limit(50)
+                ->get()
+                ->map(function ($t) {
+                    return [
+                        'encrypted_id'     => encrypt($t->id),
+                        'names'            => $t->names ?? 'N/A',
+                        'mobile_number'    => $t->mobile_number,
+                        'email_address'    => $t->email_address,
+                        'national_id'      => $t->national_id,
+                        'reference_number' => $t->reference_number,
+                    ];
+                });
+
+            return response()->json(['success' => true, 'tenants' => $tenants]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching tenants directly: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to search tenants'], 500);
+        }
+    }
+
+    /**
+     * Get properties owned by a landlord (AJAX)
+     */
+    public function getPropertiesByLandlord(Request $request)
+    {
+        try {
+            if (!$request->filled('landlord_id')) {
+                return response()->json(['success' => false, 'message' => 'Landlord ID is required'], 400);
+            }
+
+            try {
+                $landlordId = (int) Crypt::decrypt($request->landlord_id);
+            } catch (\Exception $e) {
+                $landlordId = (int) $request->landlord_id;
+            }
+
+            $properties = Property::where('client_id', $landlordId)
+                ->select('id', 'property_name', 'reference_number')
+                ->orderBy('property_name')
+                ->get();
+
+            return response()->json(['success' => true, 'properties' => $properties]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading properties by landlord: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load properties'], 500);
+        }
+    }
+
+    /**
      * Search tenant invoices (AJAX) — uses sys_pm_tenants_accounts_trans ledger
      */
     public function searchTenantInvoices(Request $request)

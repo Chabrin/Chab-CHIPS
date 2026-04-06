@@ -69,41 +69,84 @@
                     </div>
                     <div class="card-body">
                         <form id="searchForm">
-                            <!-- Row 1: Property search + Property select -->
-                            <div class="row mb-2">
-                                <div class="col-md-6">
-                                    <label for="property_search_input" class="form-label">Search Property</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="property_search_input"
-                                            placeholder="Search by Property Name or Ref">
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_property_btn">
-                                            <span class="material-symbols-outlined" id="search_property_icon">search</span>
-                                            <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display: none;"></span>
-                                        </button>
+                            <!-- Search Mode Toggle -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <label class="form-label d-block">Search By <span class="text-danger">*</span></label>
+                                    <div class="btn-group" role="group" aria-label="Search mode">
+                                        <input type="radio" class="btn-check" name="search_mode" id="mode_property" value="property" checked autocomplete="off">
+                                        <label class="btn btn-outline-primary date-filter-radio" for="mode_property">
+                                            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">apartment</span>
+                                            Property
+                                        </label>
+                                        <input type="radio" class="btn-check" name="search_mode" id="mode_landlord" value="landlord" autocomplete="off">
+                                        <label class="btn btn-outline-primary date-filter-radio" for="mode_landlord">
+                                            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span>
+                                            Landlord
+                                        </label>
                                     </div>
-                                    <small class="text-muted">Search property first, then select landlord</small>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="property_select" class="form-label">Select Property</label>
-                                    <select class="form-select" id="property_select" disabled>
-                                        <option value="">-- Select Property --</option>
-                                    </select>
-                                    <input type="hidden" id="property_id" name="property_id">
                                 </div>
                             </div>
 
-                            <!-- Row 2: Landlord select -->
-                            <div class="row mb-2">
-                                <div class="col-md-6">
-                                    <label for="landlord_select" class="form-label">Select Landlord <span class="text-danger">*</span></label>
-                                    <select class="form-control" id="landlord_select" name="landlord_id" disabled required style="width: 100%;">
-                                        <option value="">-- Select Property First --</option>
-                                    </select>
-                                    <input type="hidden" id="landlord_id" name="landlord_id">
+                            <!-- MODE: Search by Property -->
+                            <div id="property_mode_section">
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="property_search_input" class="form-label mb-1">Search Property</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" id="property_search_input"
+                                                placeholder="-- Search --">
+                                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_property_btn">
+                                                <span class="material-symbols-outlined" id="search_property_icon" style="font-size:18px;">search</span>
+                                                <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display:none;"></span>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Search by property name or reference</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="property_select" class="form-label mb-1">Select Property</label>
+                                        <select class="form-select form-select-sm" id="property_select" disabled>
+                                            <option value="">-- Select Property --</option>
+                                        </select>
+                                        <input type="hidden" id="property_id" name="property_id">
+                                    </div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="landlord_select" class="form-label mb-1">Select Landlord <span class="text-danger">*</span></label>
+                                        <select class="form-control form-control-sm" id="landlord_select" name="landlord_id" disabled required style="width:100%;">
+                                            <option value="">-- Select Property First --</option>
+                                        </select>
+                                        <input type="hidden" id="landlord_id" name="landlord_id">
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Landlord Details -->
+                            <!-- MODE: Search by Landlord -->
+                            <div id="landlord_mode_section" style="display:none;">
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <label for="landlord_search_input" class="form-label mb-1">Search Landlord</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" id="landlord_search_input"
+                                                placeholder="-- Search --">
+                                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_landlord_btn">
+                                                <span class="material-symbols-outlined" id="search_landlord_icon" style="font-size:18px;">search</span>
+                                                <span class="spinner-border spinner-border-sm" role="status" id="search_landlord_spinner" style="display:none;"></span>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Search by name, reference, phone, email or ID number</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="landlord_direct_select" class="form-label mb-1">Select Landlord <span class="text-danger">*</span></label>
+                                        <select class="form-select form-select-sm" id="landlord_direct_select" disabled>
+                                            <option value="">-- Search First --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Landlord Details (shared) -->
                             <div class="row mb-3">
                                 <div class="col-12">
                                     <small class="text-muted">
@@ -243,6 +286,99 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
+        // Helper to clear landlord details
+        function clearLandlordDetails() {
+            $('#selected_landlord_name').text('-');
+            $('#selected_landlord_mobile').text('-');
+            $('#selected_landlord_email').text('-');
+            $('#selected_landlord_id').text('-');
+            $('#landlord_id').val('');
+        }
+
+        // Mode toggle
+        $('input[name="search_mode"]').on('change', function() {
+            var mode = $(this).val();
+            clearLandlordDetails();
+            if (mode === 'property') {
+                $('#property_mode_section').show();
+                $('#landlord_mode_section').hide();
+            } else {
+                $('#property_mode_section').hide();
+                $('#landlord_mode_section').show();
+            }
+        });
+
+        // Search landlord directly
+        $('#search_landlord_btn').on('click', function() {
+            var searchTerm = $('#landlord_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                toastr.warning('Please enter at least 2 characters to search');
+                return;
+            }
+
+            $('#search_landlord_icon').hide();
+            $('#search_landlord_spinner').show();
+            $('#search_landlord_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/landlord/search-landlords',
+                method: 'GET',
+                data: {
+                    search: searchTerm
+                },
+                success: function(response) {
+                    $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');
+                    if (response.success && response.landlords && response.landlords.length > 0) {
+                        $.each(response.landlords, function(i, l) {
+                            $('#landlord_direct_select').append(
+                                '<option value="' + l.encrypted_id + '"' +
+                                ' data-name="' + (l.names || '') + '"' +
+                                ' data-mobile="' + (l.mobile_number || 'N/A') + '"' +
+                                ' data-email="' + (l.email_address || 'N/A') + '"' +
+                                ' data-id-number="' + (l.national_id || 'N/A') + '">' +
+                                (l.names || '') + ' - ' + (l.reference_number || '') +
+                                '</option>'
+                            );
+                        });
+                        $('#landlord_direct_select').prop('disabled', false);
+                        toastr.success('Found ' + response.landlords.length + ' landlord(s)');
+                    } else {
+                        toastr.info('No landlords found');
+                        $('#landlord_direct_select').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error searching landlords');
+                },
+                complete: function() {
+                    $('#search_landlord_icon').show();
+                    $('#search_landlord_spinner').hide();
+                    $('#search_landlord_btn').prop('disabled', false);
+                }
+            });
+        });
+
+        $('#landlord_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_landlord_btn').click();
+            }
+        });
+
+        // When landlord selected from direct search
+        $('#landlord_direct_select').on('change', function() {
+            var $sel = $(this).find(':selected');
+            if ($(this).val()) {
+                $('#selected_landlord_name').text($sel.data('name'));
+                $('#selected_landlord_mobile').text($sel.data('mobile'));
+                $('#selected_landlord_email').text($sel.data('email'));
+                $('#selected_landlord_id').text($sel.data('id-number'));
+                $('#landlord_id').val($(this).val());
+            } else {
+                clearLandlordDetails();
+            }
+        });
+
         // Search property
         $('#search_property_btn').on('click', function() {
             const searchTerm = $('#property_search_input').val().trim();
@@ -403,6 +539,7 @@
 
         // View Statement
         $('#search_btn').on('click', function() {
+            const mode = $('input[name="search_mode"]:checked').val();
             const landlordId = $('#landlord_id').val();
             const dateType = $('input[name="date_type"]:checked').val();
             const dateFrom = $('#date_from').val();
@@ -424,7 +561,7 @@
             $('#statementModal').modal('show');
             $('#stmt_landlord_name').text($('#selected_landlord_name').text());
 
-            const propertyId = $('#property_id').val();
+            const propertyId = (mode === 'property') ? $('#property_id').val() : '';
             loadStatement(landlordId, dateFrom, dateTo, dateType, propertyId);
         });
 

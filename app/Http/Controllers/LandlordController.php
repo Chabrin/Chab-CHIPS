@@ -102,6 +102,55 @@ class LandlordController extends Controller
     }
 
     /**
+     * Search landlords directly by name/reference/phone/email (AJAX)
+     */
+    public function searchLandlords(Request $request)
+    {
+        try {
+            $search = $request->input('search', '');
+            if (strlen($search) < 2) {
+                return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
+            }
+
+            $landlords = Client::select(
+                'sys_pm_clients.id',
+                'sys_pm_clients.names',
+                'sys_pm_clients.mobile_number',
+                'sys_pm_clients.email_address',
+                'sys_pm_clients.national_id',
+                'sys_pm_clients.reference_number'
+            )
+                ->where('sys_pm_clients.reference_number', 'LIKE', 'LAN%')
+                ->where(function ($q) use ($search) {
+                    $q->where('sys_pm_clients.names', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.reference_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.mobile_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.email_address', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.national_id', 'ILIKE', "%{$search}%");
+                })
+                ->orderBy('sys_pm_clients.names')
+                ->limit(50)
+                ->get()
+                ->map(function ($l) {
+                    return [
+                        'encrypted_id'     => encrypt($l->id),
+                        'names'            => $l->names ?? 'N/A',
+                        'mobile_number'    => $l->mobile_number,
+                        'email_address'    => $l->email_address,
+                        'national_id'      => $l->national_id,
+                        'reference_number' => $l->reference_number,
+                    ];
+                });
+
+            return response()->json(['success' => true, 'landlords' => $landlords]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching landlords: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to search landlords'], 500);
+        }
+    }
+
+    /**
      * Search landlord account statement (AJAX)
      */
     public function searchStatement(Request $request)
