@@ -34,14 +34,6 @@
     }
 }
 
-.toast,
-.toast *,
-.toast .toast-body,
-.toast-message,
-.toast .toast-message {
-    color: #fff !important;
-}
-
 /* ---- TOP NAV ---- */
 .page-wrapper.compact-wrapper .page-header,
 .page-wrapper.compact-wrapper .page-header.close_icon,

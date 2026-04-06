@@ -31,16 +31,17 @@ class PayslipsController extends Controller
             $search = $request->input('search');
 
             $employees = Staff::where(function ($query) use ($search) {
-                $query->where('staff_number', 'LIKE', "%{$search}%")
-                    ->orWhere('email_address', 'LIKE', "%{$search}%")
-                    ->orWhere('national_id', 'LIKE', "%{$search}%")
-                    ->orWhere('full_names', 'LIKE', "%{$search}%");
+                $query->where('staff_number', 'ILIKE', "%{$search}%")
+                    ->orWhere('email_address', 'ILIKE', "%{$search}%")
+                    ->orWhere('national_id', 'ILIKE', "%{$search}%")
+                    ->orWhere('full_names', 'ILIKE', "%{$search}%");
             })
                 ->get([
                     'id as staff_id',
                     'staff_number',
                     'email_address',
                     'national_id',
+                    'mobile_number',
                     'full_names as full_name'
                 ]);
 

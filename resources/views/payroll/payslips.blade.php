@@ -14,61 +14,88 @@
                         <h5 class="mb-0">Employee Payslips</h5>
                     </div>
                     <div class="card-body">
-                        <!-- Search Form -->
-                        <form id="payslip-search-form">
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="employee_search_input" class="form-label">Search Employee</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="employee_search_input"
-                                            placeholder="Search by Staff ID, Name, Email, or National ID">
-                                        <button type="button" class="btn btn-primary" id="search_employee_btn">
-                                            <span class="material-symbols-outlined" id="search_icon">search</span>
-                                            <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display: none;"></span>
-                                        </button>
+                        <div class="row">
+                            <!-- LEFT: Search & Employee Info (col-5) -->
+                            <div class="col-md-5">
+                                <form id="payslip-search-form">
+                                    <!-- Search -->
+                                    <div class="mb-2">
+                                        <label for="employee_search_input" class="form-label mb-1">Search Employee</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" id="employee_search_input"
+                                                placeholder="-- Search --">
+                                            <button type="button" class="btn btn-primary btn-sm" id="search_employee_btn">
+                                                <span class="material-symbols-outlined" id="search_icon" style="font-size:18px;">search</span>
+                                                <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Search by staff number, email, national ID or names</small>
                                     </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="employee_select" class="form-label">Select Employee</label>
-                                    <select class="form-select" id="employee_select" name="staff_id" required>
-                                        <option value="">-- Select Staff --</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="row mb-3">
-                                <div class="col-md-4">
-                                    <label for="payroll_month" class="form-label">Payroll Month</label>
-                                    <input type="month" class="form-control" id="payroll_month" name="payroll_month" required>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-12">
-                                    <div class="d-flex justify-content-end gap-2">
+
+                                    <!-- Select from results -->
+                                    <div class="mb-2">
+                                        <label for="employee_select" class="form-label mb-1">Select Employee</label>
+                                        <select class="form-select form-select-sm" id="employee_select" name="staff_id" required>
+                                            <option value="">-- Select Staff --</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Employee details -->
+                                    <table class="mb-2" style="font-size:12px;width:100%;" id="emp_details_table">
+                                        <tr>
+                                            <td class="text-muted" style="width:80px;padding:2px 4px;">Names</td>
+                                            <td style="padding:2px 4px;" id="emp_full_name">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted" style="padding:2px 4px;">ID No.</td>
+                                            <td style="padding:2px 4px;" id="emp_national_id">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted" style="padding:2px 4px;">Email</td>
+                                            <td style="padding:2px 4px;" id="emp_email">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted" style="padding:2px 4px;">Phone</td>
+                                            <td style="padding:2px 4px;" id="emp_phone">-</td>
+                                        </tr>
+                                    </table>
+
+                                    <!-- Payroll Month -->
+                                    <div class="mb-2">
+                                        <label for="payroll_month" class="form-label mb-1">Payroll Month</label>
+                                        <input type="month" class="form-control form-control-sm" id="payroll_month" name="payroll_month" required>
+                                    </div>
+
+                                    <!-- Buttons -->
+                                    <div class="d-flex gap-2 mt-3">
                                         @permission('read_payslips')
                                         <button type="submit" class="btn btn-primary btn-sm d-flex align-items-center" id="view_payslip_btn">
-                                            <span class="spinner-border spinner-border-sm me-2 d-none" role="status" id="view_spinner"></span>
+                                            <span class="spinner-border spinner-border-sm me-1 d-none" role="status" id="view_spinner"></span>
                                             <span class="material-symbols-outlined me-1" style="font-size:18px;" id="view_icon">receipt_long</span>
-                                            <span>View Payslip</span>
+                                            <span>View</span>
                                         </button>
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="email-pdf" style="display: none;">
-                                            <span class="spinner-border spinner-border-sm me-2 d-none" role="status" id="email_spinner"></span>
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="email-pdf" style="display:none;">
+                                            <span class="spinner-border spinner-border-sm me-1 d-none" role="status" id="email_spinner"></span>
                                             <span class="material-symbols-outlined me-1" style="font-size:18px;" id="email_icon">email</span>
-                                            <span>Email Payslip</span>
+                                            <span>Email</span>
                                         </button>
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="download-pdf" style="display: none;">
-                                            <span class="spinner-border spinner-border-sm me-2 d-none" role="status" id="download_spinner"></span>
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="download-pdf" style="display:none;">
+                                            <span class="spinner-border spinner-border-sm me-1 d-none" role="status" id="download_spinner"></span>
                                             <span class="material-symbols-outlined me-1" style="font-size:18px;" id="download_icon">download</span>
-                                            <span>Download PDF</span>
+                                            <span>Download</span>
                                         </button>
                                         @endpermission
                                     </div>
+                                </form>
+                            </div>
+
+                            <!-- RIGHT: Payslip Display (col-7) -->
+                            <div class="col-md-7" style="border-left:1px solid #dee2e6;">
+                                <h6 class="text-muted mb-2" style="font-size:13px;">Payslip Info</h6>
+                                <div id="payslip-container" style="display:none;">
+                                    <div id="payslip-content"></div>
                                 </div>
                             </div>
-                        </form>
-
-                        <!-- Payslip Display -->
-                        <div id="payslip-container" style="display: none;">
-                            <div id="payslip-content"></div>
                         </div>
                     </div>
                 </div>
@@ -142,12 +169,16 @@
                     if (response.employees && response.employees.length > 0) {
                         let options = '<option value="">-- Select Staff --</option>';
                         response.employees.forEach(function(emp) {
-                            options += `<option value="${emp.staff_id}">
-                            ${emp.full_name} - Staff ID: ${emp.staff_number || 'N/A'} - Email: ${emp.email || 'N/A'}
-                        </option>`;
+                            options += '<option value="' + emp.staff_id + '"' +
+                                ' data-name="' + (emp.full_name || '') + '"' +
+                                ' data-id="' + (emp.national_id || '') + '"' +
+                                ' data-email="' + (emp.email_address || '') + '"' +
+                                ' data-phone="' + (emp.mobile_number || '') + '">' +
+                                (emp.full_name || '') + ' - ' + (emp.staff_number || 'N/A') +
+                                '</option>';
                         });
                         $('#employee_select').html(options);
-                        toastr.success(`Found ${response.employees.length} employee(s)`);
+                        toastr.success('Found ' + response.employees.length + ' employee(s)');
                     } else {
                         toastr.error('No employees found');
                         $('#employee_select').html('<option value="">-- Select Staff --</option>');
@@ -163,6 +194,19 @@
                     $icon.removeClass('d-none');
                 }
             });
+        });
+
+        // Populate employee details when selected
+        $('#employee_select').on('change', function() {
+            var $sel = $(this).find(':selected');
+            if ($(this).val()) {
+                $('#emp_full_name').text($sel.data('name') || '-');
+                $('#emp_national_id').text($sel.data('id') || '-');
+                $('#emp_email').text($sel.data('email') || '-');
+                $('#emp_phone').text($sel.data('phone') || '-');
+            } else {
+                $('#emp_full_name, #emp_national_id, #emp_email, #emp_phone').text('-');
+            }
         });
 
         // Allow search on Enter key
@@ -212,6 +256,18 @@
                         $('#payslip-container').show();
                         $('#download-pdf').show();
                         $('#email-pdf').show();
+
+                        // Scroll to top of payslip card
+                        setTimeout(function() {
+                            var card = document.querySelector('.card-header');
+                            if (card) {
+                                var rect = card.getBoundingClientRect();
+                                window.scrollTo({
+                                    top: window.pageYOffset + rect.top - 50,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }, 300);
 
                         // Store employee data for email
                         $('#email-pdf').data('employee-email', response.employee_email);
