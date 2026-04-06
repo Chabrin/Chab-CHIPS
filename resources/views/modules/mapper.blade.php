@@ -414,6 +414,9 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
 <script>
     $(function() {
         var originalMappings = {};
