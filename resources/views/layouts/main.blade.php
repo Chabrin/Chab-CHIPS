@@ -539,6 +539,7 @@
         font-size: 38px !important;
         color: var(--accent) !important;
         line-height: 1;
+        font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
         transition: transform 0.15s ease, color 0.15s ease;
     }
 
@@ -635,6 +636,28 @@
         font-weight: 600;
         color: #2c3e50;
         flex: 1;
+    }
+
+    .flyout-back-btn {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border: none;
+        background: rgba(53, 152, 219, 0.1);
+        border-radius: 50%;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .flyout-back-btn .material-symbols-outlined {
+        font-size: 20px !important;
+        color: var(--accent);
+    }
+
+    .flyout-back-btn:hover {
+        background: rgba(53, 152, 219, 0.2);
     }
 
     .super-module-flyout-body {
@@ -876,10 +899,15 @@
         .super-module-flyout {
             top: 0 !important;
             left: 0 !important;
-            width: 85% !important;
-            max-width: 300px !important;
+            width: 280px !important;
+            max-width: 280px !important;
             height: 100vh !important;
             bottom: auto !important;
+            transition: left 0.25s ease !important;
+        }
+
+        .flyout-back-btn {
+            display: flex !important;
         }
 
         .super-modules-grid {
@@ -1076,7 +1104,10 @@
             {{-- Super Module Flyout Drawer --}}
             <div class="super-module-flyout" id="superModuleFlyout">
                 <div class="super-module-flyout-header">
-                    <span class="material-symbols-outlined super-module-flyout-icon" id="flyoutIcon"></span>
+                    <button class="flyout-back-btn" id="flyoutBackBtn" type="button">
+                        <span class="material-symbols-outlined">arrow_back</span>
+                    </button>
+                    <span class="material-symbols-outlined super-module-flyout-icon" id="flyoutIcon" style="font-variation-settings: 'FILL' 1;"></span>
                     <h6 id="flyoutTitle"></h6>
                 </div>
                 <div class="super-module-flyout-body" id="flyoutBody">
@@ -1446,6 +1477,16 @@
                         }
                     });
                 });
+
+                // Back button (mobile) — close flyout
+                var flyoutBackBtn = document.getElementById('flyoutBackBtn');
+                if (flyoutBackBtn) {
+                    flyoutBackBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeFlyout();
+                    });
+                }
 
                 // Keep flyout open while hovering over it
                 flyout.addEventListener('mouseenter', function() {
