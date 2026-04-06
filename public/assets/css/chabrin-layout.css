@@ -489,7 +489,7 @@ table.dataTable {
 
 .super-module-item .sidebar-link .sm-icon {
     font-size: 38px !important;
-    color: var(--accent) !important;
+    color: #3598db !important;
     line-height: 1;
     font-variation-settings:
         "FILL" 1,
@@ -516,11 +516,11 @@ table.dataTable {
 
 .super-module-item:hover .sidebar-link .sm-icon {
     transform: scale(1.12);
-    color: var(--accent-dark) !important;
+    color: #217dbb !important;
 }
 
 .super-module-item:hover .sidebar-link .sm-label {
-    color: var(--accent-dark);
+    color: #217dbb;
 }
 
 .super-module-item.active .sidebar-link {
@@ -528,12 +528,12 @@ table.dataTable {
 }
 
 .super-module-item.active .sidebar-link .sm-icon {
-    color: var(--accent-dark) !important;
+    color: #217dbb !important;
     transform: scale(1.12);
 }
 
 .super-module-item.active .sidebar-link .sm-label {
-    color: var(--accent-dark);
+    color: #217dbb;
 }
 
 .super-modules-grid {

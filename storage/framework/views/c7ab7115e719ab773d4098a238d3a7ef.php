@@ -139,13 +139,6 @@
             </div>
             </div>
           </script>
-                <script class="empty-template"
-                    type="text/x-handlebars-template">
-                    <div class="EmptyMessage">
-                    Your search turned up 0 results. 
-                    This most likely means the backend is down, 
-                    yikes!</div>
-                </script>
             </div>
         </div>
         <!-- Page Header Ends                              -->
@@ -215,7 +208,7 @@
                                         <?php $__currentLoopData = $superModuleMenus; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $smId => $sm): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                         <div class="super-module-item" data-super-module-id="<?php echo e($smId); ?>">
                                             <a class="sidebar-link">
-                                                <span class="material-symbols-outlined sm-icon"><?php echo $sm['icon'] ?: 'folder'; ?></span>
+                                                <span style="color:#3598db !important" class="material-symbols-outlined sm-icon"><?php echo $sm['icon'] ?: 'folder'; ?></span>
                                                 <span class="sm-label"><?php echo e($sm['name']); ?></span>
                                             </a>
                                         </div>

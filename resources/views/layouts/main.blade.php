@@ -139,13 +139,6 @@
             </div>
             </div>
           </script>
-                <script class="empty-template"
-                    type="text/x-handlebars-template">
-                    <div class="EmptyMessage">
-                    Your search turned up 0 results. 
-                    This most likely means the backend is down, 
-                    yikes!</div>
-                </script>
             </div>
         </div>
         <!-- Page Header Ends                              -->
@@ -214,7 +207,7 @@
                                         @foreach($superModuleMenus as $smId => $sm)
                                         <div class="super-module-item" data-super-module-id="{{ $smId }}">
                                             <a class="sidebar-link">
-                                                <span class="material-symbols-outlined sm-icon">{!! $sm['icon'] ?: 'folder' !!}</span>
+                                                <span style="color:#3598db !important" class="material-symbols-outlined sm-icon">{!! $sm['icon'] ?: 'folder' !!}</span>
                                                 <span class="sm-label">{{ $sm['name'] }}</span>
                                             </a>
                                         </div>
