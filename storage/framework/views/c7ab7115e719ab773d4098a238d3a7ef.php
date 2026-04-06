@@ -153,7 +153,7 @@
                     </button>
 
                     <div class="logo-wrapper">
-                        <p><b><a href="<?php echo e(route('dashboard')); ?>" style="text-decoration: none; color: inherit;">CHABRIN AGENCY</a></b></p>
+                        <p><b><a href="<?php echo e(route('dashboard')); ?>" style="text-decoration: none; color: inherit;">CHABRIN LTD.</a></b></p>
 
                         <div class="toggle-sidebar">
                             <span class="material-symbols-outlined">

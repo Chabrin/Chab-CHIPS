@@ -412,8 +412,11 @@
     height: 36px !important;
     min-height: 36px !important;
     padding: 6px 0 !important;
+    margin-left: 0 !important;
     background: #f8f9fa !important;
     border-top: 1px solid #e9ecef !important;
+    box-shadow: none !important;
+    width: 100% !important;
 }
 
 .footer .container-fluid {
