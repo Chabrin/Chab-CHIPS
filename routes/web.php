@@ -480,7 +480,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/escalations/notification-settings', [App\Http\Controllers\LeaseEscalationController::class, 'saveNotificationSettings'])->name('property.escalations.notification-settings.save');
 
     // Tenant Movements
-    Route::get('/property/movements', [App\Http\Controllers\TenantMovementController::class, 'index'])->name('property.movements.index');
+    Route::get('/tenant/movements', [App\Http\Controllers\TenantMovementController::class, 'index'])->name('property.movements.index');
     Route::get('/property/movements/data', [App\Http\Controllers\TenantMovementController::class, 'getData'])->name('property.movements.data');
     Route::get('/property/movements/create', [App\Http\Controllers\TenantMovementController::class, 'create'])->name('property.movements.create');
     Route::post('/property/movements/store', [App\Http\Controllers\TenantMovementController::class, 'store'])->name('property.movements.store');
