@@ -418,7 +418,7 @@ class LoginController extends Controller
             if (!$user) {
                 return redirect()->route('login')->with('error', 'Please login to view your profile');
             }
-            $user = User::with('employee')->find($user->id);
+            $user = User::with('employee', 'staffLink.staff')->find($user->id);
             $assignedCompanies = [];
             if ($user->role_companies && count($user->role_companies) > 0) {
                 $assignedCompanies = Company::whereIn('id', $user->role_companies)

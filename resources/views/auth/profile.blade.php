@@ -175,6 +175,28 @@
                                 </div>
                             </div>
 
+                            <div class="col-lg-4">
+                                <div class="d-flex align-items-start gap-2">
+                                    <span class="material-symbols-outlined" style="font-size:28px;">badge</span>
+                                    <div>
+                                        <div class="small text-muted">Linked Staff Record</div>
+                                        <div class="fw-bold">
+                                            @if($user->staffLink && $user->staffLink->staff)
+                                            @php $linkedStaff = $user->staffLink->staff; @endphp
+                                            <a href="{{ route('staff.show', Illuminate\Support\Facades\Crypt::encrypt($linkedStaff->id)) }}"
+                                               class="d-flex align-items-center gap-1 text-decoration-none">
+                                                <span>{{ $linkedStaff->full_names }}</span>
+                                                <span class="text-muted small">({{ $linkedStaff->staff_number }})</span>
+                                                <span class="material-symbols-outlined" style="font-size:16px;">open_in_new</span>
+                                            </a>
+                                            @else
+                                            <span class="text-muted">Not linked</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             @if($user->role_companies && count($user->role_companies) > 0)
                             <div class="col-12">
                                 <div class="mt-2">

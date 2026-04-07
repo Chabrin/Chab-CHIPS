@@ -109,6 +109,11 @@ class User extends Authenticatable implements LaratrustUser
         return $this->hasMany(UserAccessLog::class)->action('logout');
     }
 
+    public function staffLink()
+    {
+        return $this->hasOne(UserStaffLink::class);
+    }
+
     /**
      * Mutator to hash passwords automatically
      */

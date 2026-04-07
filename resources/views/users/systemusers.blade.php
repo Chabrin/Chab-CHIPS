@@ -25,6 +25,7 @@
                                         <th>Name</th>
                                         <th>Email</th>
                                         <th>Role</th>
+                                        <th>Linked Staff</th>
                                         <th>Status</th>
                                         <th>Action</th>
                                     </tr>
@@ -74,6 +75,13 @@
                             @foreach(DB::table('cb_roles')->get() as $role)
                             <option value="{{ $role->id }}">{{ $role->display_name }}</option>
                             @endforeach
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_staff_id" class="form-label">Linked Staff <span class="text-muted small">(optional)</span></label>
+                        <select class="form-select" id="add_staff_id" name="staff_id" style="width:100%;">
+                            <option value="">Search by name or staff number...</option>
                         </select>
                         <div class="invalid-feedback"></div>
                     </div>
@@ -130,6 +138,13 @@
                             @foreach(DB::table('cb_roles')->get() as $role)
                             <option value="{{ $role->id }}">{{ $role->display_name }}</option>
                             @endforeach
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_staff_id" class="form-label">Linked Staff <span class="text-muted small">(optional)</span></label>
+                        <select class="form-select" id="edit_staff_id" name="staff_id" style="width:100%;">
+                            <option value="">Search by name or staff number...</option>
                         </select>
                         <div class="invalid-feedback"></div>
                     </div>
@@ -255,6 +270,16 @@
                         defaultContent: '-'
                     },
                     {
+                        data: null,
+                        render: function(data, type, row) {
+                            if (row.linked_staff_id) {
+                                return '<span>' + row.linked_staff_name + '</span>'
+                                     + '<br><small class="text-muted">' + (row.linked_staff_number || '') + '</small>';
+                            }
+                            return '<span class="text-muted">—</span>';
+                        }
+                    },
+                    {
                         data: 'block',
                         render: function(data) {
                             return data == 0 ?
@@ -300,6 +325,42 @@
         }
 
         loadUsers();
+
+        // Select2 staff search config factory
+        function staffSelect2Config(modalSelector) {
+            return {
+                placeholder: 'Search by name or staff number...',
+                allowClear: true,
+                minimumInputLength: 1,
+                dropdownParent: $(modalSelector),
+                ajax: {
+                    url: '{{ route("user.ajax.staff.search") }}',
+                    dataType: 'json',
+                    delay: 300,
+                    data: function(params) { return { q: params.term }; },
+                    processResults: function(data) {
+                        return {
+                            results: data.map(function(s) {
+                                return {
+                                    id: s.id,
+                                    text: s.full_names + (s.staff_number ? ' (' + s.staff_number + ')' : '')
+                                };
+                            })
+                        };
+                    }
+                }
+            };
+        }
+
+        // Init Select2 on Add modal open
+        $('#addUserModal').on('shown.bs.modal', function() {
+            $('#add_staff_id').select2(staffSelect2Config('#addUserModal'));
+        });
+        $('#addUserModal').on('hidden.bs.modal', function() {
+            if ($('#add_staff_id').hasClass('select2-hidden-accessible')) {
+                $('#add_staff_id').select2('destroy');
+            }
+        });
 
         // Clear form errors
         function clearFormErrors(form) {
@@ -373,6 +434,24 @@
                         $('#edit_username').val(response.user.username);
                         $('#edit_email').val(response.user.email);
                         $('#edit_role').val(response.user.role_id);
+
+                        // Init Select2 then pre-populate linked staff
+                        const $staffSelect = $('#edit_staff_id');
+                        if ($staffSelect.hasClass('select2-hidden-accessible')) {
+                            $staffSelect.select2('destroy');
+                        }
+                        $staffSelect.select2(staffSelect2Config('#editUserModal'));
+                        $staffSelect.empty();
+
+                        if (response.user.linked_staff_id) {
+                            const label = response.user.linked_staff_name +
+                                (response.user.linked_staff_number ? ' (' + response.user.linked_staff_number + ')' : '');
+                            $staffSelect.append(new Option(label, response.user.linked_staff_id, true, true));
+                        } else {
+                            $staffSelect.append(new Option('', '', true, true));
+                        }
+                        $staffSelect.trigger('change');
+
                         $('#editUserModal').modal('show');
                     }
                 },
@@ -380,6 +459,14 @@
                     toastr.error(xhr.responseJSON.error || 'Failed to load user data');
                 }
             });
+        });
+
+        // Destroy Select2 on edit modal close
+        $('#editUserModal').on('hidden.bs.modal', function() {
+            const $staffSelect = $('#edit_staff_id');
+            if ($staffSelect.hasClass('select2-hidden-accessible')) {
+                $staffSelect.select2('destroy');
+            }
         });
 
         // Edit User Form Submit
@@ -505,6 +592,9 @@
         $('#addUserModal').on('hidden.bs.modal', function() {
             $('#addUserForm')[0].reset();
             clearFormErrors($('#addUserForm'));
+            const $s = $('#add_staff_id');
+            if ($s.hasClass('select2-hidden-accessible')) { $s.select2('destroy'); }
+            $s.empty().append(new Option('', '', true, true));
         });
 
         $('#editUserModal').on('hidden.bs.modal', function() {

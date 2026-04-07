@@ -151,4 +151,9 @@ class Staff extends Model
     {
         return $this->hasMany(DisciplineWitnessStatement::class, 'witness_staff_id');
     }
+
+    public function userLink()
+    {
+        return $this->hasOne(UserStaffLink::class);
+    }
 }

@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use App\Services\ErrorDispatcher;
 use App\Models\User;
+use App\Models\Staff;
+use App\Models\UserStaffLink;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -70,7 +72,10 @@ class UsersController extends Controller
             $users = DB::table('josya_users as u')
                 ->leftJoin('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
                 ->leftJoin('cb_roles as r', 'ru.role_id', '=', 'r.id')
-                ->select('u.id', 'u.name', 'u.username', 'u.email', 'r.display_name as role_name', 'u.block')
+                ->leftJoin('sys_user_staff_links as usl', 'u.id', '=', 'usl.user_id')
+                ->leftJoin('sys_staff as s', 'usl.staff_id', '=', 's.id')
+                ->select('u.id', 'u.name', 'u.username', 'u.email', 'r.display_name as role_name', 'u.block',
+                         's.id as linked_staff_id', 's.full_names as linked_staff_name', 's.staff_number as linked_staff_number')
                 ->get();
 
             // Check permissions
@@ -96,8 +101,11 @@ class UsersController extends Controller
         try {
             $user = DB::table('josya_users as u')
                 ->leftJoin('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
+                ->leftJoin('sys_user_staff_links as usl', 'u.id', '=', 'usl.user_id')
+                ->leftJoin('sys_staff as s', 'usl.staff_id', '=', 's.id')
                 ->where('u.id', $id)
-                ->select('u.id', 'u.name', 'u.username', 'u.email', 'ru.role_id', 'u.block')
+                ->select('u.id', 'u.name', 'u.username', 'u.email', 'ru.role_id', 'u.block',
+                         's.id as linked_staff_id', 's.full_names as linked_staff_name', 's.staff_number as linked_staff_number')
                 ->first();
 
             if (!$user) {
@@ -120,6 +128,7 @@ class UsersController extends Controller
                 'username' => 'required|string|max:100|unique:josya_users,username',
                 'email' => 'required|email|max:255|unique:josya_users,email',
                 'role_id' => 'required|integer|exists:cb_roles,id',
+                'staff_id' => 'nullable|integer|exists:sys_staff,id|unique:sys_user_staff_links,staff_id',
             ]);
 
             $user = User::create([
@@ -145,6 +154,13 @@ class UsersController extends Controller
                 'role_id' => $validated['role_id'],
             ]);
 
+            if (!empty($validated['staff_id'])) {
+                UserStaffLink::create([
+                    'user_id' => $user->id,
+                    'staff_id' => $validated['staff_id'],
+                ]);
+            }
+
             return response()->json(['success' => true, 'message' => 'User created successfully']);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -165,6 +181,10 @@ class UsersController extends Controller
                 'username' => ['required', 'string', 'max:100', Rule::unique('josya_users', 'username')->ignore($user->id)],
                 'email' => ['required', 'email', 'max:255', Rule::unique('josya_users', 'email')->ignore($user->id)],
                 'role_id' => 'required|integer|exists:cb_roles,id',
+                'staff_id' => [
+                    'nullable', 'integer', 'exists:sys_staff,id',
+                    Rule::unique('sys_user_staff_links', 'staff_id')->where(fn($q) => $q->where('user_id', '!=', $id)),
+                ],
             ]);
 
             $user->name = $validated['name'];
@@ -172,13 +192,20 @@ class UsersController extends Controller
             $user->email = $validated['email'];
             $user->save();
 
-
-
             DB::table('cb_role_user')->where('user_id', $id)->delete();
             DB::table('cb_role_user')->insert([
                 'user_id' => $id,
                 'role_id' => $validated['role_id'],
             ]);
+
+            if (!empty($validated['staff_id'])) {
+                UserStaffLink::updateOrCreate(
+                    ['user_id' => $id],
+                    ['staff_id' => $validated['staff_id']]
+                );
+            } else {
+                UserStaffLink::where('user_id', $id)->delete();
+            }
 
             return response()->json(['success' => true, 'message' => 'User updated successfully']);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -213,6 +240,28 @@ class UsersController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error activating user: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to activate user'], 500);
+        }
+    }
+
+    public function staffSearch(Request $request)
+    {
+        try {
+            $query = trim($request->input('q', ''));
+
+            $staff = DB::table('sys_staff')
+                ->where(function ($q) use ($query) {
+                    $q->where('full_names', 'like', '%' . $query . '%')
+                      ->orWhere('staff_number', 'like', '%' . $query . '%');
+                })
+                ->select('id', 'full_names', 'staff_number')
+                ->orderBy('full_names')
+                ->limit(20)
+                ->get();
+
+            return response()->json($staff);
+        } catch (\Exception $e) {
+            Log::error('Error searching staff: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to search staff'], 500);
         }
     }
 }

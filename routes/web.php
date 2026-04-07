@@ -865,6 +865,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // System Users
     Route::get('/roles/users', [UsersController::class, 'systemUsers'])->name('system.users');
     Route::get('/users/ajax/list', [UsersController::class, 'systemUsersAjax'])->name('user.ajax.list');
+    Route::get('/users/ajax/staff-search', [UsersController::class, 'staffSearch'])->name('user.ajax.staff.search');
     Route::get('/users/ajax/{id}', [UsersController::class, 'getUserAjax'])->name('user.ajax.get');
     Route::post('/users/ajax/store', [UsersController::class, 'storeSystemUser'])->name('user.ajax.store');
     Route::post('/users/ajax/update/{id}', [UsersController::class, 'updateSystemUser'])->name('user.ajax.update');
