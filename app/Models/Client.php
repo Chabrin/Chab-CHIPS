@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\Notifiable;
 
 class Client extends Model
 {
+    use Notifiable;
     protected $table = 'sys_pm_clients';
     protected $primaryKey = 'id';
     public $incrementing = true;
@@ -67,6 +69,11 @@ class Client extends Model
         'lease_start_date' => 'datetime',
         'rent_amount' => 'decimal:2',
     ];
+
+    public function routeNotificationForMail(): string
+    {
+        return $this->email_address;
+    }
 
     /**
      * Scope a query to only include clients with type_id = 1

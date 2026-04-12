@@ -7,8 +7,12 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Lease Management</h5>
-                        @permission('create_lease_agreements')
+                        {{-- @permission('create_lease_agreements') --}}
                         <div class="ms-auto d-flex gap-2">
+                            <a href="{{ route('property.lease-settings.contract-templates.index') }}" class="btn btn-secondary btn-sm d-flex align-items-center" title="Manage contract templates">
+                                <span class="material-symbols-outlined">article</span>
+                                <span class="ms-1">Contract Templates</span>
+                            </a>
                             <button type="button" class="btn btn-success btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#renewalModal">
                                 <span class="material-symbols-outlined">autorenew</span>
                                 <span class="ms-1">Bulk Renewal</span>
@@ -18,7 +22,7 @@
                                 <span class="ms-1">New Lease</span>
                             </a>
                         </div>
-                        @endpermission
+                        {{-- @endpermission --}}
                     </div>
                     <div class="card-body">
                         @if(session('success'))
@@ -105,6 +109,7 @@
                                                     <th>End Date</th>
                                                     <th>Days to Expiry</th>
                                                     <th>Status</th>
+                                                    <th>Contract</th>
                                                     <th>Actions</th>
                                                 </tr>
                                             </thead>
@@ -362,14 +367,31 @@
                     }
                 },
                 {
+                    data: 'contract_status',
+                    orderable: false,
+                    searchable: false,
+                    render: function(status, type, row) {
+                        if (status === 'signed') {
+                            return '<span class="badge badge-light-success"><i class="fa fa-check me-1"></i>Signed</span>';
+                        } else if (status === 'sent') {
+                            return '<span class="badge badge-light-warning"><i class="fa fa-envelope me-1"></i>Sent</span>';
+                        }
+                        return '<span class="badge badge-light-secondary">Not Sent</span>';
+                    }
+                },
+                {
                     data: 'encrypted_tenant_id',
                     orderable: false,
                     searchable: false,
                     render: function(encryptedId, type, row) {
+                        let sendBtn = row.contract_status !== 'signed'
+                            ? `<button class="btn btn-sm btn-outline-info send-contract-btn ms-1" data-id="${row.ref_number}" title="${row.contract_status === 'sent' ? 'Resend' : 'Send'} Contract"><i class="fa fa-paper-plane"></i></button>`
+                            : '';
                         return `
                             <a href="/tenants/${encryptedId}" class="text-primary" title="View Tenant">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">visibility</span>
                             </a>
+                            ${sendBtn}
                         `;
                     }
                 }
@@ -611,6 +633,30 @@
             }
             
             loadLeasesData(filters);
+        });
+
+        // Send / Resend Contract button
+        $(document).on('click', '.send-contract-btn', function() {
+            const id = $(this).data('id');
+            const btn = $(this);
+            if (!confirm('Send the lease contract to this tenant for digital signing?')) return;
+
+            btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+
+            $.ajax({
+                url: '/property/leases/' + id + '/send-contract',
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                success: function(res) {
+                    toastr.success(res.message);
+                    // Refresh table
+                    loadLeasesData({ client_id: $('#filter_client').val(), property_id: $('#filter_property').val() });
+                },
+                error: function(xhr) {
+                    toastr.error(xhr.responseJSON?.message || 'Failed to send contract.');
+                    btn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i>');
+                }
+            });
         });
 
         // Initialize Tenants Without Leases DataTable
