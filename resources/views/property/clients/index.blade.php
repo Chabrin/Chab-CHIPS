@@ -68,11 +68,11 @@
     $(document).ready(function() {
         var table = $('#clients-table').DataTable({
             processing: true,
-            serverSide: false,
+            serverSide: true,
             ajax: {
                 url: "{{ route('property.clients.data') }}",
                 type: 'GET',
-                dataSrc: 'clients'
+                dataSrc: 'data'
             },
             columns: [{
                     data: null,
@@ -136,6 +136,7 @@
             info: true,
             lengthChange: true,
             searching: true,
+            pageLength: 25,
             ordering: true,
             orderCellsTop: true,
             order: [

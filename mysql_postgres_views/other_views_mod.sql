@@ -1,8 +1,8 @@
 -- ============================================================================
 -- OTHER MODULE: CREATE OR ALTER VIEW Scripts  (mod batch)
 -- ============================================================================
--- Source:    chabrins_to_postgres_views.sql
--- Database:  CHABRINS
+-- Source:    CHABRINS_NEW_to_postgres_views.sql
+-- Database:  CHABRINS_NEW
 -- Generated: 2026-03-15
 --
 -- Execution: Run the entire file as ONE query (no GO separators).
@@ -36,7 +36,7 @@
 --   _026  vw_cb_landlord_charge_pairs_026
 -- ============================================================================
 
-USE CHABRINS;
+USE CHABRINS_NEW;
 
 -- ============================================================================
 -- _001  vw_sys_pm_properties_001
@@ -70,7 +70,7 @@ SELECT
     b.zone_manager_id                                   AS zone_manager_id,
     -- PRE-STAMPED: officer_id from CHOFFICERS via ZMGRID
     NULL                                                AS parent_property_id
-FROM CHABRINS.dbo.CHBLOCKS b
+FROM CHABRINS_NEW.dbo.CHBLOCKS b
 WHERE b.BLOCKID IS NOT NULL;
 ';
 
@@ -134,7 +134,7 @@ SELECT
     NULL                                                AS promas_id,
     RTRIM(LTRIM(c.MANHSE))                              AS properties,
     NULL                                                AS overdraft_penalty
-FROM CHABRINS.dbo.CHLRDS c
+FROM CHABRINS_NEW.dbo.CHLRDS c
 WHERE c.LORDID IS NOT NULL AND RTRIM(LTRIM(c.LORDID)) <> '''';
 ';
 
@@ -170,7 +170,7 @@ SELECT
     0                                                   AS initial_water_meter_reading,
     NULL                                                AS topology_id,
     NULL                                                AS block_owner_tenant_id
-FROM CHABRINS.dbo.CHBUNITS u
+FROM CHABRINS_NEW.dbo.CHBUNITS u
 WHERE u.unit_id IS NOT NULL;
 ';
 
@@ -233,7 +233,7 @@ SELECT
     NULL                                                AS promas_id,
     NULL                                                AS properties,
     NULL                                                AS overdraft_penalty
-FROM CHABRINS.dbo.CHTENS t
+FROM CHABRINS_NEW.dbo.CHTENS t
 WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '''';
 ';
 
@@ -261,7 +261,7 @@ SELECT
     RTRIM(LTRIM(t.BLOCKNO)) + ''-'' + RTRIM(LTRIM(t.UNITNO)) + ''-'' + LEFT(RTRIM(LTRIM(t.TENNAME)), 20)  AS ref_number,
     NULL                                                AS created_by_id,
     NULL                                                AS sla_id,
-    -- NOTE: No SLA/service-agreement table exists in CHABRINS.
+    -- NOTE: No SLA/service-agreement table exists in CHABRINS_NEW.
     -- sla_id must be assigned manually post-migration by matching
     -- sys_pm_service_agreements.property_id to the migrated property.
     blk.zone_id                                         AS zone_id,
@@ -277,8 +277,8 @@ SELECT
     NULL                                                AS documents,
     NULL                                                AS linked_lease_id,
     ''No''                                                AS override_rent_calc
-FROM CHABRINS.dbo.CHTENS t
-LEFT JOIN CHABRINS.dbo.CHBLOCKS blk
+FROM CHABRINS_NEW.dbo.CHTENS t
+LEFT JOIN CHABRINS_NEW.dbo.CHBLOCKS blk
   ON RTRIM(LTRIM(blk.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
 WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '''';
 ';
@@ -294,7 +294,7 @@ SELECT
     NULL                                                AS estates_id,
     RTRIM(LTRIM(z.bloc))                                AS zone_name,
     1                                                   AS current_status_id
-FROM CHABRINS.dbo._mig_zones z;
+FROM CHABRINS_NEW.dbo._mig_zones z;
 ';
 
 -- ============================================================================
@@ -308,8 +308,8 @@ SELECT
     RTRIM(LTRIM(za.blocal))                             AS area_name,
     z.zone_id                                           AS zone_id
     -- PRE-STAMPED: zone_id from _mig_zones via bloc
-FROM CHABRINS.dbo._mig_zone_areas za
-LEFT JOIN CHABRINS.dbo._mig_zones z ON z.bloc = za.bloc;
+FROM CHABRINS_NEW.dbo._mig_zone_areas za
+LEFT JOIN CHABRINS_NEW.dbo._mig_zones z ON z.bloc = za.bloc;
 ';
 
 -- ============================================================================
@@ -332,7 +332,7 @@ SELECT
     CASE WHEN CHRGTYP = ''BILL'' THEN ''Yes'' ELSE ''No'' END  AS is_bill,
     ''Yes''                                               AS fixed_amount,
     ISNULL(DEFAMT, 0)                                   AS amount
-FROM CHABRINS.dbo.CHCHRS
+FROM CHABRINS_NEW.dbo.CHCHRS
 WHERE CHRGID IS NOT NULL;
 ';
 
@@ -403,7 +403,7 @@ SELECT
     CASE WHEN ISNULL(n.TRAYR, 0) > 0 AND n.TRAMNTH BETWEEN 1 AND 12
          THEN TRY_CONVERT(DATE, CAST(n.TRAYR AS VARCHAR(4)) + ''-'' + RIGHT(''0'' + CAST(n.TRAMNTH AS VARCHAR(2)), 2) + ''-01'')
          ELSE NULL END AS returns_period
-FROM CHABRINS.dbo.CHTNTRS n
+FROM CHABRINS_NEW.dbo.CHTNTRS n
 WHERE n.TENNAME IS NOT NULL AND n.BLOCKID IS NOT NULL;
 ';
 
@@ -451,7 +451,7 @@ SELECT
     1                                                   AS current_status_id
     -- NOTE: cancelled receipts (CHRCS) are updated post-migration
     -- see Post_Migration_Scripts.sql
-FROM CHABRINS.dbo.CHTPAYS p
+FROM CHABRINS_NEW.dbo.CHTPAYS p
 WHERE p.TENNAME IS NOT NULL
   AND p.BLOCKID IS NOT NULL;
 ';
@@ -498,7 +498,7 @@ SELECT
     d.voucher_id                                        AS voucher_id,
     d.property_id                                       AS property_id,
     1                                                   AS current_status_id
-FROM CHABRINS.dbo.CHBCTD d
+FROM CHABRINS_NEW.dbo.CHBCTD d
 WHERE d.BTCHID IS NOT NULL;
 ';
 
@@ -543,7 +543,7 @@ SELECT
     a.zone_manager_id                                   AS zone_manager_id,
     CASE WHEN RTRIM(LTRIM(a.DELSTAT)) = ''Del'' THEN 2
          ELSE 1 END                                     AS current_status_id
-FROM CHABRINS.dbo.CHTACC a
+FROM CHABRINS_NEW.dbo.CHTACC a
 WHERE a.DRCR IS NOT NULL;
 ';
 
@@ -571,7 +571,7 @@ SELECT
     r.CANBY                                             AS canby,
     r.CANREASON                                         AS canreason,
     r.CANDATE                                           AS candate
-FROM CHABRINS.dbo.CHRCS r;
+FROM CHABRINS_NEW.dbo.CHRCS r;
 ';
 
 -- ============================================================================
@@ -631,7 +631,7 @@ SELECT
     h.AUTHUN                                            AS auth_un,
     ISNULL(h.OVDPER, 0)                                 AS overdraft_percentage,
     h.return_id                                         AS return_id
-FROM CHABRINS.dbo.CHRHMS h
+FROM CHABRINS_NEW.dbo.CHRHMS h
 WHERE h.RETURNID IS NOT NULL;
 ';
 
@@ -691,7 +691,7 @@ SELECT
     x.tenant_id                                         AS tenant_id,
     x.return_id                                         AS return_id,
     x.invoice_id                                        AS invoice_id
-FROM CHABRINS.dbo.CHRTXS x
+FROM CHABRINS_NEW.dbo.CHRTXS x
 WHERE x.RETURNID IS NOT NULL;
 ';
 
@@ -730,7 +730,7 @@ SELECT
     ''''                                                  AS otep,
     0                                                   AS [requireReset],
     o.officer_id                                        AS officer_id
-FROM CHABRINS.dbo.CHOFFICERS o
+FROM CHABRINS_NEW.dbo.CHOFFICERS o
 WHERE o.officer_id IS NOT NULL;
 ';
 
@@ -738,7 +738,7 @@ WHERE o.officer_id IS NOT NULL;
 -- _018  vw_sys_pm_service_agreements_018
 -- ============================================================================
 -- SOURCE: CHBLOCKS (1,842 rows) — one SLA per property.
---   CHABRINS has NO dedicated SLA table, but CHBLOCKS stores commission rate
+--   CHABRINS_NEW has NO dedicated SLA table, but CHBLOCKS stores commission rate
 --   (COMRATE) and VAT applicability (VATABL) per property/block.
 --   QRYCOMMS (10,009 rows) has monthly commission history but CHBLOCKS.COMRATE
 --   holds the current/latest rate directly.
@@ -771,7 +771,7 @@ SELECT
     NULL                                                AS years,
     16.00                                               AS vat_per,
     0                                                   AS flat_rate_vat
-FROM CHABRINS.dbo.CHBLOCKS b
+FROM CHABRINS_NEW.dbo.CHBLOCKS b
 WHERE b.BLOCKID IS NOT NULL;
 ';
 
@@ -814,7 +814,7 @@ SELECT
     RTRIM(LTRIM(l.RETURNID))                            AS return_code,
     l.client_id                                         AS client_id,
     l.property_id                                       AS property_id
-FROM CHABRINS.dbo.CHLACC l
+FROM CHABRINS_NEW.dbo.CHLACC l
 WHERE l.LORDID IS NOT NULL;
 ';
 
@@ -869,7 +869,7 @@ SELECT
     r.PLSTATUS                                          AS processing_status,
     r.RSTATUS                                           AS record_status,
     CAST(ISNULL(r.LOCKD, 0) AS BIT)                     AS is_locked
-FROM CHABRINS.dbo.CHRACT r
+FROM CHABRINS_NEW.dbo.CHRACT r
 WHERE r.recovery_id IS NOT NULL;
 ';
 
@@ -903,7 +903,7 @@ SELECT
     ISNULL(h.STPRINT, 0)                                AS is_printed,
     h.CHECKDAT                                          AS checked_date,
     h.AUTHDAT                                           AS authorized_date
-FROM CHABRINS.dbo.CHPVHH h
+FROM CHABRINS_NEW.dbo.CHPVHH h
 WHERE h.PVNO IS NOT NULL;
 ';
 
@@ -943,7 +943,7 @@ SELECT
     ISNULL(h.CHECKSTT, 0)                               AS checked_status,
     ISNULL(h.AUTHSTT, 0)                                AS authorized_status,
     h.ENTCNT                                            AS entry_count
-FROM CHABRINS.dbo.CHPVH h
+FROM CHABRINS_NEW.dbo.CHPVH h
 WHERE h.PVNO IS NOT NULL;
 ';
 
@@ -985,7 +985,7 @@ SELECT
     d.UNLCKBY                                           AS unlocked_by,
     d.UNLCKDAT                                          AS unlocked_date,
     d.UNLCKRS                                           AS unlock_reason
-FROM CHABRINS.dbo.CHPVDD d
+FROM CHABRINS_NEW.dbo.CHPVDD d
 WHERE d.PVNO IS NOT NULL;
 ';
 
@@ -1020,7 +1020,7 @@ SELECT
     ISNULL(d.STPOST, 0)                                 AS is_posted,
     d.PYEAR                                             AS payment_year,
     d.PMONTH                                            AS payment_month
-FROM CHABRINS.dbo.CHPVD d
+FROM CHABRINS_NEW.dbo.CHPVD d
 WHERE d.PVNO IS NOT NULL;
 ';
 
@@ -1039,7 +1039,7 @@ SELECT
     c.item_id                                           AS id,
     RTRIM(LTRIM(c.PCHRGID))                             AS primary_charge_code,
     RTRIM(LTRIM(c.DCHRGID))                             AS debit_charge_code
-FROM CHABRINS.dbo.CHCDC c
+FROM CHABRINS_NEW.dbo.CHCDC c
 WHERE c.PCHRGID IS NOT NULL;
 ';
 

@@ -655,7 +655,7 @@ use Illuminate\Support\Facades\Crypt;
             $('#tenantSpinner').show();
 
             $.ajax({
-                url: "{{ route('property.tenants.get') }}",
+                url: "{{ route('ajax.property.tenants.get') }}",
                 type: 'GET',
                 data: {
                     property_id: propertyId
