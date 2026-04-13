@@ -182,9 +182,6 @@
     <table class="header-table">
         <tr>
             <td class="logo-col">
-                @if($logoSrc)
-                <img src="{{ $logoSrc }}" alt="Logo" style="max-width: 90px; max-height: 70px;">
-                @endif
             </td>
             <td class="title-col">
                 <p class="company-name">CHABRIN AGENCIES LIMITED</p>
@@ -243,13 +240,44 @@
     <table class="data-table">
         <thead>
             <tr>
+                <th style="width: 16%;">Date</th>
+                <th style="width: 44%;">Narration</th>
+                <th style="width: 18%;">Ref</th>
+                <th style="width: 22%;">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($debits as $line)
+            <tr>
+                <td>{{ $line['date'] }}</td>
+                <td>{{ $line['narration'] }}</td>
+                <td>{{ $line['ref'] }}</td>
+                <td class="amount">{{ number_format($line['amount'], 2) }}</td>
+            </tr>
+            @empty
+            <tr>
+                <td colspan="4" style="text-align:center;">No deduction lines found.</td>
+            </tr>
+            @endforelse
+            <tr class="subtotal-row">
+                <td></td>
+                <td colspan="2">Subtotal</td>
+                <td class="amount">{{ number_format($totals['debits'], 2) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-title">OTHER RECEIPTS FROM LANDLORD ACC</div>
+    <table class="data-table">
+        <thead>
+            <tr>
                 <th style="width: 58%;">Narration</th>
                 <th style="width: 18%;">Ref</th>
                 <th style="width: 24%;">Amount</th>
             </tr>
         </thead>
         <tbody>
-            @forelse($debits as $line)
+            @forelse($otherReceipts as $line)
             <tr>
                 <td>{{ $line['narration'] }}</td>
                 <td>{{ $line['ref'] }}</td>
@@ -257,12 +285,12 @@
             </tr>
             @empty
             <tr>
-                <td colspan="3" style="text-align:center;">No deduction lines found.</td>
+                <td colspan="3" style="text-align:center;">No other landlord receipts found.</td>
             </tr>
             @endforelse
             <tr class="subtotal-row">
                 <td colspan="2">Subtotal</td>
-                <td class="amount">{{ number_format($totals['debits'], 2) }}</td>
+                <td class="amount">{{ number_format($totals['other_receipts'], 2) }}</td>
             </tr>
         </tbody>
     </table>

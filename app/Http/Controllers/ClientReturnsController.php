@@ -1801,6 +1801,32 @@ class ClientReturnsController extends Controller
                 $row += 2;
 
                 $sheet->setCellValue('A' . $row, 'LESS');
+                $sheet->mergeCells('A' . $row . ':D' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                foreach (['A' => 'Date', 'B' => 'Narration', 'C' => 'Ref', 'D' => 'Amount'] as $col => $header) {
+                    $sheet->setCellValue($col . $row, $header);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+                $row++;
+
+                foreach ($masterData['debits'] as $line) {
+                    $sheet->setCellValue('A' . $row, $line['date']);
+                    $sheet->setCellValue('B' . $row, $line['narration']);
+                    $sheet->setCellValue('C' . $row, $line['ref']);
+                    $sheet->setCellValue('D' . $row, $line['amount']);
+                    $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $sheet->setCellValue('B' . $row, 'Subtotal');
+                $sheet->setCellValue('D' . $row, $masterData['totals']['debits']);
+                $sheet->getStyle('A' . $row . ':D' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row += 2;
+
+                $sheet->setCellValue('A' . $row, 'OTHER RECEIPTS FROM LANDLORD ACC');
                 $sheet->mergeCells('A' . $row . ':C' . $row);
                 $sheet->getStyle('A' . $row)->getFont()->setBold(true);
                 $row++;
@@ -1811,7 +1837,7 @@ class ClientReturnsController extends Controller
                 }
                 $row++;
 
-                foreach ($masterData['debits'] as $line) {
+                foreach ($masterData['otherReceipts'] as $line) {
                     $sheet->setCellValue('A' . $row, $line['narration']);
                     $sheet->setCellValue('B' . $row, $line['ref']);
                     $sheet->setCellValue('C' . $row, $line['amount']);
@@ -1820,22 +1846,22 @@ class ClientReturnsController extends Controller
                 }
 
                 $sheet->setCellValue('A' . $row, 'Subtotal');
-                $sheet->setCellValue('C' . $row, $masterData['totals']['debits']);
+                $sheet->setCellValue('C' . $row, $masterData['totals']['other_receipts']);
                 $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
                 $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
                 $row += 2;
 
                 $sheet->setCellValue('A' . $row, 'Amount Payable');
-                $sheet->setCellValue('C' . $row, $masterData['totals']['amount_payable']);
+                $sheet->setCellValue('D' . $row, $masterData['totals']['amount_payable']);
                 $row++;
                 $sheet->setCellValue('A' . $row, 'Amount Paid');
-                $sheet->setCellValue('C' . $row, $masterData['totals']['amount_paid']);
+                $sheet->setCellValue('D' . $row, $masterData['totals']['amount_paid']);
                 $row++;
                 $sheet->setCellValue('A' . $row, 'Balance');
-                $sheet->setCellValue('C' . $row, $masterData['totals']['balance']);
-                $sheet->getStyle('A' . ($row - 2) . ':C' . $row)->getFont()->setBold(true);
+                $sheet->setCellValue('D' . $row, $masterData['totals']['balance']);
+                $sheet->getStyle('A' . ($row - 2) . ':D' . $row)->getFont()->setBold(true);
                 foreach (range($row - 2, $row) as $totRow) {
-                    $sheet->getStyle('C' . $totRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle('D' . $totRow)->getNumberFormat()->setFormatCode('#,##0.00');
                 }
 
                 $row += 3;
@@ -1957,15 +1983,18 @@ class ClientReturnsController extends Controller
     private function buildMasterReturnExportData(ReturnSummary $return): array
     {
         $lines = ReturnClient::where('return_code', $return->return_code)
-            ->orderBy('dr_cr')
+            ->orderBy('source_date')
+            ->orderBy('transaction_date')
             ->orderBy('entry_type')
             ->orderBy('transaction_ref')
             ->orderBy('narration')
             ->get();
 
         $credits = [];
+        $otherReceipts = [];
         $debits = [];
         $totalCredits = 0.0;
+        $totalOtherReceipts = 0.0;
         $totalDebits = 0.0;
 
         foreach ($lines as $line) {
@@ -1974,7 +2003,21 @@ class ClientReturnsController extends Controller
                 'narration' => $line->narration ?: ($line->entry_type ?: $line->entry_description ?: '-'),
                 'ref' => $line->transaction_ref ?: '-',
                 'amount' => $amount,
+                'date' => $line->source_date
+                    ? $line->source_date->format('d-m-Y')
+                    : (!empty($line->transaction_date) ? date('d-m-Y', strtotime((string) $line->transaction_date)) : '-'),
+                'sort_date' => $line->source_date
+                    ? $line->source_date->format('Y-m-d')
+                    : (!empty($line->transaction_date) ? date('Y-m-d', strtotime((string) $line->transaction_date)) : '9999-12-31'),
             ];
+
+            $narrationText = strtoupper(trim((string) ($line->narration ?: $line->entry_type ?: $line->entry_description ?: '')));
+
+            if (str_contains($narrationText, 'OPENING AT START OF MONTH')) {
+                $otherReceipts[] = $item;
+                $totalOtherReceipts += $amount;
+                continue;
+            }
 
             if (strtoupper((string) $line->dr_cr) === 'DR') {
                 $debits[] = $item;
@@ -1984,6 +2027,10 @@ class ClientReturnsController extends Controller
                 $totalCredits += $amount;
             }
         }
+
+        usort($debits, function ($left, $right) {
+            return strcmp($left['sort_date'], $right['sort_date']);
+        });
 
         $landlordName = DB::table('sys_pm_clients')
             ->where('reference_number', $return->landlord_code)
@@ -1995,13 +2042,15 @@ class ClientReturnsController extends Controller
 
         return [
             'credits' => $credits,
+            'otherReceipts' => $otherReceipts,
             'debits' => $debits,
             'totals' => [
                 'credits' => $totalCredits,
+                'other_receipts' => $totalOtherReceipts,
                 'debits' => $totalDebits,
-                'amount_payable' => $totalCredits - $totalDebits,
+                'amount_payable' => ($totalCredits + $totalOtherReceipts) - $totalDebits,
                 'amount_paid' => (float) ($return->amount_paid ?? 0),
-                'balance' => ($totalCredits - $totalDebits) - (float) ($return->amount_paid ?? 0),
+                'balance' => (($totalCredits + $totalOtherReceipts) - $totalDebits) - (float) ($return->amount_paid ?? 0),
             ],
             'landlordName' => $landlordName,
             'propertyName' => $propertyName,
