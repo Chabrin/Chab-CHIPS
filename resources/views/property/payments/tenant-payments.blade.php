@@ -10,7 +10,7 @@
                     </div>
                     <div class="card-body">
                         <!-- Filters - condensed single row -->
-                        <div class="row mb-3 align-items-end">
+                        <div class="row">
                             <div class="col-md-4">
                                 <label for="property_select" class="form-label mb-1">Property <span class="text-danger">*</span></label>
                                 <select class="form-control form-control-sm" id="property_select" style="width:100%;">
@@ -20,26 +20,27 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-4">
                                 <label for="date_from" class="form-label mb-1">From <span class="text-danger">*</span></label>
                                 <input type="date" class="form-control form-control-sm" id="date_from">
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-4">
                                 <label for="date_to" class="form-label mb-1">To <span class="text-danger">*</span></label>
                                 <input type="date" class="form-control form-control-sm" id="date_to">
                             </div>
-                            <div class="col-md-4 d-flex gap-2 justify-content-end align-items-end">
-                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
-                                    <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
-                                    <span class="material-symbols-outlined" id="search_icon">search</span>
-                                    <span class="ms-1">Search</span>
-                                </button>
-                                <button type="button" class="btn btn-success btn-sm d-flex align-items-center" id="export_btn" disabled>
-                                    <span class="spinner-border spinner-border-sm" role="status" id="export_spinner" style="display:none;"></span>
-                                    <span class="material-symbols-outlined" id="export_icon">download</span>
-                                    <span class="ms-1">Excel</span>
-                                </button>
-                            </div>
+                            
+                        </div>
+                        <div class=" d-flex gap-2 justify-content-end align-items-end">
+                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
+                                <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display:none;"></span>
+                                <span class="material-symbols-outlined" id="search_icon">search</span>
+                                <span class="ms-1">Search</span>
+                            </button>
+                            <button type="button" class="btn btn-success btn-sm d-flex align-items-center" id="export_btn" disabled>
+                                <span class="spinner-border spinner-border-sm" role="status" id="export_spinner" style="display:none;"></span>
+                                <span class="material-symbols-outlined" id="export_icon">download</span>
+                                <span class="ms-1">Excel</span>
+                            </button>
                         </div>
                         <small class="text-muted d-block mb-2">Max 32-day range. Select property and dates, then search.</small>
 

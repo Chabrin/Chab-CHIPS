@@ -463,7 +463,17 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/leases/properties-units', [App\Http\Controllers\LeasesController::class, 'getPropertiesWithUnits'])->name('property.leases.properties-units');
     Route::post('/property/leases/bulk-renew', [App\Http\Controllers\LeasesController::class, 'bulkRenew'])->name('property.leases.bulk-renew');
     Route::post('/property/leases/store', [App\Http\Controllers\LeasesController::class, 'store'])->name('property.leases.store');
+    Route::post('/property/leases/{id}/send-contract', [App\Http\Controllers\LeasesController::class, 'sendContract'])->name('property.leases.send-contract');
     Route::get('/tenants/lease/create', [App\Http\Controllers\LeasesController::class, 'create'])->name('tenant.lease.create');
+
+    // Lease Contract Template Management
+    Route::get('/property/lease-settings/contract-templates', [App\Http\Controllers\LeaseContractTemplateController::class, 'index'])->name('property.lease-settings.contract-templates.index');
+    Route::get('/property/lease-settings/contract-templates/create', [App\Http\Controllers\LeaseContractTemplateController::class, 'create'])->name('property.lease-settings.contract-templates.create');
+    Route::post('/property/lease-settings/contract-templates', [App\Http\Controllers\LeaseContractTemplateController::class, 'store'])->name('property.lease-settings.contract-templates.store');
+    Route::get('/property/lease-settings/contract-templates/{id}/edit', [App\Http\Controllers\LeaseContractTemplateController::class, 'edit'])->name('property.lease-settings.contract-templates.edit');
+    Route::put('/property/lease-settings/contract-templates/{id}', [App\Http\Controllers\LeaseContractTemplateController::class, 'update'])->name('property.lease-settings.contract-templates.update');
+    Route::post('/property/lease-settings/contract-templates/{id}/set-default', [App\Http\Controllers\LeaseContractTemplateController::class, 'setDefault'])->name('property.lease-settings.contract-templates.set-default');
+    Route::delete('/property/lease-settings/contract-templates/{id}', [App\Http\Controllers\LeaseContractTemplateController::class, 'destroy'])->name('property.lease-settings.contract-templates.destroy');
 
     // Lease Escalations
     Route::get('/property/escalations', [App\Http\Controllers\LeaseEscalationController::class, 'index'])->name('property.escalations.index');
@@ -802,6 +812,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
 ##### END CHABRIN - ROUTES FILE #####
 
+// Public lease contract signing routes (no auth required, rate-limited)
+Route::middleware(['throttle:10,1'])->group(function () {
+    Route::get('/lease-contract/sign/{token}', [App\Http\Controllers\LeasesController::class, 'showSigningPage'])->name('lease.contract.sign');
+    Route::post('/lease-contract/sign/{token}', [App\Http\Controllers\LeasesController::class, 'submitSignature'])->name('lease.contract.sign.submit');
+});
+
 
 
 
@@ -887,6 +903,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/dashboard/stats', [HomeController::class, 'getDashboardStats'])->name('dashboard.stats');
     Route::get('/dashboard/gender', [HomeController::class, 'getStaffByGender'])->name('dashboard.gender');
     Route::get('/dashboard/positions', [HomeController::class, 'getStaffByPosition'])->name('dashboard.positions');
+    Route::get('/dashboard/departments', [HomeController::class, 'getStaffByDepartment'])->name('dashboard.departments');
+    Route::get('/dashboard/leave-stats', [HomeController::class, 'getLeaveStats'])->name('dashboard.leave_stats');
+    Route::get('/dashboard/discipline-stats', [HomeController::class, 'getDisciplineStats'])->name('dashboard.discipline_stats');
+    Route::get('/dashboard/contract-stats', [HomeController::class, 'getContractStats'])->name('dashboard.contract_stats');
     //List users
     Route::get('/list/users', [UsersController::class, 'listUsers'])->name('listusers');
 

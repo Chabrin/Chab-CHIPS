@@ -30,14 +30,23 @@ class LeaseAgreement extends Model
         'escalation_rate',
         'escalation_frequency',
         'documents',
-        'linked_lease_id'
+        'linked_lease_id',
+        'contract_template_id',
+        'unsigned_pdf_path',
+        'signed_pdf_path',
+        'contract_sign_token',
+        'signer_name',
+        'contract_sent_at',
+        'contract_signed_at',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
         'date_start' => 'datetime',
         'date_end' => 'datetime',
-        'escalation_rate' => 'decimal:2'
+        'escalation_rate' => 'decimal:2',
+        'contract_sent_at' => 'datetime',
+        'contract_signed_at' => 'datetime',
     ];
 
     public function tenant()
@@ -68,5 +77,10 @@ class LeaseAgreement extends Model
     public function documents()
     {
         return $this->hasMany(LeaseAgreementDocument::class, 'parent_id');
+    }
+
+    public function contractTemplate()
+    {
+        return $this->belongsTo(LeaseContractTemplate::class, 'contract_template_id');
     }
 }

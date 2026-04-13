@@ -34,34 +34,31 @@ class ClientsController extends Controller
     public function getCLients(Request $request)
     {
         try {
-            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date'])
-                ->typeOne();
-
+            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
 
             $can_read = Auth::user()->isAbleTo('read_clients');
             $can_update = Auth::user()->isAbleTo('update_clients');
 
-            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date'])
-                ->typeOne();
-
             // Filter by client_type if provided (Landlord or Tenant)
             if ($request->filled('client_type')) {
                 if ($request->client_type === 'Landlord') {
-                    $query->where('reference_number', 'NOT LIKE', 'TEN-%');
+                    $query->where('reference_number', 'LIKE', 'LAN-%');
                 } elseif ($request->client_type === 'Tenant') {
                     $query->where('reference_number', 'LIKE', 'TEN-%');
                 }
             }
 
-            // Search filter
+            // Search filter — split into tokens so "KAMAU JOHN" matches "JOHN KAMAU MBUGUA"
             if ($request->filled('search')) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('names', 'LIKE', "%{$search}%")
-                        ->orWhere('reference_number', 'LIKE', "%{$search}%")
-                        ->orWhere('mobile_number', 'LIKE', "%{$search}%")
-                        ->orWhere('email_address', 'LIKE', "%{$search}%");
-                });
+                $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($request->search))));
+                foreach ($tokens as $token) {
+                    $query->where(function ($q) use ($token) {
+                        $q->where('names', 'ILIKE', "%{$token}%")
+                            ->orWhere('reference_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('email_address', 'ILIKE', "%{$token}%");
+                    });
+                }
             }
 
             $clients = $query->orderBy('registered_date', 'desc')

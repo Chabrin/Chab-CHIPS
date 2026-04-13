@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use App\Models\LeaseAgreementInvoiceableItem;
+use App\Services\LeaseContractService;
 
 class LeasesController extends Controller
 {
@@ -63,7 +64,9 @@ class LeasesController extends Controller
                     'current_status_id',
                     'years',
                     'auto_renewal',
-                    'escalation_rate'
+                    'escalation_rate',
+                    'contract_sent_at',
+                    'contract_signed_at',
                 ])
                 ->orderBy('date_end', 'asc')
                 ->limit(500) // Limit results for performance
@@ -92,6 +95,11 @@ class LeasesController extends Controller
                         'current_status_id' => $lease->current_status_id,
                         'years' => $lease->years,
                         'auto_renewal' => $lease->auto_renewal,
+                        'contract_sent_at' => $lease->contract_sent_at,
+                        'contract_signed_at' => $lease->contract_signed_at,
+                        'contract_status' => $lease->contract_signed_at
+                            ? 'signed'
+                            : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
                     ];
                 });
 
@@ -515,6 +523,16 @@ class LeasesController extends Controller
                 'created_by' => Auth::id()
             ]);
 
+            // Send contract to tenant for digital signing (after commit so all data is persisted)
+            try {
+                (new LeaseContractService())->sendToTenant($leaseAgreement);
+            } catch (\Exception $contractEx) {
+                // Non-fatal — lease is created, but log the failure
+                Log::error('Failed to send lease contract to tenant: ' . $contractEx->getMessage(), [
+                    'lease_id' => $leaseAgreement->id,
+                ]);
+            }
+
             return redirect()
                 ->route('property.properties.show', Crypt::encrypt($validated['property_id']))
                 ->with('success', 'Lease Agreement created successfully with reference: ' . $leaseAgreement->ref_number);
@@ -658,6 +676,125 @@ class LeasesController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading leases for unit: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load leases'], 500);
+        }
+    }
+
+    /**
+     * (Admin) Manually send / resend contract to tenant.
+     */
+    public function sendContract($id)
+    {
+        try {
+            Log::info('Admin requested to send lease contract', [
+                'lease_ref_number' => $id,
+                'admin_id' => Auth::id(),
+            ]);
+            $lease = LeaseAgreement::with(['tenant', 'property', 'unit', 'invoiceableItems', 'contractTemplate'])->where('ref_number', $id)->first();
+            Log::info('Attempting to send lease contract', [
+                'lease_id' => $lease->id ?? null,
+                'ref_number' => $id,
+                'email' => $lease->tenant->email_address ?? null,
+            ]);
+
+            (new LeaseContractService())->sendToTenant($lease);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Contract sent to ' . ($lease->tenant->names ?? 'tenant') . ' successfully.',
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error sending lease contract: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to send contract: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * (Public) Show the digital signing page for a tenant.
+     */
+    public function showSigningPage(string $token)
+    {
+        $hashedToken = hash('sha256', $token);
+
+        $lease = LeaseAgreement::with(['tenant', 'property', 'unit'])
+            ->where('contract_sign_token', $hashedToken)
+            ->first();
+
+        if (!$lease) {
+            return view('lease.sign-error', [
+                'title'   => 'Invalid Signing Link',
+                'message' => 'This link is not valid or has already been used. Please contact your property manager.',
+            ]);
+        }
+
+        if ($lease->contract_signed_at) {
+            return view('lease.sign-error', [
+                'title'   => 'Already Signed',
+                'message' => 'This lease agreement has already been signed on ' . $lease->contract_signed_at->format('d M Y') . '.',
+            ]);
+        }
+
+        return view('lease.sign', compact('lease', 'token'));
+    }
+
+    /**
+     * (Public) Handle tenant signature submission.
+     */
+    public function submitSignature(\Illuminate\Http\Request $request, string $token)
+    {
+        $request->validate([
+            'signer_name' => 'required|string|max:200',
+            'consent'     => 'accepted',
+        ]);
+
+        $hashedToken = hash('sha256', $token);
+
+        $lease = LeaseAgreement::with(['tenant', 'property', 'unit', 'invoiceableItems', 'contractTemplate'])
+            ->where('contract_sign_token', $hashedToken)
+            ->first();
+
+        if (!$lease) {
+            return view('lease.sign-error', [
+                'title'   => 'Invalid Signing Link',
+                'message' => 'This link is not valid or has already been used.',
+            ]);
+        }
+
+        if ($lease->contract_signed_at) {
+            return view('lease.sign-error', [
+                'title'   => 'Already Signed',
+                'message' => 'This lease agreement has already been signed.',
+            ]);
+        }
+
+        try {
+            $signerName = strip_tags($request->signer_name);
+
+            // Generate signed PDF
+            $signedPath = (new LeaseContractService())->generateSignedPdf($lease, $signerName);
+
+            // Persist signing data and clear token
+            $lease->signer_name       = $signerName;
+            $lease->signed_pdf_path   = $signedPath;
+            $lease->contract_signed_at = now();
+            $lease->contract_sign_token = null; // invalidate link
+            $lease->save();
+
+            Log::info('Lease contract signed by tenant', [
+                'lease_id'    => $lease->id,
+                'ref_number'  => $lease->ref_number,
+                'signer_name' => $signerName,
+            ]);
+
+            return view('lease.sign-success', [
+                'signerName' => $signerName,
+                'refNumber'  => $lease->ref_number,
+            ]);
+
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error processing lease signature: ' . $e->getMessage());
+            return back()->with('error', 'Failed to process signature. Please try again or contact your property manager.');
         }
     }
 }
