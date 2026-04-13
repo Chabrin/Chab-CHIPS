@@ -13,7 +13,7 @@
             font-family: 'DejaVu Sans', Arial, sans-serif;
             font-size: 8.5pt;
             margin: 0;
-            padding: 10px 15px;
+            padding: 10px 15px 95px 15px;
             color: #111;
         }
 
@@ -216,6 +216,44 @@
             text-align: right;
             white-space: nowrap;
         }
+
+        .fixed-footer {
+            position: fixed;
+            left: 15px;
+            right: 15px;
+            bottom: 10px;
+            font-size: 7pt;
+            color: #000;
+        }
+
+        .signoff-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .signoff-table td {
+            width: 20%;
+            vertical-align: top;
+            padding-right: 8px;
+        }
+
+        .signoff-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .signoff-line {
+            border-bottom: 1px solid #000;
+            height: 13px;
+            margin-bottom: 2px;
+        }
+
+        .page-num {
+            text-align: right;
+            margin-top: 5px;
+            font-size: 7pt;
+        }
     </style>
 </head>
 
@@ -267,44 +305,31 @@
         <thead>
             {{-- Row 1: group headers --}}
             <tr>
-                <th rowspan="2" style="width:2%;">#</th>
-                <th rowspan="2" style="width:12%; text-align:left;">Tenant Name</th>
-                <th rowspan="2" style="width:5%;">Payable</th>
-                <th rowspan="2" style="width:5%;">Rent Arrears</th>
-                <th rowspan="2" style="width:4%;">VAT</th>
-                <th colspan="2" style="width:10%;">House Deposit</th>
-                <th colspan="2" style="width:10%;">Elec Deposit</th>
-                <th colspan="2" style="width:10%;">Water Deposit</th>
-                <th rowspan="2" style="width:5%;">Elec Bill</th>
-                <th rowspan="2" style="width:5%;">Water Bill</th>
-                <th rowspan="2" style="width:5%;">Svc Charge</th>
-                <th rowspan="2" style="width:5%;">Monthly Rent</th>
-            </tr>
-            {{-- Row 2: sub-headers --}}
-            <tr>
-                <th style="width:5%;">Amt</th>
-                <th style="width:6%;">Ref</th>
-                <th style="width:5%;">Amt</th>
-                <th style="width:6%;">Ref</th>
-                <th style="width:5%;">Amt</th>
-                <th style="width:6%;">Ref</th>
+                <th style="width:5%;">Room No</th>
+                <th style="width:16%; text-align:left;">Tenant Name</th>
+                <th style="width:8%;">Payable</th>
+                <th style="width:8%;">Rent Arrears</th>
+                <th style="width:6%;">VAT</th>
+                <th style="width:8%;">House Deposit</th>
+                <th style="width:8%;">Elec Deposit</th>
+                <th style="width:8%;">Water Deposit</th>
+                <th style="width:8%;">Elec Bill</th>
+                <th style="width:8%;">Water Bill</th>
+                <th style="width:8%;">Svc Charge</th>
+                <th style="width:9%;">Monthly Rent</th>
             </tr>
         </thead>
         <tbody>
-            @php $snr = 1; @endphp
             @forelse($tenantRows as $row)
             <tr>
-                <td class="text-center">{{ $snr++ }}</td>
-                <td>{{ $row['tenant_name'] }} <span class="text-muted-sm">({{ $row['unit_code'] }})</span></td>
+                <td class="text-center">{{ $row['unit_code'] ?: '-' }}</td>
+                <td>{{ $row['tenant_name'] }}</td>
                 <td class="text-right">{{ $row['monthly_rent'] > 0 ? number_format($row['monthly_rent'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['rent_arrears'] > 0 ? number_format($row['rent_arrears'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['vat'] > 0 ? number_format($row['vat'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['house_deposit_amt'] > 0 ? number_format($row['house_deposit_amt'], 2) : '' }}</td>
-                <td class="text-muted-sm">{{ $row['house_deposit_ref'] }}</td>
                 <td class="text-right">{{ $row['elec_deposit_amt'] > 0 ? number_format($row['elec_deposit_amt'], 2) : '' }}</td>
-                <td class="text-muted-sm">{{ $row['elec_deposit_ref'] }}</td>
                 <td class="text-right">{{ $row['water_deposit_amt'] > 0 ? number_format($row['water_deposit_amt'], 2) : '' }}</td>
-                <td class="text-muted-sm">{{ $row['water_deposit_ref'] }}</td>
                 <td class="text-right">{{ $row['elec_bill'] > 0 ? number_format($row['elec_bill'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['water_bill'] > 0 ? number_format($row['water_bill'], 2) : '' }}</td>
                 <td class="text-right">{{ $row['service_charge'] > 0 ? number_format($row['service_charge'], 2) : '' }}</td>
@@ -312,7 +337,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="15" class="text-center" style="padding:8px;">No tenant lines found for this return.</td>
+                <td colspan="12" class="text-center" style="padding:8px;">No tenant lines found for this return.</td>
             </tr>
             @endforelse
 
@@ -325,11 +350,8 @@
                 <td class="text-right">{{ $totals['rent_arrears'] > 0 ? number_format($totals['rent_arrears'], 2) : '' }}</td>
                 <td class="text-right">{{ $totals['vat'] > 0 ? number_format($totals['vat'], 2) : '' }}</td>
                 <td class="text-right">{{ $totals['house_deposit'] > 0 ? number_format($totals['house_deposit'], 2) : '' }}</td>
-                <td></td>
                 <td class="text-right">{{ $totals['elec_deposit'] > 0 ? number_format($totals['elec_deposit'], 2) : '' }}</td>
-                <td></td>
                 <td class="text-right">{{ $totals['water_deposit'] > 0 ? number_format($totals['water_deposit'], 2) : '' }}</td>
-                <td></td>
                 <td class="text-right">{{ $totals['elec_bill'] > 0 ? number_format($totals['elec_bill'], 2) : '' }}</td>
                 <td class="text-right">{{ $totals['water_bill'] > 0 ? number_format($totals['water_bill'], 2) : '' }}</td>
                 <td class="text-right">{{ $totals['service_charge'] > 0 ? number_format($totals['service_charge'], 2) : '' }}</td>
@@ -342,13 +364,7 @@
     {{-- ══════ FOOTER: LEFT blank | RIGHT financial summary ══════ --}}
     <table class="footer-wrap">
         <tr>
-            <td class="col-blank">
-                @if($return->remarks || $return->remarks_2)
-                <div style="font-size:6.5pt; color:#555; background:#fff8e1; border-left:3px solid #f5a623; padding:4px 8px; border-radius:2px;">
-                    <strong>Remarks:</strong> {{ trim(($return->remarks ?? '') . ' ' . ($return->remarks_2 ?? '')) }}
-                </div>
-                @endif
-            </td>
+            <td class="col-blank"></td>
             <td class="col-summary">
                 <table class="summary-table">
                     <thead>
@@ -398,6 +414,51 @@
             </td>
         </tr>
     </table>
+
+    <div class="fixed-footer">
+        <table class="signoff-table">
+            <tr>
+                <td>
+                    <div class="signoff-title">Prepared By</div>
+                    <div class="signoff-line"></div>
+                    <div>Date: __________________</div>
+                </td>
+                <td>
+                    <div class="signoff-title">Checked By</div>
+                    <div class="signoff-line"></div>
+                    <div>Date: __________________</div>
+                </td>
+                <td>
+                    <div class="signoff-title">Approved By</div>
+                    <div class="signoff-line"></div>
+                    <div>Date: __________________</div>
+                </td>
+                <td>
+                    <div class="signoff-title">Paid By</div>
+                    <div class="signoff-line"></div>
+                    <div>Date: __________________</div>
+                </td>
+                <td>
+                    <div class="signoff-title">Client Name</div>
+                    <div class="signoff-line"></div>
+                    <div>Date: __________________</div>
+                    <div style="margin-top: 2px;">Sign: __________________</div>
+                </td>
+            </tr>
+        </table>
+        <div class="page-num">
+            <script type="text/php">
+                if (isset($pdf)) {
+                    $font = $fontMetrics->get_font('Helvetica', 'normal');
+                    $size = 8;
+                    $text = 'Page ' . $PAGE_NUM . ' of ' . $PAGE_COUNT;
+                    $x = $pdf->get_width() - 110;
+                    $y = $pdf->get_height() - 16;
+                    $pdf->text($x, $y, $text, $font, $size);
+                }
+            </script>
+        </div>
+    </div>
 
 </body>
 

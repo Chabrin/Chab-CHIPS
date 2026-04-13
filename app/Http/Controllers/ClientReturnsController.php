@@ -1546,8 +1546,9 @@ class ClientReturnsController extends Controller
             }
 
             $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('tenant_name')
+                ->orderBy('entry_type')
                 ->orderBy('unit_code')
+                ->orderBy('tenant_name')
                 ->get();
 
             // Recompute line totals (same formula as details page)
