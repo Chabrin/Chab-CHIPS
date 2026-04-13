@@ -1540,9 +1540,42 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
-            $allowedTypes = ['MINIRETURN', 'MAINRETURN'];
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
-                abort(403, 'PDF download is only available for MINIRETURN and MAINRETURN returns.');
+                abort(403, 'PDF download is only available for MINIRETURN, MAINRETURN and MASTERRETURN returns.');
+            }
+
+            if ($return->return_type === 'MASTERRETURN') {
+                $masterData = $this->buildMasterReturnExportData($return);
+                $logoPath = public_path('assets/images/logo/logo_dark.png');
+                $logoSrc  = file_exists($logoPath)
+                    ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+                    : '';
+
+                $pdf = Pdf::loadView('property.processed-returns.master-pdf', array_merge($masterData, [
+                    'return' => $return,
+                    'logoSrc' => $logoSrc,
+                ]));
+                $pdf->setPaper('A4', 'portrait');
+
+                $dompdf = $pdf->getDomPDF();
+                $dompdf->render();
+                $canvas = $dompdf->get_canvas();
+                $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
+                $canvas->page_text(470, 815, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+
+                $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
+                $token    = request()->query('download_token');
+                $pdfContent = $dompdf->output();
+
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $fileName . '"');
+                header('Cache-Control: max-age=0');
+                if ($token) {
+                    header('Set-Cookie: download_complete_' . $token . '=1; Path=/; Max-Age=60; SameSite=Lax');
+                }
+                echo $pdfContent;
+                exit;
             }
 
             $lines = ReturnClient::where('return_code', $return->return_code)
@@ -1709,9 +1742,128 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
-            $allowedTypes = ['MINIRETURN', 'MAINRETURN'];
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
-                abort(403, 'Excel download is only available for MINIRETURN and MAINRETURN returns.');
+                abort(403, 'Excel download is only available for MINIRETURN, MAINRETURN and MASTERRETURN returns.');
+            }
+
+            if ($return->return_type === 'MASTERRETURN') {
+                $masterData = $this->buildMasterReturnExportData($return);
+
+                $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $sheet = $spreadsheet->getActiveSheet();
+                $sheet->setTitle('Master Return');
+
+                $sheet->setCellValue('A1', 'CHABRIN AGENCIES LIMITED');
+                $sheet->mergeCells('A1:C1');
+                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+                $sheet->setCellValue('A2', 'PROPERTY MANAGING AGENTS');
+                $sheet->mergeCells('A2:C2');
+                $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(11);
+
+                $sheet->setCellValue('A3', '5th Floor, Room 517, NACICO Plaza Landhies Road, PO Box 16659-00620 Nairobi, Kenya');
+                $sheet->mergeCells('A3:F3');
+
+                $sheet->setCellValue('A5', 'RETURNS FOR THE MONTH OF ' . strtoupper($masterData['monthLabel']));
+                $sheet->mergeCells('A5:C5');
+                $sheet->getStyle('A5')->getFont()->setBold(true);
+
+                $sheet->setCellValue('E5', 'Landlord');
+                $sheet->setCellValue('F5', $masterData['landlordName']);
+                $sheet->setCellValue('E6', 'Property');
+                $sheet->setCellValue('F6', $masterData['propertyName']);
+
+                $row = 8;
+                $sheet->setCellValue('A' . $row, 'RETURN NET SUM');
+                $sheet->mergeCells('A' . $row . ':C' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                foreach (['A' => 'Narration', 'B' => 'Ref', 'C' => 'Amount'] as $col => $header) {
+                    $sheet->setCellValue($col . $row, $header);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+                $row++;
+
+                foreach ($masterData['credits'] as $line) {
+                    $sheet->setCellValue('A' . $row, $line['narration']);
+                    $sheet->setCellValue('B' . $row, $line['ref']);
+                    $sheet->setCellValue('C' . $row, $line['amount']);
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $sheet->setCellValue('A' . $row, 'Subtotal');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['credits']);
+                $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row += 2;
+
+                $sheet->setCellValue('A' . $row, 'LESS');
+                $sheet->mergeCells('A' . $row . ':C' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                foreach (['A' => 'Narration', 'B' => 'Ref', 'C' => 'Amount'] as $col => $header) {
+                    $sheet->setCellValue($col . $row, $header);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+                $row++;
+
+                foreach ($masterData['debits'] as $line) {
+                    $sheet->setCellValue('A' . $row, $line['narration']);
+                    $sheet->setCellValue('B' . $row, $line['ref']);
+                    $sheet->setCellValue('C' . $row, $line['amount']);
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $sheet->setCellValue('A' . $row, 'Subtotal');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['debits']);
+                $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row += 2;
+
+                $sheet->setCellValue('A' . $row, 'Amount Payable');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['amount_payable']);
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Amount Paid');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['amount_paid']);
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Balance');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['balance']);
+                $sheet->getStyle('A' . ($row - 2) . ':C' . $row)->getFont()->setBold(true);
+                foreach (range($row - 2, $row) as $totRow) {
+                    $sheet->getStyle('C' . $totRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                }
+
+                $row += 3;
+                $signoffs = ['Prepared By', 'Checked By', 'Approved By', 'Client Name'];
+                $startCols = ['A', 'C', 'E', 'G'];
+                foreach ($signoffs as $index => $title) {
+                    $col = $startCols[$index];
+                    $sheet->setCellValue($col . $row, $title);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+
+                foreach (range('A', 'G') as $col) {
+                    $sheet->getColumnDimension($col)->setAutoSize(true);
+                }
+
+                $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                $filename = 'return_' . $return->return_code . '_' . date('Y-m-d') . '.xlsx';
+
+                header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                header('Content-Disposition: attachment;filename="' . $filename . '"');
+                header('Cache-Control: max-age=0');
+                $dlToken = request()->query('download_token');
+                if ($dlToken) {
+                    header('Set-Cookie: download_complete_' . $dlToken . '=1; Path=/; Max-Age=60; SameSite=Lax');
+                }
+
+                $writer->save('php://output');
+                exit;
             }
 
             $lines = ReturnClient::where('return_code', $return->return_code)
@@ -1800,5 +1952,60 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to generate Excel'
             ], 500);
         }
+    }
+
+    private function buildMasterReturnExportData(ReturnSummary $return): array
+    {
+        $lines = ReturnClient::where('return_code', $return->return_code)
+            ->orderBy('dr_cr')
+            ->orderBy('entry_type')
+            ->orderBy('transaction_ref')
+            ->orderBy('narration')
+            ->get();
+
+        $credits = [];
+        $debits = [];
+        $totalCredits = 0.0;
+        $totalDebits = 0.0;
+
+        foreach ($lines as $line) {
+            $amount = (float) ($line->net_amount ?? $line->amount_payable_landlord ?? 0);
+            $item = [
+                'narration' => $line->narration ?: ($line->entry_type ?: $line->entry_description ?: '-'),
+                'ref' => $line->transaction_ref ?: '-',
+                'amount' => $amount,
+            ];
+
+            if (strtoupper((string) $line->dr_cr) === 'DR') {
+                $debits[] = $item;
+                $totalDebits += $amount;
+            } else {
+                $credits[] = $item;
+                $totalCredits += $amount;
+            }
+        }
+
+        $landlordName = DB::table('sys_pm_clients')
+            ->where('reference_number', $return->landlord_code)
+            ->value('names') ?: ($return->landlord_code ?? '-');
+
+        $propertyName = DB::table('sys_pm_properties')
+            ->where('reference_number', $return->property_code)
+            ->value('property_name') ?: ($return->property_code ?? '-');
+
+        return [
+            'credits' => $credits,
+            'debits' => $debits,
+            'totals' => [
+                'credits' => $totalCredits,
+                'debits' => $totalDebits,
+                'amount_payable' => $totalCredits - $totalDebits,
+                'amount_paid' => (float) ($return->amount_paid ?? 0),
+                'balance' => ($totalCredits - $totalDebits) - (float) ($return->amount_paid ?? 0),
+            ],
+            'landlordName' => $landlordName,
+            'propertyName' => $propertyName,
+            'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
+        ];
     }
 }

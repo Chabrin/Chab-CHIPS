@@ -364,7 +364,7 @@
         // Excel spinner
         $('#excel-link').on('click', function(e) {
             e.preventDefault();
-            var allowed = ['MINIRETURN', 'MAINRETURN'];
+            var allowed = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (allowed.indexOf(currentReturnType) === -1) {
                 Swal.fire({
                     icon: 'error',
@@ -379,7 +379,7 @@
         // PDF spinner
         $('#pdf-link').on('click', function(e) {
             e.preventDefault();
-            var allowed = ['MINIRETURN', 'MAINRETURN'];
+            var allowed = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (allowed.indexOf(currentReturnType) === -1) {
                 Swal.fire({
                     icon: 'error',
