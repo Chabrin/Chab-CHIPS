@@ -11,7 +11,7 @@
 
         body {
             font-family: 'DejaVu Sans', Arial, sans-serif;
-            font-size: 8pt;
+            font-size: 8.4pt;
             margin: 0;
             padding: 8px 10px 92px 10px;
             color: #111;
@@ -47,7 +47,7 @@
 
         .side-col {
             width: 30%;
-            font-size: 7pt;
+            font-size: 7.4pt;
         }
 
         .company-name {
@@ -57,25 +57,25 @@
         }
 
         .company-tag {
-            font-size: 8.5pt;
+            font-size: 8.9pt;
             font-weight: bold;
             margin: 1px 0;
         }
 
         .company-address {
-            font-size: 6.8pt;
+            font-size: 7pt;
             margin: 0;
         }
 
         .report-title {
             margin: 6px 0 0 0;
-            font-size: 8.5pt;
+            font-size: 8.9pt;
             font-weight: bold;
         }
 
         .meta-table {
             margin-bottom: 4px;
-            font-size: 7pt;
+            font-size: 7.4pt;
         }
 
         .meta-table td {
@@ -89,30 +89,31 @@
 
         .section-title {
             font-weight: bold;
-            padding: 2px 0;
-            margin-top: 5px;
+            padding: 3px 0;
+            margin-top: 6px;
+            margin-bottom: 4px;
         }
 
         .data-table {
-            margin-bottom: 5px;
-            font-size: 7pt;
+            margin-bottom: 7px;
+            font-size: 7.5pt;
             table-layout: fixed;
         }
 
         .data-table th,
         .data-table td {
             border: none;
-            padding: 1px 3px;
+            padding: 2px 4px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: clip;
-            line-height: 1.1;
+            line-height: 1.22;
         }
 
         .data-table th {
             text-align: left;
             font-weight: bold;
-            padding-bottom: 2px;
+            padding-bottom: 3px;
         }
 
         .amount {
@@ -122,19 +123,23 @@
 
         .subtotal-row td {
             font-weight: bold;
-            padding-top: 3px;
+            padding-top: 5px;
+        }
+
+        .less-section {
+            margin-top: 12px;
         }
 
         .totals-table {
             margin-top: 6px;
             width: 48%;
             margin-left: auto;
-            font-size: 7.3pt;
+            font-size: 7.7pt;
         }
 
         .totals-table td {
             border: none;
-            padding: 2px 4px;
+            padding: 3px 4px;
         }
 
         .totals-table .label {
@@ -234,7 +239,7 @@
         </tbody>
     </table>
 
-    <div class="section-title">LESS</div>
+    <div class="section-title less-section">LESS</div>
     <table class="data-table">
         <thead>
             <tr>
