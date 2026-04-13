@@ -6,7 +6,7 @@ use App\Models\Client;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Models\SystemCountry;
-use App\Models\TenantPayment;
+use App\Models\TenantPaymentAllocated;
 use App\Models\ClientDocument;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
@@ -42,7 +42,7 @@ class TenantsController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
 
-            $payments = TenantPayment::with(['tenant', 'property', 'unit'])
+            $payments = TenantPaymentAllocated::with(['tenant', 'property', 'unit'])
                 ->where('tenant_id', $id)
                 ->orderBy('payment_date', 'desc')
                 ->get()
@@ -50,7 +50,7 @@ class TenantsController extends Controller
                     return [
                         'id' => $p->id,
                         'payment_date' => $p->payment_date ? $p->payment_date->format('d-m-Y') : '-',
-                        'reference' => $p->reference ?? '-',
+                        'reference' => $p->reference_number ?? '-',
                         'narration' => $p->narration ?? '-',
                         'tenant' => $p->tenant->names ?? '-',
                         'property' => $p->property->property_name ?? '-',
@@ -76,7 +76,7 @@ class TenantsController extends Controller
             // Find the tenant directly from Client model where unit_id matches
             $tenant = Client::where('unit_id', $unitId)
                 ->first();
-            
+
             if ($tenant) {
                 return response()->json([
                     'tenant' => [
@@ -90,7 +90,6 @@ class TenantsController extends Controller
             }
 
             return response()->json(['tenant' => null]);
-            
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading tenant for unit: ' . $e->getMessage());
@@ -112,7 +111,7 @@ class TenantsController extends Controller
                 ->whereDate('date_end', '>=', now())
                 ->with('tenant:id,names,reference_number,mobile_number,email_address')
                 ->first();
-            
+
             if ($lease && $lease->tenant) {
                 return response()->json([
                     'tenant' => [
@@ -126,13 +125,13 @@ class TenantsController extends Controller
                 ]);
             }
 
-            
+
             // Alternative: Check if tenant is directly linked to unit
             $tenant = Client::where('unit_id', $unitId)
                 ->where('property_id', $propertyId)
                 ->first(['id', 'names', 'reference_number', 'mobile_number', 'email_address']);
 
-            
+
             if ($tenant) {
                 return response()->json([
                     'tenant' => [
@@ -145,9 +144,8 @@ class TenantsController extends Controller
                     ]
                 ]);
             }
-            
+
             return response()->json(['tenant' => null]);
-            
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading tenant for unit: ' . $e->getMessage());
@@ -208,7 +206,7 @@ class TenantsController extends Controller
             }
 
             $countries = SystemCountry::orderBy('country_name')->get();
-            
+
             return view('property.properties.tenants.create', compact('client', 'countries'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -226,32 +224,31 @@ class TenantsController extends Controller
         try {
             $validated = $this->validateTenantRequest($request);
             Log::info('Validated tenant data: ' . json_encode($validated));
-            
+
             $referenceNumber = $this->generateTenantReferenceNumber();
             Log::info('Generated reference number: ' . $referenceNumber);
-            
+
             $photoPath = $this->handlePhotoUpload($request);
-            
+
             $tenant = $this->createTenant($validated, $referenceNumber, $photoPath);
             Log::info('Tenant created with ID: ' . $tenant->id . ' by User ID: ' . Auth::id());
-            
+
             $this->saveBankAccounts($request, $tenant->id);
             Log::info('Bank accounts saved for tenant ID: ' . $tenant->id);
-            
+
             $this->saveOtherContacts($request, $tenant->id);
             Log::info('Other contacts saved for tenant ID: ' . $tenant->id);
-            
+
             $this->saveDocuments($request, $tenant->id);
             Log::info('Documents saved for tenant ID: ' . $tenant->id);
-            
+
             $this->saveNextOfKin($request, $tenant->id);
             Log::info('Next of kin saved for tenant ID: ' . $tenant->id);
-    
+
             DB::commit();
-    
+
             return redirect()->route('property.tenants.show', Crypt::encrypt($tenant->id))
                 ->with('success', 'Tenant created successfully!');
-    
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return redirect()->back()->withErrors($e->errors())->withInput();
@@ -262,7 +259,7 @@ class TenantsController extends Controller
             return redirect()->back()->with('error', 'Failed to create tenant: ' . $e->getMessage())->withInput();
         }
     }
-    
+
     /**
      * Validate tenant request
      */
@@ -281,7 +278,7 @@ class TenantsController extends Controller
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
             'overcraft_penalty' => 'nullable|numeric|min:0',
-            
+
             // Tenant Information
             'title' => 'required|string|max:10',
             'first_name' => 'required|string|max:255',
@@ -300,22 +297,22 @@ class TenantsController extends Controller
             'passport_number' => 'nullable|string|max:50',
             'address' => 'nullable|string',
             'national_id' => 'nullable|string|max:50',
-            
+
             // Bank Accounts (repeater)
             'bank_accounts.*.bank_id' => 'nullable|integer',
             'bank_accounts.*.branch_id' => 'nullable|integer',
             'bank_accounts.*.account_name' => 'nullable|string|max:255',
             'bank_accounts.*.account_number' => 'nullable|string|max:100',
-            
+
             // Other Contacts (repeater)
             'other_contacts.*.name' => 'nullable|string|max:255',
             'other_contacts.*.email' => 'nullable|email|max:255',
             'other_contacts.*.mobile' => 'nullable|string|max:20',
-            
+
             // Tenant Files (repeater)
             'tenant_files.*.type' => 'nullable|string|max:100',
             'tenant_files.*.file' => 'nullable|file|max:5120',
-            
+
             // Next of Kin (repeater)
             'next_of_kin.*.names' => 'nullable|string|max:255',
             'next_of_kin.*.mobile' => 'nullable|string|max:20',
@@ -326,19 +323,19 @@ class TenantsController extends Controller
             'next_of_kin.*.last_name' => 'nullable|string|max:255',
         ]);
     }
-    
+
     /**
      * Generate tenant reference number with TEN prefix
      */
     private function generateTenantReferenceNumber()
     {
         $prefix = "TEN - ";
-        
+
         // Query for the last tenant with TEN prefix, ordered by the numeric part
         $lastTenant = Client::where('reference_number', 'LIKE', "TEN -%")
             ->orderByRaw('CAST(SUBSTRING(reference_number, 7) AS UNSIGNED) DESC')
             ->first();
-    
+
         if ($lastTenant) {
             // Extract number after "TEN - " (6 characters)
             $lastNumber = (int) substr($lastTenant->reference_number, 6);
@@ -347,10 +344,10 @@ class TenantsController extends Controller
             // Start from 1 if no tenants exist
             $newNumber = 1;
         }
-    
+
         return "{$prefix}{$newNumber}";
     }
-    
+
     /**
      * Handle photo upload
      */
@@ -361,7 +358,7 @@ class TenantsController extends Controller
         }
         return null;
     }
-    
+
     /**
      * Create the main tenant record
      */
@@ -369,12 +366,12 @@ class TenantsController extends Controller
     {
         // Combine names
         $names = trim(
-            ($validated['title'] ?? '') . ' ' . 
-            ($validated['first_name'] ?? '') . ' ' . 
-            ($validated['second_name'] ?? '') . ' ' . 
-            ($validated['last_name'] ?? '')
+            ($validated['title'] ?? '') . ' ' .
+                ($validated['first_name'] ?? '') . ' ' .
+                ($validated['second_name'] ?? '') . ' ' .
+                ($validated['last_name'] ?? '')
         );
-        
+
         $tenantData = [
             'reference_number' => $referenceNumber,
             'names' => $names,
@@ -407,10 +404,10 @@ class TenantsController extends Controller
             'created_by' => Auth::id(),
             'date_time' => now(),
         ];
-    
+
         return Client::create($tenantData);
     }
-    
+
     /**
      * Save bank accounts to sys_pm_clients_17_repeat
      */
@@ -419,12 +416,12 @@ class TenantsController extends Controller
         if (!$request->has('bank_accounts')) {
             return;
         }
-    
+
         foreach ($request->input('bank_accounts') as $bankData) {
             if (empty($bankData['bank_id'])) {
                 continue;
             }
-            
+
             ClientBankAccount::create([
                 'parent_id' => $tenantId,
                 'bank_id' => $bankData['bank_id'],
@@ -434,7 +431,7 @@ class TenantsController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Save other contacts to sys_pm_clients_19_repeat
      */
@@ -443,12 +440,12 @@ class TenantsController extends Controller
         if (!$request->has('other_contacts')) {
             return;
         }
-    
+
         foreach ($request->input('other_contacts') as $contactData) {
             if (empty($contactData['name'])) {
                 continue;
             }
-            
+
             ClientOtherContact::create([
                 'parent_id' => $tenantId,
                 'contact_names' => $contactData['name'],
@@ -457,7 +454,7 @@ class TenantsController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Save documents to sys_pm_clients_65_repeat
      */
@@ -466,17 +463,17 @@ class TenantsController extends Controller
         if (!$request->has('tenant_files')) {
             return;
         }
-    
+
         foreach ($request->input('tenant_files') as $index => $documentData) {
             $documentPath = null;
-            
+
             if ($request->hasFile("tenant_files.{$index}.file")) {
                 $file = $request->file("tenant_files.{$index}.file");
                 if ($file->isValid()) {
                     $documentPath = $file->store('tenants/documents', 'public');
                 }
             }
-            
+
             if ($documentPath || !empty($documentData['type'])) {
                 ClientDocument::create([
                     'parent_id' => $tenantId,
@@ -486,7 +483,7 @@ class TenantsController extends Controller
             }
         }
     }
-    
+
     /**
      * Save next of kin to sys_pm_clients_66_repeat
      */
@@ -495,19 +492,19 @@ class TenantsController extends Controller
         if (!$request->has('next_of_kin')) {
             return;
         }
-    
+
         foreach ($request->input('next_of_kin') as $kinData) {
             if (empty($kinData['names'])) {
                 continue;
             }
-            
+
             // Combine names for full name
             $fullNames = trim(
-                ($kinData['names'] ?? '') . ' ' . 
-                ($kinData['second_name'] ?? '') . ' ' . 
-                ($kinData['last_name'] ?? '')
+                ($kinData['names'] ?? '') . ' ' .
+                    ($kinData['second_name'] ?? '') . ' ' .
+                    ($kinData['last_name'] ?? '')
             );
-            
+
             ClientNextOfKin::create([
                 'parent_id' => $tenantId,
                 'names' => $fullNames,
@@ -547,7 +544,7 @@ class TenantsController extends Controller
             }
 
             // dd($tenant, $client);
-    
+
             return view('property.properties.tenants.edit', compact('tenant', 'client', 'countries'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -555,7 +552,7 @@ class TenantsController extends Controller
             return redirect()->route('property.tenants.listing')->with('error', 'Failed to load tenant');
         }
     }
-    
+
     /**
      * Update the specified tenant
      */
@@ -565,10 +562,10 @@ class TenantsController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
             $tenant = Client::findOrFail($id);
-    
+
             // Validate the request
             $validated = $this->validateTenantRequest($request);
-    
+
             // Handle photo upload (if new photo provided)
             $photoPath = $tenant->photo;
             if ($request->hasFile('tenant_photo') && $request->file('tenant_photo')->isValid()) {
@@ -578,18 +575,18 @@ class TenantsController extends Controller
                 }
                 $photoPath = $request->file('tenant_photo')->store('tenants/photos', 'public');
             }
-    
+
             // Update the main tenant record
             $this->updateTenant($tenant, $validated, $photoPath);
-    
+
             // Update related data (delete-recreate pattern)
             $this->updateBankAccounts($request, $tenant->id);
             $this->updateOtherContacts($request, $tenant->id);
             $this->updateDocuments($request, $tenant->id);
             $this->updateNextOfKin($request, $tenant->id);
-    
+
             DB::commit();
-    
+
             return redirect()->route('property.tenants.show', Crypt::encrypt($tenant->id))
                 ->with('success', 'Tenant updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -602,7 +599,7 @@ class TenantsController extends Controller
             return redirect()->back()->with('error', 'Failed to update tenant: ' . $e->getMessage())->withInput();
         }
     }
-    
+
     /**
      * Update the main tenant record
      */
@@ -610,12 +607,12 @@ class TenantsController extends Controller
     {
         // Combine names
         $names = trim(
-            ($validated['title'] ?? '') . ' ' . 
-            ($validated['first_name'] ?? '') . ' ' . 
-            ($validated['second_name'] ?? '') . ' ' . 
-            ($validated['last_name'] ?? '')
+            ($validated['title'] ?? '') . ' ' .
+                ($validated['first_name'] ?? '') . ' ' .
+                ($validated['second_name'] ?? '') . ' ' .
+                ($validated['last_name'] ?? '')
         );
-    
+
         $tenant->update([
             'names' => $names,
             'title' => $validated['title'],
@@ -647,7 +644,7 @@ class TenantsController extends Controller
             'updated_by' => Auth::id(),
         ]);
     }
-    
+
     /**
      * Update bank accounts (delete-recreate pattern)
      */
@@ -655,14 +652,14 @@ class TenantsController extends Controller
     {
         // Delete existing bank accounts
         ClientBankAccount::where('parent_id', $tenantId)->delete();
-        
+
         // Save new bank accounts
         if ($request->has('bank_accounts')) {
             foreach ($request->input('bank_accounts') as $bankData) {
                 if (empty($bankData['bank_id'])) {
                     continue;
                 }
-                
+
                 ClientBankAccount::create([
                     'parent_id' => $tenantId,
                     'bank_id' => $bankData['bank_id'],
@@ -673,7 +670,7 @@ class TenantsController extends Controller
             }
         }
     }
-    
+
     /**
      * Update other contacts (delete-recreate pattern)
      */
@@ -681,14 +678,14 @@ class TenantsController extends Controller
     {
         // Delete existing contacts
         ClientOtherContact::where('parent_id', $tenantId)->delete();
-        
+
         // Save new contacts
         if ($request->has('other_contacts')) {
             foreach ($request->input('other_contacts') as $contactData) {
                 if (empty($contactData['name'])) {
                     continue;
                 }
-                
+
                 ClientOtherContact::create([
                     'parent_id' => $tenantId,
                     'contact_names' => $contactData['name'],
@@ -698,7 +695,7 @@ class TenantsController extends Controller
             }
         }
     }
-    
+
     /**
      * Update documents (only add new, don't delete existing)
      */
@@ -707,14 +704,14 @@ class TenantsController extends Controller
         if ($request->has('tenant_files')) {
             foreach ($request->input('tenant_files') as $index => $documentData) {
                 $documentPath = null;
-                
+
                 if ($request->hasFile("tenant_files.{$index}.file")) {
                     $file = $request->file("tenant_files.{$index}.file");
                     if ($file->isValid()) {
                         $documentPath = $file->store('tenants/documents', 'public');
                     }
                 }
-                
+
                 if ($documentPath || !empty($documentData['type'])) {
                     ClientDocument::create([
                         'parent_id' => $tenantId,
@@ -725,7 +722,7 @@ class TenantsController extends Controller
             }
         }
     }
-    
+
     /**
      * Update next of kin (delete-recreate pattern)
      */
@@ -733,21 +730,21 @@ class TenantsController extends Controller
     {
         // Delete existing next of kin
         ClientNextOfKin::where('parent_id', $tenantId)->delete();
-        
+
         // Save new next of kin
         if ($request->has('next_of_kin')) {
             foreach ($request->input('next_of_kin') as $kinData) {
                 if (empty($kinData['names'])) {
                     continue;
                 }
-                
+
                 // Combine names for full name
                 $fullNames = trim(
-                    ($kinData['names'] ?? '') . ' ' . 
-                    ($kinData['second_name'] ?? '') . ' ' . 
-                    ($kinData['last_name'] ?? '')
+                    ($kinData['names'] ?? '') . ' ' .
+                        ($kinData['second_name'] ?? '') . ' ' .
+                        ($kinData['last_name'] ?? '')
                 );
-                
+
                 ClientNextOfKin::create([
                     'parent_id' => $tenantId,
                     'names' => $fullNames,
@@ -759,7 +756,7 @@ class TenantsController extends Controller
             }
         }
     }
-    
+
     /**
      * Delete a tenant document via AJAX
      */
@@ -767,14 +764,14 @@ class TenantsController extends Controller
     {
         try {
             $document = ClientDocument::findOrFail($id);
-            
+
             // Delete file from storage
             if ($document->documents && Storage::disk('public')->exists($document->documents)) {
                 Storage::disk('public')->delete($document->documents);
             }
-            
+
             $document->delete();
-            
+
             return response()->json(['success' => true, 'message' => 'Document deleted successfully']);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -782,5 +779,4 @@ class TenantsController extends Controller
             return response()->json(['success' => false, 'message' => 'Failed to delete document'], 500);
         }
     }
-
 }
