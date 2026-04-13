@@ -446,18 +446,7 @@
                 </td>
             </tr>
         </table>
-        <div class="page-num">
-            <script type="text/php">
-                if (isset($pdf)) {
-                    $font = $fontMetrics->get_font('Helvetica', 'normal');
-                    $size = 8;
-                    $text = 'Page ' . $PAGE_NUM . ' of ' . $PAGE_COUNT;
-                    $x = $pdf->get_width() - 110;
-                    $y = $pdf->get_height() - 16;
-                    $pdf->text($x, $y, $text, $font, $size);
-                }
-            </script>
-        </div>
+        <div class="page-num"></div>
     </div>
 
 </body>

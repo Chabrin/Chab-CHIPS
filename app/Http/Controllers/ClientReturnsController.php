@@ -1673,9 +1673,16 @@ class ClientReturnsController extends Controller
             $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
             $pdf->setPaper('A4', 'landscape');
 
+            // Render first so total page count is accurate, then draw page numbers.
+            $dompdf = $pdf->getDomPDF();
+            $dompdf->render();
+            $canvas = $dompdf->get_canvas();
+            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
+            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+
             $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token    = request()->query('download_token');
-            $pdfContent = $pdf->output();
+            $pdfContent = $dompdf->output();
 
             header('Content-Type: application/pdf');
             header('Content-Disposition: attachment; filename="' . $fileName . '"');
