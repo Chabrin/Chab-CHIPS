@@ -128,6 +128,14 @@
         .amount-cell {
             white-space: nowrap;
         }
+
+        .date-cell {
+            padding-right: 10px;
+        }
+
+        .reference-cell {
+            padding-left: 10px;
+        }
     </style>
 </head>
 
@@ -160,9 +168,9 @@
     <table class="statement-table">
         <thead>
             <tr>
-                <th style="width: 9%;">Date</th>
-                <th style="width: 11%;">Reference</th>
-                <th style="width: 34%;">Narration</th>
+                <th style="width: 10%;">Date</th>
+                <th style="width: 13%;">Reference</th>
+                <th style="width: 31%;">Narration</th>
                 <th class="text-right" style="width: 11%;">Dr</th>
                 <th class="text-right" style="width: 11%;">Cr</th>
                 <th class="text-right" style="width: 24%;">Balance</th>

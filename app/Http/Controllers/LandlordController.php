@@ -225,12 +225,6 @@ class LandlordController extends Controller
             $landlord = Client::find($landlordId);
             $landlordCode = $landlord->reference_number ?? null;
 
-            Log::info('[searchStatement] Step 1 — landlord lookup', [
-                'landlordId'   => $landlordId,
-                'landlordCode' => $landlordCode,
-                'landlordName' => $landlord->names ?? null,
-                'sql'          => "SELECT * FROM sys_pm_clients WHERE id = {$landlordId};",
-            ]);
 
             $query = LandlordAccount::where(function ($q) use ($landlordId, $landlordCode) {
                 $q->where('client_id', $landlordId);
@@ -246,11 +240,6 @@ class LandlordController extends Controller
                 $query->whereDate('entry_date', '<=', $dateTo);
             }
 
-            Log::info('[searchStatement] Step 2 — main query', [
-                'sql'      => $query->toSql(),
-                'bindings' => $query->getBindings(),
-                'raw_sql'  => vsprintf(str_replace('?', "'%s'", $query->toSql()), $query->getBindings()),
-            ]);
 
             // Order chronologically: entry_date, year, month, id
             $transactions = $query->orderBy('entry_date', 'asc')
@@ -262,7 +251,7 @@ class LandlordController extends Controller
             Log::info('[searchStatement] Step 3 — results', [
                 'count'       => $transactions->count(),
                 'raw_count_sql' => "SELECT COUNT(*) FROM cb_landlord_account WHERE (client_id = {$landlordId}" . ($landlordCode ? " OR landlord_code = '{$landlordCode}'" : '') . ");",
-                'full_check_sql' => "SELECT * FROM cb_landlord_account WHERE landlord_code = '" . ($landlordCode ?? '') . "' ORDER BY entry_date ASC, YEAR(entry_date) ASC, MONTH(entry_date) ASC, id ASC;",
+                'full_check_sql' => "SELECT * FROM cb_landlord_account WHERE landlord_code = '" . ($landlordCode ?? '') . "' ORDER BY entry_date ASC, EXTRACT(YEAR FROM entry_date) ASC, EXTRACT(MONTH FROM entry_date) ASC, id ASC;",
             ]);
 
             // Process transactions with balance tracking
@@ -280,11 +269,12 @@ class LandlordController extends Controller
     }
 
     /**
-
-            return response()->json([
-                'success' => true,
-                'statement' => $statementEntries
-            ]);
+     * Export landlord statement to Excel
+     */
+    public function exportStatementExcel(Request $request)
+    {
+        try {
+            // Increase memory limit for Excel generation
             ini_set('memory_limit', '512M');
             set_time_limit(300);
 
