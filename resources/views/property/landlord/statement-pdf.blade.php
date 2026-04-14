@@ -187,6 +187,12 @@
         </tbody>
     </table>
 
+    @if(!empty($recordsWarning))
+    <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; padding: 8px 10px; margin: 10px 0; font-size: 7pt; color: #856404;">
+        <strong>Notice:</strong> {{ $recordsWarning }}
+    </div>
+    @endif
+
     <div class="footer">
         Generated on {{ date('d M Y H:i:s') }}
     </div>

@@ -250,6 +250,10 @@ class LandlordController extends Controller
     public function exportStatementExcel(Request $request)
     {
         try {
+            // Increase memory limit for Excel generation
+            ini_set('memory_limit', '512M');
+            set_time_limit(300);
+
             try {
                 $landlordId = (int) Crypt::decrypt($request->landlord_id);
             } catch (\Exception $e) {
@@ -297,9 +301,15 @@ class LandlordController extends Controller
                 $query->whereDate('entry_date', '<=', $dateTo);
             }
 
+            // Limit results to 100,000 records to prevent memory issues
+            $maxRecords = 100000;
             $transactions = $query->orderBy('entry_date', 'asc')
                 ->orderBy('id', 'asc')
+                ->limit($maxRecords)
                 ->get();
+
+            // Check if results were limited
+            $isLimited = $transactions->count() >= $maxRecords;
 
             $statementEntries = [];
             $balance = 0;
@@ -319,6 +329,18 @@ class LandlordController extends Controller
                 ];
             }
 
+            // Add warning note if results were truncated
+            if ($isLimited) {
+                $statementEntries[] = [
+                    'date' => '',
+                    'reference' => 'NOTICE',
+                    'narration' => 'Results limited to ' . $maxRecords . ' records. Please use a narrower date range.',
+                    'debit' => '',
+                    'credit' => '',
+                    'balance' => '',
+                ];
+            }
+
             $fileName = 'Landlord_Statement_' . ($landlord->reference_number ?? $landlordId) . '_' . date('Y-m-d') . '.xlsx';
 
             return Excel::download(new LandlordStatementExport($statementEntries, $landlordInfo), $fileName);
@@ -335,6 +357,10 @@ class LandlordController extends Controller
     public function exportStatementPdf(Request $request)
     {
         try {
+            // Increase memory limit for PDF generation
+            ini_set('memory_limit', '512M');
+            set_time_limit(300);
+
             try {
                 $landlordId = (int) Crypt::decrypt($request->landlord_id);
             } catch (\Exception $e) {
@@ -383,9 +409,16 @@ class LandlordController extends Controller
                 $query->whereDate('entry_date', '<=', $dateTo);
             }
 
+            // Limit results to 100,000 records to prevent memory issues
+            $maxRecords = 100000;
             $transactions = $query->orderBy('entry_date', 'asc')
                 ->orderBy('id', 'asc')
+                ->limit($maxRecords)
                 ->get();
+
+            // Check if results were limited
+            $recordsWarning = $transactions->count() >= $maxRecords ?
+                ' (Limited to ' . $maxRecords . ' records. Please use a narrower date range.)' : '';
 
             $statementEntries = [];
             $balance = 0;
@@ -414,13 +447,16 @@ class LandlordController extends Controller
                 'statement' => $statementEntries,
                 'dateFrom' => $dateFrom ? date('d M Y', strtotime($dateFrom)) : 'Beginning',
                 'dateTo' => $dateTo ? date('d M Y', strtotime($dateTo)) : 'Today',
+                'recordsWarning' => $recordsWarning,
             ];
 
             $pdf = Pdf::loadView('property.landlord.statement-pdf', $data);
             $pdf->setPaper('A4', 'portrait');
 
+            // Generate PDF output with streaming headers
             $fileName = 'Landlord_Statement_' . ($landlord->reference_number ?? $landlordId) . '_' . date('Y-m-d') . '.pdf';
 
+            // Stream to browser as download (forces download instead of opening in browser)
             return $pdf->download($fileName);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
