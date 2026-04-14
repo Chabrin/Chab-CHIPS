@@ -34,15 +34,17 @@ class ClientsController extends Controller
     public function getCLients(Request $request)
     {
         try {
-            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
 
             $can_read = Auth::user()->isAbleTo('read_clients');
             $can_update = Auth::user()->isAbleTo('update_clients');
 
+            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date'])
+                ->typeOne();
+
             // Filter by client_type if provided (Landlord or Tenant)
             if ($request->filled('client_type')) {
                 if ($request->client_type === 'Landlord') {
-                    $query->where('reference_number', 'LIKE', 'LAN-%');
+                     $query->where('reference_number', 'NOT LIKE', 'TEN-%');
                 } elseif ($request->client_type === 'Tenant') {
                     $query->where('reference_number', 'LIKE', 'TEN-%');
                 }

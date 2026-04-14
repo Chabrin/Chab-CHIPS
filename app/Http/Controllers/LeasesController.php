@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Storage;
 use App\Models\LeaseAgreementInvoiceableItem;
 use App\Services\LeaseContractService;
 
@@ -28,6 +29,117 @@ class LeasesController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading lease index: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to load leases');
+        }
+    }
+
+    /**
+     * Get portfolio-wide lease stats (AJAX)
+     */
+    public function getStats()
+    {
+        try {
+            $today = now();
+            $in90Days = now()->addDays(90);
+
+            $stats = LeaseAgreement::selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN date_end >= ? AND date_end <= ? AND current_status_id = 5 THEN 1 ELSE 0 END) as expiring_soon,
+                SUM(CASE WHEN date_end < ? THEN 1 ELSE 0 END) as expired,
+                SUM(CASE WHEN contract_signed_at IS NOT NULL THEN 1 ELSE 0 END) as signed,
+                SUM(CASE WHEN contract_sent_at IS NOT NULL AND contract_signed_at IS NULL THEN 1 ELSE 0 END) as sent_not_signed,
+                SUM(CASE WHEN contract_sent_at IS NULL THEN 1 ELSE 0 END) as not_sent,
+                SUM(CASE WHEN date_end IS NULL THEN 1 ELSE 0 END) as no_end_date
+            ", [$today, $in90Days, $today])->first();
+
+            return response()->json(['data' => $stats]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading lease stats: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * Get active leases with no end date set (AJAX)
+     */
+    public function getNoEndDateLeases(Request $request)
+    {
+        try {
+            $query = LeaseAgreement::with(['tenant:id,names', 'property:id,property_name', 'unit:id,unit_code', 'client:id,names'])
+                ->whereNull('date_end');
+
+            if ($request->filled('client_id')) {
+                $query->where('client_id', $request->client_id);
+            }
+
+            if ($request->filled('property_id')) {
+                $query->where('property_id', $request->property_id);
+            }
+
+            $leases = $query->select(['id', 'tenant_id', 'property_id', 'unit_id', 'client_id', 'ref_number', 'date_start', 'date_end', 'current_status_id', 'contract_sent_at', 'contract_signed_at', 'signed_pdf_path'])
+                ->orderBy('date_start', 'desc')
+                ->get()
+                ->map(function ($lease) {
+                    return [
+                        'id'                  => $lease->id,
+                        'encrypted_id'        => Crypt::encrypt($lease->id),
+                        'ref_number'          => $lease->ref_number,
+                        'tenant_name'         => $lease->tenant->names ?? 'N/A',
+                        'encrypted_tenant_id' => $lease->tenant_id ? Crypt::encrypt($lease->tenant_id) : null,
+                        'property_name'       => $lease->property->property_name ?? 'N/A',
+                        'unit_code'           => $lease->unit->unit_code ?? 'N/A',
+                        'client_name'         => $lease->client->names ?? 'N/A',
+                        'date_start'          => $lease->date_start,
+                        'current_status_id'   => $lease->current_status_id,
+                        'contract_status'     => $lease->contract_signed_at ? 'signed' : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
+                        'has_signed_pdf'      => !empty($lease->signed_pdf_path),
+                    ];
+                });
+
+            return response()->json(['data' => $leases]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading no-end-date leases: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load leases'], 500);
+        }
+    }
+
+    /**
+     * Stream the signed lease contract PDF for viewing.
+     */
+    public function viewSignedContract($encryptedId)
+    {
+        try {
+            $id    = Crypt::decrypt($encryptedId);
+            $lease = LeaseAgreement::findOrFail($id);
+
+            if (empty($lease->signed_pdf_path)) {
+                abort(404, 'No signed contract available for this lease.');
+            }
+
+            $filename = basename($lease->signed_pdf_path);
+
+            if (Storage::disk('local')->exists($lease->signed_pdf_path)) {
+                return Storage::disk('local')->response($lease->signed_pdf_path, $filename, [
+                    'Content-Type'        => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . $filename . '"',
+                ]);
+            }
+
+            if (Storage::disk('public')->exists($lease->signed_pdf_path)) {
+                return Storage::disk('public')->response($lease->signed_pdf_path, $filename, [
+                    'Content-Type'        => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . $filename . '"',
+                ]);
+            }
+
+            abort(404, 'Contract file not found.');
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            abort(403);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error viewing signed contract: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load contract'], 500);
         }
     }
 
@@ -67,6 +179,7 @@ class LeasesController extends Controller
                     'escalation_rate',
                     'contract_sent_at',
                     'contract_signed_at',
+                    'signed_pdf_path',
                 ])
                 ->orderBy('date_end', 'asc')
                 ->limit(500) // Limit results for performance
@@ -100,6 +213,7 @@ class LeasesController extends Controller
                         'contract_status' => $lease->contract_signed_at
                             ? 'signed'
                             : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
+                        'has_signed_pdf' => !empty($lease->signed_pdf_path),
                     ];
                 });
 
@@ -395,6 +509,78 @@ class LeasesController extends Controller
                 'success' => false,
                 'message' => 'Failed to renew leases: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Bulk-send lease contracts to tenants that haven't received one yet,
+     * or re-send to those who received but haven't signed.
+     */
+    public function bulkSendContracts(Request $request)
+    {
+        $request->validate([
+            'type'        => 'required|in:not_sent,sent_not_signed',
+            'client_id'   => 'nullable|integer|exists:sys_pm_clients,id',
+            'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
+        ]);
+
+        try {
+            $query = LeaseAgreement::with(['tenant', 'property', 'unit', 'invoiceableItems', 'contractTemplate'])
+                ->where('current_status_id', 5);
+
+            if ($request->type === 'not_sent') {
+                $query->whereNull('contract_sent_at');
+            } else {
+                $query->whereNotNull('contract_sent_at')->whereNull('contract_signed_at');
+            }
+
+            if ($request->filled('client_id')) {
+                $query->where('client_id', $request->client_id);
+            }
+
+            if ($request->filled('property_id')) {
+                $query->where('property_id', $request->property_id);
+            }
+
+            $leases = $query->get();
+
+            if ($leases->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No leases match this criteria.',
+                ], 400);
+            }
+
+            $sent   = 0;
+            $failed = 0;
+            $service = new LeaseContractService();
+
+            foreach ($leases as $lease) {
+                try {
+                    $service->sendToTenant($lease);
+                    $sent++;
+                } catch (\Exception $e) {
+                    $failed++;
+                    Log::error('Bulk send failed for lease ' . $lease->ref_number . ': ' . $e->getMessage());
+                }
+            }
+
+            $label = $request->type === 'not_sent' ? 'sent' : 'resent';
+            $message = "Contracts {$label}: {$sent}";
+            if ($failed > 0) {
+                $message .= ", failed: {$failed}";
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'sent'    => $sent,
+                'failed'  => $failed,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error in bulkSendContracts: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to send contracts.'], 500);
         }
     }
 

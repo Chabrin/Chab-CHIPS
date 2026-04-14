@@ -5,6 +5,9 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Lease Agreement – {{ $lease->ref_number ?? '' }}</title>
     <style>
+        @page {
+            margin: 22mm 20mm 22mm 20mm;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: DejaVu Sans, Arial, sans-serif;
