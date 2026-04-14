@@ -28,7 +28,7 @@ import time
 # CONFIG
 # ===============================================================================
 MSSQL_SERVER   = r'localhost\SQL2017'
-MSSQL_DATABASE = 'CHABRINS'
+MSSQL_DATABASE = 'CHABRINS_NEW'
 MSSQL_DRIVER   = '{SQL Server}'
 BATCH = 50_000
 

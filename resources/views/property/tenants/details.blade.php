@@ -154,9 +154,9 @@
                                                 <span class="fw-semibold small">Tenant Account Balance</span>
                                                 <span class="ms-auto">
                                                     @if($tenantBalance['is_in_arrears'])
-                                                        <span class="badge bg-danger">In Arrears</span>
+                                                    <span class="badge bg-danger">In Arrears</span>
                                                     @else
-                                                        <span class="badge bg-success">Credit</span>
+                                                    <span class="badge bg-success">Credit</span>
                                                     @endif
                                                 </span>
                                             </div>
@@ -188,14 +188,7 @@
                             <!-- Payments Tab -->
                             <div class="tab-pane fade" id="payments" role="tabpanel" aria-labelledby="payments-tab">
                                 <div class="mb-3">
-                                    <div id="payments-preloader" class="text-center my-4">
-                                        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                        <p class="mt-2 text-muted">Loading payments...</p>
-                                    </div>
-
-                                    <div class="table-responsive" style="visibility: hidden;" id="payments-table-wrapper">
+                                    <div class="table-responsive">
                                         <table class="display" id="tenant-payments-table" style="width:100%">
                                             <thead>
                                                 <tr>
@@ -224,14 +217,7 @@
                             <!-- Leases Tab -->
                             <div class="tab-pane fade" id="leases" role="tabpanel" aria-labelledby="leases-tab">
                                 <div class="mb-3">
-                                    <div id="leases-preloader" class="text-center my-4">
-                                        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                        <p class="mt-2 text-muted">Loading leases...</p>
-                                    </div>
-
-                                    <div class="table-responsive" style="visibility: hidden;" id="leases-table-wrapper">
+                                    <div class="table-responsive">
                                         <table class="display" id="tenant-leases-table" style="width:100%">
                                             <thead>
                                                 <tr>
@@ -280,74 +266,10 @@
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(function() {
-        var paymentsTable = $('#tenant-payments-table').DataTable({
-            processing: true,
-            serverSide: false,
-            ajax: {
-                url: '/tenants/{{ $tenant->encrypted_id }}/payments',
-                dataSrc: 'data'
-            },
-            columns: [{
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        return meta.row + 1;
-                    }
-                },
-                {
-                    data: 'payment_date'
-                },
-                {
-                    data: 'reference'
-                },
-                {
-                    data: 'narration'
-                },
-                {
-                    data: 'tenant'
-                },
-                {
-                    data: 'property'
-                },
-                {
-                    data: 'unit'
-                }, {
-                    data: 'amount',
-                    className: 'text-end'
-                }
-            ],
-            order: [
-                [1, 'desc']
-            ],
-            initComplete: function() {
-                $('#payments-preloader').hide();
-                $('#payments-table-wrapper').css('visibility', 'visible');
-            },
-            footerCallback: function(row, data, start, end, display) {
-                var api = this.api();
-
-                // helper to parse formatted numbers (with commas)
-                var parseValue = function(val) {
-                    if (!val) return 0;
-                    // remove any non-numeric characters except dot and minus
-                    var v = String(val).replace(/[^0-9.\-]/g, '');
-                    return parseFloat(v) || 0;
-                };
-
-                // column index for amount is last column
-                var amountIdx = api.columns().count() - 1;
-
-                // Total over this page
-                var pageTotal = api.column(amountIdx, {
-                    page: 'current'
-                }).data().reduce(function(a, b) {
-                    return parseValue(a) + parseValue(b);
-                }, 0);
-
-                // Update footer
-                $(api.column(amountIdx).footer()).html(pageTotal.toFixed(2));
-                $('#payments-total').text(pageTotal.toFixed(2));
-            }
-        });
+        var paymentsTable = null;
+        var leasesTable = null;
+        var paymentsLoaded = false;
+        var leasesLoaded = false;
 
         // Helper: format date to dd/mm/yy
         function formatDateShort(dateStr) {
@@ -364,61 +286,138 @@
             return dd + '/' + mm + '/' + yy;
         }
 
-        // Leases DataTable
-        var leasesTable = $('#tenant-leases-table').DataTable({
-            processing: true,
-            serverSide: false,
-            ajax: {
-                url: '/tenants/{{ $tenant->encrypted_id }}/leases',
-                dataSrc: 'data'
-            },
-            columns: [{
-                    data: null,
-                    orderable: false,
-                    render: function(data, type, row, meta) {
-                        return meta.row + 1;
+        // Initialize Payments DataTable on tab click
+        function initPaymentsTable() {
+            if (paymentsLoaded) return;
+            paymentsLoaded = true;
+
+            paymentsTable = $('#tenant-payments-table').DataTable({
+                processing: true,
+                serverSide: false,
+                ajax: {
+                    url: "{{ route('tenants.payments', ['encryptedId' => $tenant->encrypted_id]) }}",
+                    dataSrc: 'data',
+                    error: function(xhr) {
+                        console.error('Failed loading tenant payments:', xhr.responseText || xhr.statusText);
                     }
                 },
-                { data: 'ref_number' },
-                { data: 'property' },
-                { data: 'unit' },
-                {
-                    data: 'date_start',
-                    render: function(data) { return formatDateShort(data); }
-                },
-                {
-                    data: 'date_end',
-                    render: function(data) { return formatDateShort(data); }
-                },
-                {
-                    data: 'contract_status',
-                    orderable: false,
-                    render: function(status) {
-                        if (status === 'signed')  return '<span class="badge badge-light-success"><i class="fa fa-check me-1"></i>Signed</span>';
-                        if (status === 'sent')    return '<span class="badge badge-light-warning"><i class="fa fa-envelope me-1"></i>Sent</span>';
-                        return '<span class="badge badge-light-secondary">Not Sent</span>';
-                    }
-                },
-                {
-                    data: null,
-                    orderable: false,
-                    render: function(data, type, row) {
-                        var btns = '';
-                        if (row.has_signed_pdf) {
-                            btns += '<a href="/property/leases/' + row.encrypted_id + '/view-signed-contract" target="_blank" class="btn btn-sm btn-outline-success me-1" title="View Signed Contract"><i class="fa fa-file-pdf-o"></i></a>';
+                columns: [{
+                        data: null,
+                        render: function(data, type, row, meta) {
+                            return meta.row + 1;
                         }
-                        if (row.contract_status !== 'signed') {
-                            var title = row.contract_status === 'sent' ? 'Resend Contract' : 'Send Contract';
-                            btns += '<button class="btn btn-sm btn-outline-info send-lease-contract-btn" data-ref="' + row.ref_number + '" title="' + title + '"><i class="fa fa-paper-plane"></i></button>';
-                        }
-                        return btns || '<span class="text-muted small">—</span>';
+                    },
+                    {
+                        data: 'payment_date'
+                    },
+                    {
+                        data: 'reference'
+                    },
+                    {
+                        data: 'narration'
+                    },
+                    {
+                        data: 'tenant'
+                    },
+                    {
+                        data: 'property'
+                    },
+                    {
+                        data: 'unit'
+                    },
+                    {
+                        data: 'amount',
+                        className: 'text-end'
                     }
+                ],
+                order: [
+                    [1, 'desc']
+                ],
+                footerCallback: function(row, data, start, end, display) {
+                    var api = this.api();
+
+                    // helper to parse formatted numbers (with commas)
+                    var parseValue = function(val) {
+                        if (!val) return 0;
+                        // remove any non-numeric characters except dot and minus
+                        var v = String(val).replace(/[^0-9.\-]/g, '');
+                        return parseFloat(v) || 0;
+                    };
+
+                    // column index for amount is last column
+                    var amountIdx = api.columns().count() - 1;
+
+                    // Total over this page
+                    var pageTotal = api.column(amountIdx, {
+                        page: 'current'
+                    }).data().reduce(function(a, b) {
+                        return parseValue(a) + parseValue(b);
+                    }, 0);
+
+                    // Update footer
+                    $(api.column(amountIdx).footer()).html(pageTotal.toFixed(2));
+                    $('#payments-total').text(pageTotal.toFixed(2));
                 }
-            ],
-            order: [[4, 'desc']],
-            initComplete: function() {
-                $('#leases-preloader').hide();
-                $('#leases-table-wrapper').css('visibility', 'visible');
+            });
+        }
+
+        // Initialize Leases DataTable on tab click
+        function initLeasesTable() {
+            if (leasesLoaded) return;
+            leasesLoaded = true;
+
+            leasesTable = $('#tenant-leases-table').DataTable({
+                processing: true,
+                serverSide: false,
+                ajax: {
+                    url: "{{ route('tenants.leases', ['encryptedId' => $tenant->encrypted_id]) }}",
+                    dataSrc: 'data',
+                    error: function(xhr) {
+                        console.error('Failed loading tenant leases:', xhr.responseText || xhr.statusText);
+                    }
+                },
+                columns: [{
+                        data: null,
+                        render: function(data, type, row, meta) {
+                            return meta.row + 1;
+                        }
+                    },
+                    {
+                        data: 'ref_number'
+                    },
+                    {
+                        data: 'property'
+                    },
+                    {
+                        data: 'unit'
+                    },
+                    {
+                        data: 'date_start',
+                        render: function(data) {
+                            return formatDateShort(data);
+                        }
+                    },
+                    {
+                        data: 'date_end',
+                        render: function(data) {
+                            return formatDateShort(data);
+                        }
+                    }
+                ],
+                order: [
+                    [4, 'desc']
+                ]
+            });
+        }
+
+        // Listen for tab changes
+        $('#tenantTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function(e) {
+            var target = $(e.target).attr('data-bs-target');
+
+            if (target === '#payments') {
+                initPaymentsTable();
+            } else if (target === '#leases') {
+                initLeasesTable();
             }
         });
 

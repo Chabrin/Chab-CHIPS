@@ -414,7 +414,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/clients/{encryptedId}/inspections', [App\Http\Controllers\ClientsController::class, 'getInspections'])->name('property.clients.inspections');
     Route::get('/property/clients/{encryptedId}/repairs', [App\Http\Controllers\ClientsController::class, 'getRepairs'])->name('property.clients.repairs');
     Route::get('/property/units', [App\Http\Controllers\ClientsController::class, 'getUnits'])->name('property.units.get');
-    Route::get('/property/tenants', [App\Http\Controllers\ClientsController::class, 'getTenants'])->name('property.tenants.get');
+    Route::get('/property/tenants', [App\Http\Controllers\ClientsController::class, 'tenantIndex'])->name('property.tenants.index');
+    Route::get('/property/tenants/data', [App\Http\Controllers\ClientsController::class, 'getTenantsData'])->name('property.tenants.data');
+    Route::get('/ajax/property/tenants', [App\Http\Controllers\ClientsController::class, 'getTenants'])->name('ajax.property.tenants.get');
     Route::get('/ajax/banks-and-branches', [ClientsController::class, 'getBanksAndBranches'])->name('ajax.banks.branches');
 
 

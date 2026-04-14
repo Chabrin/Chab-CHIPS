@@ -10,6 +10,11 @@ class Property extends Model
     protected static function boot()
     {
         parent::boot();
+
+        static::addGlobalScope('status_active', function ($query) {
+            $query->where('active', 1);
+        });
+
         static::observe(AuditLogsObserver::class);
     }
 
@@ -88,5 +93,10 @@ class Property extends Model
     public function leaseAgreements()
     {
         return $this->hasMany(LeaseAgreement::class, 'property_id', 'id');
+    }
+
+    public function scopeWithInactive($query)
+    {
+        return $query->withoutGlobalScope('status_active');
     }
 }

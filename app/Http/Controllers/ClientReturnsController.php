@@ -1539,15 +1539,51 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
 
             $return = ReturnSummary::findOrFail($id);
+            $signoff = $this->buildReturnSignoffData($return);
 
-            $allowedTypes = ['MINIRETURN', 'MAINRETURN'];
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
-                abort(403, 'PDF download is only available for MINIRETURN and MAINRETURN returns.');
+                abort(403, 'PDF download is only available for MINIRETURN, MAINRETURN and MASTERRETURN returns.');
+            }
+
+            if ($return->return_type === 'MASTERRETURN') {
+                $masterData = $this->buildMasterReturnExportData($return);
+                $logoPath = public_path('assets/images/logo/logo_dark.png');
+                $logoSrc  = file_exists($logoPath)
+                    ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+                    : '';
+
+                $pdf = Pdf::loadView('property.processed-returns.master-pdf', array_merge($masterData, [
+                    'return' => $return,
+                    'logoSrc' => $logoSrc,
+                    'signoff' => $signoff,
+                ]));
+                $pdf->setPaper('A4', 'portrait');
+
+                $dompdf = $pdf->getDomPDF();
+                $dompdf->render();
+                $canvas = $dompdf->get_canvas();
+                $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
+                $canvas->page_text(470, 815, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+
+                $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
+                $token    = request()->query('download_token');
+                $pdfContent = $dompdf->output();
+
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $fileName . '"');
+                header('Cache-Control: max-age=0');
+                if ($token) {
+                    header('Set-Cookie: download_complete_' . $token . '=1; Path=/; Max-Age=60; SameSite=Lax');
+                }
+                echo $pdfContent;
+                exit;
             }
 
             $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('tenant_name')
+                ->orderBy('entry_type')
                 ->orderBy('unit_code')
+                ->orderBy('tenant_name')
                 ->get();
 
             // Recompute line totals (same formula as details page)
@@ -1667,14 +1703,21 @@ class ClientReturnsController extends Controller
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
                 : '';
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff');
 
             $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
             $pdf->setPaper('A4', 'landscape');
 
+            // Render first so total page count is accurate, then draw page numbers.
+            $dompdf = $pdf->getDomPDF();
+            $dompdf->render();
+            $canvas = $dompdf->get_canvas();
+            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
+            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+
             $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token    = request()->query('download_token');
-            $pdfContent = $pdf->output();
+            $pdfContent = $dompdf->output();
 
             header('Content-Type: application/pdf');
             header('Content-Disposition: attachment; filename="' . $fileName . '"');
@@ -1701,9 +1744,154 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
-            $allowedTypes = ['MINIRETURN', 'MAINRETURN'];
+            $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
-                abort(403, 'Excel download is only available for MINIRETURN and MAINRETURN returns.');
+                abort(403, 'Excel download is only available for MINIRETURN, MAINRETURN and MASTERRETURN returns.');
+            }
+
+            if ($return->return_type === 'MASTERRETURN') {
+                $masterData = $this->buildMasterReturnExportData($return);
+
+                $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $sheet = $spreadsheet->getActiveSheet();
+                $sheet->setTitle('Master Return');
+
+                $sheet->setCellValue('A1', 'CHABRIN AGENCIES LIMITED');
+                $sheet->mergeCells('A1:C1');
+                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+                $sheet->setCellValue('A2', 'PROPERTY MANAGING AGENTS');
+                $sheet->mergeCells('A2:C2');
+                $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(11);
+
+                $sheet->setCellValue('A3', '5th Floor, Room 517, NACICO Plaza Landhies Road, PO Box 16659-00620 Nairobi, Kenya');
+                $sheet->mergeCells('A3:F3');
+
+                $sheet->setCellValue('A5', 'RETURNS FOR THE MONTH OF ' . strtoupper($masterData['monthLabel']));
+                $sheet->mergeCells('A5:C5');
+                $sheet->getStyle('A5')->getFont()->setBold(true);
+
+                $sheet->setCellValue('E5', 'Landlord');
+                $sheet->setCellValue('F5', $masterData['landlordName']);
+                $sheet->setCellValue('E6', 'Property');
+                $sheet->setCellValue('F6', $masterData['propertyName']);
+
+                $row = 8;
+                $sheet->setCellValue('A' . $row, 'RETURN NET SUM');
+                $sheet->mergeCells('A' . $row . ':C' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                foreach (['A' => 'Narration', 'B' => 'Ref', 'C' => 'Amount'] as $col => $header) {
+                    $sheet->setCellValue($col . $row, $header);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+                $row++;
+
+                foreach ($masterData['credits'] as $line) {
+                    $sheet->setCellValue('A' . $row, $line['narration']);
+                    $sheet->setCellValue('B' . $row, $line['ref']);
+                    $sheet->setCellValue('C' . $row, $line['amount']);
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $sheet->setCellValue('A' . $row, 'Subtotal');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['credits']);
+                $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row += 2;
+
+                $sheet->setCellValue('A' . $row, 'LESS');
+                $sheet->mergeCells('A' . $row . ':D' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                foreach (['A' => 'Date', 'B' => 'Narration', 'C' => 'Ref', 'D' => 'Amount'] as $col => $header) {
+                    $sheet->setCellValue($col . $row, $header);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+                $row++;
+
+                foreach ($masterData['debits'] as $line) {
+                    $sheet->setCellValue('A' . $row, $line['date']);
+                    $sheet->setCellValue('B' . $row, $line['narration']);
+                    $sheet->setCellValue('C' . $row, $line['ref']);
+                    $sheet->setCellValue('D' . $row, $line['amount']);
+                    $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $sheet->setCellValue('B' . $row, 'Subtotal');
+                $sheet->setCellValue('D' . $row, $masterData['totals']['debits']);
+                $sheet->getStyle('A' . $row . ':D' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row += 2;
+
+                $sheet->setCellValue('A' . $row, 'OTHER RECEIPTS FROM LANDLORD ACC');
+                $sheet->mergeCells('A' . $row . ':C' . $row);
+                $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+                $row++;
+
+                foreach (['A' => 'Narration', 'B' => 'Ref', 'C' => 'Amount'] as $col => $header) {
+                    $sheet->setCellValue($col . $row, $header);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+                $row++;
+
+                foreach ($masterData['otherReceipts'] as $line) {
+                    $sheet->setCellValue('A' . $row, $line['narration']);
+                    $sheet->setCellValue('B' . $row, $line['ref']);
+                    $sheet->setCellValue('C' . $row, $line['amount']);
+                    $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $row++;
+                }
+
+                $sheet->setCellValue('A' . $row, 'Subtotal');
+                $sheet->setCellValue('C' . $row, $masterData['totals']['other_receipts']);
+                $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setBold(true);
+                $sheet->getStyle('C' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+                $row += 2;
+
+                $sheet->setCellValue('A' . $row, 'Amount Payable');
+                $sheet->setCellValue('D' . $row, $masterData['totals']['amount_payable']);
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Amount Paid');
+                $sheet->setCellValue('D' . $row, $masterData['totals']['amount_paid']);
+                $row++;
+                $sheet->setCellValue('A' . $row, 'Balance');
+                $sheet->setCellValue('D' . $row, $masterData['totals']['balance']);
+                $sheet->getStyle('A' . ($row - 2) . ':D' . $row)->getFont()->setBold(true);
+                foreach (range($row - 2, $row) as $totRow) {
+                    $sheet->getStyle('D' . $totRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                }
+
+                $row += 3;
+                $signoffs = ['Prepared By', 'Checked By', 'Approved By', 'Client Name'];
+                $startCols = ['A', 'C', 'E', 'G'];
+                foreach ($signoffs as $index => $title) {
+                    $col = $startCols[$index];
+                    $sheet->setCellValue($col . $row, $title);
+                    $sheet->getStyle($col . $row)->getFont()->setBold(true);
+                }
+
+                foreach (range('A', 'G') as $col) {
+                    $sheet->getColumnDimension($col)->setAutoSize(true);
+                }
+
+                $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                $filename = 'return_' . $return->return_code . '_' . date('Y-m-d') . '.xlsx';
+
+                header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                header('Content-Disposition: attachment;filename="' . $filename . '"');
+                header('Cache-Control: max-age=0');
+                $dlToken = request()->query('download_token');
+                if ($dlToken) {
+                    header('Set-Cookie: download_complete_' . $dlToken . '=1; Path=/; Max-Age=60; SameSite=Lax');
+                }
+
+                $writer->save('php://output');
+                exit;
             }
 
             $lines = ReturnClient::where('return_code', $return->return_code)
@@ -1792,5 +1980,119 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to generate Excel'
             ], 500);
         }
+    }
+
+    private function buildMasterReturnExportData(ReturnSummary $return): array
+    {
+        $lines = ReturnClient::where('return_code', $return->return_code)
+            ->orderBy('source_date')
+            ->orderBy('transaction_date')
+            ->orderBy('entry_type')
+            ->orderBy('transaction_ref')
+            ->orderBy('narration')
+            ->get();
+
+        $credits = [];
+        $otherReceipts = [];
+        $debits = [];
+        $totalCredits = 0.0;
+        $totalOtherReceipts = 0.0;
+        $totalDebits = 0.0;
+
+        foreach ($lines as $line) {
+            $amount = (float) ($line->net_amount ?? $line->amount_payable_landlord ?? 0);
+            $item = [
+                'narration' => $line->narration ?: ($line->entry_type ?: $line->entry_description ?: '-'),
+                'ref' => $line->transaction_ref ?: '-',
+                'amount' => $amount,
+                'date' => $line->source_date
+                    ? $line->source_date->format('d-m-Y')
+                    : (!empty($line->transaction_date) ? date('d-m-Y', strtotime((string) $line->transaction_date)) : '-'),
+                'sort_date' => $line->source_date
+                    ? $line->source_date->format('Y-m-d')
+                    : (!empty($line->transaction_date) ? date('Y-m-d', strtotime((string) $line->transaction_date)) : '9999-12-31'),
+            ];
+
+            $narrationText = strtoupper(trim((string) ($line->narration ?: $line->entry_type ?: $line->entry_description ?: '')));
+
+            if (str_contains($narrationText, 'OPENING AT START OF MONTH')) {
+                $otherReceipts[] = $item;
+                $totalOtherReceipts += $amount;
+                continue;
+            }
+
+            if (strtoupper((string) $line->dr_cr) === 'DR') {
+                $debits[] = $item;
+                $totalDebits += $amount;
+            } else {
+                $credits[] = $item;
+                $totalCredits += $amount;
+            }
+        }
+
+        usort($debits, function ($left, $right) {
+            return strcmp($left['sort_date'], $right['sort_date']);
+        });
+
+        $landlordName = DB::table('sys_pm_clients')
+            ->where('reference_number', $return->landlord_code)
+            ->value('names') ?: ($return->landlord_code ?? '-');
+
+        $propertyName = DB::table('sys_pm_properties')
+            ->where('reference_number', $return->property_code)
+            ->value('property_name') ?: ($return->property_code ?? '-');
+
+        return [
+            'credits' => $credits,
+            'otherReceipts' => $otherReceipts,
+            'debits' => $debits,
+            'totals' => [
+                'credits' => $totalCredits,
+                'other_receipts' => $totalOtherReceipts,
+                'debits' => $totalDebits,
+                'amount_payable' => ($totalCredits + $totalOtherReceipts) - $totalDebits,
+                'amount_paid' => (float) ($return->amount_paid ?? 0),
+                'balance' => (($totalCredits + $totalOtherReceipts) - $totalDebits) - (float) ($return->amount_paid ?? 0),
+            ],
+            'landlordName' => $landlordName,
+            'propertyName' => $propertyName,
+            'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
+        ];
+    }
+
+    private function buildReturnSignoffData(ReturnSummary $return): array
+    {
+        return [
+            'prepared' => [
+                'name' => $return->prepared_by ?: '-',
+                'date' => $this->formatSignoffDate($return->prepared_date),
+            ],
+            'checked' => [
+                'name' => $return->checked_by ?: '-',
+                'date' => $this->formatSignoffDate($return->checked_date),
+            ],
+            'approved' => [
+                'name' => $return->approved_by ?: '-',
+                'date' => $this->formatSignoffDate($return->approved_date),
+            ],
+        ];
+    }
+
+    private function formatSignoffDate($value): string
+    {
+        if (empty($value)) {
+            return '-';
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('d-m-Y');
+        }
+
+        $timestamp = strtotime((string) $value);
+        if ($timestamp === false) {
+            return '-';
+        }
+
+        return date('d-m-Y', $timestamp);
     }
 }

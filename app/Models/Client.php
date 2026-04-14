@@ -84,27 +84,27 @@ class Client extends Model
     }
 
     /**
-     * Scope a query to only include tenants (reference_number starts with TEN)
+     * Scope a query to only include tenants (type_id = 2)
      */
     public function scopeTenants($query)
     {
-        return $query->where('reference_number', 'LIKE', 'TEN%');
+        return $query->where('type_id', 2);
     }
 
     /**
-     * Scope a query to only include clients/landlords (reference_number starts with LAN)
+     * Scope a query to only include clients/landlords (type_id = 1)
      */
     public function scopeClients($query)
     {
-        return $query->where('reference_number', 'LIKE', 'LAN%');
+        return $query->where('type_id', 1);
     }
 
     /**
-     * Scope a query to only include landlords (alias for clients)
+     * Scope a query to only include landlords (alias for clients, type_id = 1)
      */
     public function scopeLandlords($query)
     {
-        return $query->where('reference_number', 'LIKE', 'LAN%');
+        return $query->where('type_id', 1);
     }
 
     /**
@@ -115,7 +115,7 @@ class Client extends Model
         return \Illuminate\Support\Facades\Crypt::encrypt($this->id);
     }
 
-     /**
+    /**
      * Check if this record is a tenant
      */
     public function isTenant()
@@ -176,5 +176,4 @@ class Client extends Model
     {
         return $this->belongsTo(ServiceAgreement::class, 'sla_id');
     }
-
 }

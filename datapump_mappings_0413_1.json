@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "src_full": "dbo.vw_sys_pm_properties_001",
+      "tgt_full": "chips_db_v3.sys_pm_properties"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_clients_landlords_002",
+      "tgt_full": "chips_db_v3.sys_pm_clients"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_units_003",
+      "tgt_full": "chips_db_v3.sys_pm_units"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_lease_agreements_005",
+      "tgt_full": "chips_db_v3.sys_pm_lease_agreements"
+    },
+    {
+      "src_full": "dbo.vw_sys_set_zones_006",
+      "tgt_full": "chips_db_v3.sys_set_zones"
+    },
+    {
+      "src_full": "dbo.vw_sys_set_zone_areas_007",
+      "tgt_full": "chips_db_v3.sys_set_zone_areas"
+    },
+    {
+      "src_full": "dbo.vw_sys_set_invoiceable_items_008",
+      "tgt_full": "chips_db_v3.sys_set_invoiceable_items"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_debtors_invoices_009",
+      "tgt_full": "chips_db_v3.sys_pm_debtors_invoices"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_tenants_payments_allocated_011",
+      "tgt_full": "chips_db_v3.sys_pm_tenants_payments_allocated"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_tenants_payments_unallocated_012",
+      "tgt_full": "chips_db_v3.sys_pm_tenants_payments_unallocated"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_tenants_accounts_transactions_013",
+      "tgt_full": "chips_db_v3.sys_pm_tenants_accounts_trans"
+    },
+    {
+      "src_full": "dbo.vw_cb_receipts_014",
+      "tgt_full": "chips_db_v3.cb_receipts"
+    },
+    {
+      "src_full": "dbo.vw_cb_returns_summary_015",
+      "tgt_full": "chips_db_v3.cb_returns_summary"
+    },
+    {
+      "src_full": "dbo.vw_cb_returns_clients_016",
+      "tgt_full": "chips_db_v3.cb_returns_clients"
+    },
+    {
+      "src_full": "dbo.vw_chofficers_to_josya_users_017",
+      "tgt_full": "chips_db_v3.josya_users"
+    },
+    {
+      "src_full": "dbo.vw_sys_pm_service_agreements_018",
+      "tgt_full": "chips_db_v3.sys_pm_service_agreements"
+    },
+    {
+      "src_full": "dbo.vw_cb_landlord_account_019",
+      "tgt_full": "chips_db_v3.cb_landlord_account"
+    },
+    {
+      "src_full": "dbo.vw_cb_money_recoveries_020",
+      "tgt_full": "chips_db_v3.cb_money_recoveries"
+    },
+    {
+      "src_full": "dbo.vw_cb_payment_vouchers_headers_new_021",
+      "tgt_full": "chips_db_v3.cb_payment_vouchers_headers_new"
+    },
+    {
+      "src_full": "dbo.vw_cb_payment_vouchers_headers_old_022",
+      "tgt_full": "chips_db_v3.cb_payment_vouchers_headers_old"
+    },
+    {
+      "src_full": "dbo.vw_cb_payment_vouchers_lines_new_023",
+      "tgt_full": "chips_db_v3.cb_payment_vouchers_lines_new"
+    },
+    {
+      "src_full": "dbo.vw_cb_payment_vouchers_lines_old_024",
+      "tgt_full": "chips_db_v3.cb_payment_vouchers_lines_old"
+    },
+    {
+      "src_full": "dbo.vw_cb_landlord_charge_pairs_026",
+      "tgt_full": "chips_db_v3.cb_landlord_charge_pairs"
+    }
+  ]
+}

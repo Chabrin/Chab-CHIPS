@@ -1,6 +1,25 @@
 @php
 use Illuminate\Support\Facades\Crypt;
 @endphp
+{{--
+COPY PERMISSIONS (paste when re-enabling checks):
+@permission('update_clients') ... @endpermission
+@permission('create_clients') ... @endpermission
+@permission('create_properties') ... @endpermission
+@permission('create_units') ... @endpermission
+@permission('create_service_agreements') ... @endpermission
+@permission('create_tenants') ... @endpermission
+@permission('create_lease_agreements') ... @endpermission
+@permission('read_clients') ... @endpermission
+@permission('read_properties') ... @endpermission
+@permission('read_service_agreements') ... @endpermission
+@permission('read_units') ... @endpermission
+@permission('read_tenants') ... @endpermission
+@permission('read_lease_agreements') ... @endpermission
+@permission('read_recoveries') ... @endpermission
+@permission('read_inspections') ... @endpermission
+@permission('read_repair_requests') ... @endpermission
+--}}
 @extends('layouts.main')
 @section('content')
 <div class="page-body" style="padding-top:10px;">
@@ -15,12 +34,10 @@ use Illuminate\Support\Facades\Crypt;
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
                             </a>
-                            @permission('update_clients')
                             <a href="/property/clients/{{ Crypt::encrypt($client->id) }}/edit" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">edit_document</span>
                                 <span class="ms-1">Edit Client</span>
                             </a>
-                            @endpermission
                         </div>
                     </div>
                     <div class="card-body">
@@ -53,7 +70,36 @@ use Illuminate\Support\Facades\Crypt;
                                         <span>Additional Actions</span>
                                     </button>
                                     <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                                        @include('property.clients.include.menu')
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="#" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
+                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">upload_file</span> Bulk Upload Data
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="{{ route('property.properties.create', ['client' => Crypt::encrypt($client->id)]) }}">
+                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">add_home</span> Add Property
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="{{ route('property.units.create', ['client' => Crypt::encrypt($client->id)]) }}">
+                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">apartment</span> Add Unit
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="{{ route('service.agreements.create', ['client' => Crypt::encrypt($client->id)]) }}">
+                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">approval_delegation</span> Add SLA
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="{{ route('units.tenants.create', ['client' => Crypt::encrypt($client->id)]) }}">
+                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">person</span> Add Tenants
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item d-flex align-items-center" href="{{ route('tenant.lease.create', ['client' => Crypt::encrypt($client->id)]) }}">
+                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">document_scanner</span> Add Lease
+                                            </a>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
@@ -61,41 +107,388 @@ use Illuminate\Support\Facades\Crypt;
 
                         <!-- Tabs Navigation -->
                         <ul class="nav nav-tabs mb-4" id="clientTabs" role="tablist">
-                            @include('property.clients.include.tabs')
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span> Profile
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">analytics</span> Stats
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="properties-tab" data-bs-toggle="tab" data-bs-target="#properties" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">home</span> Properties
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="sla-tab" data-bs-toggle="tab" data-bs-target="#sla" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">approval_delegation</span> SLA
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="units-tab" data-bs-toggle="tab" data-bs-target="#units" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">apartment</span> Units
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tenants-tab" data-bs-toggle="tab" data-bs-target="#tenants" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">group</span> Tenants
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="leases-tab" data-bs-toggle="tab" data-bs-target="#leases" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">description</span> Leases
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="recoveries-tab" data-bs-toggle="tab" data-bs-target="#recoveries" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">payments</span> Recoveries
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="inspections-tab" data-bs-toggle="tab" data-bs-target="#inspections" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">fact_check</span> Inspections
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="repairs-tab" data-bs-toggle="tab" data-bs-target="#repairs" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">build</span> Repairs &amp; Maintenance
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="returns-config-tab" data-bs-toggle="tab" data-bs-target="#returns-config" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">settings</span> Returns Config
+                                </button>
+                            </li>
                         </ul>
 
                         <!-- Tabs Content -->
                         <div class="tab-content" id="clientTabsContent">
 
                             <!-- Profile Information Tab -->
-                            @include('property.clients.include.profile')
+                            <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size:0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">badge</span>
+                                                    Personal Information
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Full Names:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->names ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">National ID:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->national_id ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Reference No:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->reference_number ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Mobile Number:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->mobile_number ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Email Address:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->email_address ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Registered:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->registered_date ? $client->registered_date->format('d-m-Y') : '-' }}</strong></small></div>
+                                                    <div class="col-12 mt-2"><small class="text-muted">Address:</small></div>
+                                                    <div class="col-12"><small><strong>{{ $client->address ?? '-' }}</strong></small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size:0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">account_balance</span>
+                                                    Banking &amp; Tax Details
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-5"><small class="text-muted">Account Name:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->account_name ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Account Number:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->account_number ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">VAT Number:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->vat_number ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">PIN Number:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->pin_number ?? '-' }}</strong></small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Statistics Tab -->
-                            @include('property.clients.include.stats')
+                            <div class="tab-pane fade" id="stats" role="tabpanel" aria-labelledby="stats-tab">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size:0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">home</span>
+                                                    Portfolio Overview
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-7"><small class="text-muted">Total Properties:</small></div>
+                                                    <div class="col-5">2</div>
+                                                    <div class="col-7"><small class="text-muted">Total Units:</small></div>
+                                                    <div class="col-5">16</div>
+                                                    <div class="col-7"><small class="text-muted">Total Vacant Units:</small></div>
+                                                    <div class="col-5">0</div>
+                                                    <div class="col-7"><small class="text-muted">New Properties:</small></div>
+                                                    <div class="col-5">2</div>
+                                                    <div class="col-7"><small class="text-muted">Total Tenants:</small></div>
+                                                    <div class="col-5">16</div>
+                                                    <div class="col-7"><small class="text-muted">Total Leases:</small></div>
+                                                    <div class="col-5">16</div>
+                                                    <div class="col-7"><small class="text-muted">Occupancy Status:</small></div>
+                                                    <div class="col-5">100%</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2">
+                                                <h6 class="mb-0" style="font-size:0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">analytics</span>
+                                                    Financial &amp; Tasks Performance
+                                                </h6>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="row g-1">
+                                                    <div class="col-7"><small class="text-muted">Overall Collection:</small></div>
+                                                    <div class="col-5">0%</div>
+                                                    <div class="col-7"><small class="text-muted">Collection vs Paid:</small></div>
+                                                    <div class="col-5">0%</div>
+                                                    <div class="col-7"><small class="text-muted">Pending Arrears:</small></div>
+                                                    <div class="col-5">0.00</div>
+                                                    <div class="col-7"><small class="text-muted">Pending Tasks:</small></div>
+                                                    <div class="col-5">0</div>
+                                                    <div class="col-7"><small class="text-muted">Success Rate:</small></div>
+                                                    <div class="col-5">0%</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                            <!-- Properties Tab (AJAX Load) -->
-                            @include('property.clients.include.properties')
+                            <!-- Properties Tab -->
+                            <div class="tab-pane fade" id="properties" role="tabpanel" aria-labelledby="properties-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="propertiesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Reference Number</th>
+                                                <th>Property Name</th>
+                                                <th>Description</th>
+                                                <th>Zone</th>
+                                                <th>Zone Area</th>
+                                                <th>Field Officer</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- SLA Tab (AJAX Load) -->
-                            @include('property.clients.include.sla')
+                            <!-- SLA Tab -->
+                            <div class="tab-pane fade" id="sla" role="tabpanel" aria-labelledby="sla-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="slaTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Reference Number</th>
+                                                <th>Property Name</th>
+                                                <th>Start Date</th>
+                                                <th>End Date</th>
+                                                <th>Commission %</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- Units Tab (AJAX Load) -->
-                            @include('property.clients.include.units')
+                            <!-- Units Tab -->
+                            <div class="tab-pane fade" id="units" role="tabpanel" aria-labelledby="units-tab">
+                                <div class="row mb-3 align-items-end">
+                                    <div class="col-5">
+                                        <label for="propertySelect" class="form-label">Select Property</label>
+                                        <select id="propertySelect" class="form-select">
+                                            <option value="">-- Select Property --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <div id="propertySpinner" class="spinner-border text-primary" role="status" style="display:none;">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="unitsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Unit Code</th>
+                                                <th>Unit Name</th>
+                                                <th>Unit Number</th>
+                                                <th>Description</th>
+                                                <th>Rent Amount</th>
+                                                <th>Zone</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- Tenants Tab (AJAX Load) -->
-                            @include('property.clients.include.tenants')
+                            <!-- Tenants Tab -->
+                            <div class="tab-pane fade" id="tenants" role="tabpanel" aria-labelledby="tenants-tab">
+                                <div class="row mb-3 align-items-end">
+                                    <div class="col-5">
+                                        <label for="tenantPropertySelect" class="form-label">Select Property</label>
+                                        <select id="tenantPropertySelect" class="form-select">
+                                            <option value="">-- Select Property --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <div id="tenantSpinner" class="spinner-border text-primary" role="status" style="display:none;">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="tenantsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Names</th>
+                                                <th>Mobile Number</th>
+                                                <th>Email Address</th>
+                                                <th>Unit Name</th>
+                                                <th>Reference Number</th>
+                                                <th>Registered Date</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- Leases Tab (AJAX Load) -->
-                            @include('property.clients.include.leases')
+                            <!-- Leases Tab -->
+                            <div class="tab-pane fade" id="leases" role="tabpanel" aria-labelledby="leases-tab">
+                                <div class="row mb-3 align-items-end">
+                                    <div class="col-5">
+                                        <label for="leasesPropertySelect" class="form-label">Select Property</label>
+                                        <select id="leasesPropertySelect" class="form-select">
+                                            <option value="">-- Select Property --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <div id="leasesSpinner" class="spinner-border text-primary" role="status" style="display:none;">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="leasesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Ref</th>
+                                                <th>Tenant</th>
+                                                <th>Property</th>
+                                                <th>Unit</th>
+                                                <th>Start</th>
+                                                <th>End</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- Recoveries Tab (AJAX Load) -->
-                            @include('property.clients.include.recoveries')
+                            <!-- Recoveries Tab -->
+                            <div class="tab-pane fade" id="recoveries" role="tabpanel" aria-labelledby="recoveries-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="recoveriesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Ref Number</th>
+                                                <th>Date</th>
+                                                <th>Amount</th>
+                                                <th>Property</th>
+                                                <th>Zone</th>
+                                                <th>Type</th>
+                                                <th>Commissionable</th>
+                                                <th>Created By</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- Inspections Tab (AJAX Load) -->
-                            @include('property.clients.include.inspections')
+                            <!-- Inspections Tab -->
+                            <div class="tab-pane fade" id="inspections" role="tabpanel" aria-labelledby="inspections-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="inspectionsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Property</th>
+                                                <th>Zone</th>
+                                                <th>Visited</th>
+                                                <th>Left</th>
+                                                <th>Duration</th>
+                                                <th>Units</th>
+                                                <th>Created By</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                            <!-- Repairs & Maintenance Tab (AJAX Load) -->
-                            @include('property.clients.include.repairs')
+                            <!-- Repairs & Maintenance Tab -->
+                            <div class="tab-pane fade" id="repairs" role="tabpanel" aria-labelledby="repairs-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="repairsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Ref Number</th>
+                                                <th>Property</th>
+                                                <th>Visited Date</th>
+                                                <th>Created By</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
                             <!-- Returns Config Tab -->
                             <div class="tab-pane fade" id="returns-config" role="tabpanel" aria-labelledby="returns-config-tab">
@@ -133,12 +526,8 @@ use Illuminate\Support\Facades\Crypt;
                                                 </label>
                                                 <select class="form-select" id="upload_type" name="upload_type" required>
                                                     <option value="">-- Select Type --</option>
-                                                    @permission('create_properties')
                                                     <option value="properties">Properties</option>
-                                                    @endpermission
-                                                    @permission('create_units')
                                                     <option value="units">Units</option>
-                                                    @endpermission
                                                 </select>
                                                 <small class="form-text text-muted">Choose what type of data you want to upload</small>
                                             </div>
@@ -655,7 +1044,7 @@ use Illuminate\Support\Facades\Crypt;
             $('#tenantSpinner').show();
 
             $.ajax({
-                url: "{{ route('property.tenants.get') }}",
+                url: "{{ route('ajax.property.tenants.get') }}",
                 type: 'GET',
                 data: {
                     property_id: propertyId

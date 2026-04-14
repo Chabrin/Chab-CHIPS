@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Error;
 use App\Models\Bank;
 use App\Models\Unit;
 use App\Models\Client;
@@ -18,6 +17,7 @@ use App\Models\ClientOtherContact;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 
@@ -28,45 +28,100 @@ class ClientsController extends Controller
      */
     public function index()
     {
-        return view('property.clients.index');
+        try {
+            return view('property.clients.index');
+        } catch (\Throwable $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading clients index', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            abort(500, 'Failed to load clients page');
+        }
     }
 
     public function getCLients(Request $request)
     {
         try {
+            $baseQuery = Client::clients();
+            $query = Client::clients()->select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
+            $user = Auth::user();
+            if (!$user) {
+                Log::warning('Unauthenticated request to clients data', [
+                    'path' => $request->path(),
+                    'ip' => $request->ip(),
+                ]);
+                return response()->json(['error' => 'Unauthenticated'], 401);
+            }
 
-            $can_read = Auth::user()->isAbleTo('read_clients');
-            $can_update = Auth::user()->isAbleTo('update_clients');
+            $can_read = Gate::forUser($user)->check('read_clients');
+            $can_update = Gate::forUser($user)->check('update_clients');
 
-            $query = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date'])
-                ->typeOne();
+            // DataTables global search: search[value]
+            $rawSearch = data_get($request->all(), 'search.value', null);
+            if (is_string($rawSearch) || is_numeric($rawSearch)) {
+                $searchValue = trim((string) $rawSearch);
+            } else {
+                $searchValue = '';
+            }
 
-            // Filter by client_type if provided (Landlord or Tenant)
-            if ($request->filled('client_type')) {
-                if ($request->client_type === 'Landlord') {
-                     $query->where('reference_number', 'NOT LIKE', 'TEN-%');
-                } elseif ($request->client_type === 'Tenant') {
-                    $query->where('reference_number', 'LIKE', 'TEN-%');
+            // Backward-compatible plain search param support
+            if ($searchValue === '' && $request->has('search')) {
+                $plainSearch = $request->input('search');
+                if (is_string($plainSearch) || is_numeric($plainSearch)) {
+                    $searchValue = trim((string) $plainSearch);
                 }
             }
 
-            // Search filter — split into tokens so "KAMAU JOHN" matches "JOHN KAMAU MBUGUA"
-            if ($request->filled('search')) {
-                $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($request->search))));
+            if ($searchValue !== '') {
+                $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($searchValue))));
                 foreach ($tokens as $token) {
                     $query->where(function ($q) use ($token) {
-                        $q->where('names', 'ILIKE', "%{$token}%")
-                            ->orWhere('reference_number', 'ILIKE', "%{$token}%")
-                            ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
-                            ->orWhere('email_address', 'ILIKE', "%{$token}%");
+                        $q->where('names', 'LIKE', "%{$token}%")
+                            ->orWhere('reference_number', 'LIKE', "%{$token}%")
+                            ->orWhere('mobile_number', 'LIKE', "%{$token}%")
+                            ->orWhere('email_address', 'LIKE', "%{$token}%");
                     });
                 }
             }
 
-            $clients = $query->orderBy('registered_date', 'desc')
-                //->limit(50) // Limit results for performance
+            $recordsTotal = (clone $baseQuery)->count();
+            $recordsFiltered = (clone $query)->count();
+
+            $columns = [
+                1 => 'id',
+                2 => 'names',
+                3 => 'mobile_number',
+                4 => 'national_id',
+                5 => 'reference_number',
+                6 => 'registered_date',
+            ];
+            $orderIndex = (int) data_get($request->all(), 'order.0.column', 2);
+            $orderBy = $columns[$orderIndex] ?? 'names';
+            $orderDir = strtolower((string) data_get($request->all(), 'order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+            $start = max((int) $request->input('start', 0), 0);
+            $length = (int) $request->input('length', 25);
+            if ($length <= 0) {
+                $length = 25;
+            }
+            $length = min($length, 100);
+
+            $clients = $query->orderBy($orderBy, $orderDir)
+                ->skip($start)
+                ->take($length)
                 ->get()
                 ->map(function ($client) use ($can_read, $can_update) {
+                    $registeredDate = '-';
+                    if (!empty($client->registered_date)) {
+                        try {
+                            $registeredDate = \Carbon\Carbon::parse($client->registered_date)->format('d-m-Y');
+                        } catch (\Throwable $e) {
+                            $registeredDate = (string) $client->registered_date;
+                        }
+                    }
+
                     return [
                         'id' => $client->id,
                         'encrypted_id' => Crypt::encrypt($client->id),
@@ -75,17 +130,181 @@ class ClientsController extends Controller
                         'national_id' => $client->national_id ?? '-',
                         'reference_number' => $client->reference_number ?? '-',
                         'email_address' => $client->email_address ?? '-',
-                        'registered_date' => $client->registered_date ? $client->registered_date->format('d-m-Y') : '-',
+                        'registered_date' => $registeredDate,
                         'can_read' => $can_read,
                         'can_update' => $can_update,
                     ];
                 });
-            Log::info('Loaded clients: ' . $clients->count());
-            return response()->json(['clients' => $clients]);
-        } catch (\Exception $e) {
+
+            Log::info('Loaded clients page', [
+                'rows' => $clients->count(),
+                'start' => $start,
+                'length' => $length,
+                'filtered' => $recordsFiltered,
+                'total' => $recordsTotal,
+            ]);
+
+            return response()->json([
+                'draw' => (int) $request->input('draw', 1),
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $clients,
+            ]);
+        } catch (\Throwable $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error loading clients: ' . $e->getMessage());
+            Log::error('Error loading clients data', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all(),
+                'path' => $request->path(),
+                'user_id' => optional(Auth::user())->id,
+            ]);
             return response()->json(['error' => 'Failed to load clients'], 500);
+        }
+    }
+
+    /**
+     * Display the tenants listing page
+     */
+    public function tenantIndex()
+    {
+        try {
+            return view('property.tenants.index');
+        } catch (\Throwable $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenants index', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+            abort(500, 'Failed to load tenants page');
+        }
+    }
+
+    /**
+     * AJAX DataTable data for tenants (type_id = 2) — fully independent from getCLients
+     */
+    public function getTenantsData(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                Log::warning('Unauthenticated request to tenants data', [
+                    'path' => $request->path(),
+                    'ip'   => $request->ip(),
+                ]);
+                return response()->json(['error' => 'Unauthenticated'], 401);
+            }
+
+            $can_read   = Gate::forUser($user)->check('read_clients');
+            $can_update = Gate::forUser($user)->check('update_clients');
+
+            $baseQuery = Client::tenants();
+            $query     = Client::tenants()->select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
+
+            // DataTables global search
+            $rawSearch = data_get($request->all(), 'search.value', null);
+            if (is_string($rawSearch) || is_numeric($rawSearch)) {
+                $searchValue = trim((string) $rawSearch);
+            } else {
+                $searchValue = '';
+            }
+            if ($searchValue === '' && $request->has('search')) {
+                $plainSearch = $request->input('search');
+                if (is_string($plainSearch) || is_numeric($plainSearch)) {
+                    $searchValue = trim((string) $plainSearch);
+                }
+            }
+
+            if ($searchValue !== '') {
+                $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($searchValue))));
+                foreach ($tokens as $token) {
+                    $query->where(function ($q) use ($token) {
+                        $q->where('names', 'LIKE', "%{$token}%")
+                            ->orWhere('reference_number', 'LIKE', "%{$token}%")
+                            ->orWhere('mobile_number', 'LIKE', "%{$token}%")
+                            ->orWhere('email_address', 'LIKE', "%{$token}%");
+                    });
+                }
+            }
+
+            $recordsTotal    = (clone $baseQuery)->count();
+            $recordsFiltered = (clone $query)->count();
+
+            $columns = [
+                1 => 'id',
+                2 => 'names',
+                3 => 'mobile_number',
+                4 => 'national_id',
+                5 => 'reference_number',
+                6 => 'registered_date',
+            ];
+            $orderIndex = (int) data_get($request->all(), 'order.0.column', 2);
+            $orderBy    = $columns[$orderIndex] ?? 'names';
+            $orderDir   = strtolower((string) data_get($request->all(), 'order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+            $start  = max((int) $request->input('start', 0), 0);
+            $length = (int) $request->input('length', 25);
+            if ($length <= 0) {
+                $length = 25;
+            }
+            $length = min($length, 100);
+
+            $tenants = $query->orderBy($orderBy, $orderDir)
+                ->skip($start)
+                ->take($length)
+                ->get()
+                ->map(function ($tenant) use ($can_read, $can_update) {
+                    $registeredDate = '-';
+                    if (!empty($tenant->registered_date)) {
+                        try {
+                            $registeredDate = \Carbon\Carbon::parse($tenant->registered_date)->format('d-m-Y');
+                        } catch (\Throwable $e) {
+                            $registeredDate = (string) $tenant->registered_date;
+                        }
+                    }
+                    return [
+                        'id'               => $tenant->id,
+                        'encrypted_id'     => Crypt::encrypt($tenant->id),
+                        'names'            => $tenant->names ?? '-',
+                        'mobile_number'    => $tenant->mobile_number ?? '-',
+                        'national_id'      => $tenant->national_id ?? '-',
+                        'reference_number' => $tenant->reference_number ?? '-',
+                        'email_address'    => $tenant->email_address ?? '-',
+                        'registered_date'  => $registeredDate,
+                        'can_read'         => $can_read,
+                        'can_update'       => $can_update,
+                    ];
+                });
+
+            Log::info('Loaded tenants page', [
+                'rows'     => $tenants->count(),
+                'start'    => $start,
+                'length'   => $length,
+                'filtered' => $recordsFiltered,
+                'total'    => $recordsTotal,
+            ]);
+
+            return response()->json([
+                'draw'            => (int) $request->input('draw', 1),
+                'recordsTotal'    => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data'            => $tenants,
+            ]);
+        } catch (\Throwable $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenants data', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+                'request' => $request->all(),
+                'path'    => $request->path(),
+                'user_id' => optional(Auth::user())->id,
+            ]);
+            return response()->json(['error' => 'Failed to load tenants'], 500);
         }
     }
 
