@@ -31,6 +31,58 @@ class LandlordController extends Controller
     }
 
     /**
+     * Helper method to process landlord transactions with opening/closing balances
+     * Handles B/F (Brought Forward) and C/F (Carried Forward) balance markers
+     */
+    private function processLandlordTransactions($transactions)
+    {
+        $statementEntries = [];
+        $balance = 0;
+
+        foreach ($transactions as $txn) {
+            $debit = abs($txn->debit_amount ?? 0);
+            $credit = abs($txn->credit_amount ?? 0);
+
+            // Update balance only for non-balance entries
+            // If entry is marked as opening/closing balance, use it to set the balance
+            if (
+                stripos($txn->entry_description, 'Opening Balance B/F') !== false ||
+                stripos($txn->entry_particulars, 'Opening Balance B/F') !== false
+            ) {
+                // Opening balance - set balance to this amount
+                $balance = $credit - $debit;
+                $narration = 'Opening Balance B/F';
+            } elseif (
+                stripos($txn->entry_description, 'Closing Balance C/F') !== false ||
+                stripos($txn->entry_particulars, 'Closing Balance C/F') !== false
+            ) {
+                // Closing balance - set balance to this amount
+                $balance = $credit - $debit;
+                $narration = 'Closing Balance C/F';
+            } else {
+                // Regular transaction - update balance
+                $balance += $credit - $debit;
+                $narration = $txn->entry_particulars ?: ($txn->entry_description ?? '-');
+            }
+
+            $statementEntries[] = [
+                'date' => $txn->entry_date,
+                'reference' => $txn->transaction_number ?? '-',
+                'narration' => $narration,
+                'debit' => $debit,
+                'credit' => $credit,
+                'balance' => $balance,
+                'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '',
+                'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '',
+                'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '',
+                'balance_formatted' => number_format($balance, 2),
+            ];
+        }
+
+        return $statementEntries;
+    }
+
+    /**
      * Search properties for landlord statements (AJAX)
      */
     public function getProperties(Request $request)
@@ -187,7 +239,6 @@ class LandlordController extends Controller
                 }
             });
 
-
             if ($dateType === 'range' && $dateFrom && $dateTo) {
                 $query->whereDate('entry_date', '>=', $dateFrom)
                     ->whereDate('entry_date', '<=', $dateTo);
@@ -201,37 +252,21 @@ class LandlordController extends Controller
                 'raw_sql'  => vsprintf(str_replace('?', "'%s'", $query->toSql()), $query->getBindings()),
             ]);
 
+            // Order chronologically: entry_date, year, month, id
             $transactions = $query->orderBy('entry_date', 'asc')
+                ->orderByRaw('EXTRACT(YEAR FROM entry_date) ASC')
+                ->orderByRaw('EXTRACT(MONTH FROM entry_date) ASC')
                 ->orderBy('id', 'asc')
                 ->get();
 
             Log::info('[searchStatement] Step 3 — results', [
                 'count'       => $transactions->count(),
                 'raw_count_sql' => "SELECT COUNT(*) FROM cb_landlord_account WHERE (client_id = {$landlordId}" . ($landlordCode ? " OR landlord_code = '{$landlordCode}'" : '') . ");",
-                'full_check_sql' => "SELECT * FROM cb_landlord_account WHERE landlord_code = '" . ($landlordCode ?? '') . "' ORDER BY entry_date ASC, id ASC;",
+                'full_check_sql' => "SELECT * FROM cb_landlord_account WHERE landlord_code = '" . ($landlordCode ?? '') . "' ORDER BY entry_date ASC, YEAR(entry_date) ASC, MONTH(entry_date) ASC, id ASC;",
             ]);
 
-            $statementEntries = [];
-            $balance = 0;
-
-            foreach ($transactions as $txn) {
-                $debit = abs($txn->debit_amount ?? 0);
-                $credit = abs($txn->credit_amount ?? 0);
-                $balance += $credit - $debit;
-
-                $statementEntries[] = [
-                    'date' => $txn->entry_date,
-                    'reference' => $txn->transaction_number ?? '-',
-                    'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
-                    'debit' => $debit,
-                    'credit' => $credit,
-                    'balance' => $balance,
-                    'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '-',
-                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '',
-                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '',
-                    'balance_formatted' => number_format($balance, 2),
-                ];
-            }
+            // Process transactions with balance tracking
+            $statementEntries = $this->processLandlordTransactions($transactions);
 
             return response()->json([
                 'success' => true,
@@ -245,12 +280,11 @@ class LandlordController extends Controller
     }
 
     /**
-     * Export landlord statement to Excel
-     */
-    public function exportStatementExcel(Request $request)
-    {
-        try {
-            // Increase memory limit for Excel generation
+
+            return response()->json([
+                'success' => true,
+                'statement' => $statementEntries
+            ]);
             ini_set('memory_limit', '512M');
             set_time_limit(300);
 
@@ -293,7 +327,6 @@ class LandlordController extends Controller
                 }
             });
 
-
             if ($dateType === 'range' && $dateFrom && $dateTo) {
                 $query->whereDate('entry_date', '>=', $dateFrom)
                     ->whereDate('entry_date', '<=', $dateTo);
@@ -303,7 +336,11 @@ class LandlordController extends Controller
 
             // Limit results to 100,000 records to prevent memory issues
             $maxRecords = 100000;
+
+            // Order chronologically: entry_date, year, month, id
             $transactions = $query->orderBy('entry_date', 'asc')
+                ->orderByRaw('EXTRACT(YEAR FROM entry_date) ASC')
+                ->orderByRaw('EXTRACT(MONTH FROM entry_date) ASC')
                 ->orderBy('id', 'asc')
                 ->limit($maxRecords)
                 ->get();
@@ -311,23 +348,8 @@ class LandlordController extends Controller
             // Check if results were limited
             $isLimited = $transactions->count() >= $maxRecords;
 
-            $statementEntries = [];
-            $balance = 0;
-
-            foreach ($transactions as $txn) {
-                $debit = abs($txn->debit_amount ?? 0);
-                $credit = abs($txn->credit_amount ?? 0);
-                $balance += $credit - $debit;
-
-                $statementEntries[] = [
-                    'date' => $txn->entry_date,
-                    'reference' => $txn->transaction_number ?? '-',
-                    'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
-                    'debit' => $debit,
-                    'credit' => $credit,
-                    'balance' => $balance,
-                ];
-            }
+            // Process transactions with balance tracking and B/F, C/F markers
+            $statementEntries = $this->processLandlordTransactions($transactions);
 
             // Add warning note if results were truncated
             if ($isLimited) {
@@ -401,7 +423,6 @@ class LandlordController extends Controller
                 }
             });
 
-
             if ($dateType === 'range' && $dateFrom && $dateTo) {
                 $query->whereDate('entry_date', '>=', $dateFrom)
                     ->whereDate('entry_date', '<=', $dateTo);
@@ -411,7 +432,11 @@ class LandlordController extends Controller
 
             // Limit results to 100,000 records to prevent memory issues
             $maxRecords = 100000;
+
+            // Order chronologically: entry_date, year, month, id
             $transactions = $query->orderBy('entry_date', 'asc')
+                ->orderByRaw('EXTRACT(YEAR FROM entry_date) ASC')
+                ->orderByRaw('EXTRACT(MONTH FROM entry_date) ASC')
                 ->orderBy('id', 'asc')
                 ->limit($maxRecords)
                 ->get();
@@ -420,27 +445,8 @@ class LandlordController extends Controller
             $recordsWarning = $transactions->count() >= $maxRecords ?
                 ' (Limited to ' . $maxRecords . ' records. Please use a narrower date range.)' : '';
 
-            $statementEntries = [];
-            $balance = 0;
-
-            foreach ($transactions as $txn) {
-                $debit = abs($txn->debit_amount ?? 0);
-                $credit = abs($txn->credit_amount ?? 0);
-                $balance += $credit - $debit;
-
-                $statementEntries[] = [
-                    'date' => $txn->entry_date,
-                    'reference' => $txn->transaction_number ?? '-',
-                    'narration' => $txn->entry_particulars ?: ($txn->entry_description ?? '-'),
-                    'debit' => $debit,
-                    'credit' => $credit,
-                    'balance' => $balance,
-                    'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '',
-                    'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '',
-                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '',
-                    'balance_formatted' => number_format($balance, 2),
-                ];
-            }
+            // Process transactions with balance tracking and B/F, C/F markers
+            $statementEntries = $this->processLandlordTransactions($transactions);
 
             $data = [
                 'landlordInfo' => $landlordInfo,
