@@ -165,15 +165,23 @@
             margin-bottom: 6px;
         }
 
-        .signoff-line {
-            border-bottom: 1px solid #000;
-            height: 10px;
-            margin-bottom: 2px;
-        }
-
         .signoff-meta {
             margin-top: 2px;
             line-height: 1.2;
+        }
+
+        .signoff-label {
+            display: inline-block;
+            width: 28px;
+        }
+
+        .signoff-value {
+            display: inline-block;
+            width: calc(100% - 34px);
+            border-bottom: 1px solid #000;
+            min-height: 10px;
+            vertical-align: bottom;
+            padding-left: 2px;
         }
     </style>
 </head>
@@ -315,27 +323,27 @@
             <tr>
                 <td>
                     <div class="signoff-title">Prepared By</div>
-                    <div class="signoff-line"></div>
-                    <div class="signoff-meta">Date: __________________</div>
-                    <div class="signoff-meta">Sign: __________________</div>
+                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value">{{ (($signoff['prepared']['name'] ?? '') !== '-' && !empty($signoff['prepared']['name'])) ? $signoff['prepared']['name'] : '' }}</span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value">{{ (($signoff['prepared']['date'] ?? '') !== '-' && !empty($signoff['prepared']['date'])) ? $signoff['prepared']['date'] : '' }}</span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
                 </td>
                 <td>
                     <div class="signoff-title">Checked By</div>
-                    <div class="signoff-line"></div>
-                    <div class="signoff-meta">Date: __________________</div>
-                    <div class="signoff-meta">Sign: __________________</div>
+                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value">{{ (($signoff['checked']['name'] ?? '') !== '-' && !empty($signoff['checked']['name'])) ? $signoff['checked']['name'] : '' }}</span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value">{{ (($signoff['checked']['date'] ?? '') !== '-' && !empty($signoff['checked']['date'])) ? $signoff['checked']['date'] : '' }}</span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
                 </td>
                 <td>
                     <div class="signoff-title">Approved By</div>
-                    <div class="signoff-line"></div>
-                    <div class="signoff-meta">Date: __________________</div>
-                    <div class="signoff-meta">Sign: __________________</div>
+                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value">{{ (($signoff['approved']['name'] ?? '') !== '-' && !empty($signoff['approved']['name'])) ? $signoff['approved']['name'] : '' }}</span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value">{{ (($signoff['approved']['date'] ?? '') !== '-' && !empty($signoff['approved']['date'])) ? $signoff['approved']['date'] : '' }}</span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
                 </td>
                 <td>
                     <div class="signoff-title">Client Name</div>
-                    <div class="signoff-line"></div>
-                    <div class="signoff-meta">Date: __________________</div>
-                    <div class="signoff-meta">Sign: __________________</div>
+                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value"></span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value"></span></div>
+                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
                 </td>
             </tr>
         </table>

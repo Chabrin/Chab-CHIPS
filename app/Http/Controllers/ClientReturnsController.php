@@ -1539,6 +1539,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
 
             $return = ReturnSummary::findOrFail($id);
+            $signoff = $this->buildReturnSignoffData($return);
 
             $allowedTypes = ['MINIRETURN', 'MAINRETURN', 'MASTERRETURN'];
             if (!in_array($return->return_type, $allowedTypes)) {
@@ -1555,6 +1556,7 @@ class ClientReturnsController extends Controller
                 $pdf = Pdf::loadView('property.processed-returns.master-pdf', array_merge($masterData, [
                     'return' => $return,
                     'logoSrc' => $logoSrc,
+                    'signoff' => $signoff,
                 ]));
                 $pdf->setPaper('A4', 'portrait');
 
@@ -1701,7 +1703,7 @@ class ClientReturnsController extends Controller
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
                 : '';
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff');
 
             $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
             $pdf->setPaper('A4', 'landscape');
@@ -2056,5 +2058,41 @@ class ClientReturnsController extends Controller
             'propertyName' => $propertyName,
             'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
         ];
+    }
+
+    private function buildReturnSignoffData(ReturnSummary $return): array
+    {
+        return [
+            'prepared' => [
+                'name' => $return->prepared_by ?: '-',
+                'date' => $this->formatSignoffDate($return->prepared_date),
+            ],
+            'checked' => [
+                'name' => $return->checked_by ?: '-',
+                'date' => $this->formatSignoffDate($return->checked_date),
+            ],
+            'approved' => [
+                'name' => $return->approved_by ?: '-',
+                'date' => $this->formatSignoffDate($return->approved_date),
+            ],
+        ];
+    }
+
+    private function formatSignoffDate($value): string
+    {
+        if (empty($value)) {
+            return '-';
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('d-m-Y');
+        }
+
+        $timestamp = strtotime((string) $value);
+        if ($timestamp === false) {
+            return '-';
+        }
+
+        return date('d-m-Y', $timestamp);
     }
 }
