@@ -60,6 +60,7 @@
         .statement-table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
             margin-bottom: 10px;
             font-size: 7.5pt;
         }
@@ -72,7 +73,7 @@
         .statement-table th {
             padding: 5px 6px;
             text-align: left;
-            font-weight: bold;
+            font-weight: normal;
             border: none;
             border-bottom: 1px solid #3598db;
         }
@@ -93,7 +94,8 @@
 
         .statement-table td.balance-cell {
             text-align: right;
-            font-weight: bold;
+            font-weight: normal;
+            white-space: nowrap;
         }
 
         .statement-table tbody tr:nth-child(even) {
@@ -101,7 +103,7 @@
         }
 
         .totals-row {
-            font-weight: bold;
+            font-weight: normal;
             background-color: #e8f4f8;
             border-top: 1.5px solid #3598db;
         }
@@ -119,6 +121,12 @@
             max-width: 250px;
             word-wrap: break-word;
             font-size: 7pt;
+        }
+
+        .date-cell,
+        .reference-cell,
+        .amount-cell {
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -152,36 +160,32 @@
     <table class="statement-table">
         <thead>
             <tr>
-                <th style="width: 12%;">Date</th>
-                <th style="width: 15%;">Reference</th>
-                <th style="width: 35%;">Narration</th>
-                <th class="text-right" style="width: 12%;">Dr</th>
-                <th class="text-right" style="width: 12%;">Cr</th>
-                <th class="text-right" style="width: 14%;">Balance</th>
+                <th style="width: 9%;">Date</th>
+                <th style="width: 11%;">Reference</th>
+                <th style="width: 34%;">Narration</th>
+                <th class="text-right" style="width: 11%;">Dr</th>
+                <th class="text-right" style="width: 11%;">Cr</th>
+                <th class="text-right" style="width: 24%;">Balance</th>
             </tr>
         </thead>
         <tbody>
             @foreach($statement as $entry)
             <tr>
-                <td>{{ $entry['date_formatted'] }}</td>
-                <td>{{ $entry['reference'] }}</td>
+                <td class="date-cell">{{ $entry['date_formatted'] }}</td>
+                <td class="reference-cell">{{ $entry['reference'] }}</td>
                 <td class="narration-cell">{{ $entry['narration'] }}</td>
-                <td class="text-right">{{ $entry['debit_formatted'] }}</td>
-                <td class="text-right">{{ $entry['credit_formatted'] }}</td>
-                <td class="balance-cell">{{ $entry['balance_formatted'] }}</td>
+                <td class="text-right amount-cell">{{ $entry['debit_formatted'] }}</td>
+                <td class="text-right amount-cell">{{ $entry['credit_formatted'] }}</td>
+                <td class="balance-cell amount-cell">{{ $entry['balance_formatted'] }}</td>
             </tr>
             @endforeach
             @if(count($statement) > 0)
             @php
             $lastEntry = end($statement);
-            $totalDr = array_sum(array_column($statement, 'debit'));
-            $totalCr = array_sum(array_column($statement, 'credit'));
             @endphp
             <tr class="totals-row">
-                <td colspan="3">Closing Balance</td>
-                <td class="text-right">{{ number_format($totalDr, 2) }}</td>
-                <td class="text-right">{{ number_format($totalCr, 2) }}</td>
-                <td class="balance-cell">{{ $lastEntry['balance_formatted'] }}</td>
+                <td colspan="5">Closing Balance</td>
+                <td class="balance-cell amount-cell">{{ $lastEntry['balance_formatted'] }}</td>
             </tr>
             @endif
         </tbody>
