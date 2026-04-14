@@ -78,10 +78,10 @@ class ClientsController extends Controller
                 $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($searchValue))));
                 foreach ($tokens as $token) {
                     $query->where(function ($q) use ($token) {
-                        $q->where('names', 'LIKE', "%{$token}%")
-                            ->orWhere('reference_number', 'LIKE', "%{$token}%")
-                            ->orWhere('mobile_number', 'LIKE', "%{$token}%")
-                            ->orWhere('email_address', 'LIKE', "%{$token}%");
+                        $q->where('names', 'ILIKE', "%{$token}%")
+                            ->orWhere('reference_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('email_address', 'ILIKE', "%{$token}%");
                     });
                 }
             }

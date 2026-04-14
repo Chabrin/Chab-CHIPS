@@ -519,7 +519,7 @@
                     },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(c) {
+                            results: response.data.map(function(c) {
                                 return { id: c.id, text: c.names + ' (' + c.reference_number + ')' };
                             })
                         };
@@ -939,7 +939,7 @@
                     data: function(params) { return { client_type: 'Landlord', search: params.term }; },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(c) {
+                            results: response.data.map(function(c) {
                                 return { id: c.id, text: c.names + ' (' + c.reference_number + ')' };
                             })
                         };
@@ -1004,7 +1004,7 @@
                     },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(client) {
+                            results: response.data.map(function(client) {
                                 return {
                                     id: client.id,
                                     text: `${client.names} (${client.reference_number})`
@@ -1258,7 +1258,7 @@
                     },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(client) {
+                            results: response.data.map(function(client) {
                                 return {
                                     id: client.id,
                                     text: `${client.names} (${client.reference_number})`
