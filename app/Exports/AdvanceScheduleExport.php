@@ -1,0 +1,182 @@
+<?php
+
+namespace App\Exports;
+
+use App\Models\ClientAdvance;
+use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Concerns\WithCustomStartCell;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+
+class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles, WithTitle, WithCustomStartCell
+{
+    protected ClientAdvance $advance;
+    protected array $schedule;
+
+    protected array $typeNames = [
+        1 => 'Expense Advance',
+        2 => 'Client Payment Advance',
+        3 => 'Overpayment Advance',
+    ];
+
+    protected array $statusNames = [
+        1 => 'Pending',
+        2 => 'Cleared',
+        3 => 'Cancelled',
+        4 => 'Suspended',
+        5 => 'Approved',
+        6 => 'Posted',
+        8 => 'Rescheduled',
+    ];
+
+    public function __construct(ClientAdvance $advance, array $schedule)
+    {
+        $this->advance = $advance;
+        $this->schedule = $schedule;
+    }
+
+    public function startCell(): string
+    {
+        return 'A9';
+    }
+
+    public function title(): string
+    {
+        return 'Repayment Schedule';
+    }
+
+    public function collection()
+    {
+        return collect($this->schedule)->map(function ($entry, $index) {
+            return [
+                'no'             => $index + 1,
+                'due_date'       => $entry['payment_date'],
+                'principal'      => number_format($entry['principal_amount'], 2),
+                'interest'       => number_format($entry['interest'], 2),
+                'total_payment'  => number_format($entry['total_amount'], 2),
+                'balance'        => number_format($entry['loan_balance'], 2),
+                'status'         => $this->statusNames[$entry['status_id'] ?? 1] ?? '—',
+            ];
+        });
+    }
+
+    public function headings(): array
+    {
+        return ['#', 'Due Date', 'Principal (KSh)', 'Interest (KSh)', 'Payment (KSh)', 'Balance (KSh)', 'Status'];
+    }
+
+    public function styles(Worksheet $sheet)
+    {
+        $advance = $this->advance;
+        $schedule = $this->schedule;
+
+        // Title
+        $sheet->setCellValue('A1', 'CLIENT ADVANCE — REPAYMENT SCHEDULE');
+        $sheet->mergeCells('A1:G1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(15);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // Subtitle
+        $sheet->setCellValue('A2', 'Generated: ' . now()->format('d M Y, H:i'));
+        $sheet->mergeCells('A2:G2');
+        $sheet->getStyle('A2')->getFont()->setItalic(true)->setSize(10);
+        $sheet->getStyle('A2')->getFont()->getColor()->setRGB('888888');
+        $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // Reference & client
+        $sheet->setCellValue('A3', 'Reference:');
+        $sheet->setCellValue('B3', $advance->reference_number ?? '—');
+        $sheet->getStyle('A3')->getFont()->setBold(true);
+        $sheet->setCellValue('D3', 'Landlord:');
+        $sheet->setCellValue('E3', ($advance->client->client_name ?? '—') . ' (' . ($advance->client->reference_number ?? '') . ')');
+        $sheet->getStyle('D3')->getFont()->setBold(true);
+
+        // Property & type
+        $sheet->setCellValue('A4', 'Property:');
+        $sheet->setCellValue('B4', $advance->property->property_name ?? '—');
+        $sheet->getStyle('A4')->getFont()->setBold(true);
+        $sheet->setCellValue('D4', 'Advance Type:');
+        $sheet->setCellValue('E4', $this->typeNames[$advance->advance_type_id] ?? '—');
+        $sheet->getStyle('D4')->getFont()->setBold(true);
+
+        // Financial summary
+        $sheet->setCellValue('A5', 'Principal:');
+        $sheet->setCellValue('B5', 'KSh ' . number_format($advance->amount, 2));
+        $sheet->getStyle('A5')->getFont()->setBold(true);
+        $sheet->setCellValue('D5', 'Interest Rate:');
+        $sheet->setCellValue('E5', ($advance->interest_rate ?? 0) . '%');
+        $sheet->getStyle('D5')->getFont()->setBold(true);
+
+        $sheet->setCellValue('A6', 'Interest Amount:');
+        $sheet->setCellValue('B6', 'KSh ' . number_format($advance->interest_amount ?? 0, 2));
+        $sheet->getStyle('A6')->getFont()->setBold(true);
+        $sheet->setCellValue('D6', 'Processing Charge:');
+        $sheet->setCellValue('E6', 'KSh ' . number_format($advance->charge_amount ?? 0, 2));
+        $sheet->getStyle('D6')->getFont()->setBold(true);
+
+        $sheet->setCellValue('A7', 'Total Amount:');
+        $sheet->setCellValue('B7', 'KSh ' . number_format($advance->total_amount, 2));
+        $sheet->getStyle('A7')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('B7')->getFont()->setBold(true)->setSize(12);
+        $sheet->getStyle('B7')->getFont()->getColor()->setRGB('1a7a4a');
+
+        // Spacer
+        $sheet->setCellValue('A8', '');
+
+        // Header row style (A9)
+        $lastRow = 9 + count($this->schedule);
+        $headerStyle = [
+            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2c3e50']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ];
+        $sheet->getStyle('A9:G9')->applyFromArray($headerStyle);
+
+        // Data rows alignment
+        $sheet->getStyle('A10:G' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // Totals row
+        $totalsRow = $lastRow + 1;
+        $totalPrincipal = array_sum(array_column($this->schedule, 'principal_amount'));
+        $totalInterest  = array_sum(array_column($this->schedule, 'interest'));
+        $totalPayment   = array_sum(array_column($this->schedule, 'total_amount'));
+
+        $sheet->setCellValue('A' . $totalsRow, 'Totals');
+        $sheet->mergeCells('A' . $totalsRow . ':B' . $totalsRow);
+        $sheet->setCellValue('C' . $totalsRow, number_format($totalPrincipal, 2));
+        $sheet->setCellValue('D' . $totalsRow, number_format($totalInterest, 2));
+        $sheet->setCellValue('E' . $totalsRow, number_format($totalPayment, 2));
+        $sheet->setCellValue('F' . $totalsRow, '—');
+        $sheet->setCellValue('G' . $totalsRow, '—');
+
+        $sheet->getStyle('A' . $totalsRow . ':G' . $totalsRow)->applyFromArray([
+            'font' => ['bold' => true],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EAF0FF']],
+            'borders' => ['top' => ['borderStyle' => Border::BORDER_MEDIUM]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+
+        // Column widths
+        $sheet->getColumnDimension('A')->setWidth(6);
+        $sheet->getColumnDimension('B')->setWidth(14);
+        $sheet->getColumnDimension('C')->setWidth(18);
+        $sheet->getColumnDimension('D')->setWidth(18);
+        $sheet->getColumnDimension('E')->setWidth(18);
+        $sheet->getColumnDimension('F')->setWidth(18);
+        $sheet->getColumnDimension('G')->setWidth(14);
+
+        // Border around data
+        if (count($this->schedule) > 0) {
+            $sheet->getStyle('A9:G' . $lastRow)->applyFromArray([
+                'borders' => [
+                    'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'DDDDDD']],
+                ],
+            ]);
+        }
+    }
+}

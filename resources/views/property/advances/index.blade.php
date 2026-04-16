@@ -135,6 +135,10 @@
                             actions += '<a href="{{ route("property.advances.edit", "ID") }}" class="text-success me-2" title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>'.replace('ID', row.encrypted_id);
                         }
 
+                        if (row.can_update && row.status_id === 6) {
+                            actions += '<a href="{{ route("property.advances.reschedule", "ID") }}" class="text-warning me-2" title="Reschedule"><span class="material-symbols-outlined" style="font-size:18px;">event_repeat</span></a>'.replace('ID', row.encrypted_id);
+                        }
+
                         // if (row.can_delete) {
                         //     actions += '<a href="javascript:void(0)" class="text-danger delete-advance" data-id="' + row.encrypted_id + '" data-client="' + row.client_name + '" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>';
                         // }

@@ -174,7 +174,7 @@
                                         <input type="number" class="form-control form-control-sm" id="amount" name="amount" step="0.01" min="0">
                                     </div>
                                     <div class="col-md-4">
-                                        <label class="form-label-sm">Interest Rate (%)</label>
+                                        <label class="form-label-sm">Percentage (%)</label>
                                         <input type="number" class="form-control form-control-sm" id="interestRate" name="interest_rate" step="0.01" min="0" value="3">
                                     </div>
                                     <div class="col-md-4 d-none" id="interestInfoCol">

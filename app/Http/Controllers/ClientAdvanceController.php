@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use App\Services\ErrorDispatcher;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ClientAdvanceController extends Controller
 {
@@ -38,14 +40,16 @@ class ClientAdvanceController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy'])
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy', 'schedule', 'previousAdvance', 'rescheduleHistory.fromAdvance', 'rescheduleHistory.toAdvance', 'rescheduleHistory.rescheduledBy'])
                 ->findOrFail($id);
 
-            return view('property.advances.show', compact('advance'));
+            $schedule = $this->buildScheduleArray($advance);
+
+            return view('property.advances.show', compact('advance', 'schedule'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading advance details: ' . $e->getMessage());
-            return redirect()->route('property.advances.index')->with('error', 'Failed to load advance details');
+            return redirect()->route('client.advances.index')->with('error', 'Failed to load advance details');
         }
     }
 
@@ -62,7 +66,7 @@ class ClientAdvanceController extends Controller
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading advance for editing: ' . $e->getMessage());
-            return redirect()->route('property.advances.index')->with('error', 'Failed to load advance for editing');
+            return redirect()->route('client.advances.index')->with('error', 'Failed to load advance for editing');
         }
     }
 
@@ -99,7 +103,7 @@ class ClientAdvanceController extends Controller
                         'encrypted_id' => Crypt::encrypt($advance->id),
                         'requisition_date' => $advance->requisition_date ? $advance->requisition_date->format('Y-m-d') : '-',
                         'reference_number' => $advance->reference_number ?? '-',
-                        'client_name' => $advance->client ? $advance->client->client_name : '-',
+                        'client_name' => $advance->client ? $advance->client->names : '-',
                         'property_name' => $advance->property ? $advance->property->property_name : '-',
                         'zone_name' => $advance->zone ? $advance->zone->zone_name : '-',
                         'advance_type' => $typeMap[$advance->advance_type_id] ?? 'Unknown',
@@ -107,6 +111,7 @@ class ClientAdvanceController extends Controller
                         'amount' => $advance->amount ? number_format($advance->amount, 2) : '0.00',
                         'current_balance' => $advance->current_balance ? number_format($advance->current_balance, 2) : '0.00',
                         'status' => $statusMap[$advance->current_status_id] ?? 'Unknown',
+                        'status_id' => $advance->current_status_id,
                         'narration' => $advance->narration ?? '-',
                         'can_update' => Auth::user()->isAbleTo('update_client_advances'),
                         'can_delete' => Auth::user()->isAbleTo('delete_client_advances'),
@@ -443,6 +448,22 @@ class ClientAdvanceController extends Controller
                 'type' => $advanceTypeId
             ]);
 
+            // Notify landlord — approval email with repayment schedule attached
+            try {
+                $encryptedAdvanceId = Crypt::encrypt($advance->id);
+                $notifySchedule = $this->buildScheduleArray($advance->load('schedule'));
+                $advance->client->notify(new \App\Notifications\AdvanceApprovalNotification(
+                    $advance,
+                    $encryptedAdvanceId,
+                    $notifySchedule
+                ));
+            } catch (\Exception $notifyEx) {
+                Log::warning('Failed to send advance approval notification', [
+                    'advance_id' => $advance->id,
+                    'error'      => $notifyEx->getMessage(),
+                ]);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Client advance created successfully',
@@ -731,6 +752,373 @@ class ClientAdvanceController extends Controller
     }
 
     // ================== HELPER METHODS ==================
+
+    /**
+     * Build a schedule array for display, PDF, and email.
+     * For Type 3 advances uses stored AdvanceSchedule rows;
+     * for Types 1 & 2 synthesises a single-row summary.
+     */
+    private function buildScheduleArray(ClientAdvance $advance): array
+    {
+        if ($advance->advance_type_id == 3 && $advance->schedule->isNotEmpty()) {
+            return $advance->schedule->map(function ($s) {
+                return [
+                    'payment_date'     => $s->payment_date ? $s->payment_date->format('Y-m-d') : '—',
+                    'principal_amount' => (float) $s->principal_amount,
+                    'interest'         => (float) $s->interest,
+                    'total_amount'     => round((float) $s->principal_amount + (float) $s->interest, 2),
+                    'loan_balance'     => (float) $s->loan_balance,
+                    'status_id'        => $s->current_status_id,
+                ];
+            })->toArray();
+        }
+
+        // Synthetic single-row for Types 1 & 2
+        return [[
+            'payment_date'     => $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '—',
+            'principal_amount' => (float) ($advance->amount ?? 0),
+            'interest'         => (float) ($advance->interest_amount ?? 0),
+            'total_amount'     => (float) ($advance->total_amount ?? 0),
+            'loan_balance'     => 0.00,
+            'status_id'        => $advance->current_status_id,
+        ]];
+    }
+
+    /**
+     * Download repayment schedule as PDF
+     */
+    public function downloadPdf($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+            $schedule = $this->buildScheduleArray($advance);
+
+            $pdf = Pdf::loadView('property.advances.schedule-pdf', compact('advance', 'schedule'));
+            return $pdf->download('AdvanceSchedule_' . ($advance->reference_number ?? $id) . '.pdf');
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error generating advance PDF: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate PDF');
+        }
+    }
+
+    /**
+     * Download repayment schedule as Excel
+     */
+    public function downloadExcel($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+            $schedule = $this->buildScheduleArray($advance);
+
+            return Excel::download(
+                new \App\Exports\AdvanceScheduleExport($advance, $schedule),
+                'AdvanceSchedule_' . ($advance->reference_number ?? $id) . '.xlsx'
+            );
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error generating advance Excel: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate Excel file');
+        }
+    }
+
+    /**
+     * Email repayment schedule to landlord (AJAX)
+     */
+    public function emailSchedule($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+
+            if (!$advance->client || !$advance->client->email_address) {
+                return response()->json(['success' => false, 'message' => 'Landlord email address not found'], 422);
+            }
+
+            $schedule = $this->buildScheduleArray($advance);
+            $advance->client->notify(new \App\Notifications\AdvanceScheduleNotification($advance, $schedule));
+
+            Log::info('Advance schedule emailed to landlord', [
+                'advance_id'   => $advance->id,
+                'client_email' => $advance->client->email_address,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Schedule emailed to ' . $advance->client->email_address,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error emailing advance schedule: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to send email: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Approve an advance — public route, landlord clicks link from email
+     */
+    public function approveAdvance($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property'])->findOrFail($id);
+
+            $statusLabels = [
+                2 => 'Cleared', 3 => 'Cancelled', 4 => 'Suspended',
+                5 => 'Already Approved', 6 => 'Already Posted', 8 => 'Rescheduled',
+            ];
+
+            if ($advance->current_status_id !== 1) {
+                $statusLabel = $statusLabels[$advance->current_status_id] ?? 'Unknown';
+                return view('property.advances.approved', compact('advance'))
+                    ->with('alreadyProcessed', true)
+                    ->with('statusLabel', $statusLabel);
+            }
+
+            $advance->update(['current_status_id' => 5]);
+
+            Log::info('Advance approved by landlord', [
+                'advance_id' => $advance->id,
+                'client_id'  => $advance->client_id,
+            ]);
+
+            return view('property.advances.approved', compact('advance'))
+                ->with('alreadyProcessed', false);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error approving advance: ' . $e->getMessage());
+            abort(404);
+        }
+    }
+
+    /**
+     * Post an advance (admin action: Approved → Posted)
+     */
+    public function postAdvance($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::findOrFail($id);
+
+            if ($advance->current_status_id !== 5) {
+                return response()->json(['success' => false, 'message' => 'Advance must be Approved before posting'], 422);
+            }
+
+            $advance->update(['current_status_id' => 6]);
+
+            Log::info('Advance posted by admin', [
+                'advance_id' => $advance->id,
+                'user_id'    => Auth::id(),
+            ]);
+
+            // ⚠️ TODO #1: Post transaction to landlord account on confirmation.
+            // Pending details: target table name, transaction_type ID, debit/credit account IDs.
+            // See docs/advance_reschedule_missing.md for full context.
+
+            return response()->json(['success' => true, 'message' => 'Advance posted successfully']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error posting advance: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to post advance'], 500);
+        }
+    }
+
+    /**
+     * Show the reschedule form for a Posted advance (status=6).
+     */
+    public function showRescheduleForm($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+
+            if ($advance->current_status_id !== 6) {
+                return redirect()->route('property.advances.show', $encryptedId)
+                    ->with('error', 'Only Posted advances can be rescheduled.');
+            }
+
+            // ⚠️ TODO #2: Confirm source of truth for payments made.
+            // Currently using sum of cleared (status=2) schedule rows.
+            // May need to cross-check sys_pm_landlord_accounts_transaction instead.
+            // See docs/advance_reschedule_missing.md for full context.
+            $amountPaid = $advance->schedule()
+                ->where('current_status_id', 2)
+                ->sum(DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
+
+            $outstandingBalance = max(0, round((float) $advance->total_amount - (float) $amountPaid, 2));
+
+            return view('property.advances.reschedule', compact('advance', 'amountPaid', 'outstandingBalance', 'encryptedId'));
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading reschedule form: ' . $e->getMessage());
+            return redirect()->route('client.advances.index')->with('error', 'Failed to load reschedule form.');
+        }
+    }
+
+    /**
+     * Process the reschedule: close old advance, open new one, log history.
+     */
+    public function processReschedule(Request $request, $encryptedId)
+    {
+        $validated = $request->validate([
+            'amount'               => 'required|numeric|min:1',
+            'interest_rate'        => 'nullable|numeric|min:0|max:100',
+            'repayment_months'     => 'nullable|integer|min:1|max:360',
+            'disbursement_date'    => 'required|date',
+            'principal_start_date' => 'required|date',
+            'narration'            => 'nullable|string|max:1000',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $oldAdvance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+
+            if ($oldAdvance->current_status_id !== 6) {
+                return response()->json(['success' => false, 'message' => 'Only Posted advances can be rescheduled.'], 422);
+            }
+
+            // ⚠️ TODO #2: Confirm source of truth for payments made.
+            $amountPaid = $oldAdvance->schedule()
+                ->where('current_status_id', 2)
+                ->sum(DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
+            $outstandingBalance = max(0, round((float) $oldAdvance->total_amount - (float) $amountPaid, 2));
+
+            // --- Recalculate interest / total for new advance ---
+            $newAmount       = (float) $validated['amount'];
+            $interestRate    = (float) ($validated['interest_rate'] ?? 0);
+            $repaymentMonths = (int) ($validated['repayment_months'] ?? 1);
+            $disbursement    = \Carbon\Carbon::parse($validated['disbursement_date']);
+            $principalStart  = \Carbon\Carbon::parse($validated['principal_start_date']);
+
+            $interestAmount = 0;
+            $newSchedule    = [];
+
+            if ($oldAdvance->advance_type_id == 3 && $interestRate > 0) {
+                $newSchedule    = $this->calculateAmortizationSchedule($newAmount, $interestRate, $repaymentMonths, $disbursement, $principalStart);
+                $interestAmount = collect($newSchedule)->sum('interest');
+            }
+            $newTotal = round($newAmount + $interestAmount, 2);
+
+            // 1. Mark old advance as Rescheduled
+            $oldAdvance->update(['current_status_id' => 8]);
+
+            // 2. Mark all pending schedule rows of old advance as Rescheduled
+            $oldAdvance->schedule()->where('current_status_id', 1)->update(['current_status_id' => 8]);
+
+            // 3. Create new advance record
+            $newAdvance = ClientAdvance::create([
+                'date_time'            => now(),
+                'requisition_date'     => now(),
+                'narration'            => $validated['narration'] ?? 'Rescheduled from ' . $oldAdvance->reference_number,
+                'created_by'           => Auth::id(),
+                'zone_id'              => $oldAdvance->zone_id,
+                'client_id'            => $oldAdvance->client_id,
+                'property_id'          => $oldAdvance->property_id,
+                'current_status_id'    => 1, // Pending — awaits landlord approval
+                'amount'               => $newAmount,
+                'repayment_months'     => $repaymentMonths,
+                'interest_rate'        => $interestRate,
+                'principal_start_date' => $principalStart,
+                'disbursement_date'    => $disbursement,
+                'interest_amount'      => $interestAmount,
+                'total_amount'         => $newTotal,
+                'current_balance'      => $newTotal,
+                'reference_number'     => $oldAdvance->reference_number . '-R' . (substr_count($oldAdvance->reference_number, '-R') + 1),
+                'advance_type_id'      => $oldAdvance->advance_type_id,
+                'previous_advance_id'  => $oldAdvance->id,
+                'miscallenous_charge_id' => $oldAdvance->miscallenous_charge_id,
+                'charge_amount'        => $oldAdvance->charge_amount,
+                'charge_billed_to'     => $oldAdvance->charge_billed_to,
+                'expense_category'     => $oldAdvance->expense_category,
+                'payment_method'       => $oldAdvance->payment_method,
+                'payment_instructions' => $oldAdvance->payment_instructions,
+            ]);
+
+            // 4. Create new schedule rows (Type 3 / Overpayment advances)
+            if (!empty($newSchedule)) {
+                foreach ($newSchedule as $row) {
+                    \App\Models\AdvanceSchedule::create([
+                        'parent_id'        => $newAdvance->id,
+                        'payment_date'     => $row['payment_date'],
+                        'principal_amount' => $row['principal'],
+                        'interest'         => $row['interest'],
+                        'loan_balance'     => $row['balance'],
+                        'current_status_id'=> 1,
+                    ]);
+                }
+            }
+
+            // 5. Log to reschedule history
+            $rootId = $this->getRootAdvanceId($oldAdvance);
+            \App\Models\AdvanceRescheduleHistory::create([
+                'original_advance_id'               => $rootId,
+                'from_advance_id'                   => $oldAdvance->id,
+                'to_advance_id'                     => $newAdvance->id,
+                'amount_paid_at_reschedule'         => $amountPaid,
+                'outstanding_balance_at_reschedule' => $outstandingBalance,
+                'narration'                         => $validated['narration'] ?? null,
+                'rescheduled_by'                    => Auth::id(),
+                'rescheduled_at'                    => now(),
+            ]);
+
+            DB::commit();
+
+            Log::info('Advance rescheduled', [
+                'old_advance_id' => $oldAdvance->id,
+                'new_advance_id' => $newAdvance->id,
+                'user_id'        => Auth::id(),
+            ]);
+
+            // Notify landlord of new advance pending approval
+            try {
+                $newEncryptedId  = Crypt::encrypt($newAdvance->id);
+                $notifySchedule  = $this->buildScheduleArray($newAdvance->load('schedule'));
+                $newAdvance->client->notify(new \App\Notifications\AdvanceApprovalNotification(
+                    $newAdvance,
+                    $newEncryptedId,
+                    $notifySchedule
+                ));
+            } catch (\Exception $notifyEx) {
+                Log::warning('Failed to send reschedule approval notification', [
+                    'advance_id' => $newAdvance->id,
+                    'error'      => $notifyEx->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'success'         => true,
+                'message'         => 'Advance rescheduled successfully. Landlord has been notified.',
+                'new_advance_id'  => Crypt::encrypt($newAdvance->id),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error processing reschedule: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to reschedule advance: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Walk the previous_advance_id chain to find the very first (original) advance.
+     */
+    private function getRootAdvanceId(ClientAdvance $advance): int
+    {
+        $current = $advance;
+        $visited = [];
+        while ($current->previous_advance_id && !in_array($current->previous_advance_id, $visited)) {
+            $visited[] = $current->id;
+            $parent = ClientAdvance::find($current->previous_advance_id);
+            if (!$parent) break;
+            $current = $parent;
+        }
+        return $current->id;
+    }
 
     /**
      * Get client average returns over specified months

@@ -703,6 +703,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/advances', [App\Http\Controllers\ClientAdvanceController::class, 'store'])->name('property.advances.store');
     Route::put('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'update'])->name('property.advances.update');
     Route::delete('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'destroy'])->name('property.advances.destroy');
+    Route::get('/property/advances/{encryptedId}/schedule/pdf', [App\Http\Controllers\ClientAdvanceController::class, 'downloadPdf'])->name('property.advances.schedule.pdf');
+    Route::get('/property/advances/{encryptedId}/schedule/excel', [App\Http\Controllers\ClientAdvanceController::class, 'downloadExcel'])->name('property.advances.schedule.excel');
+    Route::post('/property/advances/{encryptedId}/schedule/email', [App\Http\Controllers\ClientAdvanceController::class, 'emailSchedule'])->name('property.advances.schedule.email');
+    Route::post('/property/advances/{encryptedId}/post', [App\Http\Controllers\ClientAdvanceController::class, 'postAdvance'])->name('property.advances.post');
+    Route::get('/property/advances/{encryptedId}/reschedule', [App\Http\Controllers\ClientAdvanceController::class, 'showRescheduleForm'])->name('property.advances.reschedule');
+    Route::post('/property/advances/{encryptedId}/reschedule', [App\Http\Controllers\ClientAdvanceController::class, 'processReschedule'])->name('property.advances.reschedule.store');
 
 
     // Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvancesController::class, 'create'])->name('client.advances.create');
@@ -822,6 +828,11 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 Route::middleware(['throttle:10,1'])->group(function () {
     Route::get('/lease-contract/sign/{token}', [App\Http\Controllers\LeasesController::class, 'showSigningPage'])->name('lease.contract.sign');
     Route::post('/lease-contract/sign/{token}', [App\Http\Controllers\LeasesController::class, 'submitSignature'])->name('lease.contract.sign.submit');
+});
+
+// Public advance approval route — landlord clicks link from approval email (no auth, rate-limited)
+Route::middleware(['throttle:5,1'])->group(function () {
+    Route::get('/advances/approve/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'approveAdvance'])->name('property.advances.approve');
 });
 
 

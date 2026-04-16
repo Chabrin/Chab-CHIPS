@@ -176,4 +176,9 @@ class Client extends Model
     {
         return $this->belongsTo(ServiceAgreement::class, 'sla_id');
     }
+
+    public function advances()
+    {
+        return $this->hasMany(ClientAdvance::class, 'client_id', 'id');
+    }
 }
