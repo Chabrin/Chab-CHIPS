@@ -11,10 +11,12 @@ use Illuminate\Support\Facades\Crypt;
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Staff Details</h5>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('read_staff')
                             <a href="{{ route('staff.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
                             </a>
+                            @endpermission
                             @permission('update_staff')
                             <a href="{{ route('staff.edit', Crypt::encrypt($staff->id)) }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">edit_document</span>
@@ -94,6 +96,18 @@ use Illuminate\Support\Facades\Crypt;
                                 <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">punch_clock</span>
                                     Attendance
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="payslip-tab" data-bs-toggle="tab" data-bs-target="#payslip" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">receipt_long</span>
+                                    Payslip
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="leave-tab" data-bs-toggle="tab" data-bs-target="#leave" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">event_available</span>
+                                    Leave
                                 </button>
                             </li>
                         </ul>
@@ -837,9 +851,135 @@ use Illuminate\Support\Facades\Crypt;
                                 </div>
                             </div>
 
+                            <!-- Payslip Tab -->
+                            <div class="tab-pane fade" id="payslip" role="tabpanel" aria-labelledby="payslip-tab">
+                                <div class="row mb-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Select Month</label>
+                                        <input type="month" class="form-control" id="payslip_month" value="{{ date('Y-m') }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-primary w-100" id="viewPayslipBtn">
+                                            <span class="spinner-border spinner-border-sm me-1 d-none" id="payslipSpinner"></span>
+                                            View Payslip
+                                        </button>
+                                    </div>
+                                    <div class="col-md-3 d-none" id="payslipDownloadWrapper">
+                                        <a href="#" class="btn btn-outline-success w-100" id="payslipDownloadLink" target="_blank">
+                                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">download</span>
+                                            Download PDF
+                                        </a>
+                                    </div>
+                                </div>
+                                <div id="payslipPreviewWrapper" class="d-none">
+                                    <div id="payslipPreviewContent"></div>
+                                </div>
+                                <div id="payslipNoResult" class="alert alert-info d-none">No payslip found for the selected period.</div>
+                            </div>
+
+                            <!-- Leave Tab -->
+                            <div class="tab-pane fade" id="leave" role="tabpanel" aria-labelledby="leave-tab">
+                                <div class="mb-3 d-flex justify-content-end">
+                                    <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#leaveApplicationModal">
+                                        <span class="material-symbols-outlined me-1">add_circle</span>
+                                        New Leave Application
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="display" id="staffLeaveTable" style="width:100%">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Leave Type</th>
+                                                <th>Start Date</th>
+                                                <th>End Date</th>
+                                                <th>Days</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leave Application Modal -->
+<div class="modal fade" id="leaveApplicationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">New Leave Application — {{ $staff->full_names }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="staffLeaveForm">
+                    <input type="hidden" name="staff_id" value="{{ $staff->id }}">
+                    <div class="row">
+                        <div class="col-lg-6 mb-3">
+                            <label class="form-label">Leave Type <span class="text-danger">*</span></label>
+                            <select class="form-select" name="leave_type_id" id="sl_leave_type_id" required>
+                                <option value="">Select leave type...</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <label class="form-label">Available Days</label>
+                            <input type="number" class="form-control" name="available_days" id="sl_available_days" readonly>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <label class="form-label">Leave Duration <span class="text-danger">*</span></label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="leave_duration_type" id="sl_full_day" value="full_day" checked>
+                                <label class="btn btn-outline-primary" for="sl_full_day">Full Day(s)</label>
+                                <input type="radio" class="btn-check" name="leave_duration_type" id="sl_partial_day" value="partial_day">
+                                <label class="btn btn-outline-primary" for="sl_partial_day">Hours Only</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sl_full_days_section">
+                        <div class="row">
+                            <div class="col-lg-6 mb-3">
+                                <label class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" name="start_date" id="sl_start_date">
+                            </div>
+                            <div class="col-lg-6 mb-3">
+                                <label class="form-label">Requested Days <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" name="requested_days" id="sl_requested_days" min="0.5" step="0.5">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sl_hours_section" style="display:none;">
+                        <div class="row">
+                            <div class="col-lg-6 mb-3">
+                                <label class="form-label">Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" name="leave_date_hours" id="sl_leave_date_hours">
+                            </div>
+                            <div class="col-lg-6 mb-3">
+                                <label class="form-label">Time Range</label>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <input type="time" class="form-control" name="start_time_only" id="sl_start_time_only" value="08:00">
+                                    <span>to</span>
+                                    <input type="time" class="form-control" name="end_time_only" id="sl_end_time_only" value="17:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="staffLeaveSubmitBtn">
+                    <span class="spinner-border spinner-border-sm me-1 d-none" id="staffLeaveSpinner"></span>
+                    Submit Application
+                </button>
             </div>
         </div>
     </div>
@@ -1070,6 +1210,171 @@ $(document).ready(function() {
                 toastr.error(xhr.responseJSON?.error || 'Failed to submit extension request. Please try again.');
             }
         });
+    });
+
+    // ── Payslip Tab ──────────────────────────────────────────────────────────
+    $('#viewPayslipBtn').on('click', function() {
+        var month = $('#payslip_month').val();
+        if (!month) { toastr.warning('Please select a month.'); return; }
+
+        $('#payslipSpinner').removeClass('d-none');
+        $('#viewPayslipBtn').prop('disabled', true);
+        $('#payslipPreviewWrapper, #payslipNoResult, #payslipDownloadWrapper').addClass('d-none');
+
+        $.ajax({
+            url: "{{ route('ajax.payslips.view') }}",
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            data: { staff_id: {{ $staff->id }}, payroll_month: month },
+            success: function(res) {
+                if (res.success) {
+                    $('#payslipPreviewContent').html(res.html);
+                    $('#payslipPreviewWrapper').removeClass('d-none');
+                    $('#payslipDownloadLink').attr('href', '/payslips/download/{{ $staff->id }}/' + month);
+                    $('#payslipDownloadWrapper').removeClass('d-none');
+                } else {
+                    $('#payslipNoResult').removeClass('d-none');
+                }
+            },
+            error: function() { toastr.error('Failed to load payslip.'); },
+            complete: function() {
+                $('#payslipSpinner').addClass('d-none');
+                $('#viewPayslipBtn').prop('disabled', false);
+            }
+        });
+    });
+
+    // ── Leave Tab ────────────────────────────────────────────────────────────
+    var staffLeaveTable = null;
+    var leaveTypesLoaded = false;
+
+    $('#leave-tab').one('click', function() {
+        staffLeaveTable = $('#staffLeaveTable').DataTable({
+            processing: true,
+            ajax: {
+                url: "{{ route('ajax.leaveApplications.list') }}",
+                dataSrc: function(json) {
+                    return (json.leave_applications || []).filter(function(a) {
+                        return a.staff_id === {{ $staff->id }};
+                    });
+                }
+            },
+            columns: [
+                { data: null, orderable: false, render: function(d, t, r, m) { return m.row + 1; } },
+                { data: 'leave_type', render: function(d) { return d ? d.type_name : '-'; } },
+                { data: 'start_date', render: function(d) { return d ? d.substring(0, 10) : '-'; } },
+                { data: 'end_date',   render: function(d) { return d ? d.substring(0, 10) : '-'; } },
+                { data: 'display_days' },
+                {
+                    data: 'current_status_id',
+                    render: function(s) {
+                        var map = {
+                            1:  '<span class="badge bg-secondary">Pending</span>',
+                            5:  '<span class="badge bg-success">Approved</span>',
+                            28: '<span class="badge bg-danger">Rejected</span>'
+                        };
+                        return map[s] || '<span class="badge bg-light text-dark">' + s + '</span>';
+                    }
+                }
+            ],
+            order: [[2, 'desc']],
+            pageLength: 25
+        });
+
+        if (!leaveTypesLoaded) {
+            leaveTypesLoaded = true;
+            $.get("{{ route('ajax.leaveTypes.list') }}", function(res) {
+                if (res.success) {
+                    var opts = '<option value="">Select leave type...</option>';
+                    res.leave_types.forEach(function(t) {
+                        opts += '<option value="' + t.id + '">' + t.type_name + ' (' + t.entitled_days + ' days)</option>';
+                    });
+                    $('#sl_leave_type_id').html(opts);
+                }
+            });
+        }
+    });
+
+    $('input[name="leave_duration_type"]').on('change', function() {
+        if ($(this).val() === 'full_day') {
+            $('#sl_full_days_section').show();
+            $('#sl_hours_section').hide();
+        } else {
+            $('#sl_full_days_section').hide();
+            $('#sl_hours_section').show();
+        }
+    });
+
+    $('#sl_leave_type_id').on('change', function() {
+        var leaveTypeId = $(this).val();
+        if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
+        $.get('/ajax/leave-management/calendar-plan/available-leave-days/{{ $staff->id }}/' + leaveTypeId, function(res) {
+            $('#sl_available_days').val(res.available_days ?? 0);
+        });
+    });
+
+    $('#staffLeaveSubmitBtn').on('click', function() {
+        var durationType = $('input[name="leave_duration_type"]:checked').val();
+        var data = {
+            staff_id: {{ $staff->id }},
+            leave_type_id: $('#sl_leave_type_id').val(),
+            available_days: $('#sl_available_days').val() || 0,
+            leave_duration_type: durationType,
+            _token: $('meta[name="csrf-token"]').attr('content')
+        };
+
+        if (!data.leave_type_id) { toastr.warning('Please select a leave type.'); return; }
+
+        if (durationType === 'full_day') {
+            data.start_date = $('#sl_start_date').val();
+            data.requested_days = $('#sl_requested_days').val();
+            if (!data.start_date || !data.requested_days) {
+                toastr.warning('Please fill in start date and number of days.');
+                return;
+            }
+        } else {
+            var date = $('#sl_leave_date_hours').val();
+            if (!date) { toastr.warning('Please fill in the date.'); return; }
+            data.start_date = date + ' ' + $('#sl_start_time_only').val() + ':00';
+            data.end_date   = date + ' ' + $('#sl_end_time_only').val() + ':00';
+        }
+
+        $('#staffLeaveSpinner').removeClass('d-none');
+        $('#staffLeaveSubmitBtn').prop('disabled', true);
+
+        $.ajax({
+            url: "{{ route('ajax.leaveApplications.store') }}",
+            method: 'POST',
+            data: data,
+            success: function(res) {
+                if (res.success) {
+                    $('#leaveApplicationModal').modal('hide');
+                    toastr.success('Leave application submitted successfully.');
+                    if (staffLeaveTable) staffLeaveTable.ajax.reload(null, false);
+                } else {
+                    toastr.error(res.error || 'Failed to submit application.');
+                }
+            },
+            error: function(xhr) {
+                var errs = xhr.responseJSON && xhr.responseJSON.errors;
+                if (errs) {
+                    toastr.error(Object.values(errs).flat().join('<br>'));
+                } else {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to submit application.');
+                }
+            },
+            complete: function() {
+                $('#staffLeaveSpinner').addClass('d-none');
+                $('#staffLeaveSubmitBtn').prop('disabled', false);
+            }
+        });
+    });
+
+    $('#leaveApplicationModal').on('hidden.bs.modal', function() {
+        $('#staffLeaveForm')[0].reset();
+        $('#sl_available_days').val('');
+        $('#sl_full_days_section').show();
+        $('#sl_hours_section').hide();
     });
 });
 </script>

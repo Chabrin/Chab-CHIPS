@@ -162,7 +162,7 @@ class TenantsController extends Controller
             $id = Crypt::decrypt($encryptedId);
 
             $query = LeaseAgreement::with(['property', 'unit'])
-                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end'])
+                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'contract_sent_at', 'contract_signed_at', 'signed_pdf_path'])
                 ->where('tenant_id', $id);
 
             // optional property filter
@@ -172,13 +172,16 @@ class TenantsController extends Controller
 
             $leases = $query->orderBy('date_start', 'desc')->get()->map(function ($lease) {
                 return [
-                    'id' => $lease->id,
-                    'ref_number' => $lease->ref_number ?? '-',
-                    'property' => $lease->property->property_name ?? '-',
-                    'unit' => $lease->unit->unit_name ?? '-',
+                    'id'             => $lease->id,
+                    'encrypted_id'   => Crypt::encrypt($lease->id),
+                    'ref_number'     => $lease->ref_number ?? '-',
+                    'property'       => $lease->property->property_name ?? '-',
+                    'unit'           => $lease->unit->unit_name ?? '-',
                     // return ISO date so client can format to dd/mm/yy
-                    'date_start' => $lease->date_start ? $lease->date_start->toDateString() : null,
-                    'date_end' => $lease->date_end ? $lease->date_end->toDateString() : null,
+                    'date_start'     => $lease->date_start ? $lease->date_start->toDateString() : null,
+                    'date_end'       => $lease->date_end ? $lease->date_end->toDateString() : null,
+                    'contract_status' => $lease->contract_signed_at ? 'signed' : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
+                    'has_signed_pdf' => !empty($lease->signed_pdf_path),
                 ];
             });
 

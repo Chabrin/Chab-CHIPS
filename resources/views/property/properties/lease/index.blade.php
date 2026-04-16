@@ -38,6 +38,82 @@
                         </div>
                         @endif
 
+                        <!-- Lease Stats -->
+                        <div class="row g-3 mb-4" id="leaseStatsRow">
+                            <div class="col">
+                                <div class="card border-warning h-100">
+                                    <div class="card-body py-3 d-flex align-items-center gap-3">
+                                        <span class="material-symbols-outlined text-warning" style="font-size:36px;">schedule</span>
+                                        <div>
+                                            <div class="fs-4 fw-bold stat-value" id="stat-expiring"><span class="spinner-border spinner-border-sm"></span></div>
+                                            <div class="text-muted small">Expiring Soon<br><span class="text-muted" style="font-size:11px;">(next 90 days)</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card border-danger h-100">
+                                    <div class="card-body py-3 d-flex align-items-center gap-3">
+                                        <span class="material-symbols-outlined text-danger" style="font-size:36px;">error</span>
+                                        <div>
+                                            <div class="fs-4 fw-bold stat-value" id="stat-expired"><span class="spinner-border spinner-border-sm"></span></div>
+                                            <div class="text-muted small">Expired</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card border-success h-100">
+                                    <div class="card-body py-3 d-flex align-items-center gap-3">
+                                        <span class="material-symbols-outlined text-success" style="font-size:36px;">verified</span>
+                                        <div>
+                                            <div class="fs-4 fw-bold stat-value" id="stat-signed"><span class="spinner-border spinner-border-sm"></span></div>
+                                            <div class="text-muted small">Signed Contracts</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card border-info h-100">
+                                    <div class="card-body py-3 d-flex align-items-center gap-3">
+                                        <span class="material-symbols-outlined text-info" style="font-size:36px;">pending</span>
+                                        <div class="flex-grow-1">
+                                            <div class="fs-4 fw-bold stat-value" id="stat-sent-not-signed"><span class="spinner-border spinner-border-sm"></span></div>
+                                            <div class="text-muted small">Awaiting Signature</div>
+                                            <button class="btn btn-outline-info btn-sm mt-1" data-bs-toggle="modal" data-bs-target="#bulkSendModal" data-type="sent_not_signed">
+                                                <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">refresh</span> Resend All
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card border-secondary h-100">
+                                    <div class="card-body py-3 d-flex align-items-center gap-3">
+                                        <span class="material-symbols-outlined text-secondary" style="font-size:36px;">mail</span>
+                                        <div class="flex-grow-1">
+                                            <div class="fs-4 fw-bold stat-value" id="stat-not-sent"><span class="spinner-border spinner-border-sm"></span></div>
+                                            <div class="text-muted small">Contracts Not Sent</div>
+                                            <button class="btn btn-outline-secondary btn-sm mt-1" data-bs-toggle="modal" data-bs-target="#bulkSendModal" data-type="not_sent">
+                                                <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">send</span> Send All
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card border-dark h-100" style="cursor:pointer;" onclick="$(document.getElementById('no-end-date-tab')).tab('show')">
+                                    <div class="card-body py-3 d-flex align-items-center gap-3">
+                                        <span class="material-symbols-outlined text-dark" style="font-size:36px;">event_busy</span>
+                                        <div>
+                                            <div class="fs-4 fw-bold stat-value" id="stat-no-end-date"><span class="spinner-border spinner-border-sm"></span></div>
+                                            <div class="text-muted small">No End Date<br><span style="font-size:11px;">click to view</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Nav tabs -->
                         <ul class="nav nav-tabs mb-3" id="leaseTab" role="tablist">
                             <li class="nav-item" role="presentation">
@@ -56,6 +132,12 @@
                                 <button class="nav-link" id="no-lease-tab" data-bs-toggle="tab" data-bs-target="#no-lease" type="button">
                                     <span class="material-symbols-outlined" style="font-size:18px;">warning</span>
                                     Tenants Without Leases
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="no-end-date-tab" data-bs-toggle="tab" data-bs-target="#no-end-date" type="button">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">event_busy</span>
+                                    No End Date
                                 </button>
                             </li>
                         </ul>
@@ -101,7 +183,6 @@
                                             <thead>
                                                 <tr>
                                                     <th>#</th>
-                                                    <th>Lease Ref</th>
                                                     <th>Tenant</th>
                                                     <th>Property</th>
                                                     <th>Unit</th>
@@ -168,6 +249,52 @@
                                                     <th>Mobile</th>
                                                     <th>Email</th>
                                                     <th>Registered Date</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- No End Date Tab -->
+                            <div class="tab-pane fade" id="no-end-date" role="tabpanel">
+                                <!-- Filters -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Filter by Client/Landlord</label>
+                                        <select class="form-select" id="ned_filter_client"></select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Filter by Property</label>
+                                        <select class="form-select" id="ned_filter_property"><option value="">All Properties</option></select>
+                                    </div>
+                                    <div class="col-md-12 d-flex align-items-end mt-2">
+                                        <button type="button" class="btn btn-primary w-100" id="searchNoEndDateBtn">
+                                            <span class="material-symbols-outlined" style="font-size:18px;">search</span>
+                                            Search
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="position-relative">
+                                    <div id="noEndDateLoader" class="text-center py-5" style="display:none;">
+                                        <div class="spinner-border text-dark" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2 text-muted">Loading leases without end date...</p>
+                                    </div>
+                                    <div class="table-responsive custom-scrollbar" id="noEndDateTableContainer">
+                                        <table id="noEndDateTable" class="display" style="width:100%;">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Tenant</th>
+                                                    <th>Client</th>
+                                                    <th>Property</th>
+                                                    <th>Unit</th>
+                                                    <th>Start Date</th>
+                                                    <th>Status</th>
+                                                    <th>Contract</th>
                                                     <th>Actions</th>
                                                 </tr>
                                             </thead>
@@ -291,10 +418,193 @@
     </div>
 </div>
 
+<!-- Bulk Send Contracts Modal -->
+<div class="modal fade" id="bulkSendModal" tabindex="-1" aria-labelledby="bulkSendModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkSendModalLabel">Send Lease Contracts</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="bulkSendForm">
+                <div class="modal-body">
+                    <input type="hidden" id="bulkSendType" name="type">
+                    <p class="text-muted mb-3" id="bulkSendDesc"></p>
+
+                    <div class="mb-3">
+                        <label for="bs_client" class="form-label">Filter by Client / Landlord <span class="text-muted fw-normal">(optional)</span></label>
+                        <select class="form-select" id="bs_client" name="client_id">
+                            <option value="">All Clients</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="bs_property" class="form-label">Filter by Property <span class="text-muted fw-normal">(optional)</span></label>
+                        <select class="form-select" id="bs_property" name="property_id">
+                            <option value="">All Properties</option>
+                        </select>
+                    </div>
+
+                    <div class="alert alert-info mb-0 py-2">
+                        <small><span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle;">info</span>
+                        Leaving filters blank will target <strong>all</strong> matching active leases across the portfolio.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="bulkSendSubmitBtn">
+                        <span class="spinner-border spinner-border-sm me-1 d-none" id="bulkSendSpinner"></span>
+                        <span id="bulkSendBtnText">Send Contracts</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         let propertiesData = [];
+
+        // ── Lease Stats ───────────────────────────────────────────────
+        function loadStats() {
+            $.ajax({
+                url: "{{ route('property.leases.stats') }}",
+                method: 'GET',
+                success: function(response) {
+                    var d = response.data;
+                    $('#stat-expiring').text(d.expiring_soon ?? 0);
+                    $('#stat-expired').text(d.expired ?? 0);
+                    $('#stat-signed').text(d.signed ?? 0);
+                    $('#stat-sent-not-signed').text(d.sent_not_signed ?? 0);
+                    $('#stat-not-sent').text(d.not_sent ?? 0);
+                    $('#stat-no-end-date').text(d.no_end_date ?? 0);
+                },
+                error: function() {
+                    $('.stat-value').text('—');
+                }
+            });
+        }
+
+        loadStats();
+
+        // ── Bulk Send Modal ────────────────────────────────────────
+        $('#bulkSendModal').on('show.bs.modal', function(e) {
+            var type = $(e.relatedTarget).data('type');
+            $('#bulkSendType').val(type);
+            if (type === 'not_sent') {
+                $('#bulkSendModalLabel').text('Send Lease Contracts');
+                $('#bulkSendDesc').text('Send contracts to active leases that have not yet had a contract sent. Use the filters below to narrow down by client or property.');
+                $('#bulkSendBtnText').text('Send Contracts');
+            } else {
+                $('#bulkSendModalLabel').text('Resend Lease Contracts');
+                $('#bulkSendDesc').text('Resend contracts to active leases where the contract was sent but not yet signed. Use the filters below to narrow down by client or property.');
+                $('#bulkSendBtnText').text('Resend Contracts');
+            }
+
+            // Init client select2
+            $('#bs_client').select2({
+                dropdownParent: $('#bulkSendModal'),
+                placeholder: 'Search for a client/landlord...',
+                allowClear: true,
+                width: '100%',
+                minimumInputLength: 2,
+                ajax: {
+                    url: "{{ route('ajax.clients.list') }}",
+                    dataType: 'json',
+                    delay: 250,
+                    data: function(params) {
+                        return { client_type: 'Landlord', search: params.term };
+                    },
+                    processResults: function(response) {
+                        return {
+                            results: response.data.map(function(c) {
+                                return { id: c.id, text: c.names + ' (' + c.reference_number + ')' };
+                            })
+                        };
+                    },
+                    cache: true
+                }
+            });
+
+            // Init property select2
+            $('#bs_property').select2({
+                dropdownParent: $('#bulkSendModal'),
+                placeholder: 'All Properties',
+                allowClear: true,
+                width: '100%'
+            });
+
+            // Reset property list
+            $('#bs_property').html('<option value="">All Properties</option>').trigger('change');
+        });
+
+        // When client changes in bulk-send modal, reload properties
+        $('#bs_client').on('change', function() {
+            var clientId = $(this).val();
+            $('#bs_property').html('<option value="">All Properties</option>').trigger('change');
+            if (!clientId) return;
+
+            $.ajax({
+                url: "{{ route('property.properties.data') }}",
+                method: 'GET',
+                data: { client_id: clientId },
+                success: function(response) {
+                    var opts = '<option value="">All Properties</option>';
+                    if (response.data) {
+                        response.data.forEach(function(p) {
+                            opts += '<option value="' + p.id + '">' + p.property_name + ' (' + p.reference_number + ')</option>';
+                        });
+                    }
+                    $('#bs_property').html(opts).trigger('change');
+                }
+            });
+        });
+
+        // Destroy select2 on modal close
+        $('#bulkSendModal').on('hidden.bs.modal', function() {
+            if ($('#bs_client').hasClass('select2-hidden-accessible')) $('#bs_client').select2('destroy');
+            if ($('#bs_property').hasClass('select2-hidden-accessible')) $('#bs_property').select2('destroy');
+            $('#bulkSendForm')[0].reset();
+            $('#bs_client').html('<option value="">All Clients</option>');
+            $('#bs_property').html('<option value="">All Properties</option>');
+        });
+
+        // Bulk-send form submit
+        $('#bulkSendForm').on('submit', function(e) {
+            e.preventDefault();
+            var type       = $('#bulkSendType').val();
+            var clientId   = $('#bs_client').val();
+            var propertyId = $('#bs_property').val();
+
+            $('#bulkSendSpinner').removeClass('d-none');
+            $('#bulkSendSubmitBtn').prop('disabled', true);
+
+            $.ajax({
+                url: "{{ route('property.leases.bulk-send-contracts') }}",
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                data: {
+                    type: type,
+                    client_id: clientId || null,
+                    property_id: propertyId || null
+                },
+                success: function(res) {
+                    $('#bulkSendModal').modal('hide');
+                    toastr.success(res.message);
+                    loadStats();
+                },
+                error: function(xhr) {
+                    toastr.error(xhr.responseJSON?.message || 'Failed to send contracts.');
+                },
+                complete: function() {
+                    $('#bulkSendSpinner').addClass('d-none');
+                    $('#bulkSendSubmitBtn').prop('disabled', false);
+                }
+            });
+        });
+        // ─────────────────────────────────────────────────────────────
         
         // Initialize All Leases DataTable
         var allLeasesTable = $('#allLeasesTable').DataTable({
@@ -309,8 +619,12 @@
                         return meta.row + 1;
                     }
                 },
-                { data: 'ref_number' },
-                { data: 'tenant_name' },
+                {
+                    data: 'tenant_name',
+                    render: function(data, type, row) {
+                        return '<small class="text-muted">' + row.ref_number + '</small><br>' + data;
+                    }
+                },
                 { data: 'property_name' },
                 { data: 'unit_code' },
                 {
@@ -368,7 +682,7 @@
                 },
                 {
                     data: 'contract_status',
-                    orderable: false,
+                    orderable: true,
                     searchable: false,
                     render: function(status, type, row) {
                         if (status === 'signed') {
@@ -387,18 +701,21 @@
                         let sendBtn = row.contract_status !== 'signed'
                             ? `<button class="btn btn-sm btn-outline-info send-contract-btn ms-1" data-id="${row.ref_number}" title="${row.contract_status === 'sent' ? 'Resend' : 'Send'} Contract"><i class="fa fa-paper-plane"></i></button>`
                             : '';
+                        let viewContractBtn = row.has_signed_pdf
+                            ? `<a href="/property/leases/${row.encrypted_id}/view-signed-contract" class="btn btn-sm btn-outline-success ms-1" target="_blank" title="View Signed Contract"><i class="fa fa-file-pdf-o"></i></a>`
+                            : '';
                         return `
                             <a href="/tenants/${encryptedId}" class="text-primary" title="View Tenant">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">visibility</span>
                             </a>
-                            ${sendBtn}
+                            ${sendBtn}${viewContractBtn}
                         `;
                     }
                 }
             ],
             pageLength: 25,
             responsive: true,
-            order: [[7, 'asc']] // Sort by days to expiry
+            order: [[6, 'asc']] // Sort by days to expiry
         });
 
         // Initialize Expiring Leases DataTable
@@ -464,6 +781,7 @@
         function loadLeasesData(filters = {}) {
             // Show loading indicators
             $('#searchPrompt').hide();
+            $('#allLeasesLoader').show();
             $('#allLeasesLoader .spinner-border').show();
             $('#allLeasesTableContainer').hide();
             
@@ -477,7 +795,7 @@
                     allLeasesTable.draw();
                     
                     // Hide loader and show table
-                    $('#allLeasesLoader .spinner-border').hide();
+                    $('#allLeasesLoader').hide();
                     $('#allLeasesTableContainer').show();
                     
                     if (response.data.length === 0) {
@@ -524,6 +842,147 @@
         $('#expiring-tab').one('click', function() {
             loadExpiringLeases();
         });
+
+        // ── No End Date Tab ───────────────────────────────────────────
+        var noEndDateTable = $('#noEndDateTable').DataTable({
+            processing: true,
+            data: [],
+            columns: [
+                {
+                    data: null, orderable: false, searchable: false,
+                    render: function(data, type, row, meta) { return meta.row + 1; }
+                },
+                {
+                    data: 'tenant_name',
+                    render: function(data, type, row) {
+                        return '<small class="text-muted">' + row.ref_number + '</small><br>' + data;
+                    }
+                },
+                { data: 'client_name' },
+                { data: 'property_name' },
+                { data: 'unit_code' },
+                {
+                    data: 'date_start',
+                    render: function(data) { return data ? moment(data).format('MMM D, YYYY') : 'N/A'; }
+                },
+                {
+                    data: 'current_status_id',
+                    render: function(data) {
+                        switch(parseInt(data)) {
+                            case 1:  return '<span class="badge bg-secondary">Pending</span>';
+                            case 5:  return '<span class="badge bg-success">Approved</span>';
+                            case 28: return '<span class="badge bg-danger">Terminated</span>';
+                            case 29: return '<span class="badge bg-warning">Withdrawn</span>';
+                            case 32: return '<span class="badge bg-primary">Owner\'s Account</span>';
+                            case 2:  return '<span class="badge bg-info">Renewed</span>';
+                            default: return '<span class="badge bg-secondary">Unknown</span>';
+                        }
+                    }
+                },
+                {
+                    data: 'contract_status',
+                    orderable: false, searchable: false,
+                    render: function(status) {
+                        if (status === 'signed')  return '<span class="badge badge-light-success"><i class="fa fa-check me-1"></i>Signed</span>';
+                        if (status === 'sent')    return '<span class="badge badge-light-warning"><i class="fa fa-envelope me-1"></i>Sent</span>';
+                        return '<span class="badge badge-light-secondary">Not Sent</span>';
+                    }
+                },
+                {
+                    data: 'encrypted_tenant_id',
+                    orderable: false, searchable: false,
+                    render: function(encryptedId, type, row) {
+                        let viewContractBtn = row.has_signed_pdf
+                            ? '<a href="/property/leases/' + row.encrypted_id + '/view-signed-contract" class="btn btn-sm btn-outline-success ms-1" target="_blank" title="View Signed Contract"><i class="fa fa-file-pdf-o"></i></a>'
+                            : '';
+                        return '<a href="/tenants/' + encryptedId + '" class="text-primary" title="View Tenant"><span class="material-symbols-outlined" style="font-size:18px;">visibility</span></a>' + viewContractBtn;
+                    }
+                }
+            ],
+            pageLength: 25,
+            responsive: true,
+            order: [[5, 'desc']]
+        });
+
+        function loadNoEndDateLeases(filters) {
+            $('#noEndDateLoader').show();
+            $('#noEndDateTableContainer').hide();
+            $.ajax({
+                url: "{{ route('property.leases.no-end-date') }}",
+                method: 'GET',
+                data: filters || {},
+                success: function(response) {
+                    noEndDateTable.clear().rows.add(response.data).draw();
+                    $('#noEndDateLoader').hide();
+                    $('#noEndDateTableContainer').show();
+                },
+                error: function() {
+                    toastr.error('Failed to load leases without end date.');
+                    $('#noEndDateLoader').hide();
+                    $('#noEndDateTableContainer').show();
+                }
+            });
+        }
+
+        // Init filters for No End Date tab
+        $('#no-end-date-tab').one('click', function() {
+            // Init client select2
+            $('#ned_filter_client').select2({
+                placeholder: 'Search for a client/landlord...',
+                allowClear: true,
+                width: '100%',
+                minimumInputLength: 2,
+                ajax: {
+                    url: "{{ route('ajax.clients.list') }}",
+                    dataType: 'json',
+                    delay: 250,
+                    data: function(params) { return { client_type: 'Landlord', search: params.term }; },
+                    processResults: function(response) {
+                        return {
+                            results: response.data.map(function(c) {
+                                return { id: c.id, text: c.names + ' (' + c.reference_number + ')' };
+                            })
+                        };
+                    },
+                    cache: true
+                }
+            });
+
+            $('#ned_filter_client').on('change', function() {
+                var clientId = $(this).val();
+                $('#ned_filter_property').html('<option value="">All Properties</option>').trigger('change');
+                if (!clientId) return;
+                $.ajax({
+                    url: "{{ route('property.properties.data') }}",
+                    data: { client_id: clientId },
+                    success: function(res) {
+                        var opts = '<option value="">All Properties</option>';
+                        (res.data || []).forEach(function(p) {
+                            opts += '<option value="' + p.id + '">' + p.property_name + ' (' + p.reference_number + ')</option>';
+                        });
+                        $('#ned_filter_property').html(opts);
+                        if ($('#ned_filter_property').hasClass('select2-hidden-accessible')) {
+                            $('#ned_filter_property').select2('destroy');
+                        }
+                        $('#ned_filter_property').select2({ placeholder: 'All Properties', allowClear: true, width: '100%' });
+                    }
+                });
+            });
+
+            $('#ned_filter_property').select2({ placeholder: 'All Properties', allowClear: true, width: '100%' });
+
+            loadNoEndDateLeases();
+        });
+
+        $('#searchNoEndDateBtn').on('click', function() {
+            var filters = {};
+            var c = $('#ned_filter_client').val();
+            var p = $('#ned_filter_property').val();
+            if (c) filters.client_id   = c;
+            if (p) filters.property_id = p;
+            loadNoEndDateLeases(filters);
+        });
+        // ─────────────────────────────────────────────────────────────
         
         // Load clients and properties for filters
         function loadFilterOptions() {
@@ -545,7 +1004,7 @@
                     },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(client) {
+                            results: response.data.map(function(client) {
                                 return {
                                     id: client.id,
                                     text: `${client.names} (${client.reference_number})`
@@ -799,7 +1258,7 @@
                     },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(client) {
+                            results: response.data.map(function(client) {
                                 return {
                                     id: client.id,
                                     text: `${client.names} (${client.reference_number})`

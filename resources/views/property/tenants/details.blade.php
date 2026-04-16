@@ -227,6 +227,8 @@
                                                     <th>Unit</th>
                                                     <th>Start</th>
                                                     <th>End</th>
+                                                    <th>Contract</th>
+                                                    <th>Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody></tbody>
@@ -376,35 +378,48 @@
                 },
                 columns: [{
                         data: null,
+                        orderable: false,
                         render: function(data, type, row, meta) {
                             return meta.row + 1;
                         }
                     },
-                    {
-                        data: 'ref_number'
-                    },
-                    {
-                        data: 'property'
-                    },
-                    {
-                        data: 'unit'
-                    },
+                    { data: 'ref_number' },
+                    { data: 'property' },
+                    { data: 'unit' },
                     {
                         data: 'date_start',
-                        render: function(data) {
-                            return formatDateShort(data);
-                        }
+                        render: function(data) { return formatDateShort(data); }
                     },
                     {
                         data: 'date_end',
-                        render: function(data) {
-                            return formatDateShort(data);
+                        render: function(data) { return formatDateShort(data); }
+                    },
+                    {
+                        data: 'contract_status',
+                        orderable: false,
+                        render: function(status) {
+                            if (status === 'signed')  return '<span class="badge badge-light-success"><i class="fa fa-check me-1"></i>Signed</span>';
+                            if (status === 'sent')    return '<span class="badge badge-light-warning"><i class="fa fa-envelope me-1"></i>Sent</span>';
+                            return '<span class="badge badge-light-secondary">Not Sent</span>';
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: function(data, type, row) {
+                            var btns = '';
+                            if (row.has_signed_pdf) {
+                                btns += '<a href="/property/leases/' + row.encrypted_id + '/view-signed-contract" target="_blank" class="btn btn-sm btn-outline-success me-1" title="View Signed Contract"><i class="fa fa-file-pdf-o"></i></a>';
+                            }
+                            if (row.contract_status !== 'signed') {
+                                var title = row.contract_status === 'sent' ? 'Resend Contract' : 'Send Contract';
+                                btns += '<button class="btn btn-sm btn-outline-info send-lease-contract-btn" data-ref="' + row.ref_number + '" title="' + title + '"><i class="fa fa-paper-plane"></i></button>';
+                            }
+                            return btns || '<span class="text-muted small">—</span>';
                         }
                     }
                 ],
-                order: [
-                    [4, 'desc']
-                ]
+                order: [[4, 'desc']]
             });
         }
 
@@ -417,6 +432,27 @@
             } else if (target === '#leases') {
                 initLeasesTable();
             }
+        });
+
+        // Send / Resend lease contract from tenant page
+        $(document).on('click', '.send-lease-contract-btn', function() {
+            var ref = $(this).data('ref');
+            var btn = $(this);
+            if (!confirm('Send the lease contract to this tenant for digital signing?')) return;
+            btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+            $.ajax({
+                url: '/property/leases/' + ref + '/send-contract',
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                success: function(res) {
+                    toastr.success(res.message);
+                    leasesTable.ajax.reload(null, false);
+                },
+                error: function(xhr) {
+                    toastr.error(xhr.responseJSON?.message || 'Failed to send contract.');
+                    btn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i>');
+                }
+            });
         });
     });
 </script>
