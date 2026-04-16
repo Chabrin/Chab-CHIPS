@@ -521,49 +521,62 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 <div class="card border-0 shadow-sm">
                                     <div class="card-body">
                                         <div class="row g-3">
-                                            <div class="col-lg-5">
-                                                <div class="border rounded p-3 h-100">
+                                            <div class="col-lg-7">
+                                                <div class="p-2 h-100">
                                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                                        <h6 class="mb-0">Unbatched Active Properties</h6>
-                                                        <span id="returnsSelectedCount" class="badge bg-light text-dark">0 selected</span>
-                                                    </div>
-                                                    <small class="text-muted d-block mb-2">Select two or more properties, then create/update a batch.</small>
-
-                                                    <div class="mb-2">
-                                                        <textarea id="returnsConfigNotesInline" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Batch notes (optional)"></textarea>
+                                                        <h6 class="mb-0">
+                                                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">home_work</span>
+                                                            Unbatched Active Properties
+                                                        </h6>
+                                                        <span id="returnsSelectedCount" class="badge bg-primary text-white">0 selected</span>
                                                     </div>
 
-                                                    <div class="d-flex flex-wrap gap-2 mb-2">
-                                                        <button type="button" id="btnCreateReturnsBatchInline" class="btn btn-primary btn-sm">Create Batch</button>
-                                                        <button type="button" id="btnUpdateReturnsBatchInline" class="btn btn-warning btn-sm d-none">Update Batch</button>
-                                                        <button type="button" id="btnCancelReturnsBatchEdit" class="btn btn-light btn-sm d-none">Cancel Edit</button>
+                                                    <div class="d-flex flex-wrap gap-2 mb-3">
+                                                        <button type="button" id="btnCreateReturnsBatchInline" class="btn btn-primary btn-sm">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">add_circle</span>
+                                                            <span class="btn-text">Create Batch</span>
+                                                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                                        </button>
+                                                        <button type="button" id="btnUpdateReturnsBatchInline" class="btn btn-warning btn-sm d-none">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">edit</span>
+                                                            <span class="btn-text">Update Batch</span>
+                                                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                                        </button>
+                                                        <button type="button" id="btnCancelReturnsBatchEdit" class="btn btn-light btn-sm d-none">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">close</span>
+                                                            Cancel
+                                                        </button>
                                                     </div>
 
-                                                    <div id="returnsConfigInlineError" class="alert alert-danger py-2 px-2 d-none mb-2"></div>
-                                                    <div id="returnsAvailableProperties" style="max-height: 380px; overflow:auto;">
-                                                        <table class="table table-sm table-hover table-bordered mb-0 small" id="returnsPropertiesTable">
-                                                            <thead class="table-light sticky-top">
-                                                                <tr>
-                                                                    <th style="width:30px;"><input type="checkbox" id="returnsCheckAll" title="Select/Deselect All"></th>
-                                                                    <th>Property Ref</th>
-                                                                    <th>Property Name</th>
-                                                                    <th>Landlord</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody id="returnsPropertiesTableBody"></tbody>
-                                                        </table>
-                                                    </div>
+                                                    <table class="table table-sm table-hover table-bordered small w-100" id="returnsPropertiesTable">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th style="width:30px;"><input type="checkbox" id="returnsCheckAll" title="Select/Deselect All"></th>
+                                                                <th>Property Ref</th>
+                                                                <th>Property Name</th>
+                                                                <th>Landlord</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="returnsPropertiesTableBody"></tbody>
+                                                    </table>
                                                 </div>
                                             </div>
 
-                                            <div class="col-lg-7">
-                                                <div class="border rounded p-3 h-100">
+                                            <div class="col-lg-5">
+                                                <div class="p-2 h-100">
                                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                                        <h6 class="mb-0">Configured Batches</h6>
-                                                        <button type="button" id="btnDisbandAllReturnsBatches" class="btn btn-outline-danger btn-sm">Disband All</button>
+                                                        <h6 class="mb-0">
+                                                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">folder_shared</span>
+                                                            Configured Batches
+                                                        </h6>
+                                                        <button type="button" id="btnDisbandAllReturnsBatches" class="btn btn-outline-danger btn-sm">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete_sweep</span>
+                                                            <span class="btn-text">Disband All</span>
+                                                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                                        </button>
                                                     </div>
                                                     <small class="text-muted d-block mb-2">Each property can exist in only one batch.</small>
-                                                    <div id="returnsBatchCards" style="max-height: 420px; overflow:auto;"></div>
+                                                    <div id="returnsBatchCards" style="max-height: 500px; overflow:auto;"></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -747,6 +760,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
 </style>
 
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {
         var propertiesTable = null;
@@ -1137,22 +1151,39 @@ COPY PERMISSIONS (paste when re-enabling checks):
         });
 
         $('#btnDisbandAllReturnsBatches').on('click', function() {
-            if (!confirm('Disband ALL batches for this landlord profile?')) {
-                return;
-            }
-            disbandAllReturnsConfig();
+            Swal.fire({
+                title: 'Disband All Batches?',
+                text: 'This will remove all configured batches for this landlord profile. This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete_sweep</span> Yes, Disband All',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    disbandAllReturnsConfig();
+                }
+            });
         });
 
         $(document).on('change', '.returns-prop-check', function() {
             refreshReturnsSelectedCount();
+            updateCheckAllState();
         });
 
         // Check All functionality for returns properties table
-        $('#returnsCheckAll').on('change', function() {
+        $(document).on('change', '#returnsCheckAll', function() {
             var isChecked = $(this).prop('checked');
-            $('#returnsPropertiesTableBody .returns-prop-check:not(:disabled)').prop('checked', isChecked);
+            $('#returnsPropertiesTable .returns-prop-check:not(:disabled)').prop('checked', isChecked);
             refreshReturnsSelectedCount();
         });
+
+        function updateCheckAllState() {
+            var total = $('#returnsPropertiesTable .returns-prop-check:not(:disabled)').length;
+            var checked = $('#returnsPropertiesTable .returns-prop-check:not(:disabled):checked').length;
+            $('#returnsCheckAll').prop('checked', total > 0 && total === checked);
+        }
 
         $(document).on('click', '.btn-edit-returns-config-inline', function() {
             var batchId = $(this).data('id');
@@ -1160,11 +1191,22 @@ COPY PERMISSIONS (paste when re-enabling checks):
         });
 
         $(document).on('click', '.btn-delete-returns-config-inline', function() {
-            var batchId = $(this).data('id');
-            if (!confirm('Delete this merge batch? This will remove all linked properties from this configuration.')) {
-                return;
-            }
-            deleteReturnsConfig(batchId);
+            var btn = $(this);
+            var batchId = btn.data('id');
+            Swal.fire({
+                title: 'Delete This Batch?',
+                text: 'This will remove all linked properties from this batch configuration.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete</span> Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    deleteReturnsConfig(batchId, btn);
+                }
+            });
         });
 
         // Related Property details modal
@@ -1301,7 +1343,15 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         }
 
+        var returnsPropertiesDataTable = null;
+
         function renderReturnsAvailableProperties() {
+            // Destroy existing DataTable if present
+            if (returnsPropertiesDataTable) {
+                returnsPropertiesDataTable.destroy();
+                returnsPropertiesDataTable = null;
+            }
+
             var tbody = $('#returnsPropertiesTableBody');
             tbody.empty();
             $('#returnsCheckAll').prop('checked', false);
@@ -1343,7 +1393,31 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 );
             });
 
+            // Initialize DataTable
+            returnsPropertiesDataTable = $('#returnsPropertiesTable').DataTable({
+                paging: true,
+                pageLength: 10,
+                lengthMenu: [
+                    [10, 25, 50, -1],
+                    [10, 25, 50, "All"]
+                ],
+                searching: true,
+                ordering: true,
+                info: true,
+                autoWidth: false,
+                columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                }],
+                language: {
+                    search: "",
+                    searchPlaceholder: "Search properties...",
+                    emptyTable: "No eligible unbatched active properties."
+                }
+            });
+
             refreshReturnsSelectedCount();
+            updateCheckAllState();
         }
 
         function renderReturnsBatchCards() {
@@ -1369,12 +1443,16 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     '<div class="small text-muted">' + (batch.landlord_name || '-') + ' | LAN ' + (batch.landlord_ref || '-') + '</div>' +
                     '</div>' +
                     '<div class="d-flex gap-1">' +
-                    '<button class="btn btn-sm btn-outline-primary btn-edit-returns-config-inline" data-id="' + batch.id + '">Edit</button>' +
-                    '<button class="btn btn-sm btn-outline-danger btn-delete-returns-config-inline" data-id="' + batch.id + '">Delete</button>' +
+                    '<button class="btn btn-sm btn-link text-primary p-0 btn-edit-returns-config-inline" data-id="' + batch.id + '" title="Edit Batch">' +
+                    '<span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">edit_square</span>' +
+                    '</button>' +
+                    '<button class="btn btn-sm btn-link text-danger p-0 btn-delete-returns-config-inline" data-id="' + batch.id + '" title="Delete Batch">' +
+                    '<span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">delete</span>' +
+                    '<span class="spinner-border spinner-border-sm d-none" role="status"></span>' +
+                    '</button>' +
                     '</div>' +
                     '</div>' +
-                    '<ul class="mb-1 ps-3">' + itemsHtml + '</ul>' +
-                    '<div class="small text-muted">' + (batch.notes || '-') + '</div>' +
+                    '<ul class="mb-0 ps-3">' + itemsHtml + '</ul>' +
                     '</div>'
                 );
             });
@@ -1382,31 +1460,34 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
         function openReturnsConfigInlineEdit(batchId) {
             editingReturnsBatchId = Number(batchId);
-            var batch = returnsConfigBatches.find(function(b) {
-                return Number(b.id) === Number(batchId);
-            });
-            $('#returnsConfigNotesInline').val(batch && batch.notes ? batch.notes : '');
             $('#btnCreateReturnsBatchInline').addClass('d-none');
             $('#btnUpdateReturnsBatchInline').removeClass('d-none');
             $('#btnCancelReturnsBatchEdit').removeClass('d-none');
-            $('#returnsConfigInlineError').addClass('d-none').text('');
             renderReturnsAvailableProperties();
         }
 
         function resetReturnsConfigEditState() {
             editingReturnsBatchId = null;
-            $('#returnsConfigNotesInline').val('');
             $('#btnCreateReturnsBatchInline').removeClass('d-none');
             $('#btnUpdateReturnsBatchInline').addClass('d-none');
             $('#btnCancelReturnsBatchEdit').addClass('d-none');
-            $('#returnsConfigInlineError').addClass('d-none').text('');
         }
 
         function getSelectedReturnsPropertyIds() {
             var selected = [];
-            $('.returns-prop-check:checked').each(function() {
-                selected.push($(this).val());
-            });
+            // Use DataTable API to get checkboxes from all pages
+            if (returnsPropertiesDataTable) {
+                returnsPropertiesDataTable.rows().nodes().each(function(row) {
+                    var checkbox = $(row).find('.returns-prop-check:checked');
+                    if (checkbox.length) {
+                        selected.push(checkbox.val());
+                    }
+                });
+            } else {
+                $('.returns-prop-check:checked').each(function() {
+                    selected.push($(this).val());
+                });
+            }
             return selected;
         }
 
@@ -1417,20 +1498,21 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
         function saveReturnsConfigInline() {
             var propertyIds = getSelectedReturnsPropertyIds();
-            var notes = $('#returnsConfigNotesInline').val();
 
             if (propertyIds.length < 2) {
-                $('#returnsConfigInlineError').removeClass('d-none').text('Select at least two properties to create/update a batch.');
+                toastr.error('Select at least two properties to create/update a batch.');
                 return;
             }
 
-            $('#returnsConfigInlineError').addClass('d-none').text('');
+            var btn = editingReturnsBatchId ? $('#btnUpdateReturnsBatchInline') : $('#btnCreateReturnsBatchInline');
+            btn.prop('disabled', true);
+            btn.find('.btn-text').addClass('d-none');
+            btn.find('.spinner-border').removeClass('d-none');
 
             var url = "{{ route('property.clients.returns-config.store', $client->encrypted_id) }}";
             var payload = {
                 _token: "{{ csrf_token() }}",
-                property_ids: propertyIds,
-                notes: notes
+                property_ids: propertyIds
             };
 
             if (editingReturnsBatchId) {
@@ -1453,12 +1535,23 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     if (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) {
                         errorMessage = xhr.responseJSON.error || xhr.responseJSON.message;
                     }
-                    $('#returnsConfigInlineError').removeClass('d-none').text(errorMessage);
+                    toastr.error(errorMessage);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    btn.find('.btn-text').removeClass('d-none');
+                    btn.find('.spinner-border').addClass('d-none');
                 }
             });
         }
 
-        function deleteReturnsConfig(batchId) {
+        function deleteReturnsConfig(batchId, btn) {
+            if (btn) {
+                btn.prop('disabled', true);
+                btn.find('.material-symbols-outlined').addClass('d-none');
+                btn.find('.spinner-border').removeClass('d-none');
+            }
+
             $.ajax({
                 url: "{{ route('property.clients.returns-config.delete', ['encryptedId' => $client->encrypted_id, 'batchId' => '__BATCH__']) }}".replace('__BATCH__', batchId),
                 type: 'POST',
@@ -1480,11 +1573,23 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         errorMessage = xhr.responseJSON.error;
                     }
                     toastr.error(errorMessage);
+                },
+                complete: function() {
+                    if (btn) {
+                        btn.prop('disabled', false);
+                        btn.find('.material-symbols-outlined').removeClass('d-none');
+                        btn.find('.spinner-border').addClass('d-none');
+                    }
                 }
             });
         }
 
         function disbandAllReturnsConfig() {
+            var btn = $('#btnDisbandAllReturnsBatches');
+            btn.prop('disabled', true);
+            btn.find('.btn-text').addClass('d-none');
+            btn.find('.spinner-border').removeClass('d-none');
+
             $.ajax({
                 url: "{{ route('property.clients.returns-config.disband-all', $client->encrypted_id) }}",
                 type: 'POST',
@@ -1504,6 +1609,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         errorMessage = xhr.responseJSON.error;
                     }
                     toastr.error(errorMessage);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    btn.find('.btn-text').removeClass('d-none');
+                    btn.find('.spinner-border').addClass('d-none');
                 }
             });
         }
