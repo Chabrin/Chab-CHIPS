@@ -518,10 +518,55 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Returns Config Tab -->
                             <div class="tab-pane fade" id="returns-config" role="tabpanel" aria-labelledby="returns-config-tab">
-                                <div class="card">
+                                <div class="card border-0 shadow-sm">
                                     <div class="card-body">
-                                        <h6 class="card-title">Returns Configuration</h6>
-                                        <p class="text-muted">Returns configuration settings will be implemented here.</p>
+                                        <div class="row g-3">
+                                            <div class="col-lg-5">
+                                                <div class="border rounded p-3 h-100">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">Unbatched Active Properties</h6>
+                                                        <span id="returnsSelectedCount" class="badge bg-light text-dark">0 selected</span>
+                                                    </div>
+                                                    <small class="text-muted d-block mb-2">Select two or more properties, then create/update a batch.</small>
+
+                                                    <div class="mb-2">
+                                                        <textarea id="returnsConfigNotesInline" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Batch notes (optional)"></textarea>
+                                                    </div>
+
+                                                    <div class="d-flex flex-wrap gap-2 mb-2">
+                                                        <button type="button" id="btnCreateReturnsBatchInline" class="btn btn-primary btn-sm">Create Batch</button>
+                                                        <button type="button" id="btnUpdateReturnsBatchInline" class="btn btn-warning btn-sm d-none">Update Batch</button>
+                                                        <button type="button" id="btnCancelReturnsBatchEdit" class="btn btn-light btn-sm d-none">Cancel Edit</button>
+                                                    </div>
+
+                                                    <div id="returnsConfigInlineError" class="alert alert-danger py-2 px-2 d-none mb-2"></div>
+                                                    <div id="returnsAvailableProperties" style="max-height: 380px; overflow:auto;">
+                                                        <table class="table table-sm table-hover table-bordered mb-0 small" id="returnsPropertiesTable">
+                                                            <thead class="table-light sticky-top">
+                                                                <tr>
+                                                                    <th style="width:30px;"><input type="checkbox" id="returnsCheckAll" title="Select/Deselect All"></th>
+                                                                    <th>Property Ref</th>
+                                                                    <th>Property Name</th>
+                                                                    <th>Landlord</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody id="returnsPropertiesTableBody"></tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-lg-7">
+                                                <div class="border rounded p-3 h-100">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">Configured Batches</h6>
+                                                        <button type="button" id="btnDisbandAllReturnsBatches" class="btn btn-outline-danger btn-sm">Disband All</button>
+                                                    </div>
+                                                    <small class="text-muted d-block mb-2">Each property can exist in only one batch.</small>
+                                                    <div id="returnsBatchCards" style="max-height: 420px; overflow:auto;"></div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -709,8 +754,15 @@ COPY PERMISSIONS (paste when re-enabling checks):
         var unitsTable = null;
         var tenantsTable = null;
         var leasesTable = null;
+        var returnsConfigOptions = {
+            all_eligible: [],
+            unbatched: []
+        };
+        var returnsConfigBatches = [];
+        var editingReturnsBatchId = null;
         var propertiesLoaded = false;
         var relatedPropertiesLoaded = false;
+        var returnsConfigLoaded = false;
         var unitsLoaded = false;
         var tenantsLoaded = false;
         var propertiesDropdownLoaded = false;
@@ -1064,6 +1116,57 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
+        $('#returns-config-tab').on('click', function() {
+            if (!returnsConfigLoaded) {
+                loadReturnsConfig();
+                returnsConfigLoaded = true;
+            }
+        });
+
+        $('#btnCreateReturnsBatchInline').on('click', function() {
+            saveReturnsConfigInline();
+        });
+
+        $('#btnUpdateReturnsBatchInline').on('click', function() {
+            saveReturnsConfigInline();
+        });
+
+        $('#btnCancelReturnsBatchEdit').on('click', function() {
+            resetReturnsConfigEditState();
+            renderReturnsAvailableProperties();
+        });
+
+        $('#btnDisbandAllReturnsBatches').on('click', function() {
+            if (!confirm('Disband ALL batches for this landlord profile?')) {
+                return;
+            }
+            disbandAllReturnsConfig();
+        });
+
+        $(document).on('change', '.returns-prop-check', function() {
+            refreshReturnsSelectedCount();
+        });
+
+        // Check All functionality for returns properties table
+        $('#returnsCheckAll').on('change', function() {
+            var isChecked = $(this).prop('checked');
+            $('#returnsPropertiesTableBody .returns-prop-check:not(:disabled)').prop('checked', isChecked);
+            refreshReturnsSelectedCount();
+        });
+
+        $(document).on('click', '.btn-edit-returns-config-inline', function() {
+            var batchId = $(this).data('id');
+            openReturnsConfigInlineEdit(batchId);
+        });
+
+        $(document).on('click', '.btn-delete-returns-config-inline', function() {
+            var batchId = $(this).data('id');
+            if (!confirm('Delete this merge batch? This will remove all linked properties from this configuration.')) {
+                return;
+            }
+            deleteReturnsConfig(batchId);
+        });
+
         // Related Property details modal
         $(document).on('click', '#relatedPropertiesTable .btn-view-related-property', function() {
             var rowData = relatedPropertiesTable.row($(this).closest('tr')).data();
@@ -1158,6 +1261,249 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 error: function(xhr, status, error) {
                     console.error('Error loading related properties:', error);
                     toastr.error('Failed to load related properties. Please try again.');
+                }
+            });
+        }
+
+        function loadReturnsConfig() {
+            $.ajax({
+                url: "{{ route('property.clients.returns-config', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    returnsConfigBatches = response.data || [];
+                    loadReturnsConfigOptions();
+                    renderReturnsBatchCards();
+                },
+                error: function(xhr) {
+                    console.error('Error loading returns config:', xhr.responseText);
+                    toastr.error('Failed to load returns merge configuration.');
+                }
+            });
+        }
+
+        function loadReturnsConfigOptions() {
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.options', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    returnsConfigOptions = {
+                        all_eligible: response.all_eligible || [],
+                        unbatched: response.unbatched || []
+                    };
+                    renderReturnsAvailableProperties();
+                },
+                error: function(xhr) {
+                    console.error('Error loading returns config options:', xhr.responseText);
+                    toastr.error('Failed to load available properties for merge configuration.');
+                }
+            });
+        }
+
+        function renderReturnsAvailableProperties() {
+            var tbody = $('#returnsPropertiesTableBody');
+            tbody.empty();
+            $('#returnsCheckAll').prop('checked', false);
+
+            var source = editingReturnsBatchId ? returnsConfigOptions.all_eligible : returnsConfigOptions.unbatched;
+            var currentBatch = returnsConfigBatches.find(function(b) {
+                return b.id == editingReturnsBatchId;
+            });
+
+            if (!source || source.length === 0) {
+                tbody.html('<tr><td colspan="4" class="text-muted text-center py-3">No eligible unbatched active properties.</td></tr>');
+                refreshReturnsSelectedCount();
+                return;
+            }
+
+            var currentIds = currentBatch ? (currentBatch.items || []).map(function(i) {
+                return Number(i.property_id);
+            }) : [];
+
+            source.forEach(function(prop) {
+                var propId = Number(prop.id);
+                var assignedBatchId = prop.assigned_batch_id ? Number(prop.assigned_batch_id) : null;
+                var isChecked = currentIds.indexOf(propId) !== -1;
+                var disabled = assignedBatchId && (!editingReturnsBatchId || assignedBatchId !== Number(editingReturnsBatchId));
+                var disabledAttr = disabled ? 'disabled' : '';
+                var rowClass = disabled ? 'table-secondary text-muted' : '';
+                var landlordDisplay = (prop.landlord_ref || '-') + ' - ' + (prop.landlord_name || '-');
+                if (disabled) {
+                    landlordDisplay += ' <span class="text-danger small">(in batch)</span>';
+                }
+
+                tbody.append(
+                    '<tr class="' + rowClass + '">' +
+                    '<td class="text-center"><input class="form-check-input returns-prop-check" type="checkbox" value="' + prop.id + '" ' + (isChecked ? 'checked' : '') + ' ' + disabledAttr + '></td>' +
+                    '<td>' + (prop.reference_number || '-') + '</td>' +
+                    '<td>' + (prop.property_name || '-') + '</td>' +
+                    '<td>' + landlordDisplay + '</td>' +
+                    '</tr>'
+                );
+            });
+
+            refreshReturnsSelectedCount();
+        }
+
+        function renderReturnsBatchCards() {
+            var container = $('#returnsBatchCards');
+            container.empty();
+
+            if (!returnsConfigBatches || returnsConfigBatches.length === 0) {
+                container.html('<div class="text-muted small py-2">No batches configured yet.</div>');
+                return;
+            }
+
+            returnsConfigBatches.forEach(function(batch) {
+                var itemsHtml = '';
+                (batch.items || []).forEach(function(item) {
+                    itemsHtml += '<li class="small">' + (item.property_ref || '-') + ' - ' + (item.property_name || '-') + ' <span class="text-muted">(' + (item.landlord_ref || '-') + ')</span></li>';
+                });
+
+                container.append(
+                    '<div class="border rounded p-2 mb-2">' +
+                    '<div class="d-flex justify-content-between align-items-start mb-1">' +
+                    '<div>' +
+                    '<div class="fw-semibold">' + (batch.batch_reference || '-') + '</div>' +
+                    '<div class="small text-muted">' + (batch.landlord_name || '-') + ' | LAN ' + (batch.landlord_ref || '-') + '</div>' +
+                    '</div>' +
+                    '<div class="d-flex gap-1">' +
+                    '<button class="btn btn-sm btn-outline-primary btn-edit-returns-config-inline" data-id="' + batch.id + '">Edit</button>' +
+                    '<button class="btn btn-sm btn-outline-danger btn-delete-returns-config-inline" data-id="' + batch.id + '">Delete</button>' +
+                    '</div>' +
+                    '</div>' +
+                    '<ul class="mb-1 ps-3">' + itemsHtml + '</ul>' +
+                    '<div class="small text-muted">' + (batch.notes || '-') + '</div>' +
+                    '</div>'
+                );
+            });
+        }
+
+        function openReturnsConfigInlineEdit(batchId) {
+            editingReturnsBatchId = Number(batchId);
+            var batch = returnsConfigBatches.find(function(b) {
+                return Number(b.id) === Number(batchId);
+            });
+            $('#returnsConfigNotesInline').val(batch && batch.notes ? batch.notes : '');
+            $('#btnCreateReturnsBatchInline').addClass('d-none');
+            $('#btnUpdateReturnsBatchInline').removeClass('d-none');
+            $('#btnCancelReturnsBatchEdit').removeClass('d-none');
+            $('#returnsConfigInlineError').addClass('d-none').text('');
+            renderReturnsAvailableProperties();
+        }
+
+        function resetReturnsConfigEditState() {
+            editingReturnsBatchId = null;
+            $('#returnsConfigNotesInline').val('');
+            $('#btnCreateReturnsBatchInline').removeClass('d-none');
+            $('#btnUpdateReturnsBatchInline').addClass('d-none');
+            $('#btnCancelReturnsBatchEdit').addClass('d-none');
+            $('#returnsConfigInlineError').addClass('d-none').text('');
+        }
+
+        function getSelectedReturnsPropertyIds() {
+            var selected = [];
+            $('.returns-prop-check:checked').each(function() {
+                selected.push($(this).val());
+            });
+            return selected;
+        }
+
+        function refreshReturnsSelectedCount() {
+            var count = getSelectedReturnsPropertyIds().length;
+            $('#returnsSelectedCount').text(count + ' selected');
+        }
+
+        function saveReturnsConfigInline() {
+            var propertyIds = getSelectedReturnsPropertyIds();
+            var notes = $('#returnsConfigNotesInline').val();
+
+            if (propertyIds.length < 2) {
+                $('#returnsConfigInlineError').removeClass('d-none').text('Select at least two properties to create/update a batch.');
+                return;
+            }
+
+            $('#returnsConfigInlineError').addClass('d-none').text('');
+
+            var url = "{{ route('property.clients.returns-config.store', $client->encrypted_id) }}";
+            var payload = {
+                _token: "{{ csrf_token() }}",
+                property_ids: propertyIds,
+                notes: notes
+            };
+
+            if (editingReturnsBatchId) {
+                url = "{{ route('property.clients.returns-config.update', ['encryptedId' => $client->encrypted_id, 'batchId' => '__BATCH__']) }}".replace('__BATCH__', editingReturnsBatchId);
+                payload._method = 'PUT';
+            }
+
+            $.ajax({
+                url: url,
+                type: 'POST',
+                dataType: 'json',
+                data: payload,
+                success: function(response) {
+                    resetReturnsConfigEditState();
+                    loadReturnsConfig();
+                    toastr.success(response.message || 'Returns batch saved.');
+                },
+                error: function(xhr) {
+                    var errorMessage = 'Failed to save returns batch.';
+                    if (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) {
+                        errorMessage = xhr.responseJSON.error || xhr.responseJSON.message;
+                    }
+                    $('#returnsConfigInlineError').removeClass('d-none').text(errorMessage);
+                }
+            });
+        }
+
+        function deleteReturnsConfig(batchId) {
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.delete', ['encryptedId' => $client->encrypted_id, 'batchId' => '__BATCH__']) }}".replace('__BATCH__', batchId),
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    _method: 'DELETE'
+                },
+                success: function(response) {
+                    if (editingReturnsBatchId && Number(editingReturnsBatchId) === Number(batchId)) {
+                        resetReturnsConfigEditState();
+                    }
+                    loadReturnsConfig();
+                    toastr.success(response.message || 'Returns batch deleted.');
+                },
+                error: function(xhr) {
+                    var errorMessage = 'Failed to delete returns config.';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    }
+                    toastr.error(errorMessage);
+                }
+            });
+        }
+
+        function disbandAllReturnsConfig() {
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.disband-all', $client->encrypted_id) }}",
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    _method: 'DELETE'
+                },
+                success: function(response) {
+                    resetReturnsConfigEditState();
+                    loadReturnsConfig();
+                    toastr.success(response.message || 'All batches disbanded.');
+                },
+                error: function(xhr) {
+                    var errorMessage = 'Failed to disband all batches.';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    }
+                    toastr.error(errorMessage);
                 }
             });
         }
