@@ -332,7 +332,8 @@ class ClientsController extends Controller
         try {
             $clientId = Crypt::decrypt($encryptedId);
 
-            $properties = Property::with(['zone', 'zoneArea', 'fieldOfficer'])
+            $properties = Property::withInactive()
+                ->with(['zone', 'zoneArea', 'fieldOfficer'])
                 ->select([
                     'id',
                     'client_id',
@@ -363,6 +364,67 @@ class ClientsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading properties: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load properties'], 500);
+        }
+    }
+
+    /**
+     * Get related properties for a client based on current client id and matching landlord names (AJAX)
+     */
+    public function getRelatedProperties($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+            $client = Client::findOrFail($clientId);
+            $normalizedClientName = preg_replace('/\s+/', ' ', trim((string) $client->names));
+
+            // Find OTHER landlord records that share the same name — never include the current client
+            $relatedClientIds = [];
+            if (!empty($normalizedClientName)) {
+                $relatedClientIds = Client::clients()
+                    ->where('id', '!=', $client->id)
+                    ->whereRaw(
+                        "REGEXP_REPLACE(TRIM(COALESCE(names, '')), '\\s+', ' ', 'g') = ?",
+                        [$normalizedClientName]
+                    )
+                    ->pluck('id');
+            }
+
+            $properties = Property::withInactive()
+                ->select([
+                    'id',
+                    'client_id',
+                    'reference_number',
+                    'description',
+                    'property_name',
+                    'current_status_id',
+                ])
+                ->with('client')
+                ->whereIn('client_id', $relatedClientIds)
+                ->orderBy('property_name', 'asc')
+                ->get()
+                ->map(function ($property) {
+                    $landlord = $property->client;
+                    return [
+                        'id'              => $property->id,
+                        'property_url'    => route('property.properties.show', Crypt::encrypt($property->id)),
+                        'client_url'      => $property->client_id ? route('property.clients.show', Crypt::encrypt($property->client_id)) : null,
+                        'reference_number'    => $property->reference_number ?? '-',
+                        'description'         => $property->description ?? '-',
+                        'property_name'       => $property->property_name ?? '-',
+                        'status'              => (int) $property->current_status_id === 1 ? 'Active' : 'Inactive',
+                        'current_status_id'   => $property->current_status_id,
+                        'landlord_name'  => $landlord ? ($landlord->names ?? '-') : '-',
+                        'landlord_ref'   => $landlord ? ($landlord->reference_number ?? '-') : '-',
+                        'landlord_phone' => $landlord ? ($landlord->mobile_number ?? '-') : '-',
+                        'landlord_email' => $landlord ? ($landlord->email_address ?? '-') : '-',
+                    ];
+                });
+
+            return response()->json(['data' => $properties]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading related properties: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load related properties'], 500);
         }
     }
 

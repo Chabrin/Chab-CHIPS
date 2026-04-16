@@ -123,6 +123,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="related-properties-tab" data-bs-toggle="tab" data-bs-target="#related-properties" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">real_estate_agent</span> Related Properties
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="sla-tab" data-bs-toggle="tab" data-bs-target="#sla" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">approval_delegation</span> SLA
                                 </button>
@@ -294,6 +299,27 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Zone</th>
                                                 <th>Zone Area</th>
                                                 <th>Field Officer</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Related Properties Tab -->
+                            <div class="tab-pane fade" id="related-properties" role="tabpanel" aria-labelledby="related-properties-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="relatedPropertiesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Property Ref</th>
+                                                <th>Description</th>
+                                                <th>Property Name</th>
+                                                <th>LAN Ref</th>
+                                                <th>Landlord Name</th>
+                                                <th>Status</th>
                                                 <th>Actions</th>
                                             </tr>
                                         </thead>
@@ -588,6 +614,65 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+<!-- Related Property Details Modal -->
+<div class="modal fade" id="relatedPropertyModal" tabindex="-1" aria-labelledby="relatedPropertyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="relatedPropertyModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">real_estate_agent</span>
+                    Property Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="text-muted fw-semibold mb-2">Property Information</h6>
+                <table class="table table-sm table-borderless mb-3">
+                    <tr>
+                        <td class="fw-semibold text-muted" style="width:40%">Reference No.</td>
+                        <td id="rpModalRef">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Property Name</td>
+                        <td id="rpModalPropertyName">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Description</td>
+                        <td id="rpModalDescription">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Status</td>
+                        <td id="rpModalStatus">-</td>
+                    </tr>
+                </table>
+                <hr class="my-2">
+                <h6 class="text-muted fw-semibold mb-2">Landlord Information</h6>
+                <table class="table table-sm table-borderless">
+                    <tr>
+                        <td class="fw-semibold text-muted" style="width:40%">Names</td>
+                        <td id="rpModalLandlordName">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">LAN Ref</td>
+                        <td id="rpModalLandlordRef">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Phone</td>
+                        <td id="rpModalLandlordPhone">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Email</td>
+                        <td id="rpModalLandlordEmail">-</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;
@@ -620,10 +705,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
 <script>
     $(document).ready(function() {
         var propertiesTable = null;
+        var relatedPropertiesTable = null;
         var unitsTable = null;
         var tenantsTable = null;
         var leasesTable = null;
         var propertiesLoaded = false;
+        var relatedPropertiesLoaded = false;
         var unitsLoaded = false;
         var tenantsLoaded = false;
         var propertiesDropdownLoaded = false;
@@ -683,6 +770,66 @@ COPY PERMISSIONS (paste when re-enabling checks):
             responsive: true,
             language: {
                 emptyTable: "No properties found for this client"
+            }
+        });
+
+        relatedPropertiesTable = $('#relatedPropertiesTable').DataTable({
+            data: [],
+            columns: [{
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                {
+                    data: 'reference_number'
+                },
+                {
+                    data: 'description'
+                },
+                {
+                    data: 'property_name',
+                    render: function(data, type, row) {
+                        if (type === 'display' && row.property_url) {
+                            return '<a href="' + row.property_url + '" target="_blank" style="text-decoration:underline;">' + (data || '-') + '</a>';
+                        }
+                        return data || '-';
+                    }
+                },
+                {
+                    data: 'landlord_ref'
+                },
+                {
+                    data: 'landlord_name',
+                    render: function(data, type, row) {
+                        if (type === 'display' && row.client_url) {
+                            return '<a href="' + row.client_url + '" target="_blank" style="text-decoration:underline;">' + (data || '-') + '</a>';
+                        }
+                        return data || '-';
+                    }
+                },
+                {
+                    data: 'status',
+                    render: function(data, type, row) {
+                        if (row.current_status_id == 1) {
+                            return '<span class="badge badge-light-success">Active</span>';
+                        }
+                        return '<span class="badge badge-light-danger">Inactive</span>';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(data, type, row) {
+                        return '<button class="btn btn-sm btn-icon btn-view-related-property" title="View Details"><span class="material-symbols-outlined" style="font-size:18px;">visibility</span></button>';
+                    }
+                }
+            ],
+            pageLength: 10,
+            responsive: true,
+            language: {
+                emptyTable: "No related properties found"
             }
         });
 
@@ -910,6 +1057,31 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
+        $('#related-properties-tab').on('click', function() {
+            if (!relatedPropertiesLoaded) {
+                loadRelatedProperties();
+                relatedPropertiesLoaded = true;
+            }
+        });
+
+        // Related Property details modal
+        $(document).on('click', '#relatedPropertiesTable .btn-view-related-property', function() {
+            var rowData = relatedPropertiesTable.row($(this).closest('tr')).data();
+            $('#rpModalRef').text(rowData.reference_number || '-');
+            $('#rpModalPropertyName').text(rowData.property_name || '-');
+            $('#rpModalDescription').text(rowData.description || '-');
+            if (rowData.current_status_id == 1) {
+                $('#rpModalStatus').html('<span class="badge badge-light-success">Active</span>');
+            } else {
+                $('#rpModalStatus').html('<span class="badge badge-light-danger">Inactive</span>');
+            }
+            $('#rpModalLandlordName').text(rowData.landlord_name || '-');
+            $('#rpModalLandlordRef').text(rowData.landlord_ref || '-');
+            $('#rpModalLandlordPhone').text(rowData.landlord_phone || '-');
+            $('#rpModalLandlordEmail').text(rowData.landlord_email || '-');
+            $('#relatedPropertyModal').modal('show');
+        });
+
         // Load properties dropdown when units tab is clicked
         $('#units-tab').on('click', function() {
             if (!propertiesDropdownLoaded) {
@@ -967,6 +1139,25 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 error: function(xhr, status, error) {
                     console.error('Error loading properties:', error);
                     toastr.error('Failed to load properties. Please try again.');
+                }
+            });
+        }
+
+        function loadRelatedProperties() {
+            $.ajax({
+                url: "{{ route('property.clients.related-properties', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.data) {
+                        relatedPropertiesTable.clear();
+                        relatedPropertiesTable.rows.add(response.data);
+                        relatedPropertiesTable.draw();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading related properties:', error);
+                    toastr.error('Failed to load related properties. Please try again.');
                 }
             });
         }
