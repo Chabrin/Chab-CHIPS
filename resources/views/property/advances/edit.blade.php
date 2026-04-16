@@ -207,21 +207,21 @@
                                 <!-- Repayment (Overpayment only) -->
                                 <div class="row field-group" id="repaymentGroup" style="display: none;">
                                     <div class="col-md-4 mb-3">
-                                        <label for="months" class="form-label">Repayment Months <span class="text-danger">*</span></label>
-                                        <input type="number" class="form-control" id="months" name="repayment_months" min="1" value="{{ old('repayment_months', $advance->repayment_months ?? 3) }}">
+                                        <label for="months" class="form-label">Repayment Months <span class="text-danger repayment-required">*</span></label>
+                                        <input type="number" class="form-control" id="months" name="repayment_months" min="1" value="{{ old('repayment_months', $advance->repayment_months ?? '') }}">
                                         @error('repayment_months')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
                                     </div>
                                     <div class="col-md-4 mb-3">
-                                        <label for="paymentStartDate" class="form-label">Payment Start Date <span class="text-danger">*</span></label>
+                                        <label for="paymentStartDate" class="form-label">Payment Start Date <span class="text-danger repayment-required">*</span></label>
                                         <input type="date" class="form-control" id="paymentStartDate" name="principal_start_date" value="{{ old('principal_start_date', $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '') }}">
                                         @error('principal_start_date')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
                                     </div>
                                     <div class="col-md-4 mb-3">
-                                        <div class="p-2 bg-light border rounded small mt-4">Default: 3 months. Changes require authorization.</div>
+                                        <div class="p-2 bg-light border rounded small mt-4" id="repaymentHint">Optional — enter months to generate a repayment schedule preview.</div>
                                     </div>
                                 </div>
 
@@ -448,36 +448,79 @@ $(document).ready(function() {
 
         } else if (advanceType === '2') {
             var rate2     = parseFloat($('#interestRate').val()) || 3;
+            var months2   = parseInt($('#months').val()) || 0;
+            var psd2      = $('#paymentStartDate').val();
             chargeAmount  = parseFloat($('#chequeChargeGeneral').val()) || 100;
             rateDisplay   = rate2 + '%';
 
-            if (!issuedDate) {
-                basisText   = 'Select an issued date to calculate interest.';
-                totalAmount = Math.round((amount + chargeAmount) * 100) / 100;
-            } else {
-                var d2      = new Date(issuedDate);
-                var day2    = d2.getDate();
-                var lastDay2 = new Date(d2.getFullYear(), d2.getMonth() + 1, 0).getDate();
-                var rem2    = lastDay2 - day2;
+            if (months2 > 0 && issuedDate && psd2) {
+                // Repayment months entered → reducing balance amortization
+                scheduleRows = calcAmortization(amount, rate2, months2, issuedDate, psd2);
 
-                if (day2 < 20) {
-                    interestAmount = Math.round(amount * rate2 / 100 * 100) / 100;
-                    basisText = 'Issued before 20th (day ' + day2 + ') — full ' + rate2 + '% rate applied.';
-                    $('#interestCalcInfo').html('Before 20th: ' + rate2 + '% full = ' + fmt(interestAmount));
-                } else if (day2 >= 20 && day2 <= 25) {
-                    interestAmount = Math.round(amount * rate2 / 100 * (rem2 / lastDay2) * 100) / 100;
-                    basisText = 'Issued 20th–25th (day ' + day2 + ') — prorated ' + rem2 + '/' + lastDay2 + ' days.';
-                    $('#interestCalcInfo').html('20th–25th: ' + rate2 + '% prorated (' + rem2 + '/' + lastDay2 + ' days) = ' + fmt(interestAmount));
-                } else {
-                    interestAmount = 0;
-                    rateDisplay    = '0% (after 25th)';
-                    basisText      = 'Issued after 25th (day ' + day2 + ') — no interest charged.';
-                    $('#interestCalcInfo').html('After 25th: No interest charged');
-                    $('#interestRate').val(0);
+                var d2a      = new Date(issuedDate);
+                var disbDay2 = d2a.getDate();
+                var disbLast2 = new Date(d2a.getFullYear(), d2a.getMonth() + 1, 0).getDate();
+                var disbRem2  = disbLast2 - disbDay2;
+                if (disbDay2 < 25 && scheduleRows.length > 0) {
+                    var proratedFirst2 = Math.round(scheduleRows[0].interest * (disbRem2 / disbLast2) * 100) / 100;
+                    scheduleRows[0].interest     = proratedFirst2;
+                    scheduleRows[0].total_amount = Math.round((scheduleRows[0].principal_amount + proratedFirst2) * 100) / 100;
                 }
+
+                var totalInterest2  = scheduleRows.reduce(function(s, r) { return s + r.interest; }, 0);
+                var totalPrincipal2 = scheduleRows.reduce(function(s, r) { return s + r.principal_amount; }, 0);
+                interestAmount = Math.round(totalInterest2 * 100) / 100;
+                totalAmount    = Math.round((totalPrincipal2 + totalInterest2 + chargeAmount) * 100) / 100;
+                monthlyPayment = (totalPrincipal2 + totalInterest2) / months2;
+                basisText = 'Reducing balance at ' + rate2 + '% per month over ' + months2 + ' months.';
+                $('#interestCalcInfo').html(rate2 + '% reducing balance over ' + months2 + ' months &rarr; ' + fmt(interestAmount) + ' total interest');
+
+                var tbody2 = '', tPrin2 = 0, tInt2 = 0, tPay2 = 0;
+                scheduleRows.forEach(function(row, i) {
+                    tPrin2 += row.principal_amount;
+                    tInt2  += row.interest;
+                    tPay2  += row.total_amount;
+                    tbody2 += '<tr><td>' + (i + 1) + '</td><td>' + row.payment_date + '</td><td>' +
+                        fmt(row.principal_amount) + '</td><td>' + fmt(row.interest) + '</td><td>' +
+                        fmt(row.total_amount) + '</td><td>' + fmt(row.loan_balance) + '</td></tr>';
+                });
+                var tfoot2 = '<tr class="fw-bold table-light"><td colspan="2">Totals</td><td>' +
+                    fmt(tPrin2) + '</td><td>' + fmt(tInt2) + '</td><td>' + fmt(tPay2) + '</td><td>KSh 0.00</td></tr>';
+                $('#cs_schedule_body').html(tbody2);
+                $('#cs_schedule_foot').html(tfoot2);
+                $('#cs_monthly_wrap').show();
+                $('#cs_schedule_wrap').show();
+
+            } else {
+                // No months → day-of-month simple interest rule
+                if (!issuedDate) {
+                    basisText   = 'Select an issued date to calculate interest.';
+                    totalAmount = Math.round((amount + chargeAmount) * 100) / 100;
+                } else {
+                    var d2      = new Date(issuedDate);
+                    var day2    = d2.getDate();
+                    var lastDay2 = new Date(d2.getFullYear(), d2.getMonth() + 1, 0).getDate();
+                    var rem2    = lastDay2 - day2;
+
+                    if (day2 < 20) {
+                        interestAmount = Math.round(amount * rate2 / 100 * 100) / 100;
+                        basisText = 'Issued before 20th (day ' + day2 + ') — full ' + rate2 + '% rate applied.';
+                        $('#interestCalcInfo').html('Before 20th: ' + rate2 + '% full = ' + fmt(interestAmount));
+                    } else if (day2 >= 20 && day2 <= 25) {
+                        interestAmount = Math.round(amount * rate2 / 100 * (rem2 / lastDay2) * 100) / 100;
+                        basisText = 'Issued 20th–25th (day ' + day2 + ') — prorated ' + rem2 + '/' + lastDay2 + ' days.';
+                        $('#interestCalcInfo').html('20th–25th: ' + rate2 + '% prorated (' + rem2 + '/' + lastDay2 + ' days) = ' + fmt(interestAmount));
+                    } else {
+                        interestAmount = 0;
+                        rateDisplay    = '0% (after 25th)';
+                        basisText      = 'Issued after 25th (day ' + day2 + ') — no interest charged.';
+                        $('#interestCalcInfo').html('After 25th: No interest charged');
+                        $('#interestRate').val(0);
+                    }
+                }
+                totalAmount = Math.round((amount + interestAmount + chargeAmount) * 100) / 100;
+                $('#cs_monthly_wrap, #cs_schedule_wrap').hide();
             }
-            totalAmount = Math.round((amount + interestAmount + chargeAmount) * 100) / 100;
-            $('#cs_monthly_wrap, #cs_schedule_wrap').hide();
 
         } else if (advanceType === '3') {
             var rate3     = parseFloat($('#interestRate').val()) || 3;
@@ -541,7 +584,7 @@ $(document).ready(function() {
         $('#cs_basis').text(basisText);
     }
 
-    $('#issuedDate, #amount, #interestRate, #months, #paymentStartDate, #chequeChargeExpense, #chequeChargeGeneral').on('change keyup', recalculate);
+    $('#issuedDate, #amount, #interestRate, #months, #paymentStartDate, #chequeChargeExpense, #chequeChargeGeneral, #paymentStartDate').on('change keyup', recalculate);
 
     // Handle Advance Type change to show/hide fields
     $('#advanceType').on('change', function() {
@@ -569,8 +612,11 @@ $(document).ready(function() {
                 break;
 
             case '2': // Client Payment Advance
-                $('#paymentMethodGroup, #requisitionDateGroup, #amountInterestGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
+                $('#paymentMethodGroup, #requisitionDateGroup, #amountInterestGroup, #repaymentGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
                 $('#paymentMethod, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
+                $('#months, #paymentStartDate').prop('required', false);
+                $('.repayment-required').hide();
+                $('#repaymentHint').text('Optional — enter months to generate a repayment schedule preview.');
                 $('#chequeChargeGeneral').val(100);
                 if ($('#paymentMethod').val() === 'alternative') {
                     $('#paymentInstructionsGroup').show();
@@ -581,6 +627,8 @@ $(document).ready(function() {
             case '3': // Overpayment Advance
                 $('#requisitionDateGroup, #amountInterestGroup, #repaymentGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
                 $('#requisitionDate, #issuedDate, #amount, #months, #paymentStartDate, #narration').prop('required', true);
+                $('.repayment-required').show();
+                $('#repaymentHint').text('Default: 3 months. Changes require authorization.');
                 $('#months').val($('#months').val() || 3);
                 $('#chequeChargeGeneral').val(100);
                 recalculate();

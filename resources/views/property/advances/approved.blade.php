@@ -1,10 +1,12 @@
-@extends('layouts.main')
+@extends('layouts.auth')
+
+@section('title', 'Advance Approval')
 
 @section('content')
-<div class="page-body" style="padding-top:10px;">
-    <div class="container-fluid">
+<div class="d-flex align-items-center justify-content-center" style="min-height:100vh; background:#f5f6fa;">
+    <div class="container">
         <div class="row justify-content-center">
-            <div class="col-md-8">
+            <div class="col-md-6 col-lg-5">
                 <div class="card card-no-border">
                     <div class="card-body text-center py-5">
                         @if($alreadyProcessed ?? false)

@@ -125,15 +125,19 @@ class ClientAdvance extends Model
 
     public function getTotalPaidAttribute()
     {
-        return $this->schedule()->where('current_status_id', 2)->sum('total_amount');
+        return $this->schedule()
+            ->where('current_status_id', 2)
+            ->sum(\DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
     }
 
     public function getPercentagePaidAttribute()
     {
-        if ($this->total_amount == 0) {
+        if ((float) $this->total_amount == 0) {
             return 0;
         }
-        $totalPaid = $this->schedule()->where('current_status_id', 2)->sum('total_amount');
-        return round(($totalPaid / $this->total_amount) * 100, 2);
+        $totalPaid = $this->schedule()
+            ->where('current_status_id', 2)
+            ->sum(\DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
+        return round(($totalPaid / (float) $this->total_amount) * 100, 2);
     }
 }

@@ -153,14 +153,14 @@
                                 <div class="col-md-4">
                                     <label class="form-label-sm">New Disbursement Date <span class="text-danger">*</span></label>
                                     <input type="date" class="form-control form-control-sm"
-                                           name="disbursement_date" required
+                                           id="newDisbursementDate" name="disbursement_date" required
                                            value="{{ now()->format('Y-m-d') }}">
                                 </div>
 
                                 <div class="col-md-4">
                                     <label class="form-label-sm">Principal Start Date <span class="text-danger">*</span></label>
                                     <input type="date" class="form-control form-control-sm"
-                                           name="principal_start_date" required
+                                           id="newPrincipalStartDate" name="principal_start_date" required
                                            value="{{ \Carbon\Carbon::parse($advance->principal_start_date ?? now())->format('Y-m-d') }}">
                                 </div>
 
@@ -168,6 +168,56 @@
                                     <label class="form-label-sm">Narration</label>
                                     <textarea class="form-control form-control-sm" name="narration" rows="2"
                                               placeholder="Reason for rescheduling...">Rescheduled from {{ $advance->reference_number }}</textarea>
+                                </div>
+                            </div>
+
+                            {{-- Live Calculation Summary --}}
+                            <div id="reschCalcCard" class="mt-4" style="display:none;">
+                                <div class="section-header">Calculation Summary</div>
+                                <div class="row g-2">
+                                    <div class="col-6 col-md-3">
+                                        <div class="summary-box text-center">
+                                            <div class="label">Principal</div>
+                                            <div class="value" id="rc_principal">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="summary-box text-center">
+                                            <div class="label">Interest</div>
+                                            <div class="value" id="rc_interest">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="summary-box text-center">
+                                            <div class="label">Total Amount</div>
+                                            <div class="value" id="rc_total" style="color:#0d6efd;">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3 d-none" id="rc_monthly_wrap">
+                                        <div class="summary-box text-center">
+                                            <div class="label">Monthly Payment</div>
+                                            <div class="value" id="rc_monthly">—</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-2" style="font-size:0.8rem;color:#6c757d;" id="rc_basis"></div>
+
+                                {{-- Schedule preview (Type 3 only) --}}
+                                <div id="rc_schedule_wrap" class="mt-3" style="display:none;">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="rc_toggle_schedule">
+                                        <i class="fa fa-table me-1"></i>Preview Repayment Schedule
+                                    </button>
+                                    <div id="rc_schedule_table" style="display:none;">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-bordered small mb-0">
+                                                <thead class="table-dark">
+                                                    <tr><th>#</th><th>Date</th><th>Principal</th><th>Interest</th><th>Payment</th><th>Balance</th></tr>
+                                                </thead>
+                                                <tbody id="rc_schedule_body"></tbody>
+                                                <tfoot id="rc_schedule_foot"></tfoot>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -191,6 +241,145 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 <script>
 $(document).ready(function () {
+
+    // ===== LIVE CALCULATION ENGINE =====
+
+    var advanceTypeId = {{ (int) $advance->advance_type_id }};
+
+    function fmt(n) {
+        return 'KSh ' + parseFloat(n || 0).toLocaleString('en-KE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function calcAmortization(amount, rate, months, disbursementDate, principalStartDate) {
+        var schedule = [];
+        var balance = amount;
+        var principalPerMonth = amount / months;
+        var disbursement = new Date(disbursementDate);
+        var principalStart = new Date(principalStartDate);
+        var disbYM = disbursement.getFullYear() * 12 + disbursement.getMonth();
+        var startYM = principalStart.getFullYear() * 12 + principalStart.getMonth();
+        var gracePeriodMonths = Math.max(0, startYM - disbYM);
+
+        var currentDate = new Date(disbursement);
+        for (var i = 0; i < gracePeriodMonths; i++) {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            currentDate.setDate(1);
+            var gInterest = Math.round(balance * rate / 100 * 100) / 100;
+            schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: 0, interest: gInterest, total_amount: gInterest, loan_balance: balance });
+        }
+        currentDate = new Date(principalStart);
+        for (var month = 1; month <= months; month++) {
+            if (month > 1 || gracePeriodMonths === 0) {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                currentDate.setDate(1);
+            }
+            var pInterest = Math.round(balance * rate / 100 * 100) / 100;
+            var principal = Math.round(principalPerMonth * 100) / 100;
+            if (month === months) principal = Math.round(balance * 100) / 100;
+            balance = Math.round((balance - principal) * 100) / 100;
+            schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: principal, interest: pInterest, total_amount: Math.round((principal + pInterest) * 100) / 100, loan_balance: Math.max(0, balance) });
+        }
+        return schedule;
+    }
+
+    function recalculate() {
+        var amount   = parseFloat($('#newAmount').val()) || 0;
+        var rate     = parseFloat($('#newInterestRate').val()) || 0;
+        var months   = parseInt($('#newRepaymentMonths').val()) || 0;
+        var disbDate = $('#newDisbursementDate').val();
+        var psdDate  = $('#newPrincipalStartDate').val();
+
+        if (amount <= 0) { $('#reschCalcCard').hide(); return; }
+        $('#reschCalcCard').show();
+
+        var interestAmount = 0, totalAmount = 0, monthlyPayment = 0;
+        var basisText = '', scheduleRows = [];
+
+        if (rate <= 0) {
+            // No interest regardless of type
+            totalAmount = Math.round(amount * 100) / 100;
+            basisText   = 'No interest rate entered — principal only.';
+            $('#rc_monthly_wrap, #rc_schedule_wrap').hide();
+
+        } else if (months > 0) {
+            // Rate + months → reducing balance amortization
+            if (!disbDate || !psdDate) {
+                basisText   = 'Select disbursement date and principal start date to preview schedule.';
+                totalAmount = Math.round(amount * 100) / 100;
+                $('#rc_monthly_wrap, #rc_schedule_wrap').hide();
+            } else {
+                scheduleRows = calcAmortization(amount, rate, months, disbDate, psdDate);
+                var d3       = new Date(disbDate);
+                var disbDay  = d3.getDate();
+                var disbLast = new Date(d3.getFullYear(), d3.getMonth() + 1, 0).getDate();
+                var disbRem  = disbLast - disbDay;
+                if (disbDay < 25 && scheduleRows.length > 0) {
+                    var proratedFirst = Math.round(scheduleRows[0].interest * (disbRem / disbLast) * 100) / 100;
+                    scheduleRows[0].interest     = proratedFirst;
+                    scheduleRows[0].total_amount = Math.round((scheduleRows[0].principal_amount + proratedFirst) * 100) / 100;
+                }
+                var totalInterest  = scheduleRows.reduce(function(s,r){ return s + r.interest; }, 0);
+                var totalPrincipal = scheduleRows.reduce(function(s,r){ return s + r.principal_amount; }, 0);
+                interestAmount  = Math.round(totalInterest * 100) / 100;
+                totalAmount     = Math.round((totalPrincipal + totalInterest) * 100) / 100;
+                monthlyPayment  = (totalPrincipal + totalInterest) / months;
+                basisText = 'Reducing balance at ' + rate + '% per month over ' + months + ' months.';
+
+                var tbody = '', tPrin = 0, tInt = 0, tPay = 0;
+                scheduleRows.forEach(function(row, i) {
+                    tPrin += row.principal_amount; tInt += row.interest; tPay += row.total_amount;
+                    tbody += '<tr><td>' + (i+1) + '</td><td>' + row.payment_date + '</td><td>' +
+                        fmt(row.principal_amount) + '</td><td>' + fmt(row.interest) + '</td><td>' +
+                        fmt(row.total_amount) + '</td><td>' + fmt(row.loan_balance) + '</td></tr>';
+                });
+                $('#rc_schedule_body').html(tbody);
+                $('#rc_schedule_foot').html('<tr class="fw-bold table-light"><td colspan="2">Totals</td><td>' + fmt(tPrin) + '</td><td>' + fmt(tInt) + '</td><td>' + fmt(tPay) + '</td><td>KSh 0.00</td></tr>');
+                $('#rc_monthly_wrap').show();
+                $('#rc_schedule_wrap').show();
+            }
+
+        } else {
+            // Rate but no months → day-of-month simple interest rule
+            if (!disbDate) {
+                basisText   = 'Select a disbursement date to calculate interest.';
+                totalAmount = Math.round(amount * 100) / 100;
+            } else {
+                var d2       = new Date(disbDate);
+                var day2     = d2.getDate();
+                var lastDay2 = new Date(d2.getFullYear(), d2.getMonth() + 1, 0).getDate();
+                var rem2     = lastDay2 - day2;
+                if (day2 < 20) {
+                    interestAmount = Math.round(amount * rate / 100 * 100) / 100;
+                    basisText = 'Disbursed before 20th (day ' + day2 + ') — full ' + rate + '% applied.';
+                } else if (day2 <= 25) {
+                    interestAmount = Math.round(amount * rate / 100 * (rem2 / lastDay2) * 100) / 100;
+                    basisText = 'Disbursed 20th–25th (day ' + day2 + ') — prorated ' + rem2 + '/' + lastDay2 + ' days.';
+                } else {
+                    interestAmount = 0;
+                    basisText = 'Disbursed after 25th (day ' + day2 + ') — no interest charged.';
+                }
+            }
+            totalAmount = Math.round((amount + interestAmount) * 100) / 100;
+            $('#rc_monthly_wrap, #rc_schedule_wrap').hide();
+        }
+
+        $('#rc_principal').text(fmt(amount));
+        $('#rc_interest').text(fmt(interestAmount));
+        $('#rc_total').text(fmt(totalAmount));
+        $('#rc_monthly').text(monthlyPayment > 0 ? fmt(monthlyPayment) : '—');
+        $('#rc_basis').text(basisText);
+    }
+
+    $('#newAmount, #newInterestRate, #newRepaymentMonths, #newDisbursementDate, #newPrincipalStartDate').on('change keyup', recalculate);
+    recalculate(); // run on load since amount is pre-filled
+
+    $('#rc_toggle_schedule').on('click', function () {
+        $('#rc_schedule_table').toggle();
+        var showing = $('#rc_schedule_table').is(':visible');
+        $(this).html(showing ? '<i class="fa fa-table me-1"></i>Hide Schedule' : '<i class="fa fa-table me-1"></i>Preview Repayment Schedule');
+    });
+
+    // ===== SUBMIT =====
     $('#rescheduleForm').on('submit', function (e) {
         e.preventDefault();
 
