@@ -811,7 +811,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 {
                     data: 'status',
                     render: function(data, type, row) {
-                        if (row.current_status_id == 1) {
+                        if (row.active == 1) {
                             return '<span class="badge badge-light-success">Active</span>';
                         }
                         return '<span class="badge badge-light-danger">Inactive</span>';
@@ -1070,7 +1070,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
             $('#rpModalRef').text(rowData.reference_number || '-');
             $('#rpModalPropertyName').text(rowData.property_name || '-');
             $('#rpModalDescription').text(rowData.description || '-');
-            if (rowData.current_status_id == 1) {
+            if (rowData.active == 1) {
                 $('#rpModalStatus').html('<span class="badge badge-light-success">Active</span>');
             } else {
                 $('#rpModalStatus').html('<span class="badge badge-light-danger">Inactive</span>');

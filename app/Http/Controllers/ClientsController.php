@@ -396,7 +396,7 @@ class ClientsController extends Controller
                     'reference_number',
                     'description',
                     'property_name',
-                    'current_status_id',
+                    'active',
                 ])
                 ->with('client')
                 ->whereIn('client_id', $relatedClientIds)
@@ -411,8 +411,8 @@ class ClientsController extends Controller
                         'reference_number'    => $property->reference_number ?? '-',
                         'description'         => $property->description ?? '-',
                         'property_name'       => $property->property_name ?? '-',
-                        'status'              => (int) $property->current_status_id === 1 ? 'Active' : 'Inactive',
-                        'current_status_id'   => $property->current_status_id,
+                        'status'              => (int) $property->active === 1 ? 'Active' : 'Inactive',
+                        'active'              => (int) $property->active,
                         'landlord_name'  => $landlord ? ($landlord->names ?? '-') : '-',
                         'landlord_ref'   => $landlord ? ($landlord->reference_number ?? '-') : '-',
                         'landlord_phone' => $landlord ? ($landlord->mobile_number ?? '-') : '-',
