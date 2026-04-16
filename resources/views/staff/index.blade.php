@@ -4,6 +4,7 @@
 @php
 $canReadStaff = auth()->user()->hasPermission('read_staff');
 $canUpdateStaff = auth()->user()->hasPermission('update_staff');
+$canCreateUsers = auth()->user()->hasPermission('create_users');
 $staffStatuses = [5 => 'Approved', 4 => 'Suspended', 28 => 'Terminated', 36 => 'Absconded'];
 $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 28 => 'badge-light-danger', 36 => 'badge-light-dark'];
 @endphp
@@ -114,6 +115,15 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                                             <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
                                                         </a>
                                                         @endif
+                                                        @if($canCreateUsers)
+                                                        <button type="button" class="btn btn-link p-0 btn-convert-user" title="Convert to User"
+                                                            data-id="{{ $member->encrypted_id }}"
+                                                            data-name="{{ $member->full_names }}"
+                                                            data-email="{{ $member->email_address }}"
+                                                            style="line-height:1; color: inherit;">
+                                                            <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
+                                                        </button>
+                                                        @endif
                                                     </div>
                                                 </td>
                                             </tr>
@@ -149,9 +159,9 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                         <tbody>
                                             @foreach($otherStaff as $index => $member)
                                             @php
-                                                $statusId = $member->current_status_id;
-                                                $statusLabel = $staffStatuses[$statusId] ?? 'Unknown';
-                                                $badgeClass = $statusBadgeClasses[$statusId] ?? 'badge-light-secondary';
+                                            $statusId = $member->current_status_id;
+                                            $statusLabel = $staffStatuses[$statusId] ?? 'Unknown';
+                                            $badgeClass = $statusBadgeClasses[$statusId] ?? 'badge-light-secondary';
                                             @endphp
                                             <tr>
                                                 <td>{{ $index + 1 }}</td>
@@ -192,6 +202,15 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                                             data-status-id="{{ $statusId }}"
                                                             style="line-height:1; color: inherit;">
                                                             <span class="material-symbols-outlined" style="font-size:18px;">swap_horiz</span>
+                                                        </button>
+                                                        @endif
+                                                        @if($canCreateUsers)
+                                                        <button type="button" class="btn btn-link p-0 btn-convert-user" title="Convert to User"
+                                                            data-id="{{ $member->encrypted_id }}"
+                                                            data-name="{{ $member->full_names }}"
+                                                            data-email="{{ $member->email_address }}"
+                                                            style="line-height:1; color: inherit;">
+                                                            <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
                                                         </button>
                                                         @endif
                                                     </div>
@@ -244,9 +263,44 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
 </div>
 @endif
 
+@if($canCreateUsers)
+<!-- Convert Staff To User Modal -->
+<div class="modal fade" id="convertUserModal" tabindex="-1" aria-labelledby="convertUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="convert-user-form" action="#">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title" id="convertUserModalLabel">Convert Staff To User</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3" id="convert-user-staff-name" style="font-weight:600;"></p>
+                    <div class="mb-3">
+                        <label for="convert-user-email" class="form-label">Company Email</label>
+                        <input type="email" class="form-control" id="convert-user-email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="convert-user-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="convert-user-password" name="password" required minlength="6">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     var updateStatusRoute = '{{ route("staff.updateStatus", ":id") }}';
+    var convertUserRoute = '{{ $canCreateUsers ? route("staff.convertToUser", ":id") : "" }}';
+    var canCreateUsers = '{{ $canCreateUsers ? "1" : "0" }}' === '1';
+    var canUpdateStaff = '{{ $canUpdateStaff ? "1" : "0" }}' === '1';
     var csrfToken = '{{ csrf_token() }}';
     var statusBadgeClasses = {
         5: 'badge-light-success',
@@ -269,7 +323,9 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
             lengthChange: true,
             searching: true,
             ordering: true,
-            order: [[2, 'asc']],
+            order: [
+                [2, 'asc']
+            ],
             initComplete: function() {
                 $('#staff-preloader').hide();
                 $('#staff-table').css('visibility', 'visible');
@@ -289,7 +345,9 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                     lengthChange: true,
                     searching: true,
                     ordering: true,
-                    order: [[2, 'asc']],
+                    order: [
+                        [2, 'asc']
+                    ],
                     initComplete: function() {
                         $('#other-staff-preloader').hide();
                     }
@@ -319,63 +377,83 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
             window.location.href = url;
         });
 
-        @if($canUpdateStaff)
-        var currentEncryptedId = null;
-        var currentRow = null;
+        if (canCreateUsers) {
+            // Open convert staff to user modal
+            $(document).on('click', '.btn-convert-user', function() {
+                var encryptedId = $(this).data('id');
+                var name = $(this).data('name');
+                var email = $(this).data('email') || '';
+                var actionUrl = convertUserRoute.replace(':id', encryptedId);
 
-        // Open status update modal
-        $(document).on('click', '.btn-update-status', function() {
-            currentEncryptedId = $(this).data('id');
-            var name = $(this).data('name');
-            var statusId = $(this).data('status-id');
-            currentRow = $(this).closest('tr');
+                $('#convert-user-form').attr('action', actionUrl);
+                $('#convert-user-staff-name').text(name);
+                $('#convert-user-email').val(email);
+                $('#convert-user-password').val('');
 
-            $('#modal-staff-name').text(name);
-            $('#modal-status-select').val(statusId);
-            var modal = new bootstrap.Modal(document.getElementById('statusUpdateModal'));
-            modal.show();
-        });
-
-        // Save status
-        $('#btn-save-status').on('click', function() {
-            var newStatusId = parseInt($('#modal-status-select').val());
-            var url = updateStatusRoute.replace(':id', currentEncryptedId);
-
-            $('#save-status-spinner').show();
-            $('#btn-save-status').prop('disabled', true);
-
-            $.ajax({
-                type: 'PATCH',
-                url: url,
-                data: {
-                    status_id: newStatusId,
-                    _token: csrfToken,
-                },
-                success: function(response) {
-                    if (response.success) {
-                        // Update badge in the row
-                        var badge = currentRow.find('.status-badge');
-                        $.each(statusBadgeClasses, function(id, cls) { badge.removeClass(cls); });
-                        badge.addClass(statusBadgeClasses[newStatusId] || 'badge-light-secondary');
-                        badge.text(statusLabels[newStatusId] || 'Unknown');
-                        badge.data('status-id', newStatusId);
-
-                        // Update the button's data-status-id for next open
-                        currentRow.find('.btn-update-status').data('status-id', newStatusId);
-
-                        bootstrap.Modal.getInstance(document.getElementById('statusUpdateModal')).hide();
-                    }
-                },
-                error: function(xhr) {
-                    alert('Failed to update status. Please try again.');
-                },
-                complete: function() {
-                    $('#save-status-spinner').hide();
-                    $('#btn-save-status').prop('disabled', false);
-                }
+                var modal = new bootstrap.Modal(document.getElementById('convertUserModal'));
+                modal.show();
             });
-        });
-        @endif
+        }
+
+        if (canUpdateStaff) {
+            var currentEncryptedId = null;
+            var currentRow = null;
+
+            // Open status update modal
+            $(document).on('click', '.btn-update-status', function() {
+                currentEncryptedId = $(this).data('id');
+                var name = $(this).data('name');
+                var statusId = $(this).data('status-id');
+                currentRow = $(this).closest('tr');
+
+                $('#modal-staff-name').text(name);
+                $('#modal-status-select').val(statusId);
+                var modal = new bootstrap.Modal(document.getElementById('statusUpdateModal'));
+                modal.show();
+            });
+
+            // Save status
+            $('#btn-save-status').on('click', function() {
+                var newStatusId = parseInt($('#modal-status-select').val());
+                var url = updateStatusRoute.replace(':id', currentEncryptedId);
+
+                $('#save-status-spinner').show();
+                $('#btn-save-status').prop('disabled', true);
+
+                $.ajax({
+                    type: 'PATCH',
+                    url: url,
+                    data: {
+                        status_id: newStatusId,
+                        _token: csrfToken,
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            // Update badge in the row
+                            var badge = currentRow.find('.status-badge');
+                            $.each(statusBadgeClasses, function(id, cls) {
+                                badge.removeClass(cls);
+                            });
+                            badge.addClass(statusBadgeClasses[newStatusId] || 'badge-light-secondary');
+                            badge.text(statusLabels[newStatusId] || 'Unknown');
+                            badge.data('status-id', newStatusId);
+
+                            // Update the button's data-status-id for next open
+                            currentRow.find('.btn-update-status').data('status-id', newStatusId);
+
+                            bootstrap.Modal.getInstance(document.getElementById('statusUpdateModal')).hide();
+                        }
+                    },
+                    error: function(xhr) {
+                        alert('Failed to update status. Please try again.');
+                    },
+                    complete: function() {
+                        $('#save-status-spinner').hide();
+                        $('#btn-save-status').prop('disabled', false);
+                    }
+                });
+            });
+        }
     });
 </script>
 @endsection

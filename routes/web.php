@@ -125,6 +125,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
     Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
+    Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
     Route::delete('/hr/employees/{id}', [StaffController::class, 'destroy'])->name('staff.destroy');
 
     // AJAX Routes for Staff

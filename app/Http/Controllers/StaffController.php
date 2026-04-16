@@ -5,22 +5,26 @@ namespace App\Http\Controllers;
 use App\Models\Bank;
 use App\Models\Zone;
 use App\Models\Staff;
+use App\Models\User;
 use App\Models\Contract;
 use App\Models\Incident;
 use App\Models\Position;
 use App\Models\ZoneArea;
 use App\Models\Department;
 use App\Models\ActionTaken;
+use App\Models\UserStaffLink;
 use Illuminate\Http\Request;
 use App\Models\Communication;
 use App\Models\StaffDiscipline;
 use App\Services\ErrorDispatcher;
 use App\Models\EmployeeAttendance;
 use App\Models\EmployeeTermination;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use App\Jobs\ProcessAttendanceUpload;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Str;
 use App\Models\EmployeeTerminationElement;
 use App\Models\StaffDisciplineDocumentTracker;
 use Illuminate\Validation\ValidationException;
@@ -90,6 +94,79 @@ class StaffController extends Controller
     }
 
     /**
+     * Convert a staff member to system user
+     */
+    public function convertToUser(Request $request, $encryptedId)
+    {
+        if (!auth()->user()->hasPermission('create_users')) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'email' => 'required|email|max:255|unique:josya_users,email',
+            'password' => 'required|string|min:6|max:255',
+        ]);
+
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $staff = Staff::findOrFail($id);
+
+            if (UserStaffLink::where('staff_id', $staff->id)->exists()) {
+                return redirect()->route('staff.index')->with('error', 'This staff member is already linked to a user account.');
+            }
+
+            $username = $this->buildUniqueUsername($validated['email'], $staff);
+
+            DB::transaction(function () use ($staff, $validated, $username) {
+                $user = User::create([
+                    'name' => $staff->full_names,
+                    'username' => $username,
+                    'email' => $validated['email'],
+                    'password' => $validated['password'],
+                    'block' => 0,
+                    'sendEmail' => 0,
+                    'registerDate' => now(),
+                    'activation' => '',
+                    'params' => '',
+                    'resetCount' => 0,
+                    'otpKey' => '',
+                    'otep' => '',
+                    'requireReset' => 0,
+                ]);
+
+                UserStaffLink::create([
+                    'user_id' => $user->id,
+                    'staff_id' => $staff->id,
+                ]);
+            });
+
+            return redirect()->route('staff.index')->with('success', 'Staff converted to system user successfully.');
+        } catch (ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors())->withInput();
+        } catch (\Exception $e) {
+            Log::error('Error converting staff to user: ' . $e->getMessage());
+            return redirect()->route('staff.index')->with('error', 'Failed to convert staff to user.');
+        }
+    }
+
+    private function buildUniqueUsername(string $email, Staff $staff): string
+    {
+        $emailBase = Str::of($email)->before('@')->lower()->value();
+        $fallbackBase = Str::slug((string) $staff->full_names, '.');
+        $base = trim($emailBase) !== '' ? $emailBase : ($fallbackBase !== '' ? $fallbackBase : 'user');
+
+        $username = $base;
+        $counter = 1;
+
+        while (User::where('username', $username)->exists()) {
+            $counter++;
+            $username = $base . $counter;
+        }
+
+        return $username;
+    }
+
+    /**
      * Display staff details page
      */
     public function show($encryptedId)
@@ -97,14 +174,14 @@ class StaffController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
             $staff = Staff::with([
-                'department', 
-                'bank', 
-                'position', 
-                'contract', 
+                'department',
+                'bank',
+                'position',
+                'contract',
                 'contract.elements.payrollElement',
                 'employee_attendances.employee_attendance_timed',
                 // New discipline system relationships
-                'disciplineCases' => function($query) {
+                'disciplineCases' => function ($query) {
                     $query->with([
                         'incidentReports',
                         'registration',
@@ -114,7 +191,7 @@ class StaffController extends Controller
                         'deadlineExtensions',
                         'hearings',
                         'outcome',
-                        'activityLogs' => function($q) {
+                        'activityLogs' => function ($q) {
                             $q->orderBy('performed_at', 'desc')->limit(5);
                         }
                     ])->orderBy('date_time', 'desc');
@@ -125,7 +202,7 @@ class StaffController extends Controller
             ])->findOrFail($id);
 
             // dd($staff);
-    
+
             return view('staff.details', compact('staff'));
         } catch (\Exception $e) {
             Log::error('Error fetching staff details: ' . $e->getMessage());
@@ -351,7 +428,7 @@ class StaffController extends Controller
     }
 
     public function contractsEdit($encryptedId)
-    {   
+    {
         $id = Crypt::decrypt($encryptedId);
         $contract = Contract::with('elements.payrollElement')->where('staff_id', $id)->first();
 
@@ -371,7 +448,7 @@ class StaffController extends Controller
                 ->map(function ($contract) {
                     // Encrypt employee ID if employee exists
                     $encrypted_id = $contract->employee ? Crypt::encrypt($contract->employee->id) : null;
-    
+
                     return [
                         'id' => $contract->id,
                         'staff_id' => $contract->staff_id,
@@ -407,7 +484,7 @@ class StaffController extends Controller
                         'can_update' => Auth::user()->isAbleTo('update_contracts'),
                     ];
                 });
-    
+
             return response()->json(['contracts' => $contracts]);
         } catch (\Exception $e) {
             try {
@@ -421,8 +498,8 @@ class StaffController extends Controller
     }
 
     public function contractStore(Request $request)
-    {   
-        try{
+    {
+        try {
             $validated = $request->validate([
                 'staff_id' => 'required|integer',
                 'staff_positions' => 'required|integer',
@@ -461,10 +538,9 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
-            
-            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract created successfully');
 
+
+            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract created successfully');
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -474,7 +550,6 @@ class StaffController extends Controller
             Log::error('Error loading payroll elements: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load payroll elements'], 500);
         }
-       
     }
 
     public function contractUpdate(Request $request, $id)
@@ -492,10 +567,10 @@ class StaffController extends Controller
                 'elements.*.amount' => 'required|numeric|min:0',
             ]);
 
-    
+
             $contract = Contract::findOrFail($id);
             $staff = Staff::find($validated['staff_id']);
-    
+
             // Update contract fields
             $contract->staff_id = $validated['staff_id'];
             $contract->position_id = $validated['staff_positions'];
@@ -507,7 +582,7 @@ class StaffController extends Controller
             $contract->date_time = now();
             $contract->staff_number = $staff->staff_number ?? null;
             $contract->save();
-    
+
             // Update contract elements: delete old, insert new
             $contract->elements()->delete();
 
@@ -520,7 +595,7 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
+
             return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract updated successfully');
         } catch (\Exception $e) {
             try {
@@ -576,7 +651,7 @@ class StaffController extends Controller
         $incident = Incident::create(['name' => $request->name]);
         return response()->json(['success' => true, 'incident' => $incident]);
     }
-    
+
     public function actionTakenStore(Request $request)
     {
         $request->validate(['name' => 'required|string|unique:action_taken,name']);
@@ -593,7 +668,7 @@ class StaffController extends Controller
                 ->get()
                 ->map(function ($rec) {
                     $encrypted_id = $rec->staff ? Crypt::encrypt($rec->staff->id) : null;
-    
+
                     return [
                         'id' => $rec->id,
                         'staff_id' => $rec->staff_id,
@@ -634,7 +709,7 @@ class StaffController extends Controller
                         'can_delete' => Auth::user()->isAbleTo('delete_discipline_records'),
                     ];
                 });
-    
+
             return response()->json(['records' => $records]);
         } catch (\Exception $e) {
             try {
@@ -646,7 +721,7 @@ class StaffController extends Controller
             return response()->json(['error' => 'Failed to load discipline records'], 500);
         }
     }
-    
+
     public function disciplineTrackerStore(Request $request)
     {
         try {
@@ -667,7 +742,7 @@ class StaffController extends Controller
             // Set flag if documents are present
             $record->documents = $request->hasFile('documents') ? 'YES' : 'NO';
             $record->save();
-    
+
             // Handle document uploads
             if ($request->hasFile('documents')) {
                 foreach ($request->file('documents') as $file) {
@@ -679,8 +754,8 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
-           return redirect()->route('discipline.tracker.index')->with('success', 'Contract created successfully');
+
+            return redirect()->route('discipline.tracker.index')->with('success', 'Contract created successfully');
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -691,7 +766,7 @@ class StaffController extends Controller
             return response()->json(['error' => 'Failed to load discipline records'], 500);
         }
     }
-    
+
     public function disciplineTrackerUpdate(Request $request, $id)
     {
         try {
@@ -705,12 +780,12 @@ class StaffController extends Controller
                 'current_status_id' => 'required|integer',
                 'documents.*' => 'file|mimes:pdf,jpg,jpeg,png,doc,docx|max:2048',
             ]);
-    
+
             $record = StaffDiscipline::findOrFail($id);
             $record->fill($validated);
             $record->documents = $request->hasFile('documents') ? 'YES' : $record->documents;
             $record->save();
-    
+
             // Handle new document uploads
             if ($request->hasFile('documents')) {
                 foreach ($request->file('documents') as $file) {
@@ -722,7 +797,7 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
+
             return redirect()->route('discipline.tracker.index')->with('success', 'Record updated successfully');
         } catch (\Exception $e) {
             try {
@@ -743,7 +818,7 @@ class StaffController extends Controller
             // Delete the file from storage
             \Illuminate\Support\Facades\Storage::disk('public')->delete($doc->params);
             $doc->delete();
-    
+
             // If no more documents remain, update parent record
             $remaining = StaffDisciplineDocumentTracker::where('parent_id', $parentId)->count();
             if ($remaining === 0) {
@@ -753,7 +828,7 @@ class StaffController extends Controller
                     $parent->save();
                 }
             }
-    
+
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             try {
@@ -765,7 +840,7 @@ class StaffController extends Controller
             return response()->json(['error' => 'Failed to load discipline records'], 500);
         }
     }
-    
+
     public function disciplineTrackerDelete($id)
     {
         try {
@@ -807,7 +882,6 @@ class StaffController extends Controller
                 'elements.element'
             ])->findOrFail($id);
             return view('staff.employee_termination.show', compact('record'));
-            
         } catch (\Exception $e) {
             Log::error('Error fetching employee termination details: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Employee termination record not found');
@@ -836,59 +910,59 @@ class StaffController extends Controller
                 'documentTrackers',
                 'elements.element'
             ])
-            ->orderBy('date_time', 'desc')
-            ->get()
-            ->map(function ($rec) {
-                $encrypted_id = $rec->staff ? Crypt::encrypt($rec->staff->id) : null;
-                $encrypted_termination_id = Crypt::encrypt($rec->id);
+                ->orderBy('date_time', 'desc')
+                ->get()
+                ->map(function ($rec) {
+                    $encrypted_id = $rec->staff ? Crypt::encrypt($rec->staff->id) : null;
+                    $encrypted_termination_id = Crypt::encrypt($rec->id);
 
-                return [
-                    'id' => $rec->id,
-                    'date_time' => $rec->date_time ? date('Y-m-d H:i:s', strtotime($rec->date_time)) : null,
-                    'staff_id' => $rec->staff_id,
-                    'encrypted_termination_id' => $encrypted_termination_id,
-                    'contract_id' => $rec->contract_id,
-                    'years_served' => $rec->years_served,
-                    'pay_per_year' => $rec->pay_per_year,
-                    'severance_payment' => $rec->severerance_payment,
-                    'termination_reason_id' => $rec->termination_reason_id,
-                    'current_status_id' => $rec->current_status_id,
-                    'staff' => $rec->staff ? [
-                        'id' => $rec->staff->id,
-                        'name' => $rec->staff->full_names,
-                        'staff_number' => $rec->staff->staff_number,
-                        'encrypted_id' => $encrypted_id,
-                    ] : null,
-                    'contract' => $rec->contract ? [
-                        'id' => $rec->contract->id,
-                        'staff_number' => $rec->contract->staff_number,
-                        'basic_salary' => $rec->contract->basic_salary,
-                        'position_id' => $rec->contract->position_id,
-                    ] : null,
-                    'created_by' => $rec->createdBy ? [
-                        'id' => $rec->createdBy->id,
-                        'name' => $rec->createdBy->name,
-                    ] : null,
-                    'documents' => $rec->documentTrackers->map(function ($doc) {
-                        return [
-                            'id' => $doc->id,
-                            'documents' => $doc->documents,
-                            'params' => $doc->params,
-                        ];
-                    }),
-                    'elements' => $rec->elements->map(function ($el) {
-                        return [
-                            'id' => $el->id,
-                            'element_id' => $el->element_id,
-                            'element_name' => $el->element ? $el->element->element_name : null,
-                            'amount' => $el->amount,
-                        ];
-                    }),
-                    'can_read' => Auth::user()->isAbleTo('read_employee_terminations'),
-                    'can_update' => Auth::user()->isAbleTo('update_employee_terminations'),
-                    'can_delete' => Auth::user()->isAbleTo('delete_employee_terminations'),
-                ];
-            });
+                    return [
+                        'id' => $rec->id,
+                        'date_time' => $rec->date_time ? date('Y-m-d H:i:s', strtotime($rec->date_time)) : null,
+                        'staff_id' => $rec->staff_id,
+                        'encrypted_termination_id' => $encrypted_termination_id,
+                        'contract_id' => $rec->contract_id,
+                        'years_served' => $rec->years_served,
+                        'pay_per_year' => $rec->pay_per_year,
+                        'severance_payment' => $rec->severerance_payment,
+                        'termination_reason_id' => $rec->termination_reason_id,
+                        'current_status_id' => $rec->current_status_id,
+                        'staff' => $rec->staff ? [
+                            'id' => $rec->staff->id,
+                            'name' => $rec->staff->full_names,
+                            'staff_number' => $rec->staff->staff_number,
+                            'encrypted_id' => $encrypted_id,
+                        ] : null,
+                        'contract' => $rec->contract ? [
+                            'id' => $rec->contract->id,
+                            'staff_number' => $rec->contract->staff_number,
+                            'basic_salary' => $rec->contract->basic_salary,
+                            'position_id' => $rec->contract->position_id,
+                        ] : null,
+                        'created_by' => $rec->createdBy ? [
+                            'id' => $rec->createdBy->id,
+                            'name' => $rec->createdBy->name,
+                        ] : null,
+                        'documents' => $rec->documentTrackers->map(function ($doc) {
+                            return [
+                                'id' => $doc->id,
+                                'documents' => $doc->documents,
+                                'params' => $doc->params,
+                            ];
+                        }),
+                        'elements' => $rec->elements->map(function ($el) {
+                            return [
+                                'id' => $el->id,
+                                'element_id' => $el->element_id,
+                                'element_name' => $el->element ? $el->element->element_name : null,
+                                'amount' => $el->amount,
+                            ];
+                        }),
+                        'can_read' => Auth::user()->isAbleTo('read_employee_terminations'),
+                        'can_update' => Auth::user()->isAbleTo('update_employee_terminations'),
+                        'can_delete' => Auth::user()->isAbleTo('delete_employee_terminations'),
+                    ];
+                });
 
             return response()->json(['records' => $records]);
         } catch (\Exception $e) {
@@ -917,7 +991,7 @@ class StaffController extends Controller
                 'severance_elements.*.element_id' => 'required|integer',
                 'severance_elements.*.amount' => 'required|numeric|min:0',
             ]);
-    
+
             // Save main termination record
             $termination = new EmployeeTermination();
             $termination->staff_id = $validated['staff_id'];
@@ -931,7 +1005,7 @@ class StaffController extends Controller
             $termination->documents = $request->hasFile('documents') ? 'YES' : 'NO';
             $termination->current_status_id = 1;
             $termination->save();
-    
+
             // Save documents
             if ($request->hasFile('documents')) {
                 foreach ($request->file('documents') as $file) {
@@ -943,7 +1017,7 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
+
             // Save severance elements
             if (!empty($validated['severance_elements'])) {
                 foreach ($validated['severance_elements'] as $element) {
@@ -954,7 +1028,7 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
+
             return redirect()->route('employee.termination.index')->with('success', 'Employee termination recorded successfully');
         } catch (\Exception $e) {
             try {
@@ -977,7 +1051,7 @@ class StaffController extends Controller
                 ->get()
                 ->map(function ($contract) {
                     // Encrypt employee ID if employee exists
-    
+
                     return [
                         'id' => $contract->id,
                         'staff_id' => $contract->staff_id,
@@ -1009,7 +1083,7 @@ class StaffController extends Controller
                             ];
                         }),
                         'date_time' => $contract->date_time,
-                        
+
                     ];
                 });
 
@@ -1041,7 +1115,7 @@ class StaffController extends Controller
                 'severance_elements.*.element_id' => 'required|integer',
                 'severance_elements.*.amount' => 'required|numeric|min:0',
             ]);
-    
+
             $termination = EmployeeTermination::findOrFail($id);
             $termination->staff_id = $validated['staff_id'];
             $termination->contract_id = $validated['contract_id'];
@@ -1056,7 +1130,7 @@ class StaffController extends Controller
                 $termination->documents = 'YES';
             }
             $termination->save();
-    
+
             // Handle new document uploads
             if ($request->hasFile('documents')) {
                 foreach ($request->file('documents') as $file) {
@@ -1068,7 +1142,7 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
+
             // Update severance elements: delete old, insert new
             EmployeeTerminationElement::where('parent_id', $termination->id)->delete();
             if (!empty($validated['severance_elements'])) {
@@ -1080,7 +1154,7 @@ class StaffController extends Controller
                     ]);
                 }
             }
-    
+
             return redirect()->route('employee.termination.index')->with('success', 'Employee termination updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
@@ -1102,7 +1176,7 @@ class StaffController extends Controller
             // Delete the file from storage
             \Illuminate\Support\Facades\Storage::disk('public')->delete($doc->params);
             $doc->delete();
-    
+
             // If no more documents remain, update parent record
             $remaining = EmployeeTerminationDocumentTracker::where('parent_id', $parentId)->count();
             if ($remaining === 0) {
@@ -1112,7 +1186,7 @@ class StaffController extends Controller
                     $parent->save();
                 }
             }
-    
+
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             try {
@@ -1137,7 +1211,7 @@ class StaffController extends Controller
             $records = EmployeeAttendance::with(['staff', 'employee_attendance_timed', 'createdBy'])
                 ->orderBy('date_time', 'desc')
                 ->get()
-                ->map(function($att) {
+                ->map(function ($att) {
                     $encrypted_id = $att->staff ? Crypt::encrypt($att->staff->id) : null;
                     return [
                         'id' => $att->id,
@@ -1150,7 +1224,7 @@ class StaffController extends Controller
                         ] : null,
                         'date_time' => $att->date_time ? $att->date_time->format('Y-m-d H:i') : '-',
                         'month_year' => $att->month_year ?? '-',
-                        'employee_attendance_timed' => $att->employee_attendance_timed ? $att->employee_attendance_timed->map(function($timed) {
+                        'employee_attendance_timed' => $att->employee_attendance_timed ? $att->employee_attendance_timed->map(function ($timed) {
                             return [
                                 'id' => $timed->id,
                                 'date' => $timed->date,
@@ -1180,20 +1254,20 @@ class StaffController extends Controller
             return redirect()->back()->with('error', 'Failed to create staff member')->withInput();
         }
     }
-    
+
     public function attendanceUpload(Request $request)
     {
         try {
             $request->validate([
                 'attendance_file' => 'required|file|mimes:csv,txt'
             ]);
-    
+
             $file = $request->file('attendance_file');
-    
+
             // Dispatch job for background processing
             $path = $file->store('attendance_uploads'); // returns relative path
             ProcessAttendanceUpload::dispatch($path, Auth::id());
-    
+
             return response()->json(['success' => true, 'message' => 'Upload started. Data will appear once processed.']);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
@@ -1209,27 +1283,27 @@ class StaffController extends Controller
 
     public function attendanceSampleDownload()
     {
-        try{
+        try {
             $headers = [
                 'Content-Type' => 'text/csv',
                 'Content-Disposition' => 'attachment; filename="employee_attendance_sample.csv"',
             ];
-        
+
             $sampleData = [
                 ['Staff ID', 'Date', 'Month/Year', 'Time In', 'Time Out', 'Hours'],
                 ['123', '2025-11-01', '11/2025', '2025-11-01 08:00', '2025-11-01 17:00', '9'],
                 ['124', '2025-11-01', '11/2025', '2025-11-01 09:00', '2025-11-01 18:00', '9'],
                 ['125', '2025-11-01', '11/2025', '2025-11-01 08:30', '2025-11-01 17:30', '9'],
             ];
-        
-            $callback = function() use ($sampleData) {
+
+            $callback = function () use ($sampleData) {
                 $file = fopen('php://output', 'w');
                 foreach ($sampleData as $row) {
                     fputcsv($file, $row);
                 }
                 fclose($file);
             };
-        
+
             return response()->stream($callback, 200, $headers);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
@@ -1324,7 +1398,6 @@ class StaffController extends Controller
 
                 $contract->save();
                 $results[] = ['id' => $id, 'ok' => true];
-
             } catch (\Exception $e) {
                 Log::error("Bulk contract update failed for ID {$id}: " . $e->getMessage());
                 $results[] = ['id' => $id, 'ok' => false, 'error' => 'Save failed: ' . $e->getMessage()];
@@ -1394,7 +1467,7 @@ class StaffController extends Controller
                 'position_ids' => 'array',
                 'position_ids.*' => 'integer|exists:sys_hr_positions,id',
             ]);
-    
+
             // Build recipients array from staff_ids or position_ids
             $recipients = [];
             if ($validated['recipient_type'] === 'staff' && !empty($validated['staff_ids'])) {
@@ -1402,12 +1475,12 @@ class StaffController extends Controller
             } elseif ($validated['recipient_type'] === 'position' && !empty($validated['position_ids'])) {
                 $recipients = Staff::whereIn('position_id', $validated['position_ids'])->pluck('email_address')->filter()->unique()->toArray();
             }
-    
+
             $attachmentPath = null;
             if ($request->hasFile('attachment')) {
                 $attachmentPath = $request->file('attachment')->store('communications', 'public');
             }
-    
+
             $comm = Communication::create([
                 'subject' => $validated['subject'] ?? null,
                 'message' => $validated['message'],
@@ -1418,7 +1491,7 @@ class StaffController extends Controller
                 'attachment' => $attachmentPath,
                 'created_by' => Auth::id(),
             ]);
-    
+
             return response()->json(['success' => true, 'message' => 'Communication saved and awaiting confirmation.']);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['error' => $e->errors()], 422);
@@ -1432,6 +1505,4 @@ class StaffController extends Controller
             return response()->json(['error' => 'Failed to save communication'], 500);
         }
     }
-
-    
 }
