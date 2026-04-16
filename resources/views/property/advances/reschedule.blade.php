@@ -111,6 +111,21 @@
 
                         {{-- Reschedule form --}}
                         <div class="section-header">New Advance Terms</div>
+
+                        {{-- What will happen description --}}
+                        <div class="card border-0 bg-light mb-3">
+                            <div class="card-body py-3 px-4">
+                                <h6 class="mb-2" style="font-size:0.875rem;font-weight:600;">What happens when you reschedule?</h6>
+                                <ol class="mb-0 ps-3" style="font-size:0.82rem;line-height:1.8;color:#495057;">
+                                    <li>The current advance (<strong>{{ $advance->reference_number }}</strong>) is marked as <span class="badge badge-light-info">Rescheduled</span> and closed — no further payments will be collected against it.</li>
+                                    <li>All remaining pending schedule instalments on the current advance are also marked Rescheduled.</li>
+                                    <li>A new advance is created with the terms you enter below, pre-filled with the outstanding balance of <strong>{{ number_format($outstandingBalance, 2) }}</strong>.</li>
+                                    <li>The new advance is linked back to this one and the full reschedule history is preserved for audit purposes.</li>
+                                    <li>The landlord receives an approval email for the new advance. Once approved, an admin can post it.</li>
+                                </ol>
+                            </div>
+                        </div>
+
                         <form id="rescheduleForm">
                             @csrf
                             <div class="row g-3">
