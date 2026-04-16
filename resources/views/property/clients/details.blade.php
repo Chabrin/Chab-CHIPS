@@ -123,6 +123,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="related-properties-tab" data-bs-toggle="tab" data-bs-target="#related-properties" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">real_estate_agent</span> Related Properties
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="sla-tab" data-bs-toggle="tab" data-bs-target="#sla" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">approval_delegation</span> SLA
                                 </button>
@@ -294,6 +299,27 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Zone</th>
                                                 <th>Zone Area</th>
                                                 <th>Field Officer</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Related Properties Tab -->
+                            <div class="tab-pane fade" id="related-properties" role="tabpanel" aria-labelledby="related-properties-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="relatedPropertiesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Property Ref</th>
+                                                <th>Description</th>
+                                                <th>Property Name</th>
+                                                <th>LAN Ref</th>
+                                                <th>Landlord Name</th>
+                                                <th>Status</th>
                                                 <th>Actions</th>
                                             </tr>
                                         </thead>
@@ -492,10 +518,68 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Returns Config Tab -->
                             <div class="tab-pane fade" id="returns-config" role="tabpanel" aria-labelledby="returns-config-tab">
-                                <div class="card">
+                                <div class="card border-0 shadow-sm">
                                     <div class="card-body">
-                                        <h6 class="card-title">Returns Configuration</h6>
-                                        <p class="text-muted">Returns configuration settings will be implemented here.</p>
+                                        <div class="row g-3">
+                                            <div class="col-lg-7">
+                                                <div class="p-2 h-100">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">
+                                                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">home_work</span>
+                                                            Unbatched Active Properties
+                                                        </h6>
+                                                        <span id="returnsSelectedCount" class="badge bg-primary text-white">0 selected</span>
+                                                    </div>
+
+                                                    <div class="d-flex flex-wrap gap-2 mb-3">
+                                                        <button type="button" id="btnCreateReturnsBatchInline" class="btn btn-primary btn-sm">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">add_circle</span>
+                                                            <span class="btn-text">Create Batch</span>
+                                                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                                        </button>
+                                                        <button type="button" id="btnUpdateReturnsBatchInline" class="btn btn-warning btn-sm d-none">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">edit</span>
+                                                            <span class="btn-text">Update Batch</span>
+                                                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                                        </button>
+                                                        <button type="button" id="btnCancelReturnsBatchEdit" class="btn btn-light btn-sm d-none">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">close</span>
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+
+                                                    <table class="table table-sm table-hover table-bordered small w-100" id="returnsPropertiesTable">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th style="width:30px;"><input type="checkbox" id="returnsCheckAll" title="Select/Deselect All"></th>
+                                                                <th>Property Ref</th>
+                                                                <th>Property Name</th>
+                                                                <th>Landlord</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="returnsPropertiesTableBody"></tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-lg-5">
+                                                <div class="p-2 h-100">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">
+                                                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">folder_shared</span>
+                                                            Configured Batches
+                                                        </h6>
+                                                        <button type="button" id="btnDisbandAllReturnsBatches" class="btn btn-outline-danger btn-sm">
+                                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete_sweep</span>
+                                                            <span class="btn-text">Disband All</span>
+                                                            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                                        </button>
+                                                    </div>
+                                                    <small class="text-muted d-block mb-2">Each property can exist in only one batch.</small>
+                                                    <div id="returnsBatchCards" style="max-height: 500px; overflow:auto;"></div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -588,6 +672,65 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+<!-- Related Property Details Modal -->
+<div class="modal fade" id="relatedPropertyModal" tabindex="-1" aria-labelledby="relatedPropertyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="relatedPropertyModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">real_estate_agent</span>
+                    Property Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="text-muted fw-semibold mb-2">Property Information</h6>
+                <table class="table table-sm table-borderless mb-3">
+                    <tr>
+                        <td class="fw-semibold text-muted" style="width:40%">Reference No.</td>
+                        <td id="rpModalRef">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Property Name</td>
+                        <td id="rpModalPropertyName">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Description</td>
+                        <td id="rpModalDescription">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Status</td>
+                        <td id="rpModalStatus">-</td>
+                    </tr>
+                </table>
+                <hr class="my-2">
+                <h6 class="text-muted fw-semibold mb-2">Landlord Information</h6>
+                <table class="table table-sm table-borderless">
+                    <tr>
+                        <td class="fw-semibold text-muted" style="width:40%">Names</td>
+                        <td id="rpModalLandlordName">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">LAN Ref</td>
+                        <td id="rpModalLandlordRef">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Phone</td>
+                        <td id="rpModalLandlordPhone">-</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-semibold text-muted">Email</td>
+                        <td id="rpModalLandlordEmail">-</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;
@@ -617,13 +760,23 @@ COPY PERMISSIONS (paste when re-enabling checks):
 </style>
 
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {
         var propertiesTable = null;
+        var relatedPropertiesTable = null;
         var unitsTable = null;
         var tenantsTable = null;
         var leasesTable = null;
+        var returnsConfigOptions = {
+            all_eligible: [],
+            unbatched: []
+        };
+        var returnsConfigBatches = [];
+        var editingReturnsBatchId = null;
         var propertiesLoaded = false;
+        var relatedPropertiesLoaded = false;
+        var returnsConfigLoaded = false;
         var unitsLoaded = false;
         var tenantsLoaded = false;
         var propertiesDropdownLoaded = false;
@@ -683,6 +836,66 @@ COPY PERMISSIONS (paste when re-enabling checks):
             responsive: true,
             language: {
                 emptyTable: "No properties found for this client"
+            }
+        });
+
+        relatedPropertiesTable = $('#relatedPropertiesTable').DataTable({
+            data: [],
+            columns: [{
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                {
+                    data: 'reference_number'
+                },
+                {
+                    data: 'description'
+                },
+                {
+                    data: 'property_name',
+                    render: function(data, type, row) {
+                        if (type === 'display' && row.property_url) {
+                            return '<a href="' + row.property_url + '" target="_blank" style="text-decoration:underline;">' + (data || '-') + '</a>';
+                        }
+                        return data || '-';
+                    }
+                },
+                {
+                    data: 'landlord_ref'
+                },
+                {
+                    data: 'landlord_name',
+                    render: function(data, type, row) {
+                        if (type === 'display' && row.client_url) {
+                            return '<a href="' + row.client_url + '" target="_blank" style="text-decoration:underline;">' + (data || '-') + '</a>';
+                        }
+                        return data || '-';
+                    }
+                },
+                {
+                    data: 'status',
+                    render: function(data, type, row) {
+                        if (row.active == 1) {
+                            return '<span class="badge badge-light-success">Active</span>';
+                        }
+                        return '<span class="badge badge-light-danger">Inactive</span>';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(data, type, row) {
+                        return '<button class="btn btn-sm btn-icon btn-view-related-property" title="View Details"><span class="material-symbols-outlined" style="font-size:18px;">visibility</span></button>';
+                    }
+                }
+            ],
+            pageLength: 10,
+            responsive: true,
+            language: {
+                emptyTable: "No related properties found"
             }
         });
 
@@ -910,6 +1123,110 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
+        $('#related-properties-tab').on('click', function() {
+            if (!relatedPropertiesLoaded) {
+                loadRelatedProperties();
+                relatedPropertiesLoaded = true;
+            }
+        });
+
+        $('#returns-config-tab').on('click', function() {
+            if (!returnsConfigLoaded) {
+                loadReturnsConfig();
+                returnsConfigLoaded = true;
+            }
+        });
+
+        $('#btnCreateReturnsBatchInline').on('click', function() {
+            saveReturnsConfigInline();
+        });
+
+        $('#btnUpdateReturnsBatchInline').on('click', function() {
+            saveReturnsConfigInline();
+        });
+
+        $('#btnCancelReturnsBatchEdit').on('click', function() {
+            resetReturnsConfigEditState();
+            renderReturnsAvailableProperties();
+        });
+
+        $('#btnDisbandAllReturnsBatches').on('click', function() {
+            Swal.fire({
+                title: 'Disband All Batches?',
+                text: 'This will remove all configured batches for this landlord profile. This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete_sweep</span> Yes, Disband All',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    disbandAllReturnsConfig();
+                }
+            });
+        });
+
+        $(document).on('change', '.returns-prop-check', function() {
+            refreshReturnsSelectedCount();
+            updateCheckAllState();
+        });
+
+        // Check All functionality for returns properties table
+        $(document).on('change', '#returnsCheckAll', function() {
+            var isChecked = $(this).prop('checked');
+            $('#returnsPropertiesTable .returns-prop-check:not(:disabled)').prop('checked', isChecked);
+            refreshReturnsSelectedCount();
+        });
+
+        function updateCheckAllState() {
+            var total = $('#returnsPropertiesTable .returns-prop-check:not(:disabled)').length;
+            var checked = $('#returnsPropertiesTable .returns-prop-check:not(:disabled):checked').length;
+            $('#returnsCheckAll').prop('checked', total > 0 && total === checked);
+        }
+
+        $(document).on('click', '.btn-edit-returns-config-inline', function() {
+            var batchId = $(this).data('id');
+            openReturnsConfigInlineEdit(batchId);
+        });
+
+        $(document).on('click', '.btn-delete-returns-config-inline', function() {
+            var btn = $(this);
+            var batchId = btn.data('id');
+            Swal.fire({
+                title: 'Delete This Batch?',
+                text: 'This will remove all linked properties from this batch configuration.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">delete</span> Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    deleteReturnsConfig(batchId, btn);
+                }
+            });
+        });
+
+        // Related Property details modal
+        $(document).on('click', '#relatedPropertiesTable .btn-view-related-property', function() {
+            var rowData = relatedPropertiesTable.row($(this).closest('tr')).data();
+            $('#rpModalRef').text(rowData.reference_number || '-');
+            $('#rpModalPropertyName').text(rowData.property_name || '-');
+            $('#rpModalDescription').text(rowData.description || '-');
+            if (rowData.active == 1) {
+                $('#rpModalStatus').html('<span class="badge badge-light-success">Active</span>');
+            } else {
+                $('#rpModalStatus').html('<span class="badge badge-light-danger">Inactive</span>');
+            }
+            $('#rpModalLandlordName').text(rowData.landlord_name || '-');
+            $('#rpModalLandlordRef').text(rowData.landlord_ref || '-');
+            $('#rpModalLandlordPhone').text(rowData.landlord_phone || '-');
+            $('#rpModalLandlordEmail').text(rowData.landlord_email || '-');
+            $('#relatedPropertyModal').modal('show');
+        });
+
         // Load properties dropdown when units tab is clicked
         $('#units-tab').on('click', function() {
             if (!propertiesDropdownLoaded) {
@@ -967,6 +1284,336 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 error: function(xhr, status, error) {
                     console.error('Error loading properties:', error);
                     toastr.error('Failed to load properties. Please try again.');
+                }
+            });
+        }
+
+        function loadRelatedProperties() {
+            $.ajax({
+                url: "{{ route('property.clients.related-properties', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.data) {
+                        relatedPropertiesTable.clear();
+                        relatedPropertiesTable.rows.add(response.data);
+                        relatedPropertiesTable.draw();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading related properties:', error);
+                    toastr.error('Failed to load related properties. Please try again.');
+                }
+            });
+        }
+
+        function loadReturnsConfig() {
+            $.ajax({
+                url: "{{ route('property.clients.returns-config', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    returnsConfigBatches = response.data || [];
+                    loadReturnsConfigOptions();
+                    renderReturnsBatchCards();
+                },
+                error: function(xhr) {
+                    console.error('Error loading returns config:', xhr.responseText);
+                    toastr.error('Failed to load returns merge configuration.');
+                }
+            });
+        }
+
+        function loadReturnsConfigOptions() {
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.options', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    returnsConfigOptions = {
+                        all_eligible: response.all_eligible || [],
+                        unbatched: response.unbatched || []
+                    };
+                    renderReturnsAvailableProperties();
+                },
+                error: function(xhr) {
+                    console.error('Error loading returns config options:', xhr.responseText);
+                    toastr.error('Failed to load available properties for merge configuration.');
+                }
+            });
+        }
+
+        var returnsPropertiesDataTable = null;
+
+        function renderReturnsAvailableProperties() {
+            // Destroy existing DataTable if present
+            if (returnsPropertiesDataTable) {
+                returnsPropertiesDataTable.destroy();
+                returnsPropertiesDataTable = null;
+            }
+
+            var tbody = $('#returnsPropertiesTableBody');
+            tbody.empty();
+            $('#returnsCheckAll').prop('checked', false);
+
+            var source = editingReturnsBatchId ? returnsConfigOptions.all_eligible : returnsConfigOptions.unbatched;
+            var currentBatch = returnsConfigBatches.find(function(b) {
+                return b.id == editingReturnsBatchId;
+            });
+
+            if (!source || source.length === 0) {
+                tbody.html('<tr><td colspan="4" class="text-muted text-center py-3">No eligible unbatched active properties.</td></tr>');
+                refreshReturnsSelectedCount();
+                return;
+            }
+
+            var currentIds = currentBatch ? (currentBatch.items || []).map(function(i) {
+                return Number(i.property_id);
+            }) : [];
+
+            source.forEach(function(prop) {
+                var propId = Number(prop.id);
+                var assignedBatchId = prop.assigned_batch_id ? Number(prop.assigned_batch_id) : null;
+                var isChecked = currentIds.indexOf(propId) !== -1;
+                var disabled = assignedBatchId && (!editingReturnsBatchId || assignedBatchId !== Number(editingReturnsBatchId));
+                var disabledAttr = disabled ? 'disabled' : '';
+                var rowClass = disabled ? 'table-secondary text-muted' : '';
+                var landlordDisplay = (prop.landlord_ref || '-') + ' - ' + (prop.landlord_name || '-');
+                if (disabled) {
+                    landlordDisplay += ' <span class="text-danger small">(in batch)</span>';
+                }
+
+                tbody.append(
+                    '<tr class="' + rowClass + '">' +
+                    '<td class="text-center"><input class="form-check-input returns-prop-check" type="checkbox" value="' + prop.id + '" ' + (isChecked ? 'checked' : '') + ' ' + disabledAttr + '></td>' +
+                    '<td>' + (prop.reference_number || '-') + '</td>' +
+                    '<td>' + (prop.property_name || '-') + '</td>' +
+                    '<td>' + landlordDisplay + '</td>' +
+                    '</tr>'
+                );
+            });
+
+            // Initialize DataTable
+            returnsPropertiesDataTable = $('#returnsPropertiesTable').DataTable({
+                paging: true,
+                pageLength: 10,
+                lengthMenu: [
+                    [10, 25, 50, -1],
+                    [10, 25, 50, "All"]
+                ],
+                searching: true,
+                ordering: true,
+                info: true,
+                autoWidth: false,
+                columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                }],
+                language: {
+                    search: "",
+                    searchPlaceholder: "Search properties...",
+                    emptyTable: "No eligible unbatched active properties."
+                }
+            });
+
+            refreshReturnsSelectedCount();
+            updateCheckAllState();
+        }
+
+        function renderReturnsBatchCards() {
+            var container = $('#returnsBatchCards');
+            container.empty();
+
+            if (!returnsConfigBatches || returnsConfigBatches.length === 0) {
+                container.html('<div class="text-muted small py-2">No batches configured yet.</div>');
+                return;
+            }
+
+            returnsConfigBatches.forEach(function(batch) {
+                var itemsHtml = '';
+                (batch.items || []).forEach(function(item) {
+                    itemsHtml += '<li class="small">' + (item.property_ref || '-') + ' - ' + (item.property_name || '-') + ' <span class="text-muted">(' + (item.landlord_ref || '-') + ')</span></li>';
+                });
+
+                container.append(
+                    '<div class="border rounded p-2 mb-2">' +
+                    '<div class="d-flex justify-content-between align-items-start mb-1">' +
+                    '<div>' +
+                    '<div class="fw-semibold">' + (batch.batch_reference || '-') + '</div>' +
+                    '<div class="small text-muted">' + (batch.landlord_name || '-') + ' | LAN ' + (batch.landlord_ref || '-') + '</div>' +
+                    '</div>' +
+                    '<div class="d-flex gap-1">' +
+                    '<button class="btn btn-sm btn-link text-primary p-0 btn-edit-returns-config-inline" data-id="' + batch.id + '" title="Edit Batch">' +
+                    '<span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">edit_square</span>' +
+                    '</button>' +
+                    '<button class="btn btn-sm btn-link text-danger p-0 btn-delete-returns-config-inline" data-id="' + batch.id + '" title="Delete Batch">' +
+                    '<span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">delete</span>' +
+                    '<span class="spinner-border spinner-border-sm d-none" role="status"></span>' +
+                    '</button>' +
+                    '</div>' +
+                    '</div>' +
+                    '<ul class="mb-0 ps-3">' + itemsHtml + '</ul>' +
+                    '</div>'
+                );
+            });
+        }
+
+        function openReturnsConfigInlineEdit(batchId) {
+            editingReturnsBatchId = Number(batchId);
+            $('#btnCreateReturnsBatchInline').addClass('d-none');
+            $('#btnUpdateReturnsBatchInline').removeClass('d-none');
+            $('#btnCancelReturnsBatchEdit').removeClass('d-none');
+            renderReturnsAvailableProperties();
+        }
+
+        function resetReturnsConfigEditState() {
+            editingReturnsBatchId = null;
+            $('#btnCreateReturnsBatchInline').removeClass('d-none');
+            $('#btnUpdateReturnsBatchInline').addClass('d-none');
+            $('#btnCancelReturnsBatchEdit').addClass('d-none');
+        }
+
+        function getSelectedReturnsPropertyIds() {
+            var selected = [];
+            // Use DataTable API to get checkboxes from all pages
+            if (returnsPropertiesDataTable) {
+                returnsPropertiesDataTable.rows().nodes().each(function(row) {
+                    var checkbox = $(row).find('.returns-prop-check:checked');
+                    if (checkbox.length) {
+                        selected.push(checkbox.val());
+                    }
+                });
+            } else {
+                $('.returns-prop-check:checked').each(function() {
+                    selected.push($(this).val());
+                });
+            }
+            return selected;
+        }
+
+        function refreshReturnsSelectedCount() {
+            var count = getSelectedReturnsPropertyIds().length;
+            $('#returnsSelectedCount').text(count + ' selected');
+        }
+
+        function saveReturnsConfigInline() {
+            var propertyIds = getSelectedReturnsPropertyIds();
+
+            if (propertyIds.length < 2) {
+                toastr.error('Select at least two properties to create/update a batch.');
+                return;
+            }
+
+            var btn = editingReturnsBatchId ? $('#btnUpdateReturnsBatchInline') : $('#btnCreateReturnsBatchInline');
+            btn.prop('disabled', true);
+            btn.find('.btn-text').addClass('d-none');
+            btn.find('.spinner-border').removeClass('d-none');
+
+            var url = "{{ route('property.clients.returns-config.store', $client->encrypted_id) }}";
+            var payload = {
+                _token: "{{ csrf_token() }}",
+                property_ids: propertyIds
+            };
+
+            if (editingReturnsBatchId) {
+                url = "{{ route('property.clients.returns-config.update', ['encryptedId' => $client->encrypted_id, 'batchId' => '__BATCH__']) }}".replace('__BATCH__', editingReturnsBatchId);
+                payload._method = 'PUT';
+            }
+
+            $.ajax({
+                url: url,
+                type: 'POST',
+                dataType: 'json',
+                data: payload,
+                success: function(response) {
+                    resetReturnsConfigEditState();
+                    loadReturnsConfig();
+                    toastr.success(response.message || 'Returns batch saved.');
+                },
+                error: function(xhr) {
+                    var errorMessage = 'Failed to save returns batch.';
+                    if (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) {
+                        errorMessage = xhr.responseJSON.error || xhr.responseJSON.message;
+                    }
+                    toastr.error(errorMessage);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    btn.find('.btn-text').removeClass('d-none');
+                    btn.find('.spinner-border').addClass('d-none');
+                }
+            });
+        }
+
+        function deleteReturnsConfig(batchId, btn) {
+            if (btn) {
+                btn.prop('disabled', true);
+                btn.find('.material-symbols-outlined').addClass('d-none');
+                btn.find('.spinner-border').removeClass('d-none');
+            }
+
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.delete', ['encryptedId' => $client->encrypted_id, 'batchId' => '__BATCH__']) }}".replace('__BATCH__', batchId),
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    _method: 'DELETE'
+                },
+                success: function(response) {
+                    if (editingReturnsBatchId && Number(editingReturnsBatchId) === Number(batchId)) {
+                        resetReturnsConfigEditState();
+                    }
+                    loadReturnsConfig();
+                    toastr.success(response.message || 'Returns batch deleted.');
+                },
+                error: function(xhr) {
+                    var errorMessage = 'Failed to delete returns config.';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    }
+                    toastr.error(errorMessage);
+                },
+                complete: function() {
+                    if (btn) {
+                        btn.prop('disabled', false);
+                        btn.find('.material-symbols-outlined').removeClass('d-none');
+                        btn.find('.spinner-border').addClass('d-none');
+                    }
+                }
+            });
+        }
+
+        function disbandAllReturnsConfig() {
+            var btn = $('#btnDisbandAllReturnsBatches');
+            btn.prop('disabled', true);
+            btn.find('.btn-text').addClass('d-none');
+            btn.find('.spinner-border').removeClass('d-none');
+
+            $.ajax({
+                url: "{{ route('property.clients.returns-config.disband-all', $client->encrypted_id) }}",
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    _method: 'DELETE'
+                },
+                success: function(response) {
+                    resetReturnsConfigEditState();
+                    loadReturnsConfig();
+                    toastr.success(response.message || 'All batches disbanded.');
+                },
+                error: function(xhr) {
+                    var errorMessage = 'Failed to disband all batches.';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    }
+                    toastr.error(errorMessage);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    btn.find('.btn-text').removeClass('d-none');
+                    btn.find('.spinner-border').addClass('d-none');
                 }
             });
         }

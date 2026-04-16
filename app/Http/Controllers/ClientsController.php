@@ -12,6 +12,8 @@ use App\Models\ClientDocument;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
 use App\Models\ClientBankAccount;
+use App\Models\ReturnsMergeBatch;
+use App\Models\ReturnsMergeBatchItem;
 use App\Services\ErrorDispatcher;
 use App\Models\ClientOtherContact;
 use Illuminate\Support\Facades\DB;
@@ -332,7 +334,8 @@ class ClientsController extends Controller
         try {
             $clientId = Crypt::decrypt($encryptedId);
 
-            $properties = Property::with(['zone', 'zoneArea', 'fieldOfficer'])
+            $properties = Property::withInactive()
+                ->with(['zone', 'zoneArea', 'fieldOfficer'])
                 ->select([
                     'id',
                     'client_id',
@@ -363,6 +366,383 @@ class ClientsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading properties: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load properties'], 500);
+        }
+    }
+
+    /**
+     * Get related properties for a client based on current client id and matching landlord names (AJAX)
+     */
+    public function getRelatedProperties($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+            $client = Client::findOrFail($clientId);
+            $normalizedClientName = preg_replace('/\s+/', ' ', trim((string) $client->names));
+
+            // Find OTHER landlord records that share the same name — never include the current client
+            $relatedClientIds = [];
+            if (!empty($normalizedClientName)) {
+                $relatedClientIds = Client::clients()
+                    ->where('id', '!=', $client->id)
+                    ->whereRaw(
+                        "REGEXP_REPLACE(TRIM(COALESCE(names, '')), '\\s+', ' ', 'g') = ?",
+                        [$normalizedClientName]
+                    )
+                    ->pluck('id');
+            }
+
+            $properties = Property::withInactive()
+                ->select([
+                    'id',
+                    'client_id',
+                    'reference_number',
+                    'description',
+                    'property_name',
+                    'active',
+                ])
+                ->with('client')
+                ->whereIn('client_id', $relatedClientIds)
+                ->orderBy('property_name', 'asc')
+                ->get()
+                ->map(function ($property) {
+                    $landlord = $property->client;
+                    return [
+                        'id'              => $property->id,
+                        'property_url'    => route('property.properties.show', Crypt::encrypt($property->id)),
+                        'client_url'      => $property->client_id ? route('property.clients.show', Crypt::encrypt($property->client_id)) : null,
+                        'reference_number'    => $property->reference_number ?? '-',
+                        'description'         => $property->description ?? '-',
+                        'property_name'       => $property->property_name ?? '-',
+                        'status'              => (int) $property->active === 1 ? 'Active' : 'Inactive',
+                        'active'              => (int) $property->active,
+                        'landlord_name'  => $landlord ? ($landlord->names ?? '-') : '-',
+                        'landlord_ref'   => $landlord ? ($landlord->reference_number ?? '-') : '-',
+                        'landlord_phone' => $landlord ? ($landlord->mobile_number ?? '-') : '-',
+                        'landlord_email' => $landlord ? ($landlord->email_address ?? '-') : '-',
+                    ];
+                });
+
+            return response()->json(['data' => $properties]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading related properties: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load related properties'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: list merge batches for this landlord profile
+     */
+    public function getReturnsConfig($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+
+            $batches = ReturnsMergeBatch::with('items')
+                ->where('anchor_client_id', $clientId)
+                ->orderByDesc('id')
+                ->get()
+                ->map(function ($batch) {
+                    return [
+                        'id' => $batch->id,
+                        'batch_reference' => $batch->batch_reference,
+                        'landlord_name' => $batch->landlord_name,
+                        'landlord_ref' => $batch->landlord_ref,
+                        'items_count' => $batch->items->count(),
+                        'notes' => $batch->notes ?? '-',
+                        'items' => $batch->items->map(function ($item) {
+                            return [
+                                'property_id' => $item->property_id,
+                                'property_ref' => $item->property_ref ?? '-',
+                                'property_name' => $item->property_name ?? '-',
+                                'landlord_ref' => $item->landlord_ref ?? '-',
+                            ];
+                        })->values(),
+                        'created_at' => optional($batch->created_at)->format('Y-m-d H:i:s'),
+                    ];
+                });
+
+            return response()->json(['data' => $batches]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading returns config list: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load returns configuration'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: fetch available active properties for merge setup.
+     */
+    public function getReturnsConfigOptions($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+            $client = Client::findOrFail($clientId);
+
+            $eligibleProperties = $this->getEligibleReturnsMergeProperties($client);
+            $assignedMap = ReturnsMergeBatchItem::whereIn('property_id', $eligibleProperties->pluck('id'))
+                ->pluck('batch_id', 'property_id');
+
+            $allEligible = $eligibleProperties
+                ->map(function ($property) {
+                    return [
+                        'id' => $property->id,
+                        'reference_number' => $property->reference_number ?? '-',
+                        'property_name' => $property->property_name ?? '-',
+                        'client_id' => $property->client_id,
+                        'landlord_name' => optional($property->client)->names ?? '-',
+                        'landlord_ref' => optional($property->client)->reference_number ?? '-',
+                        'label' => ($property->reference_number ?? '-') . ' - ' . ($property->property_name ?? '-'),
+                    ];
+                })
+                ->values();
+
+            $allEligible = $allEligible->map(function ($row) use ($assignedMap) {
+                $row['assigned_batch_id'] = $assignedMap->get($row['id']);
+                return $row;
+            })->values();
+
+            $unbatched = $allEligible->filter(function ($row) {
+                return empty($row['assigned_batch_id']);
+            })->values();
+
+            return response()->json([
+                'all_eligible' => $allEligible,
+                'unbatched' => $unbatched,
+                'landlord' => [
+                    'id' => $client->id,
+                    'name' => $client->names,
+                    'reference_number' => $client->reference_number,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading returns config options: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load returns config options'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: get one batch with item ids for edit.
+     */
+    public function getReturnsConfigBatch($encryptedId, $batchId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+
+            $batch = ReturnsMergeBatch::with('items')
+                ->where('anchor_client_id', $clientId)
+                ->findOrFail($batchId);
+
+            return response()->json([
+                'data' => [
+                    'id' => $batch->id,
+                    'batch_reference' => $batch->batch_reference,
+                    'property_ids' => $batch->items->pluck('property_id')->values(),
+                    'notes' => $batch->notes,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading returns config batch: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load configuration details'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: create a merge batch.
+     */
+    public function storeReturnsConfig(Request $request, $encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+            $client = Client::findOrFail($clientId);
+
+            $validated = $request->validate([
+                'property_ids' => 'required|array|min:2',
+                'property_ids.*' => 'required|integer|distinct',
+                'notes' => 'nullable|string|max:500',
+            ]);
+
+            $propertyIds = array_values(array_unique(array_map('intval', $validated['property_ids'])));
+
+            $eligibleProperties = $this->getEligibleReturnsMergeProperties($client)->keyBy('id');
+
+            foreach ($propertyIds as $propertyId) {
+                if (!$eligibleProperties->has($propertyId)) {
+                    return response()->json([
+                        'error' => 'One or more selected properties are invalid, inactive, or not under the same landlord name.'
+                    ], 422);
+                }
+            }
+
+            $conflictPropertyIds = ReturnsMergeBatchItem::whereIn('property_id', $propertyIds)
+                ->pluck('property_id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+
+            if (!empty($conflictPropertyIds)) {
+                return response()->json([
+                    'error' => 'Some properties are already assigned to another merge batch. Remove overlaps and try again.'
+                ], 422);
+            }
+
+            DB::beginTransaction();
+
+            $batch = ReturnsMergeBatch::create([
+                'batch_reference' => $this->generateReturnsMergeReference(),
+                'anchor_client_id' => $client->id,
+                'landlord_name' => $client->names ?? '-',
+                'landlord_name_normalized' => $this->normalizeLandlordName((string) $client->names),
+                'landlord_id' => $client->id,
+                'landlord_ref' => $client->reference_number,
+                'notes' => $validated['notes'] ?? null,
+                'created_by' => Auth::id(),
+                'date_time' => now(),
+            ]);
+
+            foreach ($propertyIds as $propertyId) {
+                $property = $eligibleProperties->get($propertyId);
+                $landlord = $property->client;
+
+                ReturnsMergeBatchItem::create([
+                    'batch_id' => $batch->id,
+                    'property_id' => $property->id,
+                    'property_ref' => $property->reference_number,
+                    'property_name' => $property->property_name,
+                    'landlord_id' => $property->client_id,
+                    'landlord_ref' => optional($landlord)->reference_number,
+                    'landlord_name' => optional($landlord)->names,
+                    'date_time' => now(),
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json(['message' => 'Returns merge configuration created successfully.']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating returns config: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to create returns config'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: update an existing merge batch.
+     */
+    public function updateReturnsConfig(Request $request, $encryptedId, $batchId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+            $client = Client::findOrFail($clientId);
+
+            $batch = ReturnsMergeBatch::where('anchor_client_id', $client->id)->findOrFail($batchId);
+
+            $validated = $request->validate([
+                'property_ids' => 'required|array|min:2',
+                'property_ids.*' => 'required|integer|distinct',
+                'notes' => 'nullable|string|max:500',
+            ]);
+
+            $propertyIds = array_values(array_unique(array_map('intval', $validated['property_ids'])));
+
+            $eligibleProperties = $this->getEligibleReturnsMergeProperties($client)->keyBy('id');
+            foreach ($propertyIds as $propertyId) {
+                if (!$eligibleProperties->has($propertyId)) {
+                    return response()->json([
+                        'error' => 'One or more selected properties are invalid, inactive, or not under the same landlord name.'
+                    ], 422);
+                }
+            }
+
+            $conflictExists = ReturnsMergeBatchItem::whereIn('property_id', $propertyIds)
+                ->where('batch_id', '!=', $batch->id)
+                ->exists();
+
+            if ($conflictExists) {
+                return response()->json([
+                    'error' => 'Some selected properties already belong to another merge batch.'
+                ], 422);
+            }
+
+            DB::beginTransaction();
+
+            $batch->update([
+                'notes' => $validated['notes'] ?? null,
+                'updated_by' => Auth::id(),
+                'landlord_name' => $client->names ?? '-',
+                'landlord_name_normalized' => $this->normalizeLandlordName((string) $client->names),
+                'landlord_ref' => $client->reference_number,
+            ]);
+
+            ReturnsMergeBatchItem::where('batch_id', $batch->id)->delete();
+
+            foreach ($propertyIds as $propertyId) {
+                $property = $eligibleProperties->get($propertyId);
+                $landlord = $property->client;
+
+                ReturnsMergeBatchItem::create([
+                    'batch_id' => $batch->id,
+                    'property_id' => $property->id,
+                    'property_ref' => $property->reference_number,
+                    'property_name' => $property->property_name,
+                    'landlord_id' => $property->client_id,
+                    'landlord_ref' => optional($landlord)->reference_number,
+                    'landlord_name' => optional($landlord)->names,
+                    'date_time' => now(),
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json(['message' => 'Returns merge configuration updated successfully.']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating returns config: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to update returns config'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: delete a merge batch.
+     */
+    public function deleteReturnsConfig($encryptedId, $batchId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+
+            $batch = ReturnsMergeBatch::where('anchor_client_id', $clientId)->findOrFail($batchId);
+            $batch->delete();
+
+            return response()->json(['message' => 'Returns merge configuration deleted successfully.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error deleting returns config: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to delete returns config'], 500);
+        }
+    }
+
+    /**
+     * Returns Config: disband all batches for current landlord profile.
+     */
+    public function disbandAllReturnsConfig($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+
+            ReturnsMergeBatch::where('anchor_client_id', $clientId)->delete();
+
+            return response()->json(['message' => 'All merge batches have been disbanded.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error disbanding all returns config: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to disband all merge batches'], 500);
         }
     }
 
@@ -903,6 +1283,43 @@ class ClientsController extends Controller
             'next_of_kin.*.relation' => 'nullable|string|max:100',
             'next_of_kin.*.national_id' => 'nullable|string|max:50',
         ]);
+    }
+
+    private function normalizeLandlordName(string $name): string
+    {
+        return preg_replace('/\s+/', ' ', trim($name));
+    }
+
+    private function getEligibleReturnsMergeProperties(Client $client)
+    {
+        $normalizedClientName = $this->normalizeLandlordName((string) $client->names);
+
+        $relatedClientIds = collect([$client->id]);
+        if (!empty($normalizedClientName)) {
+            $relatedClientIds = Client::clients()
+                ->whereRaw(
+                    "REGEXP_REPLACE(TRIM(COALESCE(names, '')), '\\s+', ' ', 'g') = ?",
+                    [$normalizedClientName]
+                )
+                ->pluck('id');
+        }
+
+        return Property::withInactive()
+            ->with('client:id,names,reference_number')
+            ->select(['id', 'client_id', 'reference_number', 'property_name', 'active'])
+            ->where('active', 1)
+            ->whereIn('client_id', $relatedClientIds)
+            ->orderBy('property_name', 'asc')
+            ->get();
+    }
+
+    private function generateReturnsMergeReference(): string
+    {
+        do {
+            $reference = 'RMB-' . now()->format('Ymd-His') . '-' . random_int(100, 999);
+        } while (ReturnsMergeBatch::where('batch_reference', $reference)->exists());
+
+        return $reference;
     }
 
     /**

@@ -15,8 +15,21 @@ use App\Models\ReturnClient;
 use App\Jobs\UpdateAbstractThresholdsJob;
 use Barryvdh\DomPDF\Facade\Pdf;
 
+use App\Traits\ReturnsRentLinesTrait;
+use App\Traits\ReturnsPayThresholdTrait;
+use App\Traits\ReturnsDeductionsTrait;
+use App\Traits\ReturnsSummaryTrait;
+use App\Traits\ReturnsMasterReturnTrait;
+use App\Traits\ReturnsLandlordAccountTrait;
+
 class ClientReturnsController extends Controller
 {
+    use ReturnsRentLinesTrait;
+    use ReturnsPayThresholdTrait;
+    use ReturnsDeductionsTrait;
+    use ReturnsSummaryTrait;
+    use ReturnsMasterReturnTrait;
+    use ReturnsLandlordAccountTrait;
     /**
      * Display the unpaid returns listing page
      */
@@ -644,169 +657,95 @@ class ClientReturnsController extends Controller
             return redirect()->back()->with('error', 'Failed to load returns generation page');
         }
     }
+
     /**
-     * Process returns generation
-     * 3 raw SQL queries wrapped in a transaction:
-     * 1) INSERT rent lines into cb_returns_clients (with commission_amount & vat_amount)
-     * 2) UPDATE pay_percentage + net_amount + zero commission/vat for non-payable
-     * 3) INSERT aggregated summaries into cb_returns_summary
+     * Process returns generation using modular traits.
+     * 
+     * Flow:
+     * 1) Insert rent CR lines from invoices (ReturnsRentLinesTrait)
+     * 2) Update pay threshold percentages (ReturnsPayThresholdTrait)
+     * 3) Insert deductions: advances, recoveries, collections (ReturnsDeductionsTrait)
+     * 4) Insert MAINRETURN summaries (ReturnsSummaryTrait)
+     * 5) Generate MASTERRETURNs for batched properties (ReturnsMasterReturnTrait)
+     * 6) Mark landlord account entries as recovered (ReturnsLandlordAccountTrait)
+     * 7) Create approval workflow items
+     * 
+     * Supports optional property_id for single-property generation.
      */
     public function processGenerate(Request $request)
     {
         try {
             $request->validate([
-                'returns_month' => 'required|date_format:Y-m'
+                'returns_month' => 'required|date_format:Y-m',
+                'property_id'   => 'nullable|integer|exists:sys_pm_properties,id'
             ]);
+
+            // Parse input parameters
             $returnsMonth = $request->returns_month; // YYYY-MM
             $returnPeriod = str_replace('-', '', $returnsMonth); // YYYYMM
-            $generationDate = now();
             $generatedBy = Auth::id();
+            $propertyId = $request->property_id ? (int) $request->property_id : null;
 
             [$returnYear, $returnMonthNum] = explode('-', $returnsMonth);
             $returnYear = (int) $returnYear;
             $returnMonthNum = (int) $returnMonthNum;
             $monthName = date('F', mktime(0, 0, 0, $returnMonthNum, 1, $returnYear));
-            $prevDate = date('Y-m', strtotime($returnsMonth . '-01 -1 month'));
             $monthStart = $returnsMonth . '-01';
-            $nextMonthStart = date('Y-m-d', strtotime($monthStart . ' +1 month'));
-            $prevMonthStart = $prevDate . '-01';
+            $prevMonthStart = date('Y-m-01', strtotime($monthStart . ' -1 month'));
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
 
             DB::beginTransaction();
 
             // ═══════════════════════════════════════════════════════════════════
-            // COUNT INVOICES
+            // VALIDATION: Check for approved invoices
             // ═══════════════════════════════════════════════════════════════════
-            $totalInvoices = DB::selectOne("
-                SELECT COUNT(*) as cnt FROM sys_pm_debtors_invoices i
-                WHERE i.date_due = ?::date
-                  AND i.current_status_id = 1
-                  AND i.debtor_type_id = '2'
-                  AND i.property_id IS NOT NULL
-                  AND i.unit_id IS NOT NULL
-                  AND i.lease_id IS NOT NULL
-                  AND i.tenant_id IS NOT NULL
-            ", [$monthStart])->cnt;
+            $totalInvoices = $this->countApprovedInvoices($monthStart, $propertyId);
 
             if ($totalInvoices == 0) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => 'No approved invoices found for the selected period.'
+                    'message' => $propertyId
+                        ? 'No approved invoices found for this property in the selected period.'
+                        : 'No approved invoices found for the selected period.'
                 ], 422);
             }
 
             Log::info("=== RETURN GENERATION START ===", [
-                'returns_month' => $returnsMonth,
+                'returns_month'  => $returnsMonth,
                 'total_invoices' => $totalInvoices,
+                'property_id'    => $propertyId,
             ]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // BLOCK IF RETURNS ALREADY EXIST FOR THIS PERIOD
+            // VALIDATION: Check if returns already exist
             // ═══════════════════════════════════════════════════════════════════
-            $existingCount = DB::selectOne("
-                SELECT COUNT(*) as cnt FROM cb_returns_summary
-                WHERE year = ? AND month = ?
-            ", [$returnYear, $returnMonthNum])->cnt;
-
-            if ($existingCount > 0) {
+            if ($this->returnsExistForPeriod($returnPeriod, $propertyId)) {
                 DB::rollBack();
+                $propMsg = $propertyId ? ' for this property' : '';
                 return response()->json([
                     'success' => false,
-                    'message' => "Returns for {$monthName} {$returnYear} have already been generated and cannot be regenerated."
+                    'message' => "Returns for {$monthName} {$returnYear} have already been generated{$propMsg} and cannot be regenerated."
                 ], 422);
             }
 
             // Get next return_id base
-            $baseReturnId = DB::selectOne("SELECT COALESCE(MAX(return_id), 35217) + 1 as next_id FROM cb_returns_summary")->next_id;
-
-            // Common WHERE clause for invoice selection
-            $invoiceWhere = "
-                i.date_due = ?::date
-                AND i.current_status_id = 1
-                AND i.debtor_type_id = '2'
-                AND i.property_id IS NOT NULL
-                AND i.unit_id IS NOT NULL
-                AND i.lease_id IS NOT NULL
-                AND i.tenant_id IS NOT NULL
-            ";
-
-            // Common JOINs
-            $invoiceJoins = "
-                FROM sys_pm_debtors_invoices i
-                JOIN sys_pm_properties p ON p.id = i.property_id
-                JOIN sys_pm_units u ON u.id = i.unit_id
-                JOIN sys_pm_clients t ON t.id = i.tenant_id
-                LEFT JOIN sys_pm_service_agreements s ON s.property_id = i.property_id
-                LEFT JOIN sys_pm_clients c ON c.id = s.client_d
-            ";
-
-            // Approved-return exclusion
-            $notApproved = "
-                AND NOT EXISTS (
-                    SELECT 1 FROM cb_returns_summary rs
-                    WHERE rs.return_code = 'R1' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number
-                      AND rs.approved_status = 1
-                )
-            ";
-
-            $baseBindings = [$monthStart, $returnPeriod];
+            $baseReturnId = $this->getNextReturnIdBase();
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 1: INSERT RENT LINES (one per invoice/tenant)
+            // STEP 1: INSERT RENT LINES (ReturnsRentLinesTrait)
             // ═══════════════════════════════════════════════════════════════════
-            $rentInserted = DB::affectingStatement("
-                INSERT INTO cb_returns_clients (
-                    return_code, return_period, transaction_number, transaction_date,
-                    entry_description, entry_type, dr_cr,
-                    property_code, unit_code, tenant_name,
-                    net_amount, amount_payable_landlord,
-                    vat_amount, commission_amount,
-                    property_id, client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
-                    return_id, invoice_id, narration, transaction_ref,
-                    is_commissionable, server_time, user_id
-                )
-                SELECT
-                    'R1' || ? || COALESCE(c.reference_number, 'UNKNOWN') || p.reference_number,
-                    ?::integer,
-                    '',
-                    ?,
-                    'RENT',
-                    'RENT CURRENT',
-                    'CR',
-                    p.reference_number,
-                    u.unit_code,
-                    t.names,
-                    i.total_amount,
-                    i.total_amount,
-                    ROUND(ROUND(i.total_amount * COALESCE(s.commission_percentage, 0) / 100, 2) * COALESCE(s.vat_per, 16) / 100, 2),
-                    ROUND(i.total_amount * COALESCE(s.commission_percentage, 0) / 100, 2),
-                    i.property_id,
-                    COALESCE(s.client_d, 0),
-                    i.zone_id,
-                    i.field_officer_id,
-                    i.zone_supervisor_id,
-                    i.zone_manager_id,
-                    i.unit_id,
-                    i.tenant_id,
-                    ? + DENSE_RANK() OVER (ORDER BY i.property_id) - 1,
-                    i.id,
-                    'Rent for {$monthName} {$returnYear}',
-                    i.reference_number,
-                    'Yes',
-                    NOW(),
-                    ?
-                {$invoiceJoins}
-                WHERE {$invoiceWhere}
-                {$notApproved}
-            ", array_merge(
-                [$returnPeriod, $returnPeriod, $transactionDate, $baseReturnId, $generatedBy],
-                $baseBindings
-            ));
-
-            Log::info("Query 1: Rent lines inserted", ['count' => $rentInserted]);
+            $rentInserted = $this->insertRentLines(
+                $returnPeriod,
+                $monthStart,
+                $transactionDate,
+                $baseReturnId,
+                $generatedBy,
+                $monthName,
+                $returnYear,
+                $propertyId
+            );
 
             if ($rentInserted == 0) {
                 DB::rollBack();
@@ -816,478 +755,130 @@ class ClientReturnsController extends Controller
                 ], 422);
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // QUERY 2: UPDATE PAY PERCENTAGE, PAYABLE STATUS & NET AMOUNT
-            // Sets threshold from prev-month invoice, then zeroes net_amount
-            // for non-payable tenants (<85%) in a single UPDATE
-            // ═══════════════════════════════════════════════════════════════════
-            DB::statement("
-                UPDATE cb_returns_clients rc
-                SET pay_percentage = sub.pct,
-                    current_balance = sub.prev_balance,
-                    total_amount = sub.prev_total,
-                    threshold_percentage = sub.pct_num,
-                    payable_status = sub.pay_status,
-                    net_amount = CASE WHEN sub.pay_status IN (1, 2, 3) THEN rc.amount_payable_landlord ELSE 0 END,
-                    commission_amount = CASE WHEN sub.pay_status IN (1, 2, 3) THEN rc.commission_amount ELSE 0 END,
-                    vat_amount = CASE WHEN sub.pay_status IN (1, 2, 3) THEN rc.vat_amount ELSE 0 END
-                FROM (
-                    SELECT
-                        rc2.id AS rc_id,
-                        COALESCE(pi.current_balance, 0) AS prev_balance,
-                        COALESCE(pi.total_amount, 0) AS prev_total,
-                        CASE
-                            WHEN pi.id IS NOT NULL THEN
-                                CASE
-                                    WHEN pi.total_amount > 0 AND pi.current_balance <= 0 THEN 100.00
-                                    WHEN pi.total_amount > 0 AND pi.current_balance >= pi.total_amount THEN 0.00
-                                    WHEN pi.total_amount > 0 THEN ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2)
-                                    ELSE 0.00
-                                END
-                            WHEN NOT EXISTS (
-                                SELECT 1 FROM sys_pm_debtors_invoices older
-                                WHERE older.tenant_id = rc2.tenant_id
-                                  AND older.date_due < ?::date
-                                  AND older.current_status_id = 1
-                                  AND older.debtor_type_id = '2'
-                            ) THEN 100.00
-                            ELSE 0.00
-                        END AS pct_num,
-                        CASE
-                            WHEN pi.id IS NOT NULL THEN
-                                CASE
-                                    WHEN pi.total_amount > 0 AND pi.current_balance <= 0 THEN '100'
-                                    WHEN pi.total_amount > 0 AND pi.current_balance >= pi.total_amount THEN '0'
-                                    WHEN pi.total_amount > 0 THEN ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2)::text
-                                    ELSE '0'
-                                END
-                            WHEN NOT EXISTS (
-                                SELECT 1 FROM sys_pm_debtors_invoices older
-                                WHERE older.tenant_id = rc2.tenant_id
-                                  AND older.date_due < ?::date
-                                  AND older.current_status_id = 1
-                                  AND older.debtor_type_id = '2'
-                            ) THEN '100'
-                            ELSE '0'
-                        END AS pct,
-                        CASE
-                            WHEN pi.id IS NOT NULL AND (
-                                (pi.total_amount > 0 AND pi.current_balance <= 0)
-                                OR (pi.total_amount > 0 AND ROUND(((pi.total_amount - pi.current_balance) / pi.total_amount) * 100, 2) >= 85)
-                            ) THEN 1
-                            WHEN pi.id IS NULL AND NOT EXISTS (
-                                SELECT 1 FROM sys_pm_debtors_invoices older
-                                WHERE older.tenant_id = rc2.tenant_id
-                                  AND older.date_due < ?::date
-                                  AND older.current_status_id = 1
-                                  AND older.debtor_type_id = '2'
-                            ) THEN 1
-                            ELSE 0
-                        END AS pay_status
-                    FROM cb_returns_clients rc2
-                    LEFT JOIN LATERAL (
-                        SELECT pi2.id, pi2.current_balance, pi2.total_amount
-                        FROM sys_pm_debtors_invoices pi2
-                        WHERE pi2.tenant_id = rc2.tenant_id
-                          AND pi2.date_due >= ?::date AND pi2.date_due < ?::date
-                          AND pi2.current_status_id = 1
-                          AND pi2.debtor_type_id = '2'
-                        ORDER BY pi2.id DESC LIMIT 1
-                    ) pi ON true
-                    WHERE rc2.return_period = ?
-                      AND rc2.entry_type = 'RENT CURRENT'
-                ) sub
-                WHERE rc.id = sub.rc_id
-            ", [
-                $monthStart,
-                $monthStart,
-                $monthStart,
-                $prevMonthStart,
-                $monthStart,
-                $returnPeriod
-            ]);
-
-            Log::info("Query 2: Updated pay percentages, net_amount, commission and vat");
+            Log::info("Step 1: Rent lines inserted", ['count' => $rentInserted, 'property_id' => $propertyId]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 2B: INSERT Advance Payments from Landlord Account as DR lines
-            // Picks up all debit entries scheduled for this return period.
-            // year+month on cb_landlord_account = WHEN to recover (schedule target).
-            // recovery_year+recovery_month = WHEN it was actually recovered (written by Q3B).
-            // The LATERAL join implicitly limits to properties in this batch.
+            // STEP 2: UPDATE PAY THRESHOLDS (ReturnsPayThresholdTrait)
             // ═══════════════════════════════════════════════════════════════════
-            $advancesInserted = DB::affectingStatement("
-                INSERT INTO cb_returns_clients (
-                    return_code, return_period, transaction_number, transaction_date,
-                    entry_description, entry_type, dr_cr,
-                    property_code, net_amount, narration,
-                    property_id, client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id,
-                    return_id, deduction_point_2, is_commissionable,
-                    server_time, user_id
-                )
-                SELECT
-                    rc_base.return_code,
-                    ?::integer,
-                    '',
-                    ?,
-                    la.entry_description,
-                    'Advance Payments-From Landlord Acc',
-                    'DR',
-                    rc_base.property_code,
-                    la.debit_amount,
-                    COALESCE(la.entry_particulars, la.entry_description),
-                    la.property_id,
-                    la.client_id,
-                    rc_base.zone_id,
-                    rc_base.field_officer_id,
-                    rc_base.zone_supervisor_id,
-                    rc_base.zone_manager_id,
-                    rc_base.return_id,
-                    NULL,
-                    'No',
-                    NOW(),
-                    ?
-                FROM cb_landlord_account la
-                JOIN LATERAL (
-                    SELECT return_code, return_id, property_code,
-                           zone_id, field_officer_id, zone_supervisor_id, zone_manager_id
-                    FROM cb_returns_clients
-                    WHERE return_period = ? AND property_id = la.property_id
-                    LIMIT 1
-                ) rc_base ON true
-                WHERE la.debit_amount > 0
-                  AND la.is_recovered = 0
-                  AND la.year = ?
-                  AND la.month = ?
-                  AND la.entry_type_code != '0005'
-            ", [$returnPeriod, $transactionDate, $generatedBy, $returnPeriod, $returnYear, $returnMonthNum]);
+            $this->updatePayThresholds($returnPeriod, $monthStart, $prevMonthStart, $propertyId);
 
-            Log::info("Query 2B: Advance payment DR lines inserted", ['count' => $advancesInserted]);
+            Log::info("Step 2: Pay thresholds updated");
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 2C: INSERT Recoveries from cb_money_recoveries as DR lines
-            // Picks up DR-class entries for this year/month not yet linked to a return.
-            // The LATERAL join implicitly limits to properties in this batch.
+            // STEP 3: INSERT DEDUCTIONS (ReturnsDeductionsTrait)
             // ═══════════════════════════════════════════════════════════════════
-            $recoveriesInserted = DB::affectingStatement("
-                INSERT INTO cb_returns_clients (
-                    return_code, return_period, transaction_number, transaction_date,
-                    entry_description, entry_type, dr_cr,
-                    property_code, unit_code, tenant_name,
-                    net_amount, narration,
-                    property_id, client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
-                    return_id, deduction_point_2, is_commissionable,
-                    server_time, user_id
-                )
-                SELECT
-                    rc_base.return_code,
-                    ?::integer,
-                    COALESCE(mr.transaction_number, ''),
-                    ?,
-                    mr.transaction_description,
-                    'Recoveries',
-                    'DR',
-                    rc_base.property_code,
-                    mr.unit_code,
-                    mr.tenant_name,
-                    mr.debit_amount,
-                    mr.transaction_description,
-                    mr.property_id,
-                    mr.client_id,
-                    mr.zone_id,
-                    mr.field_officer_id,
-                    mr.zone_supervisor_id,
-                    mr.zone_manager_id,
-                    mr.unit_id,
-                    mr.tenant_id,
-                    rc_base.return_id,
-                    'After Comm',
-                    'No',
-                    NOW(),
-                    ?
-                FROM cb_money_recoveries mr
-                JOIN LATERAL (
-                    SELECT return_code, return_id, property_code
-                    FROM cb_returns_clients
-                    WHERE return_period = ? AND property_id = mr.property_id
-                    LIMIT 1
-                ) rc_base ON true
-                WHERE mr.transaction_class = 'DR'
-                  AND mr.year = ?
-                  AND mr.month = ?
-                  AND mr.return_id IS NULL
-            ", [$returnPeriod, $transactionDate, $generatedBy, $returnPeriod, $returnYear, $returnMonthNum]);
-
-            Log::info("Query 2C: Recovery DR lines inserted", ['count' => $recoveriesInserted]);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // QUERY 2D: INSERT CR collections from cb_money_recoveries as CR lines
-            // Water Bills, Service Charges, Electricity Bills, etc. collected
-            // from tenants that form part of the landlord's return credit.
-            // Mirrors how CHRACT CR rows appeared in CHRTXS as OTHER PAYMENTS/DEPOSITS.
-            // ═══════════════════════════════════════════════════════════════════
-            $collectionsInserted = DB::affectingStatement("
-                INSERT INTO cb_returns_clients (
-                    return_code, return_period, transaction_number, transaction_date,
-                    entry_description, entry_type, dr_cr,
-                    property_code, unit_code, tenant_name,
-                    net_amount, amount_payable_landlord, narration,
-                    property_id, client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
-                    return_id, is_commissionable, transaction_source,
-                    server_time, user_id
-                )
-                SELECT
-                    rc_base.return_code,
-                    ?::integer,
-                    COALESCE(mr.transaction_number, ''),
-                    ?,
-                    mr.transaction_type,
-                    'OTHER PAYMENTS/DEPOSITS',
-                    'CR',
-                    rc_base.property_code,
-                    mr.unit_code,
-                    mr.tenant_name,
-                    mr.credit_amount,
-                    mr.credit_amount,
-                    mr.transaction_description,
-                    mr.property_id,
-                    mr.client_id,
-                    mr.zone_id,
-                    mr.field_officer_id,
-                    mr.zone_supervisor_id,
-                    mr.zone_manager_id,
-                    mr.unit_id,
-                    mr.tenant_id,
-                    rc_base.return_id,
-                    'No',
-                    'TENANT ACCOUNT',
-                    NOW(),
-                    ?
-                FROM cb_money_recoveries mr
-                JOIN LATERAL (
-                    SELECT return_code, return_id, property_code
-                    FROM cb_returns_clients
-                    WHERE return_period = ? AND property_id = mr.property_id
-                    LIMIT 1
-                ) rc_base ON true
-                WHERE mr.transaction_class = 'CR'
-                  AND mr.year = ?
-                  AND mr.month = ?
-                  AND mr.return_id IS NULL
-            ", [$returnPeriod, $transactionDate, $generatedBy, $returnPeriod, $returnYear, $returnMonthNum]);
-
-            Log::info("Query 2D: Tenant collection CR lines inserted", ['count' => $collectionsInserted]);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // QUERY 3: INSERT SUMMARIES INTO cb_returns_summary
-            // ═══════════════════════════════════════════════════════════════════
-            $q3 = "
-                INSERT INTO cb_returns_summary (
-                    return_code, landlord_code, property_code, year, month,
-                    return_description, return_period, return_type,
-                    commission_rate, total_credit, commission_total, vatable_total,
-                    commission_amount, total_debit, net_amount,
-                    transaction_amount, net_balance,
-                    prepared_by, prepared_status, prepared_date,
-                    approved_status, paid_status, return_id,
-                    payable_amount, non_payable_amount, payable_units, total_units
-                )
-                SELECT
-                    rc.return_code,
-                    COALESCE(
-                        (SELECT cl.reference_number FROM sys_pm_clients cl WHERE cl.id = rc.client_id LIMIT 1),
-                        'UNKNOWN'
-                    ) AS landlord_code,
-                    rc.property_code,
-                    ? AS year,
-                    ? AS month,
-                    COALESCE(
-                        (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.id = rc.property_id LIMIT 1),
-                        rc.property_code
-                    ) || '-{$monthName} {$returnYear}' AS return_description,
-                    ? AS return_period,
-                    'MAINRETURN' AS return_type,
-                    CASE WHEN SUM(rc.commission_amount) > 0
-                              AND SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) > 0
-                        THEN ROUND(SUM(rc.commission_amount) / SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) * 100, 2)
-                        ELSE 0
-                    END AS commission_rate,
-                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS total_credit,
-                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS commission_total,
-                    0 AS vatable_total,
-                    SUM(rc.commission_amount) AS commission_amount,
-                    SUM(rc.commission_amount) + SUM(rc.vat_amount)
-                        + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
-                    SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
-                        - SUM(rc.commission_amount) - SUM(rc.vat_amount)
-                        - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS net_amount,
-                    0 AS transaction_amount,
-                    0 AS net_balance,
-                    ? AS prepared_by,
-                    1 AS prepared_status,
-                    NOW() AS prepared_date,
-                    0 AS approved_status,
-                    0 AS paid_status,
-                    rc.return_id,
-                    SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.net_amount ELSE 0 END) AS payable_amount,
-                    SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND (rc.payable_status = 0 OR rc.payable_status IS NULL) THEN rc.amount_payable_landlord ELSE 0 END) AS non_payable_amount,
-                    COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.unit_id END) AS payable_units,
-                    COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
-                FROM cb_returns_clients rc
-                WHERE rc.return_period = ?
-                  AND NOT EXISTS (
-                      SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code
-                  )
-                GROUP BY rc.return_code, rc.property_code, rc.property_id, rc.client_id, rc.return_id
-            ";
-
-            $summaryCount = DB::affectingStatement(
-                $q3,
-                [$returnYear, $returnMonthNum, $returnPeriod, $preparedByName, $returnPeriod]
+            $advancesInserted = $this->insertAdvancePaymentLines(
+                $returnPeriod,
+                $transactionDate,
+                $generatedBy,
+                $returnYear,
+                $returnMonthNum,
+                $propertyId
             );
 
-            Log::info("Query 3: Inserted summaries", ['summaries' => $summaryCount]);
+            $recoveriesInserted = $this->insertRecoveryLines(
+                $returnPeriod,
+                $transactionDate,
+                $generatedBy,
+                $returnYear,
+                $returnMonthNum,
+                $propertyId
+            );
+
+            $collectionsInserted = $this->insertCollectionLines(
+                $returnPeriod,
+                $transactionDate,
+                $generatedBy,
+                $returnYear,
+                $returnMonthNum,
+                $propertyId
+            );
+
+            Log::info("Step 3: Deductions inserted", [
+                'advances'    => $advancesInserted,
+                'recoveries'  => $recoveriesInserted,
+                'collections' => $collectionsInserted,
+                'property_id' => $propertyId
+            ]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 3B: Mark landlord account entries as recovered
-            // Uses the same filter as Q2B; DISTINCT property_id→return_code join
-            // avoids any per-row lookups.
+            // STEP 4: INSERT MAINRETURN SUMMARIES (ReturnsSummaryTrait)
+            // Uses original logic to calculate correct aggregates
             // ═══════════════════════════════════════════════════════════════════
-            DB::statement("
-                UPDATE cb_landlord_account la
-                SET is_recovered = 1,
-                    recovery_year        = ?,
-                    recovery_month       = ?,
-                    return_code          = rc_base.return_code,
-                    recovery_server_time = NOW()
-                FROM (
-                    SELECT DISTINCT ON (property_id) property_id, return_code
-                    FROM cb_returns_clients
-                    WHERE return_period = ?
-                      AND return_code LIKE 'R1%'
-                    ORDER BY property_id, return_code
-                ) rc_base
-                WHERE la.property_id = rc_base.property_id
-                  AND la.debit_amount > 0
-                  AND la.is_recovered = 0
-                  AND la.year  = ?
-                  AND la.month = ?
-                  AND la.entry_type_code != '0005'
-            ", [$returnYear, $returnMonthNum, $returnPeriod, $returnYear, $returnMonthNum]);
+            $summaryCount = $this->insertMainReturnSummariesLegacy(
+                $returnPeriod,
+                $returnYear,
+                $returnMonthNum,
+                $monthName,
+                $preparedByName,
+                $propertyId
+            );
+
+            Log::info("Step 4: MAINRETURN summaries inserted", ['count' => $summaryCount, 'property_id' => $propertyId]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // QUERY 3C: Link money recoveries to their new return_id
+            // STEP 5: GENERATE MASTERRETURNs (ReturnsMasterReturnTrait)
+            // Aggregates properties from cb_returns_merge_batches config
+            // Skip if processing a single property (MASTERRETURN needs all batch properties)
             // ═══════════════════════════════════════════════════════════════════
-            DB::statement("
-                UPDATE cb_money_recoveries mr
-                SET return_id  = rs.id,
-                    is_locked  = true
-                FROM cb_returns_summary rs
-                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-                WHERE mr.year  = ?
-                  AND mr.month = ?
-                  AND mr.return_id IS NULL
-                  AND mr.property_id = p.id
-                  AND rs.return_period = ?
-                  AND rs.approved_status = 0
-            ", [$returnYear, $returnMonthNum, $returnPeriod]);
-
-            Log::info("Query 3B/3C: Landlord account marked recovered, recoveries linked");
+            $masterReturnCount = 0;
+            if (!$propertyId) {
+                $masterReturnCount = $this->generateMasterReturns(
+                    $returnPeriod,
+                    $transactionDate,
+                    $generatedBy,
+                    $returnYear,
+                    $returnMonthNum
+                );
+                Log::info("Step 5: MASTERRETURNs generated", ['count' => $masterReturnCount]);
+            } else {
+                Log::info("Step 5: MASTERRETURN generation skipped (single property mode)", ['property_id' => $propertyId]);
+            }
 
             // ═══════════════════════════════════════════════════════════════════
-            // CREATE APPROVAL WORKFLOW ITEMS FOR NEW SUMMARIES (bulk SQL)
+            // STEP 6: MARK AS RECOVERED (ReturnsDeductionsTrait + ReturnsLandlordAccountTrait)
             // ═══════════════════════════════════════════════════════════════════
-            $userId = auth()->id();
-            $clientIp = request()->ip();
+            $this->markLandlordAccountRecovered($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
+            $this->linkMoneyRecoveriesToReturns($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
 
-            // Q4: Bulk insert approval items
-            $approvalCount = DB::affectingStatement("
-                INSERT INTO cb_approval_items (
-                    item_type, item_id, item_reference, status,
-                    current_level, total_levels, initiated_by, initiated_at,
-                    created_at, updated_at
-                )
-                SELECT
-                    'return_summary', rs.id, rs.return_code, 'Pending',
-                    1, 4, ?, NOW(),
-                    NOW(), NOW()
-                FROM cb_returns_summary rs
-                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-                WHERE rs.return_period = ?
-                  AND rs.approved_status = 0
-                  AND p.field_officer_id IS NOT NULL
-                ON CONFLICT (item_type, item_id) DO NOTHING
-            ", [$userId, $returnPeriod]);
+            Log::info("Step 6: Landlord account entries marked recovered", ['property_id' => $propertyId]);
 
-            // Q5: Bulk insert level-1 approvers
-            DB::statement("
-                INSERT INTO cb_item_approvers (
-                    approval_item_id, approver_id, approver_level,
-                    is_optional, approval_status, assigned_at,
-                    created_at, updated_at
-                )
-                SELECT
-                    ai.id, p.field_officer_id, 1,
-                    0, 'Pending', NOW(),
-                    NOW(), NOW()
-                FROM cb_approval_items ai
-                JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
-                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-                WHERE rs.return_period = ?
-                  AND NOT EXISTS (
-                      SELECT 1 FROM cb_item_approvers ia
-                      WHERE ia.approval_item_id = ai.id AND ia.approver_level = 1
-                  )
-            ", [$returnPeriod]);
+            // ═══════════════════════════════════════════════════════════════════
+            // STEP 7: CREATE APPROVAL WORKFLOW ITEMS
+            // ═══════════════════════════════════════════════════════════════════
+            $approvalCount = $this->createApprovalWorkflowItems($returnPeriod, $generatedBy, $propertyId);
 
-            // Q6: Bulk insert initial actions
-            DB::statement("
-                INSERT INTO cb_approval_actions (
-                    item_approver_id, approval_item_id, actor_id,
-                    from_level, to_level, action, comments,
-                    action_timestamp, ip_address, sequence_number, is_current,
-                    created_at, updated_at
-                )
-                SELECT
-                    ia.id, ai.id, ?,
-                    0, 1, 'Initiated', 'Return submitted for approval',
-                    NOW(), ?, 1, 1,
-                    NOW(), NOW()
-                FROM cb_item_approvers ia
-                JOIN cb_approval_items ai ON ai.id = ia.approval_item_id
-                JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
-                WHERE rs.return_period = ?
-                  AND ia.approver_level = 1
-                  AND NOT EXISTS (
-                      SELECT 1 FROM cb_approval_actions aa
-                      WHERE aa.item_approver_id = ia.id AND aa.action = 'Initiated'
-                  )
-            ", [$userId, $clientIp, $returnPeriod]);
-
-            Log::info("Approval items created", ['count' => $approvalCount]);
+            Log::info("Step 7: Approval items created", ['count' => $approvalCount, 'property_id' => $propertyId]);
 
             DB::commit();
 
             Log::info("=== RETURN GENERATION COMPLETE ===", [
-                'client_lines'       => $rentInserted,
-                'advance_lines'      => $advancesInserted,
-                'recovery_lines'     => $recoveriesInserted,
-                'collection_lines'   => $collectionsInserted,
-                'summaries'          => $summaryCount,
-                'returns_month'      => $returnsMonth,
+                'rent_lines'       => $rentInserted,
+                'advance_lines'    => $advancesInserted,
+                'recovery_lines'   => $recoveriesInserted,
+                'collection_lines' => $collectionsInserted,
+                'main_returns'     => $summaryCount,
+                'master_returns'   => $masterReturnCount,
+                'returns_month'    => $returnsMonth,
+                'property_id'      => $propertyId,
+                'mode'             => $propertyId ? 'single_property' : 'all_properties'
             ]);
 
             $totalLines = $rentInserted + $advancesInserted + $recoveriesInserted + $collectionsInserted;
-            $message = "Client returns generated successfully for {$summaryCount} properties ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery + {$collectionsInserted} collection lines)";
+            $propLabel = $propertyId ? " for property ID {$propertyId}" : "";
+            $message = "Client returns generated successfully{$propLabel}: {$summaryCount} MAINRETURN(s)";
+            if ($masterReturnCount > 0) {
+                $message .= ", {$masterReturnCount} MASTERRETURN(s)";
+            }
+            $message .= " ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery + {$collectionsInserted} collection lines)";
 
             return response()->json([
-                'success' => true,
-                'message' => $message,
-                'count' => $rentInserted,
-                'properties_count' => $summaryCount
+                'success'          => true,
+                'message'          => $message,
+                'count'            => $rentInserted,
+                'properties_count' => $summaryCount,
+                'master_count'     => $masterReturnCount,
+                'property_id'      => $propertyId
             ]);
         } catch (Exception $e) {
             DB::rollBack();
@@ -1299,6 +890,189 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to generate returns: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Insert MAINRETURN summaries using original aggregation logic.
+     * Kept separate to ensure accurate calculations.
+     */
+    protected function insertMainReturnSummariesLegacy(
+        string $returnPeriod,
+        int $returnYear,
+        int $returnMonthNum,
+        string $monthName,
+        string $preparedByName,
+        ?int $propertyId = null
+    ): int {
+        $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
+
+        $q3 = "
+            INSERT INTO cb_returns_summary (
+                return_code, landlord_code, property_code, year, month,
+                return_description, return_period, return_type,
+                commission_rate, total_credit, commission_total, vatable_total,
+                commission_amount, total_debit, net_amount,
+                transaction_amount, net_balance,
+                prepared_by, prepared_status, prepared_date,
+                approved_status, paid_status, return_id,
+                payable_amount, non_payable_amount, payable_units, total_units
+            )
+            SELECT
+                rc.return_code,
+                COALESCE(
+                    (SELECT cl.reference_number FROM sys_pm_clients cl WHERE cl.id = rc.client_id LIMIT 1),
+                    'UNKNOWN'
+                ) AS landlord_code,
+                rc.property_code,
+                ? AS year,
+                ? AS month,
+                COALESCE(
+                    (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.id = rc.property_id LIMIT 1),
+                    rc.property_code
+                ) || '-{$monthName} {$returnYear}' AS return_description,
+                ? AS return_period,
+                'MAINRETURN' AS return_type,
+                CASE WHEN SUM(rc.commission_amount) > 0
+                          AND SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) > 0
+                    THEN ROUND(SUM(rc.commission_amount) / SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) * 100, 2)
+                    ELSE 0
+                END AS commission_rate,
+                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS total_credit,
+                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS commission_total,
+                0 AS vatable_total,
+                SUM(rc.commission_amount) AS commission_amount,
+                SUM(rc.commission_amount) + SUM(rc.vat_amount)
+                    + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
+                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
+                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
+                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS net_amount,
+                0 AS transaction_amount,
+                0 AS net_balance,
+                ? AS prepared_by,
+                1 AS prepared_status,
+                NOW() AS prepared_date,
+                0 AS approved_status,
+                0 AS paid_status,
+                rc.return_id,
+                SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.net_amount ELSE 0 END) AS payable_amount,
+                SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND (rc.payable_status = 0 OR rc.payable_status IS NULL) THEN rc.amount_payable_landlord ELSE 0 END) AS non_payable_amount,
+                COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.unit_id END) AS payable_units,
+                COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
+            FROM cb_returns_clients rc
+            WHERE rc.return_period = ?
+              {$propertyFilter}
+              AND NOT EXISTS (
+                  SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code
+              )
+            GROUP BY rc.return_code, rc.property_code, rc.property_id, rc.client_id, rc.return_id
+        ";
+
+        $bindings = [$returnYear, $returnMonthNum, $returnPeriod, $preparedByName, $returnPeriod];
+        if ($propertyId) {
+            $bindings[] = $propertyId;
+        }
+
+        return DB::affectingStatement($q3, $bindings);
+    }
+
+    /**
+     * Create approval workflow items for new return summaries.
+     */
+    protected function createApprovalWorkflowItems(string $returnPeriod, int $userId, ?int $propertyId = null): int
+    {
+        $clientIp = request()->ip();
+        $propertyFilter = $propertyId ? " AND p.id = ?" : "";
+
+        // Bulk insert approval items
+        $approvalSql = "
+            INSERT INTO cb_approval_items (
+                item_type, item_id, item_reference, status,
+                current_level, total_levels, initiated_by, initiated_at,
+                created_at, updated_at
+            )
+            SELECT
+                'return_summary', rs.id, rs.return_code, 'Pending',
+                1, 4, ?, NOW(),
+                NOW(), NOW()
+            FROM cb_returns_summary rs
+            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+            WHERE rs.return_period = ?
+              AND rs.approved_status = 0
+              AND p.field_officer_id IS NOT NULL
+              {$propertyFilter}
+            ON CONFLICT (item_type, item_id) DO NOTHING
+        ";
+
+        $approvalBindings = [$userId, $returnPeriod];
+        if ($propertyId) {
+            $approvalBindings[] = $propertyId;
+        }
+
+        $approvalCount = DB::affectingStatement($approvalSql, $approvalBindings);
+
+        // Bulk insert level-1 approvers
+        $approverSql = "
+            INSERT INTO cb_item_approvers (
+                approval_item_id, approver_id, approver_level,
+                is_optional, approval_status, assigned_at,
+                created_at, updated_at
+            )
+            SELECT
+                ai.id, p.field_officer_id, 1,
+                0, 'Pending', NOW(),
+                NOW(), NOW()
+            FROM cb_approval_items ai
+            JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+            WHERE rs.return_period = ?
+              {$propertyFilter}
+              AND NOT EXISTS (
+                  SELECT 1 FROM cb_item_approvers ia
+                  WHERE ia.approval_item_id = ai.id AND ia.approver_level = 1
+              )
+        ";
+
+        $approverBindings = [$returnPeriod];
+        if ($propertyId) {
+            $approverBindings[] = $propertyId;
+        }
+
+        DB::statement($approverSql, $approverBindings);
+
+        // Bulk insert initial actions
+        $actionSql = "
+            INSERT INTO cb_approval_actions (
+                item_approver_id, approval_item_id, actor_id,
+                from_level, to_level, action, comments,
+                action_timestamp, ip_address, sequence_number, is_current,
+                created_at, updated_at
+            )
+            SELECT
+                ia.id, ai.id, ?,
+                0, 1, 'Initiated', 'Return submitted for approval',
+                NOW(), ?, 1, 1,
+                NOW(), NOW()
+            FROM cb_item_approvers ia
+            JOIN cb_approval_items ai ON ai.id = ia.approval_item_id
+            JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
+            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+            WHERE rs.return_period = ?
+              AND ia.approver_level = 1
+              {$propertyFilter}
+              AND NOT EXISTS (
+                  SELECT 1 FROM cb_approval_actions aa
+                  WHERE aa.item_approver_id = ia.id AND aa.action = 'Initiated'
+              )
+        ";
+
+        $actionBindings = [$userId, $clientIp, $returnPeriod];
+        if ($propertyId) {
+            $actionBindings[] = $propertyId;
+        }
+
+        DB::statement($actionSql, $actionBindings);
+
+        return $approvalCount;
     }
 
     /**

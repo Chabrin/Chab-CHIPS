@@ -125,6 +125,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
     Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
+    Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
     Route::delete('/hr/employees/{id}', [StaffController::class, 'destroy'])->name('staff.destroy');
 
     // AJAX Routes for Staff
@@ -408,11 +409,19 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/clients', [ClientsController::class, 'store'])->name('property.clients.store');
     Route::get('/property/clients/{encryptedId}', [App\Http\Controllers\ClientsController::class, 'show'])->name('property.clients.show');
     Route::get('/property/clients/{encryptedId}/properties', [App\Http\Controllers\ClientsController::class, 'getProperties'])->name('property.clients.properties');
+    Route::get('/property/clients/{encryptedId}/related-properties', [App\Http\Controllers\ClientsController::class, 'getRelatedProperties'])->name('property.clients.related-properties');
     Route::get('/property/clients/{encryptedId}/properties-dropdown', [App\Http\Controllers\ClientsController::class, 'getClientProperties'])->name('property.clients.properties.dropdown');
     Route::get('/property/clients/{encryptedId}/leases', [App\Http\Controllers\ClientsController::class, 'getLeases'])->name('property.clients.leases');
     Route::get('/property/clients/{encryptedId}/recoveries', [App\Http\Controllers\ClientsController::class, 'getRecoveries'])->name('property.clients.recoveries');
     Route::get('/property/clients/{encryptedId}/inspections', [App\Http\Controllers\ClientsController::class, 'getInspections'])->name('property.clients.inspections');
     Route::get('/property/clients/{encryptedId}/repairs', [App\Http\Controllers\ClientsController::class, 'getRepairs'])->name('property.clients.repairs');
+    Route::get('/property/clients/{encryptedId}/returns-config', [App\Http\Controllers\ClientsController::class, 'getReturnsConfig'])->name('property.clients.returns-config');
+    Route::get('/property/clients/{encryptedId}/returns-config/options', [App\Http\Controllers\ClientsController::class, 'getReturnsConfigOptions'])->name('property.clients.returns-config.options');
+    Route::get('/property/clients/{encryptedId}/returns-config/{batchId}', [App\Http\Controllers\ClientsController::class, 'getReturnsConfigBatch'])->name('property.clients.returns-config.show');
+    Route::post('/property/clients/{encryptedId}/returns-config', [App\Http\Controllers\ClientsController::class, 'storeReturnsConfig'])->name('property.clients.returns-config.store');
+    Route::put('/property/clients/{encryptedId}/returns-config/{batchId}', [App\Http\Controllers\ClientsController::class, 'updateReturnsConfig'])->name('property.clients.returns-config.update');
+    Route::delete('/property/clients/{encryptedId}/returns-config/{batchId}', [App\Http\Controllers\ClientsController::class, 'deleteReturnsConfig'])->name('property.clients.returns-config.delete');
+    Route::delete('/property/clients/{encryptedId}/returns-config', [App\Http\Controllers\ClientsController::class, 'disbandAllReturnsConfig'])->name('property.clients.returns-config.disband-all');
     Route::get('/property/units', [App\Http\Controllers\ClientsController::class, 'getUnits'])->name('property.units.get');
     Route::get('/property/tenants', [App\Http\Controllers\ClientsController::class, 'tenantIndex'])->name('property.tenants.index');
     Route::get('/property/tenants/data', [App\Http\Controllers\ClientsController::class, 'getTenantsData'])->name('property.tenants.data');
