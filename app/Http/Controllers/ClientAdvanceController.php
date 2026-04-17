@@ -952,7 +952,7 @@ class ClientAdvanceController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::findOrFail($id);
+            $advance = ClientAdvance::with('schedule')->findOrFail($id);
 
             if ($advance->current_status_id !== 5) {
                 return response()->json(['success' => false, 'message' => 'Advance must be Approved before posting'], 422);
@@ -976,78 +976,140 @@ class ClientAdvanceController extends Controller
     }
 
     /**
-     * Insert a debit entry (entry_type_code 0009) into cb_landlord_account
-     * when an advance is posted/approved. This makes the advance recoverable
-     * via the monthly returns deduction process (insertAdvancePaymentLines).
+     * Insert debit entries (entry_type_code 0009) into cb_landlord_account
+     * when an advance is posted/approved.
+     *
+     * For advances with a repayment schedule (Type 2/3 with months):
+     *   One row per installment, tagged with that installment's year/month so that
+     *   insertAdvancePaymentLines() picks up exactly the right amount each month.
+     *
+     * For single-payment advances (Type 1, Type 2 no months):
+     *   One row for the full total_amount, tagged with the disbursement year/month.
      */
     private function postToLandlordAccount(ClientAdvance $advance, int $userId): void
     {
         try {
-            $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
-                ? $advance->disbursement_date
-                : \Carbon\Carbon::parse($advance->disbursement_date);
-            $year        = $disbDate->year;
-            $month       = $disbDate->month;
-            $totalAmount = (float) $advance->total_amount;
-            $clientId    = $advance->client_id;
-            $propertyId  = $advance->property_id;
-            $ref         = $advance->reference_number ?? 'N/A';
-            $particulars = 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y');
+            $clientId   = $advance->client_id;
+            $propertyId = $advance->property_id;
+            $ref        = $advance->reference_number ?? 'N/A';
 
-            DB::statement("
-                INSERT INTO cb_landlord_account (
-                    year, month, landlord_code, property_code,
-                    entry_type_code, entry_description, entry_particulars,
-                    entry_date,
-                    debit_amount, credit_amount, balance,
-                    is_recovered,
-                    client_id, property_id,
-                    server_time, user_id
-                )
-                SELECT
-                    ? AS year,
-                    ? AS month,
-                    c.reference_number,
-                    p.reference_number,
-                    '0009',
-                    'ADVANCE',
-                    ?,
-                    NOW(),
-                    ? AS debit_amount,
-                    0 AS credit_amount,
-                    COALESCE(
-                        (SELECT balance FROM cb_landlord_account
-                         WHERE client_id = ? AND property_id = ?
-                         ORDER BY id DESC LIMIT 1),
-                        0
-                    ) - ? AS balance,
-                    0 AS is_recovered,
-                    ? AS client_id,
-                    ? AS property_id,
-                    NOW(),
-                    ?
-                FROM sys_pm_clients c
-                CROSS JOIN sys_pm_properties p
-                WHERE c.id = ? AND p.id = ?
-            ", [
-                $year, $month,
-                $particulars,
-                $totalAmount,
-                $clientId, $propertyId,
-                $totalAmount,
-                $clientId, $propertyId,
-                $userId,
-                $clientId, $propertyId,
-            ]);
+            // Resolve reference codes once via a single query
+            $codes = DB::table('sys_pm_clients as c')
+                ->crossJoin('sys_pm_properties as p')
+                ->where('c.id', $clientId)
+                ->where('p.id', $propertyId)
+                ->select('c.reference_number as landlord_code', 'p.reference_number as property_code')
+                ->first();
 
-            Log::info('Advance posted to landlord account', [
-                'advance_id'   => $advance->id,
-                'reference'    => $ref,
-                'client_id'    => $clientId,
-                'property_id'  => $propertyId,
-                'debit_amount' => $totalAmount,
-                'period'       => $year . '/' . str_pad($month, 2, '0', STR_PAD_LEFT),
-            ]);
+            if (!$codes) {
+                Log::error('postToLandlordAccount: could not resolve client/property codes', [
+                    'advance_id'  => $advance->id,
+                    'client_id'   => $clientId,
+                    'property_id' => $propertyId,
+                ]);
+                return;
+            }
+
+            // Fetch current running balance for this client/property
+            $runningBalance = (float) DB::table('cb_landlord_account')
+                ->where('client_id', $clientId)
+                ->where('property_id', $propertyId)
+                ->orderBy('id', 'desc')
+                ->value('balance') ?? 0.0;
+
+            // Load schedule if not already eager-loaded
+            $schedule = $advance->relationLoaded('schedule')
+                ? $advance->schedule
+                : $advance->schedule()->orderBy('payment_date')->get();
+
+            $hasSchedule = $schedule->isNotEmpty() && !empty($advance->repayment_months);
+
+            if ($hasSchedule) {
+                // --- Multi-installment: one ledger row per schedule entry ---
+                $disbDate = $advance->disbursement_date instanceof \Carbon\Carbon
+                    ? $advance->disbursement_date
+                    : \Carbon\Carbon::parse($advance->disbursement_date);
+
+                $rows = [];
+                foreach ($schedule as $idx => $entry) {
+                    $payDate     = $entry->payment_date instanceof \Carbon\Carbon
+                        ? $entry->payment_date
+                        : \Carbon\Carbon::parse($entry->payment_date);
+                    $installment = round((float) $entry->principal_amount + (float) $entry->interest, 2);
+                    $runningBalance -= $installment;
+
+                    $label = $idx === 0
+                        ? 'Advance ' . $ref . ' Instalment 1 of ' . $schedule->count() . ' disbursed ' . $disbDate->format('d M Y')
+                        : 'Advance ' . $ref . ' Instalment ' . ($idx + 1) . ' of ' . $schedule->count();
+
+                    $rows[] = [
+                        'year'              => $payDate->year,
+                        'month'             => $payDate->month,
+                        'landlord_code'     => $codes->landlord_code,
+                        'property_code'     => $codes->property_code,
+                        'entry_type_code'   => '0009',
+                        'entry_description' => 'ADVANCE',
+                        'entry_particulars' => $label,
+                        'entry_date'        => now(),
+                        'debit_amount'      => $installment,
+                        'credit_amount'     => 0,
+                        'balance'           => $runningBalance,
+                        'is_recovered'      => 0,
+                        'client_id'         => $clientId,
+                        'property_id'       => $propertyId,
+                        'server_time'       => now(),
+                        'user_id'           => $userId,
+                    ];
+                }
+
+                foreach ($rows as $row) {
+                    DB::table('cb_landlord_account')->insert($row);
+                }
+
+                Log::info('Advance posted to landlord account (installments)', [
+                    'advance_id'   => $advance->id,
+                    'reference'    => $ref,
+                    'rows'         => count($rows),
+                    'client_id'    => $clientId,
+                    'property_id'  => $propertyId,
+                ]);
+
+            } else {
+                // --- Single row: full total_amount, disbursement month ---
+                $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
+                    ? $advance->disbursement_date
+                    : \Carbon\Carbon::parse($advance->disbursement_date);
+                $totalAmount = (float) $advance->total_amount;
+                $runningBalance -= $totalAmount;
+
+                DB::table('cb_landlord_account')->insert([
+                    'year'              => $disbDate->year,
+                    'month'             => $disbDate->month,
+                    'landlord_code'     => $codes->landlord_code,
+                    'property_code'     => $codes->property_code,
+                    'entry_type_code'   => '0009',
+                    'entry_description' => 'ADVANCE',
+                    'entry_particulars' => 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y'),
+                    'entry_date'        => now(),
+                    'debit_amount'      => $totalAmount,
+                    'credit_amount'     => 0,
+                    'balance'           => $runningBalance,
+                    'is_recovered'      => 0,
+                    'client_id'         => $clientId,
+                    'property_id'       => $propertyId,
+                    'server_time'       => now(),
+                    'user_id'           => $userId,
+                ]);
+
+                Log::info('Advance posted to landlord account (lump sum)', [
+                    'advance_id'   => $advance->id,
+                    'reference'    => $ref,
+                    'debit_amount' => $totalAmount,
+                    'period'       => $disbDate->year . '/' . str_pad($disbDate->month, 2, '0', STR_PAD_LEFT),
+                    'client_id'    => $clientId,
+                    'property_id'  => $propertyId,
+                ]);
+            }
         } catch (\Exception $e) {
             // Log but do not rethrow — the advance is already posted;
             // a ledger failure should not undo it silently.
