@@ -929,6 +929,8 @@ class ClientAdvanceController extends Controller
 
             $advance->update(['current_status_id' => 6]);
 
+            $this->postToLandlordAccount($advance, $advance->created_by ?? 0);
+
             Log::info('Advance approved by landlord', [
                 'advance_id' => $advance->id,
                 'client_id'  => $advance->client_id,
@@ -958,20 +960,101 @@ class ClientAdvanceController extends Controller
 
             $advance->update(['current_status_id' => 6]);
 
+            $this->postToLandlordAccount($advance, Auth::id());
+
             Log::info('Advance posted by admin', [
                 'advance_id' => $advance->id,
                 'user_id'    => Auth::id(),
             ]);
-
-            // ⚠️ TODO #1: Post transaction to landlord account on confirmation.
-            // Pending details: target table name, transaction_type ID, debit/credit account IDs.
-            // See docs/advance_reschedule_missing.md for full context.
 
             return response()->json(['success' => true, 'message' => 'Advance posted successfully']);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error posting advance: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to post advance'], 500);
+        }
+    }
+
+    /**
+     * Insert a debit entry (entry_type_code 0009) into cb_landlord_account
+     * when an advance is posted/approved. This makes the advance recoverable
+     * via the monthly returns deduction process (insertAdvancePaymentLines).
+     */
+    private function postToLandlordAccount(ClientAdvance $advance, int $userId): void
+    {
+        try {
+            $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
+                ? $advance->disbursement_date
+                : \Carbon\Carbon::parse($advance->disbursement_date);
+            $year        = $disbDate->year;
+            $month       = $disbDate->month;
+            $totalAmount = (float) $advance->total_amount;
+            $clientId    = $advance->client_id;
+            $propertyId  = $advance->property_id;
+            $ref         = $advance->reference_number ?? 'N/A';
+            $particulars = 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y');
+
+            DB::statement("
+                INSERT INTO cb_landlord_account (
+                    year, month, landlord_code, property_code,
+                    entry_type_code, entry_description, entry_particulars,
+                    entry_date,
+                    debit_amount, credit_amount, balance,
+                    is_recovered,
+                    client_id, property_id,
+                    server_time, user_id
+                )
+                SELECT
+                    ? AS year,
+                    ? AS month,
+                    c.reference_number,
+                    p.reference_number,
+                    '0009',
+                    'ADVANCE',
+                    ?,
+                    NOW(),
+                    ? AS debit_amount,
+                    0 AS credit_amount,
+                    COALESCE(
+                        (SELECT balance FROM cb_landlord_account
+                         WHERE client_id = ? AND property_id = ?
+                         ORDER BY id DESC LIMIT 1),
+                        0
+                    ) - ? AS balance,
+                    0 AS is_recovered,
+                    ? AS client_id,
+                    ? AS property_id,
+                    NOW(),
+                    ?
+                FROM sys_pm_clients c
+                CROSS JOIN sys_pm_properties p
+                WHERE c.id = ? AND p.id = ?
+            ", [
+                $year, $month,
+                $particulars,
+                $totalAmount,
+                $clientId, $propertyId,
+                $totalAmount,
+                $clientId, $propertyId,
+                $userId,
+                $clientId, $propertyId,
+            ]);
+
+            Log::info('Advance posted to landlord account', [
+                'advance_id'   => $advance->id,
+                'reference'    => $ref,
+                'client_id'    => $clientId,
+                'property_id'  => $propertyId,
+                'debit_amount' => $totalAmount,
+                'period'       => $year . '/' . str_pad($month, 2, '0', STR_PAD_LEFT),
+            ]);
+        } catch (\Exception $e) {
+            // Log but do not rethrow — the advance is already posted;
+            // a ledger failure should not undo it silently.
+            Log::error('Failed to post advance to landlord account', [
+                'advance_id' => $advance->id,
+                'error'      => $e->getMessage(),
+            ]);
         }
     }
 
