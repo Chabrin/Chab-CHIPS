@@ -48,7 +48,7 @@ trait ReturnsSummaryTrait
                 ?,
                 rc.property_code,
                 p.property_name,
-                CONCAT_WS(' ', c.first_name, c.last_name),
+                c.names,
                 c.reference_number,
                 -- total_returns: Sum all CR lines
                 SUM(CASE WHEN rc.dr_cr = 'CR' THEN COALESCE(rc.net_amount, 0) ELSE 0 END),
@@ -84,7 +84,7 @@ trait ReturnsSummaryTrait
                 ?
             FROM cb_returns_clients rc
             JOIN sys_pm_properties p ON p.id = rc.property_id
-            JOIN cb_clients c         ON c.id = rc.client_id
+            JOIN sys_pm_clients c     ON c.id = rc.client_id
             WHERE rc.return_period = ?
               AND rc.return_code LIKE 'R1%'
             GROUP BY
@@ -162,6 +162,118 @@ trait ReturnsSummaryTrait
         DB::statement("DELETE FROM cb_returns_summary WHERE return_period = ?", [$returnPeriod]);
 
         Log::info("ReturnsSummaryTrait: Deleted existing returns", ['period' => $returnPeriod]);
+    }
+
+    /**
+     * Delete unapproved returns for regeneration.
+     * Only deletes returns where approved_status != 1.
+     * Also resets landlord account recovery flags.
+     *
+     * @param string $returnPeriod YYYYMM format
+     * @param int|null $propertyId Optional: Delete for single property only
+     * @return array Counts of deleted records
+     */
+    protected function deleteUnapprovedReturnsForPeriod(string $returnPeriod, ?int $propertyId = null): array
+    {
+        // Get return codes to delete (for resetting landlord account)
+        if ($propertyId) {
+            $returnsToDelete = DB::select("
+                SELECT rs.return_code
+                FROM cb_returns_summary rs
+                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                WHERE rs.return_period = ?
+                  AND rs.approved_status != 1
+                  AND p.id = ?
+            ", [$returnPeriod, $propertyId]);
+        } else {
+            $returnsToDelete = DB::select("
+                SELECT return_code
+                FROM cb_returns_summary
+                WHERE return_period = ?
+                  AND approved_status != 1
+            ", [$returnPeriod]);
+        }
+
+        $returnCodes = array_map(fn($r) => $r->return_code, $returnsToDelete);
+
+        if (empty($returnCodes)) {
+            return ['clients' => 0, 'summaries' => 0, 'landlord_reset' => 0];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($returnCodes), '?'));
+
+        // Delete cb_returns_clients lines
+        $clientsDeleted = DB::delete("
+            DELETE FROM cb_returns_clients
+            WHERE return_period = ?
+              AND return_code IN ({$placeholders})
+        ", array_merge([$returnPeriod], $returnCodes));
+
+        // Delete cb_returns_summary entries
+        $summariesDeleted = DB::delete(
+            "
+            DELETE FROM cb_returns_summary
+            WHERE return_period = ?
+              AND approved_status != 1
+              " . ($propertyId ? "AND property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)" : ""),
+            $propertyId ? [$returnPeriod, $propertyId] : [$returnPeriod]
+        );
+
+        // Reset landlord account recovery flags
+        $landlordReset = DB::affectingStatement("
+            UPDATE cb_landlord_account
+            SET is_recovered = 0,
+                recovery_year = NULL,
+                recovery_month = NULL,
+                return_code = NULL,
+                recovery_server_time = NULL
+            WHERE return_code IN ({$placeholders})
+        ", $returnCodes);
+
+        Log::info("ReturnsSummaryTrait: Deleted unapproved returns for regeneration", [
+            'period' => $returnPeriod,
+            'property_id' => $propertyId,
+            'clients_deleted' => $clientsDeleted,
+            'summaries_deleted' => $summariesDeleted,
+            'landlord_reset' => $landlordReset
+        ]);
+
+        return [
+            'clients' => $clientsDeleted,
+            'summaries' => $summariesDeleted,
+            'landlord_reset' => $landlordReset
+        ];
+    }
+
+    /**
+     * Check if APPROVED returns exist for a period (optionally for a specific property).
+     * Unapproved returns can be deleted and regenerated.
+     *
+     * @param string $returnPeriod YYYYMM format
+     * @param int|null $propertyId Optional: Check for single property only
+     * @return bool
+     */
+    protected function approvedReturnsExistForPeriod(string $returnPeriod, ?int $propertyId = null): bool
+    {
+        if ($propertyId) {
+            $count = DB::selectOne("
+                SELECT COUNT(*) AS cnt
+                FROM cb_returns_summary rs
+                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                WHERE rs.return_period = ?
+                  AND rs.approved_status = 1
+                  AND p.id = ?
+            ", [$returnPeriod, $propertyId]);
+        } else {
+            $count = DB::selectOne("
+                SELECT COUNT(*) AS cnt
+                FROM cb_returns_summary
+                WHERE return_period = ?
+                  AND approved_status = 1
+            ", [$returnPeriod]);
+        }
+
+        return $count->cnt > 0;
     }
 
     /**

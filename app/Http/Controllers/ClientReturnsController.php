@@ -719,15 +719,27 @@ class ClientReturnsController extends Controller
             ]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // VALIDATION: Check if returns already exist
+            // VALIDATION: Check if APPROVED returns exist (block only approved)
             // ═══════════════════════════════════════════════════════════════════
-            if ($this->returnsExistForPeriod($returnPeriod, $propertyId)) {
+            $propMsg = $propertyId ? ' for this property' : '';
+            if ($this->approvedReturnsExistForPeriod($returnPeriod, $propertyId)) {
                 DB::rollBack();
-                $propMsg = $propertyId ? ' for this property' : '';
                 return response()->json([
                     'success' => false,
-                    'message' => "Returns for {$monthName} {$returnYear} have already been generated{$propMsg} and cannot be regenerated."
+                    'message' => "Returns for {$monthName} {$returnYear} have been approved{$propMsg} and cannot be regenerated."
                 ], 422);
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            // DELETE: Remove any unapproved returns before regenerating
+            // ═══════════════════════════════════════════════════════════════════
+            $deleted = $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $propertyId);
+            if ($deleted['summaries'] > 0) {
+                Log::info("Pre-generation cleanup: Deleted unapproved returns", [
+                    'period' => $returnPeriod,
+                    'property_id' => $propertyId,
+                    'deleted' => $deleted
+                ]);
             }
 
             // Get next return_id base
@@ -798,6 +810,22 @@ class ClientReturnsController extends Controller
                 'advances'    => $advancesInserted,
                 'recoveries'  => $recoveriesInserted,
                 'collections' => $collectionsInserted,
+                'property_id' => $propertyId
+            ]);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // STEP 3b: INSERT COMMISSION DR LINES (ReturnsDeductionsTrait)
+            // Creates summary Commission DR line per return (for backward compatibility)
+            // ═══════════════════════════════════════════════════════════════════
+            $commissionsInserted = $this->insertCommissionLines(
+                $returnPeriod,
+                $transactionDate,
+                $generatedBy,
+                $propertyId
+            );
+
+            Log::info("Step 3b: Commission DR lines inserted", [
+                'count' => $commissionsInserted,
                 'property_id' => $propertyId
             ]);
 

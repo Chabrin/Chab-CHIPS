@@ -39,13 +39,13 @@ trait ReturnsMasterReturnTrait
                 -- Get MAINRETURN summaries for properties in active batches
                 SELECT
                     mb.id AS batch_id,
-                    mb.batch_code,
-                    mb.batch_name,
-                    mb.client_id AS batch_client_id,
+                    mb.batch_reference AS batch_code,
+                    mb.landlord_name AS batch_name,
+                    mb.landlord_id AS batch_client_id,
                     rs.id AS child_return_id,
                     rs.return_code AS child_return_code,
                     rs.property_code,
-                    rs.property_id,
+                    mbi.property_id,
                     rs.total_returns,
                     rs.rent_amount,
                     rs.amount_withheld,
@@ -61,10 +61,10 @@ trait ReturnsMasterReturnTrait
                     rs.zone_manager_id
                 FROM cb_returns_merge_batches mb
                 JOIN cb_returns_merge_batch_items mbi ON mbi.batch_id = mb.id
-                JOIN cb_returns_summary rs ON rs.property_id = mbi.property_id
+                JOIN sys_pm_properties p ON p.id = mbi.property_id
+                JOIN cb_returns_summary rs ON rs.property_code = p.reference_number
                                            AND rs.return_period = ?
                                            AND rs.return_type = 'MAINRETURN'
-                WHERE mb.is_active = true
             ),
             batch_aggregates AS (
                 -- Aggregate per batch
@@ -123,7 +123,7 @@ trait ReturnsMasterReturnTrait
                     ?,
                     ?,  -- batch_code as property_code
                     ?,  -- batch_name as property_name
-                    CONCAT_WS(' ', c.first_name, c.last_name),
+                    c.names,
                     c.reference_number,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     'MASTERRETURN',
@@ -134,7 +134,7 @@ trait ReturnsMasterReturnTrait
                     ?, ?,
                     NOW(),
                     ?
-                FROM cb_clients c
+                FROM sys_pm_clients c
                 WHERE c.id = ?
             ", [
                 $masterReturnCode,
@@ -201,7 +201,7 @@ trait ReturnsMasterReturnTrait
     {
         $result = DB::selectOne("
             SELECT reference_number
-            FROM cb_clients
+            FROM sys_pm_clients
             WHERE id = ?
         ", [$clientId]);
 
@@ -256,12 +256,11 @@ trait ReturnsMasterReturnTrait
                 return_code, return_period, transaction_number, transaction_date,
                 entry_description, entry_type, dr_cr,
                 property_code, unit_code, tenant_name,
-                invoice_amount, commission_rate, gross_commission_rate,
                 commission_amount, vat_amount, net_amount, amount_payable_landlord,
                 narration, pay_percentage, payable_status,
                 property_id, client_id, zone_id, field_officer_id,
                 zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
-                return_id, service_agreement_id, invoice_id,
+                return_id, invoice_id,
                 is_commissionable, transaction_source, transaction_ref,
                 deduction_point_2,
                 server_time, user_id
@@ -277,9 +276,6 @@ trait ReturnsMasterReturnTrait
                 property_code,
                 unit_code,
                 tenant_name,
-                invoice_amount,
-                commission_rate,
-                gross_commission_rate,
                 commission_amount,
                 vat_amount,
                 net_amount,
@@ -296,7 +292,6 @@ trait ReturnsMasterReturnTrait
                 unit_id,
                 tenant_id,
                 NULL,  -- will be linked later
-                service_agreement_id,
                 invoice_id,
                 is_commissionable,
                 transaction_source,
@@ -365,11 +360,10 @@ trait ReturnsMasterReturnTrait
         return DB::select("
             SELECT
                 rs.*,
-                c.first_name,
-                c.last_name,
+                c.names AS landlord_name,
                 c.reference_number AS landlord_code
             FROM cb_returns_summary rs
-            JOIN cb_clients c ON c.id = rs.client_id
+            JOIN sys_pm_clients c ON c.id = rs.client_id
             WHERE rs.return_period = ?
               AND rs.return_type = 'MASTERRETURN'
             ORDER BY rs.return_code
