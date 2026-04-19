@@ -39,7 +39,7 @@ trait ReturnsRentLinesTrait
         $propertyFilter = $propertyId ? "AND i.property_id = ?" : "";
 
         $invoiceWhere = "
-            i.date_due = ?::date
+            i.returns_period::date = ?::date
             AND i.current_status_id = 1
             AND i.debtor_type_id = '2'
             AND i.property_id IS NOT NULL
@@ -150,7 +150,7 @@ trait ReturnsRentLinesTrait
 
         return DB::selectOne("
             SELECT COUNT(*) as cnt FROM sys_pm_debtors_invoices i
-            WHERE i.date_due = ?::date
+            WHERE i.returns_period::date = ?::date
               AND i.current_status_id = 1
               AND i.debtor_type_id = '2'
               AND i.property_id IS NOT NULL
