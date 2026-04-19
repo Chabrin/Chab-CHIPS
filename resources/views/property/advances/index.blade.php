@@ -131,8 +131,12 @@
                     render: function(data, type, row) {
                         var actions = '<a href="{{ route("property.advances.show", "ID") }}" class="text-info me-2" title="View"><span class="material-symbols-outlined" style="font-size:18px;">visibility</span></a>'.replace('ID', row.encrypted_id);
 
-                        if (row.can_update) {
+                        if (row.can_update && row.status_id !== 6) {
                             actions += '<a href="{{ route("property.advances.edit", "ID") }}" class="text-success me-2" title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>'.replace('ID', row.encrypted_id);
+                        }
+
+                        if (row.can_update && row.status_id === 6) {
+                            actions += '<a href="{{ route("property.advances.reschedule", "ID") }}" class="text-warning me-2" title="Reschedule"><span class="material-symbols-outlined" style="font-size:18px;">event_repeat</span></a>'.replace('ID', row.encrypted_id);
                         }
 
                         // if (row.can_delete) {

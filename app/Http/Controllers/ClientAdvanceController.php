@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use App\Services\ErrorDispatcher;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ClientAdvanceController extends Controller
 {
@@ -38,14 +40,16 @@ class ClientAdvanceController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy'])
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy', 'schedule', 'previousAdvance', 'rescheduleHistory.fromAdvance', 'rescheduleHistory.toAdvance', 'rescheduleHistory.rescheduledBy'])
                 ->findOrFail($id);
 
-            return view('property.advances.show', compact('advance'));
+            $schedule = $this->buildScheduleArray($advance);
+
+            return view('property.advances.show', compact('advance', 'schedule'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading advance details: ' . $e->getMessage());
-            return redirect()->route('property.advances.index')->with('error', 'Failed to load advance details');
+            return redirect()->route('client.advances.index')->with('error', 'Failed to load advance details');
         }
     }
 
@@ -62,7 +66,7 @@ class ClientAdvanceController extends Controller
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading advance for editing: ' . $e->getMessage());
-            return redirect()->route('property.advances.index')->with('error', 'Failed to load advance for editing');
+            return redirect()->route('client.advances.index')->with('error', 'Failed to load advance for editing');
         }
     }
 
@@ -99,7 +103,7 @@ class ClientAdvanceController extends Controller
                         'encrypted_id' => Crypt::encrypt($advance->id),
                         'requisition_date' => $advance->requisition_date ? $advance->requisition_date->format('Y-m-d') : '-',
                         'reference_number' => $advance->reference_number ?? '-',
-                        'client_name' => $advance->client ? $advance->client->client_name : '-',
+                        'client_name' => $advance->client ? $advance->client->names : '-',
                         'property_name' => $advance->property ? $advance->property->property_name : '-',
                         'zone_name' => $advance->zone ? $advance->zone->zone_name : '-',
                         'advance_type' => $typeMap[$advance->advance_type_id] ?? 'Unknown',
@@ -107,6 +111,7 @@ class ClientAdvanceController extends Controller
                         'amount' => $advance->amount ? number_format($advance->amount, 2) : '0.00',
                         'current_balance' => $advance->current_balance ? number_format($advance->current_balance, 2) : '0.00',
                         'status' => $statusMap[$advance->current_status_id] ?? 'Unknown',
+                        'status_id' => $advance->current_status_id,
                         'narration' => $advance->narration ?? '-',
                         'can_update' => Auth::user()->isAbleTo('update_client_advances'),
                         'can_delete' => Auth::user()->isAbleTo('delete_client_advances'),
@@ -247,11 +252,13 @@ class ClientAdvanceController extends Controller
                 $rules['payment_method'] = 'required|string|in:bank_transfer,alternative';
                 $rules['payment_instructions'] = 'nullable|string|max:500';
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
-                $rules['interest_rate'] = 'nullable|numeric|min:0|max:10';
+                $rules['interest_rate'] = 'nullable|numeric|min:0|max:100';
+                $rules['repayment_months'] = 'nullable|integer|min:1|max:360';
+                $rules['principal_start_date'] = 'nullable|date';
             } elseif ($advanceTypeId == 3) { // Overpayment Advance
-                $rules['repayment_months'] = 'required|integer|min:1|max:36';
+                $rules['repayment_months'] = 'required|integer|min:1|max:360';
                 $rules['principal_start_date'] = 'required|date|after:disbursement_date';
-                $rules['interest_rate'] = 'required|numeric|min:0|max:10';
+                $rules['interest_rate'] = 'required|numeric|min:0|max:100';
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
             }
 
@@ -329,67 +336,76 @@ class ClientAdvanceController extends Controller
                 $validated['principal_start_date'] = null;
 
             } elseif ($advanceTypeId == 2) {
-                // CLIENT PAYMENT ADVANCE: Interest based on issued date in the month
+                // CLIENT PAYMENT ADVANCE
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
                 $remainingDays = $daysInMonth - $day;
-                $rate = floatval($validated['interest_rate'] ?? 3);
+                $rate = floatval($validated['interest_rate'] ?? 0);
+                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
+                $repaymentMonths = !empty($validated['repayment_months']) ? intval($validated['repayment_months']) : null;
+                $principalStartDate = $validated['principal_start_date'] ?? null;
 
-                if ($day < 20) {
-                    // Before 20th: full interest
-                    $interestAmount = $amount * $rate / 100;
-                } elseif ($day >= 20 && $day <= 25) {
-                    // 20th-25th: prorated interest
-                    $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
+                if ($repaymentMonths && $principalStartDate) {
+                    // Reducing balance amortization when months are provided
+                    $schedule = $this->calculateAmortizationSchedule(
+                        $amount, $rate, $repaymentMonths,
+                        $validated['disbursement_date'], $principalStartDate
+                    );
+                    if ($day < 25 && !empty($schedule)) {
+                        $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
+                        $schedule[0]['interest'] = $proratedFirst;
+                        $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
+                    }
+                    $totalInterest  = array_sum(array_column($schedule, 'interest'));
+                    $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
+                    $interestAmount = round($totalInterest, 2);
+                    $validated['repayment_months']    = $repaymentMonths;
+                    $validated['principal_start_date'] = $principalStartDate;
                 } else {
-                    // After 25th: no interest
-                    $interestAmount = 0;
-                    $validated['interest_rate'] = 0;
+                    // Day-of-month simple interest
+                    if ($day < 20) {
+                        $interestAmount = $amount * $rate / 100;
+                    } elseif ($day <= 25) {
+                        $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
+                    } else {
+                        $interestAmount = 0;
+                        $validated['interest_rate'] = 0;
+                    }
+                    $interestAmount = round($interestAmount, 2);
+                    $validated['repayment_months']    = null;
+                    $validated['principal_start_date'] = null;
                 }
 
-                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
-                $validated['charge_amount'] = $chargeAmount;
-                $validated['interest_amount'] = round($interestAmount, 2);
-                $validated['total_amount'] = round($amount + $interestAmount + $chargeAmount, 2);
+                $validated['charge_amount']   = $chargeAmount;
+                $validated['interest_amount'] = $interestAmount;
+                $validated['total_amount']    = round($amount + $interestAmount + $chargeAmount, 2);
                 $validated['current_balance'] = $validated['total_amount'];
-                $validated['repayment_months'] = null;
-                $validated['principal_start_date'] = null;
 
             } elseif ($advanceTypeId == 3) {
-                // OVERPAYMENT ADVANCE: 3% monthly reducing balance, 3 month default repayment
+                // OVERPAYMENT ADVANCE: Reducing balance
                 $rate = floatval($validated['interest_rate'] ?? 3);
                 $repaymentMonths = intval($validated['repayment_months'] ?? 3);
-
-                // Calculate first month interest (prorated if before 25th)
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
                 $remainingDays = $daysInMonth - $day;
 
-                // Generate amortization schedule (reducing balance)
                 $schedule = $this->calculateAmortizationSchedule(
-                    $amount,
-                    $rate,
-                    $repaymentMonths,
-                    $validated['disbursement_date'],
-                    $validated['principal_start_date']
+                    $amount, $rate, $repaymentMonths,
+                    $validated['disbursement_date'], $validated['principal_start_date']
                 );
 
-                $totalInterest = array_sum(array_column($schedule, 'interest'));
-                $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
-
-                // If disbursed before 25th, prorate first month interest
                 if ($day < 25 && !empty($schedule)) {
-                    $firstInterest = $schedule[0]['interest'];
-                    $proratedFirst = round($firstInterest * ($remainingDays / $daysInMonth), 2);
-                    $schedule[0]['interest'] = $proratedFirst;
+                    $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
+                    $schedule[0]['interest']     = $proratedFirst;
                     $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
-                    $totalInterest = array_sum(array_column($schedule, 'interest'));
                 }
 
-                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
-                $validated['charge_amount'] = $chargeAmount;
+                $totalInterest  = array_sum(array_column($schedule, 'interest'));
+                $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
+                $chargeAmount   = floatval($validated['charge_amount'] ?? 100);
+                $validated['charge_amount']   = $chargeAmount;
                 $validated['interest_amount'] = round($totalInterest, 2);
-                $validated['total_amount'] = round($totalPrincipal + $totalInterest + $chargeAmount, 2);
+                $validated['total_amount']    = round($totalPrincipal + $totalInterest + $chargeAmount, 2);
                 $validated['current_balance'] = $validated['total_amount'];
             }
 
@@ -407,7 +423,7 @@ class ClientAdvanceController extends Controller
                 'type' => $advanceTypeId
             ]);
 
-            // Create amortization schedule entries (for Overpayment type)
+            // Create amortization schedule entries (Type 3 always; Type 2 when repayment months provided)
             if (!empty($schedule)) {
                 foreach ($schedule as $index => $entry) {
                     try {
@@ -442,6 +458,22 @@ class ClientAdvanceController extends Controller
                 'client_id' => $clientId,
                 'type' => $advanceTypeId
             ]);
+
+            // Notify landlord — approval email with repayment schedule attached
+            try {
+                $encryptedAdvanceId = Crypt::encrypt($advance->id);
+                $notifySchedule = $this->buildScheduleArray($advance->load('schedule'));
+                $advance->client->notify(new \App\Notifications\AdvanceApprovalNotification(
+                    $advance,
+                    $encryptedAdvanceId,
+                    $notifySchedule
+                ));
+            } catch (\Exception $notifyEx) {
+                Log::warning('Failed to send advance approval notification', [
+                    'advance_id' => $advance->id,
+                    'error'      => $notifyEx->getMessage(),
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
@@ -514,11 +546,13 @@ class ClientAdvanceController extends Controller
                 $rules['payment_method'] = 'required|string|in:bank_transfer,alternative';
                 $rules['payment_instructions'] = 'nullable|string|max:500';
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
-                $rules['interest_rate'] = 'nullable|numeric|min:0|max:10';
+                $rules['interest_rate'] = 'nullable|numeric|min:0|max:100';
+                $rules['repayment_months'] = 'nullable|integer|min:1|max:360';
+                $rules['principal_start_date'] = 'nullable|date';
             } elseif ($advanceTypeId == 3) { // Overpayment Advance
-                $rules['repayment_months'] = 'required|integer|min:1|max:36';
+                $rules['repayment_months'] = 'required|integer|min:1|max:360';
                 $rules['principal_start_date'] = 'required|date|after:disbursement_date';
-                $rules['interest_rate'] = 'required|numeric|min:0|max:10';
+                $rules['interest_rate'] = 'required|numeric|min:0|max:100';
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
             }
 
@@ -531,6 +565,7 @@ class ClientAdvanceController extends Controller
             // ===== INTEREST & CHARGE CALCULATIONS BY TYPE =====
             $disbursement = \Carbon\Carbon::parse($validated['disbursement_date']);
             $amount = floatval($validated['amount']);
+            $schedule = [];
 
             if ($advanceTypeId == 1) {
                 // EXPENSE ADVANCE: No interest
@@ -542,27 +577,46 @@ class ClientAdvanceController extends Controller
                 $validated['principal_start_date'] = null;
 
             } elseif ($advanceTypeId == 2) {
-                // CLIENT PAYMENT ADVANCE: Interest based on issued date
+                // CLIENT PAYMENT ADVANCE
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
                 $remainingDays = $daysInMonth - $day;
-                $rate = floatval($validated['interest_rate'] ?? 3);
+                $rate = floatval($validated['interest_rate'] ?? 0);
+                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
+                $repaymentMonths = !empty($validated['repayment_months']) ? intval($validated['repayment_months']) : null;
+                $principalStartDate = $validated['principal_start_date'] ?? null;
 
-                if ($day < 20) {
-                    $interestAmount = $amount * $rate / 100;
-                } elseif ($day >= 20 && $day <= 25) {
-                    $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
+                if ($repaymentMonths && $principalStartDate) {
+                    $schedule = $this->calculateAmortizationSchedule(
+                        $amount, $rate, $repaymentMonths,
+                        $validated['disbursement_date'], $principalStartDate
+                    );
+                    if ($day < 25 && !empty($schedule)) {
+                        $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
+                        $schedule[0]['interest']     = $proratedFirst;
+                        $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
+                    }
+                    $totalInterest  = array_sum(array_column($schedule, 'interest'));
+                    $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
+                    $interestAmount = round($totalInterest, 2);
+                    $validated['repayment_months']    = $repaymentMonths;
+                    $validated['principal_start_date'] = $principalStartDate;
                 } else {
-                    $interestAmount = 0;
-                    $validated['interest_rate'] = 0;
+                    if ($day < 20) {
+                        $interestAmount = round($amount * $rate / 100, 2);
+                    } elseif ($day <= 25) {
+                        $interestAmount = round(($amount * $rate / 100) * ($remainingDays / $daysInMonth), 2);
+                    } else {
+                        $interestAmount = 0;
+                        $validated['interest_rate'] = 0;
+                    }
+                    $validated['repayment_months']    = null;
+                    $validated['principal_start_date'] = null;
                 }
 
-                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
-                $validated['charge_amount'] = $chargeAmount;
-                $validated['interest_amount'] = round($interestAmount, 2);
-                $validated['total_amount'] = round($amount + $interestAmount + $chargeAmount, 2);
-                $validated['repayment_months'] = null;
-                $validated['principal_start_date'] = null;
+                $validated['charge_amount']   = $chargeAmount;
+                $validated['interest_amount'] = $interestAmount;
+                $validated['total_amount']    = round($amount + $interestAmount + $chargeAmount, 2);
 
             } elseif ($advanceTypeId == 3) {
                 // OVERPAYMENT ADVANCE: Reducing balance
@@ -573,26 +627,22 @@ class ClientAdvanceController extends Controller
                 $remainingDays = $daysInMonth - $day;
 
                 $schedule = $this->calculateAmortizationSchedule(
-                    $amount,
-                    $rate,
-                    $repaymentMonths,
-                    $validated['disbursement_date'],
-                    $validated['principal_start_date']
+                    $amount, $rate, $repaymentMonths,
+                    $validated['disbursement_date'], $validated['principal_start_date']
                 );
 
                 if ($day < 25 && !empty($schedule)) {
-                    $firstInterest = $schedule[0]['interest'];
-                    $proratedFirst = round($firstInterest * ($remainingDays / $daysInMonth), 2);
-                    $schedule[0]['interest'] = $proratedFirst;
+                    $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
+                    $schedule[0]['interest']     = $proratedFirst;
                     $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
                 }
 
-                $totalInterest = array_sum(array_column($schedule, 'interest'));
+                $totalInterest  = array_sum(array_column($schedule, 'interest'));
                 $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
-                $chargeAmount = floatval($validated['charge_amount'] ?? 100);
-                $validated['charge_amount'] = $chargeAmount;
+                $chargeAmount   = floatval($validated['charge_amount'] ?? 100);
+                $validated['charge_amount']   = $chargeAmount;
                 $validated['interest_amount'] = round($totalInterest, 2);
-                $validated['total_amount'] = round($totalPrincipal + $totalInterest + $chargeAmount, 2);
+                $validated['total_amount']    = round($totalPrincipal + $totalInterest + $chargeAmount, 2);
             }
 
             // Update current balance (preserve payments already made)
@@ -731,6 +781,539 @@ class ClientAdvanceController extends Controller
     }
 
     // ================== HELPER METHODS ==================
+
+    /**
+     * Build a schedule array for display, PDF, and email.
+     * For Type 3 advances uses stored AdvanceSchedule rows;
+     * for Types 1 & 2 synthesises a single-row summary.
+     */
+    private function buildScheduleArray(ClientAdvance $advance): array
+    {
+        // Use stored schedule rows for Type 3, or Type 2 with amortization months
+        $hasStoredSchedule = $advance->schedule->isNotEmpty() &&
+            ($advance->advance_type_id == 3 ||
+             ($advance->advance_type_id == 2 && !empty($advance->repayment_months)));
+
+        if ($hasStoredSchedule) {
+            return $advance->schedule->map(function ($s) {
+                return [
+                    'payment_date'     => $s->payment_date ? $s->payment_date->format('Y-m-d') : '—',
+                    'principal_amount' => (float) $s->principal_amount,
+                    'interest'         => (float) $s->interest,
+                    'total_amount'     => round((float) $s->principal_amount + (float) $s->interest, 2),
+                    'loan_balance'     => (float) $s->loan_balance,
+                    'status_id'        => $s->current_status_id,
+                ];
+            })->toArray();
+        }
+
+        // Synthetic single-row for Types 1 & 2 (no amortization)
+        // BUT: if Type 2/3 has repayment_months set and no stored rows, compute on the fly
+        if (!empty($advance->repayment_months) && !empty($advance->principal_start_date) && in_array($advance->advance_type_id, [2, 3])) {
+            $computed = $this->calculateAmortizationSchedule(
+                (float) $advance->amount,
+                (float) ($advance->interest_rate ?? 0),
+                (int) $advance->repayment_months,
+                $advance->disbursement_date->format('Y-m-d'),
+                $advance->principal_start_date instanceof \Carbon\Carbon
+                    ? $advance->principal_start_date->format('Y-m-d')
+                    : $advance->principal_start_date
+            );
+            return array_map(function ($row) use ($advance) {
+                return array_merge($row, ['status_id' => $advance->current_status_id]);
+            }, $computed);
+        }
+
+        return [[
+            'payment_date'     => $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '—',
+            'principal_amount' => (float) ($advance->amount ?? 0),
+            'interest'         => (float) ($advance->interest_amount ?? 0),
+            'total_amount'     => (float) ($advance->total_amount ?? 0),
+            'loan_balance'     => 0.00,
+            'status_id'        => $advance->current_status_id,
+        ]];
+    }
+
+    /**
+     * Download repayment schedule as PDF
+     */
+    public function downloadPdf($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+            $schedule = $this->buildScheduleArray($advance);
+
+            $pdf = Pdf::loadView('property.advances.schedule-pdf', compact('advance', 'schedule'));
+            return $pdf->download('AdvanceSchedule_' . ($advance->reference_number ?? $id) . '.pdf');
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error generating advance PDF: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate PDF');
+        }
+    }
+
+    /**
+     * Download repayment schedule as Excel
+     */
+    public function downloadExcel($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+            $schedule = $this->buildScheduleArray($advance);
+
+            return Excel::download(
+                new \App\Exports\AdvanceScheduleExport($advance, $schedule),
+                'AdvanceSchedule_' . ($advance->reference_number ?? $id) . '.xlsx'
+            );
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error generating advance Excel: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate Excel file');
+        }
+    }
+
+    /**
+     * Email repayment schedule to landlord (AJAX)
+     */
+    public function emailSchedule($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+
+            if (!$advance->client || !$advance->client->email_address) {
+                return response()->json(['success' => false, 'message' => 'Landlord email address not found'], 422);
+            }
+
+            $schedule = $this->buildScheduleArray($advance);
+            $advance->client->notify(new \App\Notifications\AdvanceScheduleNotification($advance, $schedule));
+
+            Log::info('Advance schedule emailed to landlord', [
+                'advance_id'   => $advance->id,
+                'client_email' => $advance->client->email_address,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Schedule emailed to ' . $advance->client->email_address,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error emailing advance schedule: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to send email: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Approve an advance — public route, landlord clicks link from email
+     */
+    public function approveAdvance($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property'])->findOrFail($id);
+
+            $statusLabels = [
+                2 => 'Cleared', 3 => 'Cancelled', 4 => 'Suspended',
+                5 => 'Already Approved', 6 => 'Already Posted', 8 => 'Rescheduled',
+            ];
+
+            if ($advance->current_status_id !== 1) {
+                $statusLabel = $statusLabels[$advance->current_status_id] ?? 'Unknown';
+                return view('property.advances.approved', compact('advance'))
+                    ->with('alreadyProcessed', true)
+                    ->with('statusLabel', $statusLabel);
+            }
+
+            $advance->update(['current_status_id' => 6]);
+
+            $this->postToLandlordAccount($advance, $advance->created_by ?? 0);
+
+            Log::info('Advance approved by landlord', [
+                'advance_id' => $advance->id,
+                'client_id'  => $advance->client_id,
+            ]);
+
+            return view('property.advances.approved', compact('advance'))
+                ->with('alreadyProcessed', false);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error approving advance: ' . $e->getMessage());
+            abort(404);
+        }
+    }
+
+    /**
+     * Post an advance (admin action: Approved → Posted)
+     */
+    public function postAdvance($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with('schedule')->findOrFail($id);
+
+            if ($advance->current_status_id !== 5) {
+                return response()->json(['success' => false, 'message' => 'Advance must be Approved before posting'], 422);
+            }
+
+            $advance->update(['current_status_id' => 6]);
+
+            $this->postToLandlordAccount($advance, Auth::id());
+
+            Log::info('Advance posted by admin', [
+                'advance_id' => $advance->id,
+                'user_id'    => Auth::id(),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Advance posted successfully']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error posting advance: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to post advance'], 500);
+        }
+    }
+
+    /**
+     * Insert debit entries (entry_type_code 0009) into cb_landlord_account
+     * when an advance is posted/approved.
+     *
+     * For advances with a repayment schedule (Type 2/3 with months):
+     *   One row per installment, tagged with that installment's year/month so that
+     *   insertAdvancePaymentLines() picks up exactly the right amount each month.
+     *
+     * For single-payment advances (Type 1, Type 2 no months):
+     *   One row for the full total_amount, tagged with the disbursement year/month.
+     */
+    private function postToLandlordAccount(ClientAdvance $advance, int $userId): void
+    {
+        try {
+            $clientId   = $advance->client_id;
+            $propertyId = $advance->property_id;
+            $ref        = $advance->reference_number ?? 'N/A';
+
+            // Resolve reference codes once via a single query
+            $codes = DB::table('sys_pm_clients as c')
+                ->crossJoin('sys_pm_properties as p')
+                ->where('c.id', $clientId)
+                ->where('p.id', $propertyId)
+                ->select('c.reference_number as landlord_code', 'p.reference_number as property_code')
+                ->first();
+
+            if (!$codes) {
+                Log::error('postToLandlordAccount: could not resolve client/property codes', [
+                    'advance_id'  => $advance->id,
+                    'client_id'   => $clientId,
+                    'property_id' => $propertyId,
+                ]);
+                return;
+            }
+
+            // Fetch current running balance for this client/property
+            $runningBalance = (float) DB::table('cb_landlord_account')
+                ->where('client_id', $clientId)
+                ->where('property_id', $propertyId)
+                ->orderBy('id', 'desc')
+                ->value('balance') ?? 0.0;
+
+            // Load schedule if not already eager-loaded
+            $schedule = $advance->relationLoaded('schedule')
+                ? $advance->schedule
+                : $advance->schedule()->orderBy('payment_date')->get();
+
+            $hasSchedule = $schedule->isNotEmpty() && !empty($advance->repayment_months);
+
+            if ($hasSchedule) {
+                // --- Multi-installment: one ledger row per schedule entry ---
+                $disbDate = $advance->disbursement_date instanceof \Carbon\Carbon
+                    ? $advance->disbursement_date
+                    : \Carbon\Carbon::parse($advance->disbursement_date);
+
+                $rows = [];
+                foreach ($schedule as $idx => $entry) {
+                    $payDate     = $entry->payment_date instanceof \Carbon\Carbon
+                        ? $entry->payment_date
+                        : \Carbon\Carbon::parse($entry->payment_date);
+                    $installment = round((float) $entry->principal_amount + (float) $entry->interest, 2);
+                    $runningBalance -= $installment;
+
+                    $label = $idx === 0
+                        ? 'Advance ' . $ref . ' Instalment 1 of ' . $schedule->count() . ' disbursed ' . $disbDate->format('d M Y')
+                        : 'Advance ' . $ref . ' Instalment ' . ($idx + 1) . ' of ' . $schedule->count();
+
+                    $rows[] = [
+                        'year'              => $payDate->year,
+                        'month'             => $payDate->month,
+                        'landlord_code'     => $codes->landlord_code,
+                        'property_code'     => $codes->property_code,
+                        'entry_type_code'   => '0009',
+                        'entry_description' => 'ADVANCE',
+                        'entry_particulars' => $label,
+                        'entry_date'        => now(),
+                        'debit_amount'      => $installment,
+                        'credit_amount'     => 0,
+                        'balance'           => $runningBalance,
+                        'is_recovered'      => 0,
+                        'client_id'         => $clientId,
+                        'property_id'       => $propertyId,
+                        'server_time'       => now(),
+                        'user_id'           => $userId,
+                    ];
+                }
+
+                foreach ($rows as $row) {
+                    DB::table('cb_landlord_account')->insert($row);
+                }
+
+                Log::info('Advance posted to landlord account (installments)', [
+                    'advance_id'   => $advance->id,
+                    'reference'    => $ref,
+                    'rows'         => count($rows),
+                    'client_id'    => $clientId,
+                    'property_id'  => $propertyId,
+                ]);
+
+            } else {
+                // --- Single row: full total_amount, disbursement month ---
+                $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
+                    ? $advance->disbursement_date
+                    : \Carbon\Carbon::parse($advance->disbursement_date);
+                $totalAmount = (float) $advance->total_amount;
+                $runningBalance -= $totalAmount;
+
+                DB::table('cb_landlord_account')->insert([
+                    'year'              => $disbDate->year,
+                    'month'             => $disbDate->month,
+                    'landlord_code'     => $codes->landlord_code,
+                    'property_code'     => $codes->property_code,
+                    'entry_type_code'   => '0009',
+                    'entry_description' => 'ADVANCE',
+                    'entry_particulars' => 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y'),
+                    'entry_date'        => now(),
+                    'debit_amount'      => $totalAmount,
+                    'credit_amount'     => 0,
+                    'balance'           => $runningBalance,
+                    'is_recovered'      => 0,
+                    'client_id'         => $clientId,
+                    'property_id'       => $propertyId,
+                    'server_time'       => now(),
+                    'user_id'           => $userId,
+                ]);
+
+                Log::info('Advance posted to landlord account (lump sum)', [
+                    'advance_id'   => $advance->id,
+                    'reference'    => $ref,
+                    'debit_amount' => $totalAmount,
+                    'period'       => $disbDate->year . '/' . str_pad($disbDate->month, 2, '0', STR_PAD_LEFT),
+                    'client_id'    => $clientId,
+                    'property_id'  => $propertyId,
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Log but do not rethrow — the advance is already posted;
+            // a ledger failure should not undo it silently.
+            Log::error('Failed to post advance to landlord account', [
+                'advance_id' => $advance->id,
+                'error'      => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Show the reschedule form for a Posted advance (status=6).
+     */
+    public function showRescheduleForm($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+
+            if ($advance->current_status_id !== 6) {
+                return redirect()->route('property.advances.show', $encryptedId)
+                    ->with('error', 'Only Posted advances can be rescheduled.');
+            }
+
+            // ⚠️ TODO #2: Confirm source of truth for payments made.
+            // Currently using sum of cleared (status=2) schedule rows.
+            // May need to cross-check sys_pm_landlord_accounts_transaction instead.
+            // See docs/advance_reschedule_missing.md for full context.
+            $amountPaid = $advance->schedule()
+                ->where('current_status_id', 2)
+                ->sum(DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
+
+            $outstandingBalance = max(0, round((float) $advance->total_amount - (float) $amountPaid, 2));
+
+            return view('property.advances.reschedule', compact('advance', 'amountPaid', 'outstandingBalance', 'encryptedId'));
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading reschedule form: ' . $e->getMessage());
+            return redirect()->route('client.advances.index')->with('error', 'Failed to load reschedule form.');
+        }
+    }
+
+    /**
+     * Process the reschedule: close old advance, open new one, log history.
+     */
+    public function processReschedule(Request $request, $encryptedId)
+    {
+        $validated = $request->validate([
+            'amount'               => 'required|numeric|min:1',
+            'interest_rate'        => 'nullable|numeric|min:0|max:100',
+            'repayment_months'     => 'nullable|integer|min:1|max:360',
+            'disbursement_date'    => 'required|date',
+            'principal_start_date' => 'required|date',
+            'narration'            => 'nullable|string|max:1000',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $oldAdvance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
+
+            if ($oldAdvance->current_status_id !== 6) {
+                return response()->json(['success' => false, 'message' => 'Only Posted advances can be rescheduled.'], 422);
+            }
+
+            // ⚠️ TODO #2: Confirm source of truth for payments made.
+            $amountPaid = $oldAdvance->schedule()
+                ->where('current_status_id', 2)
+                ->sum(DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
+            $outstandingBalance = max(0, round((float) $oldAdvance->total_amount - (float) $amountPaid, 2));
+
+            // --- Recalculate interest / total for new advance ---
+            $newAmount       = (float) $validated['amount'];
+            $interestRate    = (float) ($validated['interest_rate'] ?? 0);
+            $repaymentMonths = (int) ($validated['repayment_months'] ?? 1);
+            $disbursement    = \Carbon\Carbon::parse($validated['disbursement_date']);
+            $principalStart  = \Carbon\Carbon::parse($validated['principal_start_date']);
+
+            $interestAmount = 0;
+            $newSchedule    = [];
+
+            if ($oldAdvance->advance_type_id == 3 && $interestRate > 0) {
+                $newSchedule    = $this->calculateAmortizationSchedule($newAmount, $interestRate, $repaymentMonths, $disbursement, $principalStart);
+                $interestAmount = collect($newSchedule)->sum('interest');
+            }
+            $newTotal = round($newAmount + $interestAmount, 2);
+
+            // 1. Mark old advance as Rescheduled
+            $oldAdvance->update(['current_status_id' => 8]);
+
+            // 2. Mark all pending schedule rows of old advance as Rescheduled
+            $oldAdvance->schedule()->where('current_status_id', 1)->update(['current_status_id' => 8]);
+
+            // 3. Create new advance record
+            $newAdvance = ClientAdvance::create([
+                'date_time'            => now(),
+                'requisition_date'     => now(),
+                'narration'            => $validated['narration'] ?? 'Rescheduled from ' . $oldAdvance->reference_number,
+                'created_by'           => Auth::id(),
+                'zone_id'              => $oldAdvance->zone_id,
+                'client_id'            => $oldAdvance->client_id,
+                'property_id'          => $oldAdvance->property_id,
+                'current_status_id'    => 1, // Pending — awaits landlord approval
+                'amount'               => $newAmount,
+                'repayment_months'     => $repaymentMonths,
+                'interest_rate'        => $interestRate,
+                'principal_start_date' => $principalStart,
+                'disbursement_date'    => $disbursement,
+                'interest_amount'      => $interestAmount,
+                'total_amount'         => $newTotal,
+                'current_balance'      => $newTotal,
+                'reference_number'     => $oldAdvance->reference_number . '-R' . (substr_count($oldAdvance->reference_number, '-R') + 1),
+                'advance_type_id'      => $oldAdvance->advance_type_id,
+                'previous_advance_id'  => $oldAdvance->id,
+                'miscallenous_charge_id' => $oldAdvance->miscallenous_charge_id,
+                'charge_amount'        => $oldAdvance->charge_amount,
+                'charge_billed_to'     => $oldAdvance->charge_billed_to,
+                'expense_category'     => $oldAdvance->expense_category,
+                'payment_method'       => $oldAdvance->payment_method,
+                'payment_instructions' => $oldAdvance->payment_instructions,
+            ]);
+
+            // 4. Create new schedule rows (Type 3 / Overpayment advances)
+            if (!empty($newSchedule)) {
+                foreach ($newSchedule as $row) {
+                    \App\Models\AdvanceSchedule::create([
+                        'parent_id'        => $newAdvance->id,
+                        'payment_date'     => $row['payment_date'],
+                        'principal_amount' => $row['principal'],
+                        'interest'         => $row['interest'],
+                        'loan_balance'     => $row['balance'],
+                        'current_status_id'=> 1,
+                    ]);
+                }
+            }
+
+            // 5. Log to reschedule history
+            $rootId = $this->getRootAdvanceId($oldAdvance);
+            \App\Models\AdvanceRescheduleHistory::create([
+                'original_advance_id'               => $rootId,
+                'from_advance_id'                   => $oldAdvance->id,
+                'to_advance_id'                     => $newAdvance->id,
+                'amount_paid_at_reschedule'         => $amountPaid,
+                'outstanding_balance_at_reschedule' => $outstandingBalance,
+                'narration'                         => $validated['narration'] ?? null,
+                'rescheduled_by'                    => Auth::id(),
+                'rescheduled_at'                    => now(),
+            ]);
+
+            DB::commit();
+
+            Log::info('Advance rescheduled', [
+                'old_advance_id' => $oldAdvance->id,
+                'new_advance_id' => $newAdvance->id,
+                'user_id'        => Auth::id(),
+            ]);
+
+            // Notify landlord of new advance pending approval
+            try {
+                $newEncryptedId  = Crypt::encrypt($newAdvance->id);
+                $notifySchedule  = $this->buildScheduleArray($newAdvance->load('schedule'));
+                $newAdvance->client->notify(new \App\Notifications\AdvanceApprovalNotification(
+                    $newAdvance,
+                    $newEncryptedId,
+                    $notifySchedule
+                ));
+            } catch (\Exception $notifyEx) {
+                Log::warning('Failed to send reschedule approval notification', [
+                    'advance_id' => $newAdvance->id,
+                    'error'      => $notifyEx->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'success'         => true,
+                'message'         => 'Advance rescheduled successfully. Landlord has been notified.',
+                'new_advance_id'  => Crypt::encrypt($newAdvance->id),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error processing reschedule: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to reschedule advance: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Walk the previous_advance_id chain to find the very first (original) advance.
+     */
+    private function getRootAdvanceId(ClientAdvance $advance): int
+    {
+        $current = $advance;
+        $visited = [];
+        while ($current->previous_advance_id && !in_array($current->previous_advance_id, $visited)) {
+            $visited[] = $current->id;
+            $parent = ClientAdvance::find($current->previous_advance_id);
+            if (!$parent) break;
+            $current = $parent;
+        }
+        return $current->id;
+    }
 
     /**
      * Get client average returns over specified months
