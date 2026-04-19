@@ -684,7 +684,7 @@ class ClientReturnsController extends Controller
             $returnsMonth = $request->returns_month; // YYYY-MM
             $returnPeriod = str_replace('-', '', $returnsMonth); // YYYYMM
             $generatedBy = Auth::id();
-            $propertyId = $request->property_id ? (int) $request->property_id : null;
+            $requestedPropertyId = $request->property_id ? (int) $request->property_id : null;
 
             [$returnYear, $returnMonthNum] = explode('-', $returnsMonth);
             $returnYear = (int) $returnYear;
@@ -695,69 +695,193 @@ class ClientReturnsController extends Controller
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
 
+            // ═══════════════════════════════════════════════════════════════════
+            // CHECK FOR MERGE BATCH: If single property is in merge batch, get all partners
+            // ═══════════════════════════════════════════════════════════════════
+            $mergeInfo = null;
+            $propertyIds = [];
+            $isMergeBatchMode = false;
+
+            if ($requestedPropertyId) {
+                $mergeInfo = $this->getMergeBatchInfo($requestedPropertyId);
+                if ($mergeInfo) {
+                    $propertyIds = $mergeInfo['property_ids'];
+                    $isMergeBatchMode = true;
+                    Log::info("Merge batch detected", [
+                        'requested_property' => $requestedPropertyId,
+                        'batch_reference' => $mergeInfo['batch_reference'],
+                        'all_properties' => $propertyIds
+                    ]);
+                } else {
+                    $propertyIds = [$requestedPropertyId];
+                }
+            }
+
             DB::beginTransaction();
 
             // ═══════════════════════════════════════════════════════════════════
             // VALIDATION: Check for approved invoices
             // ═══════════════════════════════════════════════════════════════════
-            $totalInvoices = $this->countApprovedInvoices($monthStart, $propertyId);
+            $totalInvoices = 0;
+            if ($isMergeBatchMode) {
+                foreach ($propertyIds as $pid) {
+                    $totalInvoices += $this->countApprovedInvoices($monthStart, $pid);
+                }
+            } else {
+                $totalInvoices = $this->countApprovedInvoices($monthStart, $requestedPropertyId);
+            }
 
             if ($totalInvoices == 0) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => $propertyId
+                    'message' => $requestedPropertyId
                         ? 'No approved invoices found for this property in the selected period.'
                         : 'No approved invoices found for the selected period.'
                 ], 422);
             }
 
             Log::info("=== RETURN GENERATION START ===", [
-                'returns_month'  => $returnsMonth,
-                'total_invoices' => $totalInvoices,
-                'property_id'    => $propertyId,
+                'returns_month'    => $returnsMonth,
+                'total_invoices'   => $totalInvoices,
+                'property_id'      => $requestedPropertyId,
+                'merge_batch_mode' => $isMergeBatchMode,
+                'property_ids'     => $propertyIds ?: null,
             ]);
 
             // ═══════════════════════════════════════════════════════════════════
-            // VALIDATION: Check if APPROVED returns exist (block only approved)
+            // VALIDATION & DELETE: Check approved returns and delete unapproved
             // ═══════════════════════════════════════════════════════════════════
-            $propMsg = $propertyId ? ' for this property' : '';
-            if ($this->approvedReturnsExistForPeriod($returnPeriod, $propertyId)) {
-                DB::rollBack();
-                return response()->json([
-                    'success' => false,
-                    'message' => "Returns for {$monthName} {$returnYear} have been approved{$propMsg} and cannot be regenerated."
-                ], 422);
-            }
-
-            // ═══════════════════════════════════════════════════════════════════
-            // DELETE: Remove any unapproved returns before regenerating
-            // ═══════════════════════════════════════════════════════════════════
-            $deleted = $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $propertyId);
-            if ($deleted['summaries'] > 0) {
-                Log::info("Pre-generation cleanup: Deleted unapproved returns", [
-                    'period' => $returnPeriod,
-                    'property_id' => $propertyId,
-                    'deleted' => $deleted
-                ]);
+            if ($isMergeBatchMode) {
+                // Check and delete for ALL properties in merge batch
+                foreach ($propertyIds as $pid) {
+                    if ($this->approvedReturnsExistForPeriod($returnPeriod, $pid)) {
+                        DB::rollBack();
+                        $propName = DB::table('sys_pm_properties')->where('id', $pid)->value('property_name') ?? "ID {$pid}";
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Returns for {$monthName} {$returnYear} have been approved for merge partner '{$propName}' and cannot be regenerated."
+                        ], 422);
+                    }
+                }
+                foreach ($propertyIds as $pid) {
+                    $deleted = $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $pid);
+                    if ($deleted['summaries'] > 0) {
+                        Log::info("Pre-generation cleanup: Deleted unapproved returns for merge partner", [
+                            'period' => $returnPeriod,
+                            'property_id' => $pid,
+                            'deleted' => $deleted
+                        ]);
+                    }
+                }
+            } else {
+                $propMsg = $requestedPropertyId ? ' for this property' : '';
+                if ($this->approvedReturnsExistForPeriod($returnPeriod, $requestedPropertyId)) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Returns for {$monthName} {$returnYear} have been approved{$propMsg} and cannot be regenerated."
+                    ], 422);
+                }
+                $deleted = $this->deleteUnapprovedReturnsForPeriod($returnPeriod, $requestedPropertyId);
+                if ($deleted['summaries'] > 0) {
+                    Log::info("Pre-generation cleanup: Deleted unapproved returns", [
+                        'period' => $returnPeriod,
+                        'property_id' => $requestedPropertyId,
+                        'deleted' => $deleted
+                    ]);
+                }
             }
 
             // Get next return_id base
             $baseReturnId = $this->getNextReturnIdBase();
 
             // ═══════════════════════════════════════════════════════════════════
-            // STEP 1: INSERT RENT LINES (ReturnsRentLinesTrait)
+            // GENERATION: Process properties (loop for merge batch, single otherwise)
             // ═══════════════════════════════════════════════════════════════════
-            $rentInserted = $this->insertRentLines(
-                $returnPeriod,
-                $monthStart,
-                $transactionDate,
-                $baseReturnId,
-                $generatedBy,
-                $monthName,
-                $returnYear,
-                $propertyId
-            );
+            $rentInserted = 0;
+            $advancesInserted = 0;
+            $recoveriesInserted = 0;
+            $collectionsInserted = 0;
+            $commissionsInserted = 0;
+            $summaryCount = 0;
+
+            $propertiesToProcess = $isMergeBatchMode ? $propertyIds : [$requestedPropertyId];
+
+            foreach ($propertiesToProcess as $propertyId) {
+                // STEP 1: INSERT RENT LINES
+                $rentInserted += $this->insertRentLines(
+                    $returnPeriod,
+                    $monthStart,
+                    $transactionDate,
+                    $baseReturnId,
+                    $generatedBy,
+                    $monthName,
+                    $returnYear,
+                    $propertyId
+                );
+
+                // STEP 2: UPDATE PAY THRESHOLDS
+                $this->updatePayThresholds($returnPeriod, $monthStart, $prevMonthStart, $propertyId);
+
+                // STEP 3: INSERT DEDUCTIONS
+                $advancesInserted += $this->insertAdvancePaymentLines(
+                    $returnPeriod,
+                    $transactionDate,
+                    $generatedBy,
+                    $returnYear,
+                    $returnMonthNum,
+                    $propertyId
+                );
+
+                $recoveriesInserted += $this->insertRecoveryLines(
+                    $returnPeriod,
+                    $transactionDate,
+                    $generatedBy,
+                    $returnYear,
+                    $returnMonthNum,
+                    $propertyId
+                );
+
+                $collectionsInserted += $this->insertCollectionLines(
+                    $returnPeriod,
+                    $transactionDate,
+                    $generatedBy,
+                    $returnYear,
+                    $returnMonthNum,
+                    $propertyId
+                );
+
+                // STEP 3b: INSERT COMMISSION DR LINES
+                $commissionsInserted += $this->insertCommissionLines(
+                    $returnPeriod,
+                    $transactionDate,
+                    $generatedBy,
+                    $propertyId
+                );
+
+                // STEP 4: INSERT MAINRETURN SUMMARIES
+                $summaryCount += $this->insertMainReturnSummariesLegacy(
+                    $returnPeriod,
+                    $returnYear,
+                    $returnMonthNum,
+                    $monthName,
+                    $preparedByName,
+                    $propertyId
+                );
+
+                // STEP 6: MARK AS RECOVERED
+                $this->markLandlordAccountRecovered($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
+                $this->linkMoneyRecoveriesToReturns($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
+
+                // STEP 7: CREATE APPROVAL WORKFLOW ITEMS
+                $this->createApprovalWorkflowItems($returnPeriod, $generatedBy, $propertyId);
+
+                Log::info("Processed property", [
+                    'property_id' => $propertyId,
+                    'merge_batch_mode' => $isMergeBatchMode
+                ]);
+            }
 
             if ($rentInserted == 0) {
                 DB::rollBack();
@@ -767,90 +891,21 @@ class ClientReturnsController extends Controller
                 ], 422);
             }
 
-            Log::info("Step 1: Rent lines inserted", ['count' => $rentInserted, 'property_id' => $propertyId]);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 2: UPDATE PAY THRESHOLDS (ReturnsPayThresholdTrait)
-            // ═══════════════════════════════════════════════════════════════════
-            $this->updatePayThresholds($returnPeriod, $monthStart, $prevMonthStart, $propertyId);
-
-            Log::info("Step 2: Pay thresholds updated");
-
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 3: INSERT DEDUCTIONS (ReturnsDeductionsTrait)
-            // ═══════════════════════════════════════════════════════════════════
-            $advancesInserted = $this->insertAdvancePaymentLines(
-                $returnPeriod,
-                $transactionDate,
-                $generatedBy,
-                $returnYear,
-                $returnMonthNum,
-                $propertyId
-            );
-
-            $recoveriesInserted = $this->insertRecoveryLines(
-                $returnPeriod,
-                $transactionDate,
-                $generatedBy,
-                $returnYear,
-                $returnMonthNum,
-                $propertyId
-            );
-
-            $collectionsInserted = $this->insertCollectionLines(
-                $returnPeriod,
-                $transactionDate,
-                $generatedBy,
-                $returnYear,
-                $returnMonthNum,
-                $propertyId
-            );
-
-            Log::info("Step 3: Deductions inserted", [
-                'advances'    => $advancesInserted,
-                'recoveries'  => $recoveriesInserted,
+            Log::info("Steps 1-4, 6-7 completed", [
+                'rent' => $rentInserted,
+                'advances' => $advancesInserted,
+                'recoveries' => $recoveriesInserted,
                 'collections' => $collectionsInserted,
-                'property_id' => $propertyId
+                'commissions' => $commissionsInserted,
+                'summaries' => $summaryCount
             ]);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 3b: INSERT COMMISSION DR LINES (ReturnsDeductionsTrait)
-            // Creates summary Commission DR line per return (for backward compatibility)
-            // ═══════════════════════════════════════════════════════════════════
-            $commissionsInserted = $this->insertCommissionLines(
-                $returnPeriod,
-                $transactionDate,
-                $generatedBy,
-                $propertyId
-            );
-
-            Log::info("Step 3b: Commission DR lines inserted", [
-                'count' => $commissionsInserted,
-                'property_id' => $propertyId
-            ]);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 4: INSERT MAINRETURN SUMMARIES (ReturnsSummaryTrait)
-            // Uses original logic to calculate correct aggregates
-            // ═══════════════════════════════════════════════════════════════════
-            $summaryCount = $this->insertMainReturnSummariesLegacy(
-                $returnPeriod,
-                $returnYear,
-                $returnMonthNum,
-                $monthName,
-                $preparedByName,
-                $propertyId
-            );
-
-            Log::info("Step 4: MAINRETURN summaries inserted", ['count' => $summaryCount, 'property_id' => $propertyId]);
 
             // ═══════════════════════════════════════════════════════════════════
             // STEP 5: GENERATE MASTERRETURNs (ReturnsMasterReturnTrait)
-            // Aggregates properties from cb_returns_merge_batches config
-            // Skip if processing a single property (MASTERRETURN needs all batch properties)
+            // Generate if: all properties OR merge batch mode (all batch properties processed)
             // ═══════════════════════════════════════════════════════════════════
             $masterReturnCount = 0;
-            if (!$propertyId) {
+            if (!$requestedPropertyId || $isMergeBatchMode) {
                 $masterReturnCount = $this->generateMasterReturns(
                     $returnPeriod,
                     $transactionDate,
@@ -860,23 +915,8 @@ class ClientReturnsController extends Controller
                 );
                 Log::info("Step 5: MASTERRETURNs generated", ['count' => $masterReturnCount]);
             } else {
-                Log::info("Step 5: MASTERRETURN generation skipped (single property mode)", ['property_id' => $propertyId]);
+                Log::info("Step 5: MASTERRETURN generation skipped (single property not in merge batch)");
             }
-
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 6: MARK AS RECOVERED (ReturnsDeductionsTrait + ReturnsLandlordAccountTrait)
-            // ═══════════════════════════════════════════════════════════════════
-            $this->markLandlordAccountRecovered($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
-            $this->linkMoneyRecoveriesToReturns($returnPeriod, $returnYear, $returnMonthNum, $propertyId);
-
-            Log::info("Step 6: Landlord account entries marked recovered", ['property_id' => $propertyId]);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // STEP 7: CREATE APPROVAL WORKFLOW ITEMS
-            // ═══════════════════════════════════════════════════════════════════
-            $approvalCount = $this->createApprovalWorkflowItems($returnPeriod, $generatedBy, $propertyId);
-
-            Log::info("Step 7: Approval items created", ['count' => $approvalCount, 'property_id' => $propertyId]);
 
             DB::commit();
 
@@ -888,12 +928,25 @@ class ClientReturnsController extends Controller
                 'main_returns'     => $summaryCount,
                 'master_returns'   => $masterReturnCount,
                 'returns_month'    => $returnsMonth,
-                'property_id'      => $propertyId,
-                'mode'             => $propertyId ? 'single_property' : 'all_properties'
+                'requested_property' => $requestedPropertyId,
+                'merge_batch_mode' => $isMergeBatchMode,
+                'properties_processed' => count($propertiesToProcess)
             ]);
 
+            // Build response message
             $totalLines = $rentInserted + $advancesInserted + $recoveriesInserted + $collectionsInserted;
-            $propLabel = $propertyId ? " for property ID {$propertyId}" : "";
+            if ($isMergeBatchMode) {
+                $propNames = DB::table('sys_pm_properties')
+                    ->whereIn('id', $propertyIds)
+                    ->pluck('property_name')
+                    ->toArray();
+                $propLabel = " for merge batch '{$mergeInfo['batch_reference']}' (" . count($propertyIds) . " properties: " . implode(', ', $propNames) . ")";
+            } elseif ($requestedPropertyId) {
+                $propLabel = " for property ID {$requestedPropertyId}";
+            } else {
+                $propLabel = "";
+            }
+
             $message = "Client returns generated successfully{$propLabel}: {$summaryCount} MAINRETURN(s)";
             if ($masterReturnCount > 0) {
                 $message .= ", {$masterReturnCount} MASTERRETURN(s)";
@@ -901,12 +954,17 @@ class ClientReturnsController extends Controller
             $message .= " ({$rentInserted} rent + {$advancesInserted} advance + {$recoveriesInserted} recovery + {$collectionsInserted} collection lines)";
 
             return response()->json([
-                'success'          => true,
-                'message'          => $message,
-                'count'            => $rentInserted,
-                'properties_count' => $summaryCount,
-                'master_count'     => $masterReturnCount,
-                'property_id'      => $propertyId
+                'success'            => true,
+                'message'            => $message,
+                'count'              => $rentInserted,
+                'properties_count'   => $summaryCount,
+                'master_count'       => $masterReturnCount,
+                'property_id'        => $requestedPropertyId,
+                'merge_batch'        => $isMergeBatchMode ? [
+                    'batch_reference' => $mergeInfo['batch_reference'],
+                    'property_ids'    => $propertyIds,
+                    'properties_count' => count($propertyIds)
+                ] : null
             ]);
         } catch (Exception $e) {
             DB::rollBack();
@@ -918,6 +976,47 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to generate returns: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Get merge batch information for a property.
+     * Returns null if property is not in any merge batch.
+     *
+     * @param int $propertyId
+     * @return array|null ['batch_id', 'batch_reference', 'property_ids']
+     */
+    protected function getMergeBatchInfo(int $propertyId): ?array
+    {
+        // Check if property is in any merge batch
+        $batchItem = DB::table('cb_returns_merge_batch_items')
+            ->where('property_id', $propertyId)
+            ->first();
+
+        if (!$batchItem) {
+            return null;
+        }
+
+        // Get batch info
+        $batch = DB::table('cb_returns_merge_batches')
+            ->where('id', $batchItem->batch_id)
+            ->first();
+
+        if (!$batch) {
+            return null;
+        }
+
+        // Get all property IDs in this batch
+        $propertyIds = DB::table('cb_returns_merge_batch_items')
+            ->where('batch_id', $batchItem->batch_id)
+            ->pluck('property_id')
+            ->toArray();
+
+        return [
+            'batch_id'        => $batch->id,
+            'batch_reference' => $batch->batch_reference,
+            'landlord_name'   => $batch->landlord_name,
+            'property_ids'    => $propertyIds
+        ];
     }
 
     /**

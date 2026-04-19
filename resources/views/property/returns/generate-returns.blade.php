@@ -349,10 +349,28 @@
             data: requestData,
             success: function(response) {
                 if (response.success) {
+                    // Build message with merge batch info if present
+                    let detailsHtml = `<span style=\"font-family:Roboto,Arial,sans-serif;font-size:1rem;\"><strong>${response.message}</strong></span>`;
+
+                    if (response.merge_batch) {
+                        detailsHtml += `<br><br><div style="background:#e3f2fd;padding:10px;border-radius:6px;text-align:left;">
+                            <span style="font-family:Roboto,Arial,sans-serif;font-size:0.9rem;display:flex;align-items:center;">
+                                <span class="material-symbols-outlined" style="color:#1976d2;font-size:1.3em;margin-right:6px;">merge</span>
+                                <strong>Merge Batch Detected!</strong>
+                            </span>
+                            <span style="font-family:Roboto,Arial,sans-serif;font-size:0.85rem;color:#555;display:block;margin-top:4px;">
+                                Batch: <strong>${response.merge_batch.batch_reference}</strong><br>
+                                ${response.merge_batch.properties_count} properties regenerated together
+                            </span>
+                        </div>`;
+                    }
+
+                    detailsHtml += `<br><span style=\"font-family:Roboto,Arial,sans-serif;font-size:1rem;display:flex;align-items:center;\"><span class=\"material-symbols-outlined\" style=\"color:#2196F3;font-size:1.2em;margin-right:4px;vertical-align:middle;\">receipt_long</span>Total returns generated: <b>${response.count}</b></span>`;
+
                     Swal.fire({
                         icon: 'success',
                         title: '<span style="font-family:Roboto,Arial,sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:0.5px;display:flex;align-items:center;"><span class="material-symbols-outlined" style="color:#2196F3;font-size:1.5em;margin-right:6px;vertical-align:middle;">check_circle</span>Success!</span>',
-                        html: `<span style=\"font-family:Roboto,Arial,sans-serif;font-size:1rem;\"><strong>${response.message}</strong></span><br><br><span style=\"font-family:Roboto,Arial,sans-serif;font-size:1rem;display:flex;align-items:center;\"><span class=\"material-symbols-outlined\" style=\"color:#2196F3;font-size:1.2em;margin-right:4px;vertical-align:middle;\">receipt_long</span>Total returns generated: <b>${response.count}</b></span>`,
+                        html: detailsHtml,
                         allowOutsideClick: false,
                         confirmButtonText: '<span style="display:flex;align-items:center;"><span class="material-symbols-outlined" style="font-size:1.2em;margin-right:4px;vertical-align:middle;">done</span>OK</span>',
                         customClass: {
