@@ -44,8 +44,7 @@ trait ReturnsDeductionsTrait
             $bindings[] = $propertyId;
         }
 
-        // Recoverable entry type codes from sys_set_invoiceable_items:
-        // 0009 = Advance Payments, 0013 = Refund of Deposits, 0014 = Cheque Charges
+        // Recoverable entry type codes from sys_set_invoiceable_items
         // Filter by specific year and month being computed
         $advancesInserted = DB::affectingStatement("
             INSERT INTO cb_returns_clients (
@@ -62,8 +61,8 @@ trait ReturnsDeductionsTrait
                 ?::integer,
                 la.transaction_number,
                 ?,
-                la.entry_description,
-                'Advance Payments-From Landlord Acc',
+                COALESCE(ii.item_name, la.entry_description),
+                COALESCE(ii.item_name, 'Landlord Account Deduction'),
                 'DR',
                 rc_base.property_code,
                 la.debit_amount,
@@ -81,6 +80,7 @@ trait ReturnsDeductionsTrait
                 NOW(),
                 ?
             FROM cb_landlord_account la
+            LEFT JOIN sys_set_invoiceable_items ii ON ii.billing_code = la.entry_type_code
             JOIN (
                 SELECT DISTINCT ON (client_id)
                        return_code, return_id, property_code, property_id, client_id,
@@ -94,7 +94,7 @@ trait ReturnsDeductionsTrait
               AND COALESCE(la.is_recovered, 0) != 1
               AND la.year = ?
               AND la.month = ?
-              AND la.entry_type_code IN ('0009', '0013', '0014')
+              AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
               {$propertyFilter}
             ORDER BY la.id
         ", $bindings);
@@ -121,7 +121,7 @@ trait ReturnsDeductionsTrait
                   AND COALESCE(la.is_recovered, 0) != 1
                   AND la.year = ?
                   AND la.month = ?
-                  AND la.entry_type_code IN ('0009', '0013', '0014')
+                  AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
             ", [$returnYear, $returnMonth, $returnPeriod, $returnYear, $returnMonth]);
         }
 
