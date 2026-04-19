@@ -246,9 +246,7 @@
                                                 <th>Dr/Cr</th>
                                                 <th class="text-end">Amt</th>
                                                 <th class="text-end">Net</th>
-                                                <th class="text-end">VAT</th>
                                                 <th class="text-end">Pay %</th>
-                                                <th>Period</th>
                                                 <th class="text-center">Payable?</th>
                                                 <th></th>
                                             </tr>
@@ -473,22 +471,15 @@
                     }
                 },
                 {
-                    data: 'vat_amount',
-                    className: 'text-end'
-                },
-                {
                     data: 'pay_percentage',
                     className: 'text-end',
                     render: function(d) {
-                        if (!d || d === '' || d === '0') return '<span class="text-danger">0.00%</span>';
+                        if (!d || d === '' || d === '0') return '<span class="text-danger">0.00</span>';
                         var num = parseFloat(d);
-                        var fmt = num.toFixed(2) + '%';
+                        var fmt = num.toFixed(2);
                         if (num >= 85) return '<span class="text-success">' + fmt + '</span>';
                         return '<span class="text-danger">' + fmt + '</span>';
                     }
-                },
-                {
-                    data: 'return_period'
                 },
                 {
                     data: 'payable_status',
