@@ -46,6 +46,7 @@ trait ReturnsDeductionsTrait
 
         // Recoverable entry type codes from sys_set_invoiceable_items
         // Filter by specific year and month being computed
+        // EXCLUDE clients in active merge batches - those get deductions on MASTERRETURN instead
         $advancesInserted = DB::affectingStatement("
             INSERT INTO cb_returns_clients (
                 return_code, return_period, transaction_number, transaction_date,
@@ -95,11 +96,17 @@ trait ReturnsDeductionsTrait
               AND la.year = ?
               AND la.month = ?
               AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
+              -- Exclude landlords in merge batches (deductions go to MASTERRETURN)
+              AND NOT EXISTS (
+                  SELECT 1 FROM cb_returns_merge_batches mb
+                  WHERE mb.landlord_id = la.client_id
+              )
               {$propertyFilter}
             ORDER BY la.id
         ", $bindings);
 
         // Mark the recovered entries in cb_landlord_account (only for the specific year/month)
+        // Exclude merge batch landlords - those are handled by MASTERRETURN generation
         if ($advancesInserted > 0) {
             DB::statement("
                 UPDATE cb_landlord_account la
@@ -122,6 +129,10 @@ trait ReturnsDeductionsTrait
                   AND la.year = ?
                   AND la.month = ?
                   AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM cb_returns_merge_batches mb
+                      WHERE mb.landlord_id = la.client_id
+                  )
             ", [$returnYear, $returnMonth, $returnPeriod, $returnYear, $returnMonth]);
         }
 

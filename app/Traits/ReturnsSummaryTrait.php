@@ -168,6 +168,7 @@ trait ReturnsSummaryTrait
      * Delete unapproved returns for regeneration.
      * Only deletes returns where approved_status != 1.
      * Also resets landlord account recovery flags.
+     * Also deletes MASTERRETURNs when their child MAINRETURNs are being deleted.
      *
      * @param string $returnPeriod YYYYMM format
      * @param int|null $propertyId Optional: Delete for single property only
@@ -178,7 +179,7 @@ trait ReturnsSummaryTrait
         // Get return codes to delete (for resetting landlord account)
         if ($propertyId) {
             $returnsToDelete = DB::select("
-                SELECT rs.return_code
+                SELECT rs.return_code, rs.parent_return_code
                 FROM cb_returns_summary rs
                 JOIN sys_pm_properties p ON p.reference_number = rs.property_code
                 WHERE rs.return_period = ?
@@ -187,7 +188,7 @@ trait ReturnsSummaryTrait
             ", [$returnPeriod, $propertyId]);
         } else {
             $returnsToDelete = DB::select("
-                SELECT return_code
+                SELECT return_code, parent_return_code
                 FROM cb_returns_summary
                 WHERE return_period = ?
                   AND approved_status != 1
@@ -195,6 +196,44 @@ trait ReturnsSummaryTrait
         }
 
         $returnCodes = array_map(fn($r) => $r->return_code, $returnsToDelete);
+
+        // Also add parent MASTERRETURNs (from parent_return_code) that should be deleted
+        foreach ($returnsToDelete as $r) {
+            if (!empty($r->parent_return_code) && !in_array($r->parent_return_code, $returnCodes)) {
+                $returnCodes[] = $r->parent_return_code;
+            }
+        }
+
+        // Also find any orphan MASTERRETURNs with empty property_code for this period/landlord
+        if ($propertyId && !empty($returnsToDelete)) {
+            // Get landlord codes for the properties being deleted
+            $landlordCodes = DB::select("
+                SELECT DISTINCT rs.landlord_code
+                FROM cb_returns_summary rs
+                JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+                WHERE rs.return_period = ?
+                  AND rs.approved_status != 1
+                  AND p.id = ?
+            ", [$returnPeriod, $propertyId]);
+
+            foreach ($landlordCodes as $lc) {
+                // Find unapproved MASTERRETURNs for this landlord
+                $orphanMasters = DB::select("
+                    SELECT return_code
+                    FROM cb_returns_summary
+                    WHERE return_period = ?
+                      AND return_type = 'MASTERRETURN'
+                      AND landlord_code = ?
+                      AND approved_status != 1
+                ", [$returnPeriod, $lc->landlord_code]);
+
+                foreach ($orphanMasters as $m) {
+                    if (!in_array($m->return_code, $returnCodes)) {
+                        $returnCodes[] = $m->return_code;
+                    }
+                }
+            }
+        }
 
         if (empty($returnCodes)) {
             return ['clients' => 0, 'summaries' => 0, 'landlord_reset' => 0];
@@ -209,15 +248,13 @@ trait ReturnsSummaryTrait
               AND return_code IN ({$placeholders})
         ", array_merge([$returnPeriod], $returnCodes));
 
-        // Delete cb_returns_summary entries
-        $summariesDeleted = DB::delete(
-            "
+        // Delete cb_returns_summary entries (both MAINRETURN and MASTERRETURN)
+        $summariesDeleted = DB::delete("
             DELETE FROM cb_returns_summary
             WHERE return_period = ?
               AND approved_status != 1
-              " . ($propertyId ? "AND property_code = (SELECT reference_number FROM sys_pm_properties WHERE id = ?)" : ""),
-            $propertyId ? [$returnPeriod, $propertyId] : [$returnPeriod]
-        );
+              AND return_code IN ({$placeholders})
+        ", array_merge([$returnPeriod], $returnCodes));
 
         // Reset landlord account recovery flags
         $landlordReset = DB::affectingStatement("
@@ -233,6 +270,7 @@ trait ReturnsSummaryTrait
         Log::info("ReturnsSummaryTrait: Deleted unapproved returns for regeneration", [
             'period' => $returnPeriod,
             'property_id' => $propertyId,
+            'return_codes' => $returnCodes,
             'clients_deleted' => $clientsDeleted,
             'summaries_deleted' => $summariesDeleted,
             'landlord_reset' => $landlordReset

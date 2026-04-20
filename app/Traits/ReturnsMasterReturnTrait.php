@@ -33,7 +33,7 @@ trait ReturnsMasterReturnTrait
         int $returnYear,
         int $returnMonth
     ): int {
-        // Get active merge batches with their aggregated data
+        // Get active merge batches with their aggregated data using CORRECT columns
         $masterReturns = DB::select("
             WITH batch_property_returns AS (
                 -- Get MAINRETURN summaries for properties in active batches
@@ -42,19 +42,25 @@ trait ReturnsMasterReturnTrait
                     mb.batch_reference AS batch_code,
                     mb.landlord_name AS batch_name,
                     mb.landlord_id AS batch_client_id,
-                    rs.id AS child_return_id,
+                    rs.id AS child_summary_id,
+                    rs.return_id AS child_return_id,
                     rs.return_code AS child_return_code,
                     rs.property_code,
                     mbi.property_id,
-                    rs.total_returns,
-                    rs.rent_amount,
-                    rs.amount_withheld,
-                    rs.gross_commission,
-                    rs.vat_commission,
-                    rs.net_commission_paid,
-                    rs.deductions,
-                    rs.other_collections,
-                    rs.net_amount_payable,
+                    -- Use columns that actually have data
+                    COALESCE(rs.total_credit, 0) AS total_credit,
+                    COALESCE(rs.total_debit, 0) AS total_debit,
+                    COALESCE(rs.net_amount, 0) AS net_amount,
+                    COALESCE(rs.commission_amount, 0) AS commission_amount,
+                    COALESCE(rs.commission_total, 0) AS commission_total,
+                    COALESCE(rs.vatable_total, 0) AS vatable_total,
+                    COALESCE(rs.transaction_amount, 0) AS transaction_amount,
+                    COALESCE(rs.net_balance, 0) AS net_balance,
+                    COALESCE(rs.payable_amount, 0) AS payable_amount,
+                    COALESCE(rs.non_payable_amount, 0) AS non_payable_amount,
+                    COALESCE(rs.payable_units, 0) AS payable_units,
+                    COALESCE(rs.total_units, 0) AS total_units,
+                    rs.commission_rate,
                     rs.zone_id,
                     rs.field_officer_id,
                     rs.zone_supervisor_id,
@@ -74,17 +80,23 @@ trait ReturnsMasterReturnTrait
                     batch_name,
                     batch_client_id,
                     STRING_AGG(child_return_code, ',' ORDER BY child_return_code) AS child_return_codes,
+                    STRING_AGG(child_summary_id::text, ',' ORDER BY child_return_code) AS child_summary_ids,
                     STRING_AGG(child_return_id::text, ',' ORDER BY child_return_code) AS child_return_ids,
                     COUNT(*) AS property_count,
-                    SUM(total_returns)        AS total_returns,
-                    SUM(rent_amount)          AS rent_amount,
-                    SUM(amount_withheld)      AS amount_withheld,
-                    SUM(gross_commission)     AS gross_commission,
-                    SUM(vat_commission)       AS vat_commission,
-                    SUM(net_commission_paid)  AS net_commission_paid,
-                    SUM(deductions)           AS deductions,
-                    SUM(other_collections)    AS other_collections,
-                    SUM(net_amount_payable)   AS net_amount_payable,
+                    -- Aggregate correct columns
+                    SUM(total_credit)       AS total_credit,
+                    SUM(total_debit)        AS total_debit,
+                    SUM(net_amount)         AS net_amount,
+                    SUM(commission_amount)  AS commission_amount,
+                    SUM(commission_total)   AS commission_total,
+                    SUM(vatable_total)      AS vatable_total,
+                    SUM(transaction_amount) AS transaction_amount,
+                    SUM(net_balance)        AS net_balance,
+                    SUM(payable_amount)     AS payable_amount,
+                    SUM(non_payable_amount) AS non_payable_amount,
+                    SUM(payable_units)      AS payable_units,
+                    SUM(total_units)        AS total_units,
+                    AVG(commission_rate)    AS commission_rate,
                     MIN(zone_id) AS zone_id,
                     MIN(field_officer_id) AS field_officer_id,
                     MIN(zone_supervisor_id) AS zone_supervisor_id,
@@ -103,35 +115,43 @@ trait ReturnsMasterReturnTrait
             $landlordCode = $this->getLandlordCodeForClient($batch->batch_client_id);
             $masterReturnCode = 'R1' . $returnPeriod . $landlordCode;
 
-            // Insert MASTERRETURN summary
+            // Get next return_id for MASTERRETURN
+            $nextReturnId = DB::selectOne("SELECT COALESCE(MAX(return_id), 0) + 1 as next_id FROM cb_returns_summary")->next_id;
+
+            // Insert MASTERRETURN summary using CORRECT columns
             DB::statement("
                 INSERT INTO cb_returns_summary (
-                    return_code, return_period, return_date,
-                    property_code, property_name, landlord_name, landlord_code,
-                    total_returns, rent_amount, amount_withheld,
-                    gross_commission, vat_commission, net_commission_paid,
-                    deductions, other_collections, net_amount_payable,
-                    return_type, approved_status, transaction_ref,
+                    return_code, return_period, return_type,
+                    property_code, landlord_code, landlord_name,
+                    year, month, return_description,
+                    total_credit, total_debit, net_amount,
+                    commission_amount, commission_total, commission_rate, vatable_total,
+                    transaction_amount, net_balance,
+                    payable_amount, non_payable_amount, payable_units, total_units,
+                    approved_status, paid_status, prepared_status,
+                    transaction_ref, return_id,
                     client_id, zone_id, field_officer_id,
                     zone_supervisor_id, zone_manager_id,
-                    year, month,
                     server_time, user_id
                 )
                 SELECT
                     ?,
                     ?::integer,
-                    ?,
-                    ?,  -- batch_code as property_code
-                    ?,  -- batch_name as property_name
-                    c.names,
-                    c.reference_number,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     'MASTERRETURN',
-                    0,
-                    ?,  -- child return codes
-                    ?,
+                    '',  -- property_code empty for MASTERRETURN
+                    c.reference_number,
+                    c.names,
+                    ?, ?,
+                    'Returns for ' || ? || ' ' || ?,
+                    ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?,
+                    ?, ?, ?, ?,
+                    0, 0, 1,
+                    ?,  -- child return codes
+                    ?,  -- return_id
+                    ?,
+                    ?, ?, ?, ?,
                     NOW(),
                     ?
                 FROM sys_pm_clients c
@@ -139,42 +159,58 @@ trait ReturnsMasterReturnTrait
             ", [
                 $masterReturnCode,
                 $returnPeriod,
-                $transactionDate,
-                $batch->batch_code,
-                $batch->batch_name,
-                $batch->total_returns,
-                $batch->rent_amount,
-                $batch->amount_withheld,
-                $batch->gross_commission,
-                $batch->vat_commission,
-                $batch->net_commission_paid,
-                $batch->deductions,
-                $batch->other_collections,
-                $batch->net_amount_payable,
+                $returnYear,
+                $returnMonth,
+                date('F', mktime(0, 0, 0, $returnMonth, 1)),
+                $returnYear,
+                $batch->total_credit,
+                $batch->total_debit,
+                $batch->net_amount,
+                $batch->commission_amount,
+                $batch->commission_total,
+                $batch->commission_rate,
+                $batch->vatable_total,
+                $batch->transaction_amount,
+                $batch->net_balance,
+                $batch->payable_amount,
+                $batch->non_payable_amount,
+                $batch->payable_units,
+                $batch->total_units,
                 $batch->child_return_codes,
+                $nextReturnId,
                 $batch->batch_client_id,
                 $batch->zone_id,
                 $batch->field_officer_id,
                 $batch->zone_supervisor_id,
                 $batch->zone_manager_id,
-                $returnYear,
-                $returnMonth,
                 $generatedBy,
                 $batch->batch_client_id
             ]);
 
             // Mark child MAINRETURNs as merged
             $this->markChildReturnsAsMerged(
-                $batch->child_return_ids,
+                $batch->child_summary_ids,
                 $masterReturnCode,
                 $returnPeriod
             );
 
-            // Copy all line items from child returns to MASTERRETURN
+            // Create RETURN NET SUM lines for MASTERRETURN
             $this->copyLinesToMasterReturn(
                 $masterReturnCode,
-                $batch->child_return_ids,
-                $returnPeriod
+                explode(',', $batch->child_return_codes),
+                $returnPeriod,
+                $nextReturnId
+            );
+
+            // Add landlord-level deductions to MASTERRETURN
+            $this->insertMasterReturnDeductions(
+                $masterReturnCode,
+                $returnPeriod,
+                $nextReturnId,
+                $batch->batch_client_id,
+                $returnYear,
+                $returnMonth,
+                $generatedBy
             );
 
             $masterReturnCount++;
@@ -184,11 +220,101 @@ trait ReturnsMasterReturnTrait
                 'batch'          => $batch->batch_name,
                 'properties'     => $batch->property_count,
                 'child_returns'  => $batch->child_return_codes,
-                'net_payable'    => $batch->net_amount_payable
+                'total_credit'   => $batch->total_credit,
+                'net_amount'     => $batch->net_amount
             ]);
         }
 
         return $masterReturnCount;
+    }
+
+    /**
+     * Insert landlord-level deductions from cb_landlord_account to MASTERRETURN.
+     *
+     * @param string $masterReturnCode
+     * @param string $returnPeriod
+     * @param int $returnId
+     * @param int $clientId Landlord client ID
+     * @param int $returnYear
+     * @param int $returnMonth
+     * @param int $userId
+     * @return int Lines inserted
+     */
+    protected function insertMasterReturnDeductions(
+        string $masterReturnCode,
+        string $returnPeriod,
+        int $returnId,
+        int $clientId,
+        int $returnYear,
+        int $returnMonth,
+        int $userId
+    ): int {
+        // Insert landlord-level deductions from cb_landlord_account
+        $inserted = DB::affectingStatement("
+            INSERT INTO cb_returns_clients (
+                return_code, return_period, transaction_number, transaction_date,
+                entry_description, entry_type, dr_cr,
+                property_code, net_amount, narration,
+                property_id, client_id, zone_id, field_officer_id,
+                zone_supervisor_id, zone_manager_id,
+                return_id, is_commissionable, transaction_source, transaction_ref,
+                server_time, user_id
+            )
+            SELECT
+                ?,
+                ?::integer,
+                la.transaction_number,
+                TO_CHAR(NOW(), 'DD-Mon-YYYY'),
+                'DEDUCTION',
+                COALESCE(ii.item_name, 'Advance Payments-From Landlord Acc'),
+                'DR',
+                '',  -- empty property_code for landlord-level deductions
+                la.debit_amount,
+                COALESCE(la.entry_particulars, la.entry_description),
+                NULL,
+                la.client_id,
+                NULL, NULL, NULL, NULL,
+                ?,
+                'No',
+                'LANDLORD ACCOUNT',
+                la.transaction_number,
+                NOW(),
+                ?
+            FROM cb_landlord_account la
+            LEFT JOIN sys_set_invoiceable_items ii ON ii.billing_code = la.entry_type_code
+            WHERE la.client_id = ?
+              AND la.debit_amount > 0
+              AND COALESCE(la.is_recovered, 0) != 1
+              AND la.year = ?
+              AND la.month = ?
+              AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
+        ", [$masterReturnCode, $returnPeriod, $returnId, $userId, $clientId, $returnYear, $returnMonth]);
+
+        // Mark as recovered
+        if ($inserted > 0) {
+            DB::statement("
+                UPDATE cb_landlord_account
+                SET is_recovered = 1,
+                    recovery_year = ?,
+                    recovery_month = ?,
+                    return_code = ?,
+                    recovery_server_time = NOW()
+                WHERE client_id = ?
+                  AND debit_amount > 0
+                  AND COALESCE(is_recovered, 0) != 1
+                  AND year = ?
+                  AND month = ?
+                  AND entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
+            ", [$returnYear, $returnMonth, $masterReturnCode, $clientId, $returnYear, $returnMonth]);
+
+            Log::info("ReturnsMasterReturnTrait: Added landlord deductions to MASTERRETURN", [
+                'master_code' => $masterReturnCode,
+                'client_id'   => $clientId,
+                'count'       => $inserted
+            ]);
+        }
+
+        return $inserted;
     }
 
     /**
@@ -234,23 +360,28 @@ trait ReturnsMasterReturnTrait
     }
 
     /**
-     * Copy line items from child returns to MASTERRETURN.
-     * Preserves original line details but updates return_code.
+     * Create RETURN NET SUM lines for MASTERRETURN.
+     * Instead of copying all child lines, creates summary lines per child MAINRETURN.
      *
      * @param string $masterReturnCode The MASTERRETURN code
-     * @param string $childReturnIds Comma-separated child return IDs
+     * @param array $childReturnCodes Array of child return codes
      * @param string $returnPeriod YYYYMM format
+     * @param int $masterReturnId The return_id for the MASTERRETURN
      * @return void
      */
     protected function copyLinesToMasterReturn(
         string $masterReturnCode,
-        string $childReturnIds,
-        string $returnPeriod
+        array $childReturnCodes,
+        string $returnPeriod,
+        int $masterReturnId
     ): void {
-        $ids = explode(',', $childReturnIds);
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        if (empty($childReturnCodes)) {
+            return;
+        }
 
-        // Insert new lines with MASTERRETURN code, linking back to original
+        $placeholders = implode(',', array_fill(0, count($childReturnCodes), '?'));
+
+        // Create RETURN NET SUM lines - one per child MAINRETURN showing its net total
         DB::statement("
             INSERT INTO cb_returns_clients (
                 return_code, return_period, transaction_number, transaction_date,
@@ -262,47 +393,53 @@ trait ReturnsMasterReturnTrait
                 zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
                 return_id, invoice_id,
                 is_commissionable, transaction_source, transaction_ref,
-                deduction_point_2,
                 server_time, user_id
             )
             SELECT
                 ?,  -- master return code
-                return_period,
-                transaction_number,
-                transaction_date,
-                entry_description,
-                entry_type,
-                dr_cr,
-                property_code,
-                unit_code,
-                tenant_name,
-                commission_amount,
-                vat_amount,
-                net_amount,
-                amount_payable_landlord,
-                narration,
-                pay_percentage,
-                payable_status,
-                property_id,
-                client_id,
-                zone_id,
-                field_officer_id,
-                zone_supervisor_id,
-                zone_manager_id,
-                unit_id,
-                tenant_id,
-                NULL,  -- will be linked later
-                invoice_id,
-                is_commissionable,
-                transaction_source,
-                return_code,  -- original return code as reference
-                deduction_point_2,
-                server_time,
-                user_id
-            FROM cb_returns_clients
-            WHERE return_id IN ({$placeholders})
-              AND return_period = ?
-        ", array_merge([$masterReturnCode], $ids, [$returnPeriod]));
+                ?::integer,  -- return_period as integer
+                rs.property_code,  -- transaction_number = property code (fits varchar 12)
+                TO_CHAR(NOW(), 'DD-Mon-YYYY'),
+                'NETSUM',  -- entry_description
+                'RETURN NET SUM',  -- entry_type
+                'CR',  -- dr_cr
+                rs.property_code,
+                NULL,  -- unit_code
+                rs.landlord_name,  -- tenant_name = landlord name
+                rs.commission_amount,
+                COALESCE(rs.vatable_total, 0),
+                rs.net_amount,  -- The net total for this child
+                rs.net_amount,
+                'Net return for property ' || rs.property_code,
+                100,  -- pay_percentage
+                1,    -- payable_status
+                p.id,  -- property_id
+                rs.client_id,
+                rs.zone_id,
+                rs.field_officer_id,
+                rs.zone_supervisor_id,
+                rs.zone_manager_id,
+                NULL,  -- unit_id
+                NULL,  -- tenant_id
+                ?,  -- master return_id
+                NULL,  -- invoice_id
+                0,  -- is_commissionable
+                'MASTERRETURN',
+                rs.return_code,  -- transaction_ref = child return code
+                NOW(),
+                rs.user_id
+            FROM cb_returns_summary rs
+            LEFT JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+            WHERE rs.return_code IN ({$placeholders})
+              AND rs.return_period = ?
+              AND rs.return_type = 'MAINRETURN'
+        ", array_merge([$masterReturnCode, $returnPeriod, $masterReturnId], $childReturnCodes, [$returnPeriod]));
+
+        Log::info("ReturnsMasterReturnTrait: created RETURN NET SUM lines for MASTERRETURN", [
+            'master_code'   => $masterReturnCode,
+            'child_codes'   => $childReturnCodes,
+            'return_period' => $returnPeriod
+        ]);
     }
 
     /**
@@ -316,17 +453,16 @@ trait ReturnsMasterReturnTrait
         return DB::select("
             SELECT
                 mb.id AS batch_id,
-                mb.batch_code,
-                mb.batch_name,
+                mb.batch_reference AS batch_code,
+                mb.landlord_name AS batch_name,
                 mbi.property_id,
                 p.reference_number AS property_code,
                 p.property_name
             FROM cb_returns_merge_batches mb
             JOIN cb_returns_merge_batch_items mbi ON mbi.batch_id = mb.id
             JOIN sys_pm_properties p ON p.id = mbi.property_id
-            WHERE mb.client_id = ?
-              AND mb.is_active = true
-            ORDER BY mb.batch_code, p.reference_number
+            WHERE mb.landlord_id = ?
+            ORDER BY mb.batch_reference, p.reference_number
         ", [$clientId]);
     }
 
@@ -343,7 +479,6 @@ trait ReturnsMasterReturnTrait
             FROM cb_returns_merge_batch_items mbi
             JOIN cb_returns_merge_batches mb ON mb.id = mbi.batch_id
             WHERE mbi.property_id = ?
-              AND mb.is_active = true
         ", [$propertyId]);
 
         return $result->cnt > 0;
