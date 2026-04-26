@@ -1038,7 +1038,7 @@ class HrSettingsController extends Controller
             $validated = $request->validate([
                 'zone_id' => 'required|integer|exists:sys_set_zones,id',
                 'assigned_as' => 'required|string|max:255',
-                'staff_id' => 'required|integer|exists:sys_set_staff,id',
+                'staff_id' => 'required|integer|exists:sys_staff,id',
                 'properties_ids' => 'required|array',
                 'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
@@ -1058,14 +1058,21 @@ class HrSettingsController extends Controller
 
             return response()->json(['success' => true, 'message' => 'Zone assignment created successfully', 'zone_assignment' => $assignment]);
         } catch (ValidationException $e) {
+            Log::warning('Zone assignment validation error:', $e->errors());
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
+            Log::error('Zone assignment store error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to save zone assignment'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to save zone assignment: ' . $e->getMessage()], 500);
         }
     }
 
@@ -1075,7 +1082,7 @@ class HrSettingsController extends Controller
             $validated = $request->validate([
                 'zone_id' => 'required|integer|exists:sys_set_zones,id',
                 'assigned_as' => 'required|string|max:255',
-                'staff_id' => 'required|integer|exists:sys_set_staff,id',
+                'staff_id' => 'required|integer|exists:sys_staff,id',
                 'properties_ids' => 'required|array',
                 'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
@@ -1093,14 +1100,22 @@ class HrSettingsController extends Controller
 
             return response()->json(['success' => true, 'message' => 'Zone assignment updated successfully', 'zone_assignment' => $assignment]);
         } catch (ValidationException $e) {
+            Log::warning('Zone assignment validation error:', $e->errors());
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
+            Log::error('Zone assignment update error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'assignment_id' => $id
+            ]);
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to update zone assignment'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to update zone assignment: ' . $e->getMessage()], 500);
         }
     }
 
