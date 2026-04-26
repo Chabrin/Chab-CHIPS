@@ -58,6 +58,8 @@
 <div class="modal fade" id="addZoneAssignmentModal" tabindex="-1" aria-labelledby="addZoneAssignmentModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
+            <!-- Inline field spinners for edit mode -->
+            <div id="zoneAssignmentFieldSpinners" style="display:none;"></div>
             <div class="modal-header">
                 <h5 class="modal-title" id="addZoneAssignmentModalLabel">Zone Assignment</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -68,60 +70,85 @@
 
                     <div class="row">
                         <!-- Step 1: Select Staff -->
-                        <div class="col-lg-6 mb-3">
+                        <div class="col-lg-6 mb-3 position-relative">
                             <label for="staff_id" class="form-label">Staff <span style="color:red">*</span></label>
-                            <select class="form-select" name="staff_id" id="staff_id" required>
-                                <option value="" disabled selected>Select staff first</option>
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" name="staff_id" id="staff_id" required>
+                                    <option value="" disabled selected>Select staff first</option>
+                                </select>
+                                <span class="input-group-text bg-white border-0" id="spinner-staff" style="display:none;padding-left:0;">
+                                    <span class="spinner-border spinner-border-sm text-primary"></span>
+                                </span>
+                            </div>
                         </div>
 
                         <!-- Step 2: Select Assignment Role -->
-                        <div class="col-lg-6 mb-3">
+                        <div class="col-lg-6 mb-3 position-relative">
                             <label for="assigned_as" class="form-label">Assign As Role <span style="color:red">*</span></label>
-                            <select class="form-select" name="assigned_as" id="assigned_as" required disabled>
-                                <option value="" disabled selected>Select staff first, then select role</option>
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" name="assigned_as" id="assigned_as" required disabled>
+                                    <option value="" disabled selected>Select staff first, then select role</option>
+                                </select>
+                                <span class="input-group-text bg-white border-0" id="spinner-role" style="display:none;padding-left:0;">
+                                    <span class="spinner-border spinner-border-sm text-primary"></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
 
                     <div class="row">
                         <!-- Step 3: Select Zone -->
-                        <div class="col-lg-6 mb-3">
+                        <div class="col-lg-6 mb-3 position-relative">
                             <label for="zone_id" class="form-label">Zone <span style="color:red">*</span></label>
-                            <select class="form-select" name="zone_id" id="zone_id" required disabled>
-                                <option value="" disabled selected>Select role first, then select zone</option>
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" name="zone_id" id="zone_id" required disabled>
+                                    <option value="" disabled selected>Select role first, then select zone</option>
+                                </select>
+                                <span class="input-group-text bg-white border-0" id="spinner-zone" style="display:none;padding-left:0;">
+                                    <span class="spinner-border spinner-border-sm text-primary"></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Step 4: Filter and Select Available Properties -->
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <label class="form-label mb-0">Available Zone Properties <span style="color:red">*</span></label>
+                            <div class="d-flex align-items-center gap-2">
+                                <label class="form-label mb-0">Available Zone Properties <span style="color:red">*</span></label>
+                                <button type="button" id="zoneAssignmentRefreshSort" class="btn btn-sm btn-light" title="Refresh / Sort checked to top">
+                                    <span class="material-symbols-outlined">refresh</span>
+                                </button>
+                            </div>
                             <span id="zoneAssignmentSelectedCount" class="badge bg-primary text-white">0 selected</span>
                         </div>
 
-                        <table class="table table-sm table-hover mb-0" id="zoneAssignmentPropertiesTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width:30px;"><input type="checkbox" id="zoneAssignmentCheckAll" title="Select/Deselect All"></th>
-                                    <th>Property Ref</th>
-                                    <th>Property Name</th>
-                                </tr>
-                            </thead>
-                            <tbody id="zoneAssignmentPropertiesTableBody">
-                                <tr>
-                                    <td colspan="3" class="text-muted text-center py-3">Select zone and role first</td>
-                                </tr>
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <th></th>
-                                    <th></th>
-                                    <th></th>
-                                </tr>
-                            </tfoot>
-                        </table>
+                        <div class="position-relative">
+                            <table class="table table-sm table-hover mb-0" id="zoneAssignmentPropertiesTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:30px;"><input type="checkbox" id="zoneAssignmentCheckAll" title="Select/Deselect All"></th>
+                                        <th>Property Ref</th>
+                                        <th>Property Name</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="zoneAssignmentPropertiesTableBody">
+                                    <tr>
+                                        <td colspan="3" class="text-muted text-center py-3">Select zone and role first</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            <span id="spinner-properties" style="display:none;position:absolute;top:40px;left:50%;transform:translateX(-50%);z-index:2;">
+                                <span class="spinner-border spinner-border-sm text-primary"></span>
+                            </span>
+                        </div>
                         <small class="form-text text-muted d-block mt-2">Properties shown are not assigned to any staff member for this role.</small>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
@@ -143,6 +170,7 @@
 </div>
 @endsection
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     let propertiesTableData = [];
     let isEditMode = false;
@@ -202,13 +230,7 @@
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
-                        buttons += `
-                            <a href="{{ url('/hr/zone/assignments') }}/${row.id}/view"
-                                class="btn btn-xs btn-light"
-                                title="View"
-                                style="padding:1px 2px;">
-                                <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
-                            </a>`;
+                        // View/Unassign removed per new UX request
                         if (row.can_update) {
                             buttons += `
                                 <button class="btn btn-xs btn-light edit-zone-assignment"
@@ -510,27 +532,24 @@
                 searching: true,
                 info: true,
                 lengthChange: true,
-                columnDefs: [
-                    { orderable: false, targets: 0 }
-                ]
+                columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                }]
             });
 
             refreshZoneAssignmentSelectedCount();
             updateZoneAssignmentCheckAllState();
         }
 
-        // Render properties table body with checked rows first
+        // Render properties table body (preserve order; manual refresh sorts)
         function renderPropertiesTableBody() {
-            // Sort: checked first, then unchecked
-            let sorted = propertiesTableData.slice().sort(function(a, b) {
-                if (a.checked === b.checked) return 0;
-                return a.checked ? -1 : 1;
-            });
+            let ordered = propertiesTableData.slice();
 
             let tbody = $('#zoneAssignmentPropertiesTableBody');
             tbody.empty();
 
-            sorted.forEach(function(prop) {
+            ordered.forEach(function(prop) {
                 tbody.append(
                     '<tr>' +
                     '<td class="text-center"><input class="form-check-input zone-prop-check" type="checkbox" value="' + prop.id + '" ' + (prop.checked ? 'checked' : '') + '></td>' +
@@ -540,6 +559,35 @@
                 );
             });
         }
+
+        // Manual refresh/sort: checked rows first
+        $(document).on('click', '#zoneAssignmentRefreshSort', function() {
+            if ($.fn.DataTable.isDataTable('#zoneAssignmentPropertiesTable')) {
+                $('#zoneAssignmentPropertiesTable').DataTable().destroy();
+            }
+
+            propertiesTableData.sort(function(a, b) {
+                if (a.checked === b.checked) return 0;
+                return a.checked ? -1 : 1;
+            });
+
+            renderPropertiesTableBody();
+
+            $('#zoneAssignmentPropertiesTable').DataTable({
+                paging: true,
+                pageLength: 10,
+                searching: true,
+                info: true,
+                lengthChange: true,
+                columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                }]
+            });
+
+            refreshZoneAssignmentSelectedCount();
+            updateZoneAssignmentCheckAllState();
+        });
 
         // Get selected property IDs from data store (DOM-paginated rows aren't queryable)
         function getSelectedZoneAssignmentPropertyIds() {
@@ -583,9 +631,10 @@
                 searching: true,
                 info: true,
                 lengthChange: true,
-                columnDefs: [
-                    { orderable: false, targets: 0 }
-                ]
+                columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                }]
             });
 
             refreshZoneAssignmentSelectedCount();
@@ -612,9 +661,10 @@
                 searching: true,
                 info: true,
                 lengthChange: true,
-                columnDefs: [
-                    { orderable: false, targets: 0 }
-                ]
+                columnDefs: [{
+                    orderable: false,
+                    targets: 0
+                }]
             });
 
             refreshZoneAssignmentSelectedCount();
@@ -704,11 +754,20 @@
 
             // Parse existing properties IDs robustly (handles string "1,2,3", single number, or empty)
             let propIdsRaw = String(assignmentData.properties_ids || '');
-            let selectedPropertyIds = propIdsRaw
-                ? propIdsRaw.split(',').map(p => Number(String(p).trim())).filter(n => !isNaN(n))
-                : [];
+            let selectedPropertyIds = propIdsRaw ?
+                propIdsRaw.split(',').map(p => Number(String(p).trim())).filter(n => !isNaN(n)) : [];
 
+            // Show modal and loading overlay while we fetch data
             $('#addZoneAssignmentModal').modal('show');
+            // Show all field spinners and set all fields readonly/disabled
+            $('#spinner-staff').show();
+            $('#spinner-role').show();
+            $('#spinner-zone').show();
+            $('#spinner-properties').show();
+            $('#staff_id').prop('disabled', true);
+            $('#assigned_as').prop('disabled', true);
+            $('#zone_id').prop('disabled', true);
+            $('#zoneAssignmentPropertiesTable input, #zoneAssignmentPropertiesTable button, #zoneAssignmentPropertiesTable select').prop('disabled', true);
 
             // Load and set staff
             $.ajax({
@@ -738,16 +797,14 @@
                     }
 
                     $staff_id.val(assignmentData.staff_id);
-
-                    // Initialize Select2 with dropdownParent
                     $staff_id.select2({
                         placeholder: 'Select Staff',
                         allowClear: false,
                         dropdownParent: $('#addZoneAssignmentModal')
                     });
-
                     // Lock staff field on edit
                     $staff_id.prop('disabled', true).trigger('change.select2');
+                    $('#spinner-staff').hide();
 
                     // Now load roles for this staff
                     $.ajax({
@@ -775,6 +832,7 @@
 
                             // Lock role field on edit
                             $assigned_as.prop('disabled', true);
+                            $('#spinner-role').hide();
 
                             // Load zones for this role
                             $.ajax({
@@ -802,6 +860,7 @@
 
                                     // Lock zone field on edit
                                     $zone_id.prop('disabled', true);
+                                    $('#spinner-zone').hide();
 
                                     // Load available properties for this zone
                                     $.ajax({
@@ -830,25 +889,31 @@
                                             });
 
                                             renderZoneAssignmentPropertiesTable(availableProps, selectedPropertyIds);
+                                            $('#spinner-properties').hide();
+                                            $('#zoneAssignmentPropertiesTable input, #zoneAssignmentPropertiesTable button, #zoneAssignmentPropertiesTable select').prop('disabled', false);
                                         },
                                         error: function() {
                                             toastr.error('Failed to load available properties.');
                                             renderZoneAssignmentPropertiesTable([], []);
+                                            $('#spinner-properties').hide();
                                         }
                                     });
                                 },
                                 error: function() {
                                     toastr.error('Failed to load zones.');
+                                    $('#spinner-zone').hide();
                                 }
                             });
                         },
                         error: function() {
                             toastr.error('Failed to load roles.');
+                            $('#spinner-role').hide();
                         }
                     });
                 },
                 error: function() {
                     toastr.error('Failed to load staff.');
+                    $('#spinner-staff').hide();
                 }
             });
         });
@@ -857,43 +922,50 @@
             var $btn = $(this);
             var $icon = $btn.find('.material-symbols-outlined').first();
 
-            if (!confirm('Are you sure you want to delete this zone assignment?')) {
-                return;
-            }
+            Swal.fire({
+                title: 'Delete assignment?',
+                text: 'Are you sure you want to delete this zone assignment? This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
 
-            $icon.show();
-            $btn.find('.material-symbols-outlined').last().hide();
-            $btn.prop('disabled', true);
+                $icon.show();
+                $btn.find('.material-symbols-outlined').last().hide();
+                $btn.prop('disabled', true);
 
-            $.ajax({
-                url: "{{ url('/ajax/hr/zone/assignments') }}/" + $btn.data('id'),
-                type: 'DELETE',
-                data: {
-                    _token: '{{ csrf_token() }}'
-                },
-                success: function(res) {
-                    $icon.hide();
-                    $btn.find('.material-symbols-outlined').last().show();
-                    $btn.prop('disabled', false);
+                $.ajax({
+                    url: "{{ url('/ajax/hr/zone/assignments') }}/" + $btn.data('id'),
+                    type: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function(res) {
+                        $icon.hide();
+                        $btn.find('.material-symbols-outlined').last().show();
+                        $btn.prop('disabled', false);
 
-                    if (res.success) {
-                        toastr.success('Deleted');
-                        table.ajax.reload(null, false);
-                    } else {
-                        toastr.error(res.error || 'Error deleting');
+                        if (res.success) {
+                            toastr.success('Deleted');
+                            table.ajax.reload(null, false);
+                        } else {
+                            toastr.error(res.error || 'Error deleting');
+                        }
+                    },
+                    error: function(xhr) {
+                        $icon.hide();
+                        $btn.find('.material-symbols-outlined').last().show();
+                        $btn.prop('disabled', false);
+
+                        let msg = 'Delete error';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            msg = xhr.responseJSON.error;
+                        }
+                        toastr.error(msg);
                     }
-                },
-                error: function(xhr) {
-                    $icon.hide();
-                    $btn.find('.material-symbols-outlined').last().show();
-                    $btn.prop('disabled', false);
-
-                    let msg = 'Delete error';
-                    if (xhr.responseJSON && xhr.responseJSON.error) {
-                        msg = xhr.responseJSON.error;
-                    }
-                    toastr.error(msg);
-                }
+                });
             });
         });
 
@@ -911,6 +983,12 @@
             $('#assigned_as').prop('disabled', false);
             $('#zone_id').prop('disabled', false);
             propertiesTableData = [];
+            // ensure loading overlay hidden
+            $('#spinner-staff').hide();
+            $('#spinner-role').hide();
+            $('#spinner-zone').hide();
+            $('#spinner-properties').hide();
+            $('#zoneAssignmentPropertiesTable input, #zoneAssignmentPropertiesTable button, #zoneAssignmentPropertiesTable select').prop('disabled', false);
         });
     });
 </script>
