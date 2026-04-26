@@ -323,8 +323,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::delete('/ajax/hr/zone/assignments/{id}', [HrSettingsController::class, 'zoneAssignmentsDelete'])->name('ajax.zoneAssignments.delete');
 
     Route::get('/ajax/hr/properties/by-zone/{zoneId}', [HrSettingsController::class, 'propertiesByZone'])->name('ajax.properties.byZone');
+    Route::get('/ajax/hr/properties/available-in-zone', [HrSettingsController::class, 'availablePropertiesInZone'])->name('ajax.properties.availableInZone');
     Route::get('/ajax/hr/staff/list', [HrSettingsController::class, 'staffList'])->name('ajax.staff.list');
     Route::get('/ajax/hr/assignment_types/list', [HrSettingsController::class, 'assignmentTypesList'])->name('ajax.assignmentTypes.list');
+    Route::get('/ajax/hr/roles/list', [HrSettingsController::class, 'rolesList'])->name('ajax.roles.list');
     Route::get('/ajax/hr/zones/list', [HrSettingsController::class, 'zonesList'])->name('ajax.zones.list');
 
     ####### Leave Management Section Start ########
