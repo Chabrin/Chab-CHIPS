@@ -202,23 +202,30 @@
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
+                        buttons += `
+                            <a href="{{ url('/hr/zone/assignments') }}/${row.id}/view"
+                                class="btn btn-xs btn-light"
+                                title="View"
+                                style="padding:1px 2px;">
+                                <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
+                            </a>`;
                         if (row.can_update) {
                             buttons += `
-                                <button class="btn btn-xs btn-light edit-zone-assignment" 
-                                    data-id="${row.id}" 
+                                <button class="btn btn-xs btn-light edit-zone-assignment"
+                                    data-id="${row.id}"
                                     data-zone_id="${row.zone_id || (row.zone && row.zone.id ? row.zone.id : '')}"
                                     data-assigned_as="${row.assigned_as || (row.assignment_type && row.assignment_type.id ? row.assignment_type.id : '')}"
                                     data-staff_id="${row.staff_id || (row.staff && row.staff.id ? row.staff.id : '')}"
-                                    data-fo_ids="${row.fo_ids ? row.fo_ids : ''}" 
-                                    data-properties_ids="${row.properties_ids ? row.properties_ids : ''}" 
-                                    data-current_status_id="${row.current_status_id}" 
+                                    data-fo_ids="${row.fo_ids ? row.fo_ids : ''}"
+                                    data-properties_ids="${row.properties_ids ? row.properties_ids : ''}"
+                                    data-current_status_id="${row.current_status_id}"
                                     style="padding:1px 2px;">
                                     <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
                                 </button>`;
                         }
                         if (row.can_delete) {
                             buttons += `
-                                <button class="btn btn-xs btn-light delete-zone-assignment" 
+                                <button class="btn btn-xs btn-light delete-zone-assignment"
                                     data-id="${row.id}" style="padding:1px 2px;">
                                     <span class="material-symbols-outlined spin" style="font-size:18px;display:none;">sync</span>
                                     <span class="material-symbols-outlined" style="font-size:18px;">delete_sweep</span>
@@ -534,13 +541,9 @@
             });
         }
 
-        // Get selected property IDs from checkboxes
+        // Get selected property IDs from data store (DOM-paginated rows aren't queryable)
         function getSelectedZoneAssignmentPropertyIds() {
-            let selected = [];
-            $('.zone-prop-check:checked').each(function() {
-                selected.push($(this).val());
-            });
-            return selected;
+            return propertiesTableData.filter(p => p.checked).map(p => p.id);
         }
 
         // Refresh the selected count badge
@@ -549,10 +552,10 @@
             $('#zoneAssignmentSelectedCount').text(count + ' selected');
         }
 
-        // Update check all checkbox state
+        // Update check all checkbox state — counts from data store, not DOM
         function updateZoneAssignmentCheckAllState() {
-            let total = $('.zone-prop-check:not(:disabled)').length;
-            let checked = $('.zone-prop-check:not(:disabled):checked').length;
+            let total = propertiesTableData.length;
+            let checked = propertiesTableData.filter(p => p.checked).length;
             $('#zoneAssignmentCheckAll').prop('checked', total > 0 && total === checked);
         }
 
@@ -795,8 +798,10 @@
                                         });
                                     }
 
-                                    $zone_id.prop('disabled', false);
                                     $zone_id.val(assignmentData.zone_id);
+
+                                    // Lock zone field on edit
+                                    $zone_id.prop('disabled', true);
 
                                     // Load available properties for this zone
                                     $.ajax({

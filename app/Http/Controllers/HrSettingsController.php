@@ -1051,6 +1051,28 @@ class HrSettingsController extends Controller
         return false;
     }
 
+    /**
+     * Get all role identifiers that represent the field_officer role
+     * across cb_roles and ZoneAssignmentType tables.
+     */
+    private function getFieldOfficerRoleIds(): array
+    {
+        $ids = [];
+
+        $cbIds = DB::table('cb_roles')
+            ->where('name', 'field_officer')
+            ->pluck('id')
+            ->toArray();
+        $ids = array_merge($ids, $cbIds);
+
+        $typeIds = ZoneAssignmentType::whereRaw('LOWER(type_name) = ?', ['field officer'])
+            ->pluck('id')
+            ->toArray();
+        $ids = array_merge($ids, $typeIds);
+
+        return array_values(array_unique($ids));
+    }
+
     public function zoneAssignmentsStore(Request $request)
     {
         try {
@@ -1185,6 +1207,76 @@ class HrSettingsController extends Controller
         }
     }
 
+    public function zoneAssignmentView($id)
+    {
+        $assignment = ZoneAssignment::with('createdBy', 'staff', 'assignment_type', 'zone')->findOrFail($id);
+
+        $propertyIds = [];
+        if (!empty($assignment->properties_ids)) {
+            $propertyIds = array_filter(array_map('intval', array_map('trim', explode(',', $assignment->properties_ids))));
+        }
+
+        $properties = !empty($propertyIds)
+            ? Property::whereIn('id', $propertyIds)->orderBy('reference_number')->get()
+            : collect();
+
+        return view('settings.hr.zone_assignment_view', compact('assignment', 'properties'));
+    }
+
+    public function zoneAssignmentUnassignProperty(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'property_id' => 'required|integer|exists:sys_pm_properties,id',
+            ]);
+
+            $assignment = ZoneAssignment::findOrFail($id);
+
+            $currentIds = !empty($assignment->properties_ids)
+                ? array_filter(array_map('trim', explode(',', $assignment->properties_ids)))
+                : [];
+
+            $remaining = array_values(array_filter($currentIds, function ($pid) use ($validated) {
+                return (int) $pid !== (int) $validated['property_id'];
+            }));
+
+            if (count($remaining) === count($currentIds)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Property is not part of this assignment.'
+                ], 422);
+            }
+
+            if (empty($remaining)) {
+                $assignment->delete();
+                return response()->json([
+                    'success' => true,
+                    'deleted' => true,
+                    'message' => 'Last property unassigned. Assignment removed.'
+                ]);
+            }
+
+            $assignment->properties_ids = implode(',', $remaining);
+            $assignment->save();
+
+            return response()->json([
+                'success' => true,
+                'deleted' => false,
+                'message' => 'Property unassigned successfully.',
+                'remaining_count' => count($remaining)
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to unassign property'], 500);
+        }
+    }
+
     public function assignmentTypesList()
     {
         try {
@@ -1306,10 +1398,24 @@ class HrSettingsController extends Controller
                 return response()->json(['success' => true, 'properties' => []]);
             }
 
-            // Get already assigned properties for this role (not assigned to current staff)
-            $assignedProperties = DB::table('sys_pm_zones_assignments')
-                ->where('zone_id', $zoneId)
-                ->where('assigned_as', $assignedAs)
+            // For field officers, exclude properties assigned to ANY other field officer
+            // (across all field_officer role identifiers). For other roles, only exclude
+            // assignments under the same role.
+            if ($this->isFieldOfficerRole($assignedAs)) {
+                $excludedRoles = $this->getFieldOfficerRoleIds();
+                if (empty($excludedRoles)) {
+                    $excludedRoles = [$assignedAs];
+                }
+                $assignedQuery = DB::table('sys_pm_zones_assignments')
+                    ->where('zone_id', $zoneId)
+                    ->whereIn('assigned_as', $excludedRoles);
+            } else {
+                $assignedQuery = DB::table('sys_pm_zones_assignments')
+                    ->where('zone_id', $zoneId)
+                    ->where('assigned_as', $assignedAs);
+            }
+
+            $assignedProperties = $assignedQuery
                 ->when($staffId, function ($query) use ($staffId) {
                     // Exclude current staff's own assignments
                     return $query->where('staff_id', '!=', $staffId);
