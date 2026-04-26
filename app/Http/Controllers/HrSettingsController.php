@@ -1032,6 +1032,25 @@ class HrSettingsController extends Controller
         }
     }
 
+    /**
+     * Check whether the given assigned_as value refers to the field_officer role.
+     * Resolves against cb_roles (used by the dropdown) with a fallback to ZoneAssignmentType.
+     */
+    private function isFieldOfficerRole($assignedAs): bool
+    {
+        $role = DB::table('cb_roles')->where('id', $assignedAs)->first();
+        if ($role && strtolower($role->name) === 'field_officer') {
+            return true;
+        }
+
+        $type = ZoneAssignmentType::find($assignedAs);
+        if ($type && strtolower($type->type_name) === 'field officer') {
+            return true;
+        }
+
+        return false;
+    }
+
     public function zoneAssignmentsStore(Request $request)
     {
         try {
@@ -1042,6 +1061,21 @@ class HrSettingsController extends Controller
                 'properties_ids' => 'required|array',
                 'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
+
+            // Validate: field officers cannot be assigned to multiple zones
+            if ($this->isFieldOfficerRole($validated['assigned_as'])) {
+                $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
+                    ->where('assigned_as', $validated['assigned_as'])
+                    ->where('zone_id', '!=', $validated['zone_id'])
+                    ->exists();
+
+                if ($existingAssignments) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Field officers cannot be assigned to multiple zones. This staff member is already assigned to another zone.'
+                    ], 422);
+                }
+            }
 
             // Convert properties array to comma-separated string
             $propertiesString = implode(',', $validated['properties_ids']);
@@ -1088,6 +1122,22 @@ class HrSettingsController extends Controller
             ]);
 
             $assignment = ZoneAssignment::findOrFail($id);
+
+            // Validate: field officers cannot be assigned to multiple zones
+            if ($this->isFieldOfficerRole($validated['assigned_as'])) {
+                $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
+                    ->where('assigned_as', $validated['assigned_as'])
+                    ->where('zone_id', '!=', $validated['zone_id'])
+                    ->where('id', '!=', $id)
+                    ->exists();
+
+                if ($existingAssignments) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Field officers cannot be assigned to multiple zones. This staff member is already assigned to another zone.'
+                    ], 422);
+                }
+            }
 
             // Convert properties array to comma-separated string
             $propertiesString = implode(',', $validated['properties_ids']);

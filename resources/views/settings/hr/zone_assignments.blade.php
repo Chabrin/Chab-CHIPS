@@ -34,6 +34,18 @@
                                 <tbody>
                                     <!-- Data loaded via DataTables AJAX -->
                                 </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                     </div>
@@ -54,28 +66,32 @@
                 <form id="zoneAssignmentForm">
                     <input type="hidden" name="id" id="zoneAssignmentId">
 
-                    <!-- Step 1: Select Staff -->
-                    <div class="mb-3">
-                        <label for="staff_id" class="form-label">Staff <span style="color:red">*</span></label>
-                        <select class="form-select" name="staff_id" id="staff_id" required>
-                            <option value="" disabled selected>Select staff first</option>
-                        </select>
+                    <div class="row">
+                        <!-- Step 1: Select Staff -->
+                        <div class="col-lg-6 mb-3">
+                            <label for="staff_id" class="form-label">Staff <span style="color:red">*</span></label>
+                            <select class="form-select" name="staff_id" id="staff_id" required>
+                                <option value="" disabled selected>Select staff first</option>
+                            </select>
+                        </div>
+
+                        <!-- Step 2: Select Assignment Role -->
+                        <div class="col-lg-6 mb-3">
+                            <label for="assigned_as" class="form-label">Assign As Role <span style="color:red">*</span></label>
+                            <select class="form-select" name="assigned_as" id="assigned_as" required disabled>
+                                <option value="" disabled selected>Select staff first, then select role</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <!-- Step 2: Select Assignment Role -->
-                    <div class="mb-3">
-                        <label for="assigned_as" class="form-label">Assign As Role <span style="color:red">*</span></label>
-                        <select class="form-select" name="assigned_as" id="assigned_as" required disabled>
-                            <option value="" disabled selected>Select staff first, then select role</option>
-                        </select>
-                    </div>
-
-                    <!-- Step 3: Select Zone -->
-                    <div class="mb-3">
-                        <label for="zone_id" class="form-label">Zone <span style="color:red">*</span></label>
-                        <select class="form-select" name="zone_id" id="zone_id" required disabled>
-                            <option value="" disabled selected>Select role first, then select zone</option>
-                        </select>
+                    <div class="row">
+                        <!-- Step 3: Select Zone -->
+                        <div class="col-lg-6 mb-3">
+                            <label for="zone_id" class="form-label">Zone <span style="color:red">*</span></label>
+                            <select class="form-select" name="zone_id" id="zone_id" required disabled>
+                                <option value="" disabled selected>Select role first, then select zone</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Step 4: Filter and Select Available Properties -->
@@ -85,22 +101,27 @@
                             <span id="zoneAssignmentSelectedCount" class="badge bg-primary text-white">0 selected</span>
                         </div>
 
-                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem;">
-                            <table class="table table-sm table-hover mb-0" id="zoneAssignmentPropertiesTable">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th style="width:30px;"><input type="checkbox" id="zoneAssignmentCheckAll" title="Select/Deselect All"></th>
-                                        <th>Property Ref</th>
-                                        <th>Property Name</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="zoneAssignmentPropertiesTableBody">
-                                    <tr>
-                                        <td colspan="3" class="text-muted text-center py-3">Select zone and role first</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                        <table class="table table-sm table-hover mb-0" id="zoneAssignmentPropertiesTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:30px;"><input type="checkbox" id="zoneAssignmentCheckAll" title="Select/Deselect All"></th>
+                                    <th>Property Ref</th>
+                                    <th>Property Name</th>
+                                </tr>
+                            </thead>
+                            <tbody id="zoneAssignmentPropertiesTableBody">
+                                <tr>
+                                    <td colspan="3" class="text-muted text-center py-3">Select zone and role first</td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
                         <small class="form-text text-muted d-block mt-2">Properties shown are not assigned to any staff member for this role.</small>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
@@ -123,6 +144,9 @@
 @endsection
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
+    let propertiesTableData = [];
+    let isEditMode = false;
+
     $(document).ready(function() {
         let table = $('#zone-assignments-table').DataTable({
             processing: true,
@@ -182,9 +206,9 @@
                             buttons += `
                                 <button class="btn btn-xs btn-light edit-zone-assignment" 
                                     data-id="${row.id}" 
-                                    data-zone_id="${row.zone && row.zone.id ? row.zone.id : ''}" 
-                                    data-assigned_as="${row.assignment_type && row.assignment_type.id ? row.assignment_type.id : ''}" 
-                                    data-staff_id="${row.staff && row.staff.id ? row.staff.id : ''}" 
+                                    data-zone_id="${row.zone_id || (row.zone && row.zone.id ? row.zone.id : '')}"
+                                    data-assigned_as="${row.assigned_as || (row.assignment_type && row.assignment_type.id ? row.assignment_type.id : '')}"
+                                    data-staff_id="${row.staff_id || (row.staff && row.staff.id ? row.staff.id : '')}"
                                     data-fo_ids="${row.fo_ids ? row.fo_ids : ''}" 
                                     data-properties_ids="${row.properties_ids ? row.properties_ids : ''}" 
                                     data-current_status_id="${row.current_status_id}" 
@@ -206,32 +230,47 @@
                 }
             ],
             paging: true,
+            pageLength: 10,
             info: true,
             lengthChange: true
         });
 
-        // ===== STEP 1: When modal opens, load staff list =====
+        // ===== STEP 1: When modal opens, load staff list (Add mode only) =====
         $('#addZoneAssignmentModal').on('show.bs.modal', function() {
+            // Skip reset/load if we are in edit mode — the edit handler will populate
+            if (isEditMode) {
+                return;
+            }
+
             // Reset form
             $('#zoneAssignmentForm')[0].reset();
             $('#zoneAssignmentId').val('');
 
+            // Re-enable staff and role selects (they may have been disabled by a previous edit)
+            $('#staff_id').prop('disabled', false);
+            $('#assigned_as').prop('disabled', true);
+            $('#zone_id').prop('disabled', true);
+
+            // Reset properties table
+            if ($.fn.DataTable.isDataTable('#zoneAssignmentPropertiesTable')) {
+                $('#zoneAssignmentPropertiesTable').DataTable().destroy();
+            }
+            $('#zoneAssignmentPropertiesTableBody').html('<tr><td colspan="3" class="text-muted text-center py-3">Select zone and role first</td></tr>');
+            $('#zoneAssignmentSelectedCount').text('0 selected');
+            propertiesTableData = [];
+
             // Disable steps 2-4
-            $('#assigned_as').prop('disabled', true).empty().append($('<option>', {
+            $('#assigned_as').empty().append($('<option>', {
                 value: '',
                 text: 'Select staff first, then select role',
                 disabled: true,
                 selected: true
             }));
-            $('#zone_id').prop('disabled', true).empty().append($('<option>', {
+            $('#zone_id').empty().append($('<option>', {
                 value: '',
                 text: 'Select role first, then select zone',
                 disabled: true,
                 selected: true
-            }));
-            $('#properties_ids').prop('disabled', true).empty().append($('<option>', {
-                disabled: true,
-                text: 'Select zone first to see available properties'
             }));
 
             // Load staff list
@@ -241,6 +280,12 @@
                 dataType: 'json',
                 success: function(response) {
                     let $staff_id = $('#staff_id');
+
+                    // Destroy existing Select2 first
+                    if ($staff_id.hasClass("select2-hidden-accessible")) {
+                        $staff_id.select2('destroy');
+                    }
+
                     $staff_id.empty();
                     $staff_id.append($('<option>', {
                         value: '',
@@ -257,15 +302,11 @@
                         });
                     }
 
-                    // Check if Select2 is already initialized and destroy it
-                    if ($staff_id.hasClass("select2-hidden-accessible")) {
-                        $staff_id.select2('destroy');
-                    }
-
-                    // Initialize Select2
+                    // Initialize Select2 with dropdownParent so search input is focusable inside modal
                     $staff_id.select2({
                         placeholder: 'Select Staff',
-                        allowClear: true
+                        allowClear: true,
+                        dropdownParent: $('#addZoneAssignmentModal')
                     });
                 },
                 error: function() {
@@ -429,29 +470,68 @@
 
         // Function to render properties table with checkboxes
         function renderZoneAssignmentPropertiesTable(properties, selectedIds) {
-            let tbody = $('#zoneAssignmentPropertiesTableBody');
-            tbody.empty();
+            // Destroy existing DataTable before re-rendering
+            if ($.fn.DataTable.isDataTable('#zoneAssignmentPropertiesTable')) {
+                $('#zoneAssignmentPropertiesTable').DataTable().destroy();
+            }
+
             $('#zoneAssignmentCheckAll').prop('checked', false);
 
             if (!properties || properties.length === 0) {
-                tbody.html('<tr><td colspan="3" class="text-muted text-center py-3">No available properties in this zone for this role.</td></tr>');
+                propertiesTableData = [];
+                $('#zoneAssignmentPropertiesTableBody').html('<tr><td colspan="3" class="text-muted text-center py-3">No available properties in this zone for this role.</td></tr>');
                 refreshZoneAssignmentSelectedCount();
                 return;
             }
 
-            properties.forEach(function(prop) {
-                let isChecked = selectedIds.indexOf(Number(prop.id)) !== -1;
+            // Store properties data globally with checked state
+            propertiesTableData = properties.map(function(prop) {
+                return {
+                    id: prop.id,
+                    reference_number: prop.reference_number,
+                    property_name: prop.property_name,
+                    checked: selectedIds.indexOf(Number(prop.id)) !== -1
+                };
+            });
+
+            renderPropertiesTableBody();
+
+            // Initialize DataTable with paging and global search
+            $('#zoneAssignmentPropertiesTable').DataTable({
+                paging: true,
+                pageLength: 10,
+                searching: true,
+                info: true,
+                lengthChange: true,
+                columnDefs: [
+                    { orderable: false, targets: 0 }
+                ]
+            });
+
+            refreshZoneAssignmentSelectedCount();
+            updateZoneAssignmentCheckAllState();
+        }
+
+        // Render properties table body with checked rows first
+        function renderPropertiesTableBody() {
+            // Sort: checked first, then unchecked
+            let sorted = propertiesTableData.slice().sort(function(a, b) {
+                if (a.checked === b.checked) return 0;
+                return a.checked ? -1 : 1;
+            });
+
+            let tbody = $('#zoneAssignmentPropertiesTableBody');
+            tbody.empty();
+
+            sorted.forEach(function(prop) {
                 tbody.append(
                     '<tr>' +
-                    '<td class="text-center"><input class="form-check-input zone-prop-check" type="checkbox" value="' + prop.id + '" ' + (isChecked ? 'checked' : '') + '></td>' +
+                    '<td class="text-center"><input class="form-check-input zone-prop-check" type="checkbox" value="' + prop.id + '" ' + (prop.checked ? 'checked' : '') + '></td>' +
                     '<td>' + (prop.reference_number || '-') + '</td>' +
                     '<td>' + (prop.property_name || '-') + '</td>' +
                     '</tr>'
                 );
             });
-
-            refreshZoneAssignmentSelectedCount();
-            updateZoneAssignmentCheckAllState();
         }
 
         // Get selected property IDs from checkboxes
@@ -476,16 +556,64 @@
             $('#zoneAssignmentCheckAll').prop('checked', total > 0 && total === checked);
         }
 
-        // Handle individual checkbox change
+        // Handle individual checkbox change - rebuild table with checked rows on top
         $(document).on('change', '.zone-prop-check', function() {
+            let propId = $(this).val();
+            let isChecked = $(this).prop('checked');
+
+            // Update data
+            let propData = propertiesTableData.find(p => p.id == propId);
+            if (propData) {
+                propData.checked = isChecked;
+            }
+
+            // Rebuild and reinitialize DataTable
+            if ($.fn.DataTable.isDataTable('#zoneAssignmentPropertiesTable')) {
+                $('#zoneAssignmentPropertiesTable').DataTable().destroy();
+            }
+
+            renderPropertiesTableBody();
+
+            $('#zoneAssignmentPropertiesTable').DataTable({
+                paging: true,
+                pageLength: 10,
+                searching: true,
+                info: true,
+                lengthChange: true,
+                columnDefs: [
+                    { orderable: false, targets: 0 }
+                ]
+            });
+
             refreshZoneAssignmentSelectedCount();
             updateZoneAssignmentCheckAllState();
         });
 
-        // Handle check all checkbox
+        // Handle check all checkbox - rebuild table with all checked rows on top
         $(document).on('change', '#zoneAssignmentCheckAll', function() {
             let isChecked = $(this).prop('checked');
-            $('.zone-prop-check:not(:disabled)').prop('checked', isChecked);
+
+            // Update all data
+            propertiesTableData.forEach(p => p.checked = isChecked);
+
+            // Rebuild and reinitialize DataTable
+            if ($.fn.DataTable.isDataTable('#zoneAssignmentPropertiesTable')) {
+                $('#zoneAssignmentPropertiesTable').DataTable().destroy();
+            }
+
+            renderPropertiesTableBody();
+
+            $('#zoneAssignmentPropertiesTable').DataTable({
+                paging: true,
+                pageLength: 10,
+                searching: true,
+                info: true,
+                lengthChange: true,
+                columnDefs: [
+                    { orderable: false, targets: 0 }
+                ]
+            });
+
             refreshZoneAssignmentSelectedCount();
         });
 
@@ -565,7 +693,18 @@
 
         $(document).on('click', '.edit-zone-assignment', function() {
             let assignmentData = $(this).data();
+
+            // Mark as edit mode BEFORE opening modal so show.bs.modal handler skips its reset/load
+            isEditMode = true;
+
             $('#zoneAssignmentId').val(assignmentData.id);
+
+            // Parse existing properties IDs robustly (handles string "1,2,3", single number, or empty)
+            let propIdsRaw = String(assignmentData.properties_ids || '');
+            let selectedPropertyIds = propIdsRaw
+                ? propIdsRaw.split(',').map(p => Number(String(p).trim())).filter(n => !isNaN(n))
+                : [];
+
             $('#addZoneAssignmentModal').modal('show');
 
             // Load and set staff
@@ -575,6 +714,11 @@
                 dataType: 'json',
                 success: function(response) {
                     let $staff_id = $('#staff_id');
+
+                    if ($staff_id.hasClass("select2-hidden-accessible")) {
+                        $staff_id.select2('destroy');
+                    }
+
                     $staff_id.empty();
                     $staff_id.append($('<option>', {
                         value: '',
@@ -590,8 +734,17 @@
                         });
                     }
 
-                    // Set staff and trigger cascading load
                     $staff_id.val(assignmentData.staff_id);
+
+                    // Initialize Select2 with dropdownParent
+                    $staff_id.select2({
+                        placeholder: 'Select Staff',
+                        allowClear: false,
+                        dropdownParent: $('#addZoneAssignmentModal')
+                    });
+
+                    // Lock staff field on edit
+                    $staff_id.prop('disabled', true).trigger('change.select2');
 
                     // Now load roles for this staff
                     $.ajax({
@@ -615,8 +768,10 @@
                                 });
                             }
 
-                            $assigned_as.prop('disabled', false);
                             $assigned_as.val(assignmentData.assigned_as);
+
+                            // Lock role field on edit
+                            $assigned_as.prop('disabled', true);
 
                             // Load zones for this role
                             $.ajax({
@@ -654,34 +809,26 @@
                                         },
                                         dataType: 'json',
                                         success: function(response) {
-                                            let $properties = $('#properties_ids');
-                                            $properties.empty();
+                                            let availableProps = response.properties || [];
 
-                                            if (response.properties && response.properties.length > 0) {
-                                                response.properties.forEach(function(property) {
-                                                    $properties.append($('<option>', {
-                                                        value: property.id,
-                                                        text: property.reference_number + ' - ' + property.property_name
-                                                    }));
-                                                });
-
-                                                // Parse existing properties IDs
-                                                if (assignmentData.properties_ids) {
-                                                    let propIds = assignmentData.properties_ids.split(',').map(p => p.trim());
-                                                    $properties.val(propIds);
+                                            // Ensure currently-selected properties always appear
+                                            // (even if endpoint excludes them for some reason)
+                                            let presentIds = availableProps.map(p => Number(p.id));
+                                            selectedPropertyIds.forEach(function(selId) {
+                                                if (presentIds.indexOf(selId) === -1) {
+                                                    availableProps.push({
+                                                        id: selId,
+                                                        reference_number: '#' + selId,
+                                                        property_name: '(currently assigned)'
+                                                    });
                                                 }
+                                            });
 
-                                                $properties.prop('disabled', false);
-                                            } else {
-                                                $properties.empty().append($('<option>', {
-                                                    disabled: true,
-                                                    text: 'No unassigned properties in this zone'
-                                                }));
-                                                $properties.prop('disabled', true);
-                                            }
+                                            renderZoneAssignmentPropertiesTable(availableProps, selectedPropertyIds);
                                         },
                                         error: function() {
                                             toastr.error('Failed to load available properties.');
+                                            renderZoneAssignmentPropertiesTable([], []);
                                         }
                                     });
                                 },
@@ -746,8 +893,19 @@
         });
 
         $('#addZoneAssignmentModal').on('hidden.bs.modal', function() {
+            isEditMode = false;
+
+            if ($.fn.DataTable.isDataTable('#zoneAssignmentPropertiesTable')) {
+                $('#zoneAssignmentPropertiesTable').DataTable().destroy();
+            }
             $('#zoneAssignmentForm')[0].reset();
             $('#zoneAssignmentId').val('');
+
+            // Re-enable locked fields so next open (Add) starts clean
+            $('#staff_id').prop('disabled', false);
+            $('#assigned_as').prop('disabled', false);
+            $('#zone_id').prop('disabled', false);
+            propertiesTableData = [];
         });
     });
 </script>
