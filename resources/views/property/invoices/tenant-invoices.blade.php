@@ -198,7 +198,7 @@
                                                 <span class="spinner-border spinner-border-sm" role="status" id="search_tenant_spinner" style="display:none;"></span>
                                             </button>
                                         </div>
-                                        <small class="text-muted">Search by name, reference, phone, email or ID number</small>
+                                        <small class="text-muted">Search by email, ID, phone, reference or room code</small>
                                     </div>
                                     <div class="col-md-6">
                                         <label for="tenant_direct_select" class="form-label mb-1">Select Tenant <span class="text-danger">*</span></label>
@@ -750,13 +750,14 @@
                     $('#tenant_direct_select').empty().append('<option value="">-- Select Tenant --</option>');
                     if (response.success && response.tenants && response.tenants.length > 0) {
                         $.each(response.tenants, function(i, t) {
+                            var roomCodes = (t.unit_codes && t.unit_codes.length) ? ' [' + t.unit_codes.join(', ') + ']' : '';
                             $('#tenant_direct_select').append(
                                 '<option value="' + t.encrypted_id + '"' +
                                 ' data-name="' + (t.names || '') + '"' +
                                 ' data-mobile="' + (t.mobile_number || 'N/A') + '"' +
                                 ' data-email="' + (t.email_address || 'N/A') + '"' +
                                 ' data-id-number="' + (t.national_id || 'N/A') + '">' +
-                                (t.names || '') + ' - ' + (t.reference_number || '') +
+                                (t.names || '') + ' - ' + (t.reference_number || '') + roomCodes +
                                 '</option>'
                             );
                         });
