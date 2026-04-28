@@ -43,6 +43,7 @@ class ClientsController extends Controller
         }
     }
 
+
     public function getCLients(Request $request)
     {
         try {

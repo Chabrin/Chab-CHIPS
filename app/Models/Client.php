@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class Client extends Model
 {
     use Notifiable;
+
     protected $table = 'sys_pm_clients';
     protected $primaryKey = 'id';
     public $incrementing = true;
@@ -70,68 +73,100 @@ class Client extends Model
         'rent_amount' => 'decimal:2',
     ];
 
+    /**
+     * GLOBAL SCOPE: Restrict clients by assigned properties
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        static::addGlobalScope('user_clients_properties', function ($query) {
+
+            if (!Auth::check()) {
+                return;
+            }
+
+            $userId = Auth::id();
+
+            $isGlobal = DB::table('cb_role_user as ru')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('ru.user_id', $userId)
+                ->where('r.is_global', true)
+                ->exists();
+
+            if ($isGlobal) {
+                return;
+            }
+
+            $staffId = DB::table('sys_user_staff_links')
+                ->where('user_id', $userId)
+                ->value('staff_id');
+
+            if (!$staffId) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $query->whereExists(function ($sub) use ($staffId) {
+                $sub->selectRaw('1')
+                    ->from('sys_pm_properties as spp')
+                    ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
+                    ->whereColumn('spp.client_id', 'sys_pm_clients.id')
+                    ->where('spza.staff_id', $staffId)
+                    ->where('spza.current_status_id', 1);
+            });
+        });
+    }
+
+    /**
+     * OPTIONAL: bypass scope when needed
+     */
+    public function scopeWithAll($query)
+    {
+        return $query->withoutGlobalScope('user_clients_properties');
+    }
+
     public function routeNotificationForMail(): string
     {
         return $this->email_address;
     }
 
-    /**
-     * Scope a query to only include clients with type_id = 1
-     */
     public function scopeTypeOne($query)
     {
         return $query->where('type_id', 1);
     }
 
-    /**
-     * Scope a query to only include tenants (type_id = 2)
-     */
     public function scopeTenants($query)
     {
         return $query->where('type_id', 2);
     }
 
-    /**
-     * Scope a query to only include clients/landlords (type_id = 1)
-     */
     public function scopeClients($query)
     {
         return $query->where('type_id', 1);
     }
 
-    /**
-     * Scope a query to only include landlords (alias for clients, type_id = 1)
-     */
     public function scopeLandlords($query)
     {
         return $query->where('type_id', 1);
     }
 
-    /**
-     * Get encrypted ID for URL routing
-     */
     public function getEncryptedIdAttribute()
     {
         return \Illuminate\Support\Facades\Crypt::encrypt($this->id);
     }
 
-    /**
-     * Check if this record is a tenant
-     */
     public function isTenant()
     {
         return strpos($this->reference_number, 'TEN') === 0;
     }
 
-    /**
-     * Check if this record is a client/landlord
-     */
     public function isClient()
     {
         return strpos($this->reference_number, 'LAN') === 0;
     }
 
     // Relationships
+
     public function property()
     {
         return $this->belongsTo(Property::class, 'property_id');
