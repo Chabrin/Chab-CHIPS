@@ -187,6 +187,9 @@
 </head>
 
 <body>
+    @php
+        $amt = fn($v) => abs(round((float) ($v ?? 0), 2)) > 0 ? number_format((float) $v, 2) : '';
+    @endphp
     <table class="header-table">
         <tr>
             <td class="logo-col">
@@ -230,7 +233,7 @@
             <tr>
                 <td>{{ $line['narration'] }}</td>
                 <td>{{ $line['ref'] }}</td>
-                <td class="amount">{{ number_format($line['amount'], 2) }}</td>
+                <td class="amount">{{ $amt($line['amount']) }}</td>
             </tr>
             @empty
             <tr>
@@ -260,7 +263,7 @@
                 <td>{{ $line['date'] }}</td>
                 <td>{{ $line['narration'] }}</td>
                 <td>{{ $line['ref'] }}</td>
-                <td class="amount">{{ number_format($line['amount'], 2) }}</td>
+                <td class="amount">{{ $amt($line['amount']) }}</td>
             </tr>
             @empty
             <tr>
@@ -289,7 +292,7 @@
             <tr>
                 <td>{{ $line['narration'] }}</td>
                 <td>{{ $line['ref'] }}</td>
-                <td class="amount">{{ number_format($line['amount'], 2) }}</td>
+                <td class="amount">{{ $amt($line['amount']) }}</td>
             </tr>
             @empty
             <tr>

@@ -271,6 +271,9 @@
 </head>
 
 <body>
+    @php
+        $amt = fn($v) => abs(round((float) ($v ?? 0), 2)) > 0 ? number_format((float) $v, 2) : '';
+    @endphp
 
     {{-- ══════ PAGE HEADER ══════ --}}
     <table class="page-header">
@@ -331,16 +334,16 @@
             <tr>
                 <td class="text-center">{{ $row['unit_code'] ?: '-' }}</td>
                 <td>{{ $row['tenant_name'] }}</td>
-                <td class="text-right">{{ $row['monthly_rent'] > 0 ? number_format($row['monthly_rent'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['rent_arrears'] > 0 ? number_format($row['rent_arrears'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['vat'] > 0 ? number_format($row['vat'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['house_deposit_amt'] > 0 ? number_format($row['house_deposit_amt'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['elec_deposit_amt'] > 0 ? number_format($row['elec_deposit_amt'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['water_deposit_amt'] > 0 ? number_format($row['water_deposit_amt'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['elec_bill'] > 0 ? number_format($row['elec_bill'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['water_bill'] > 0 ? number_format($row['water_bill'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['service_charge'] > 0 ? number_format($row['service_charge'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['monthly_rent'] > 0 ? number_format($row['monthly_rent'], 2) : '' }}</td>
+                <td class="text-right">{{ number_format((float) ($row['monthly_rent'] ?? 0), 2) }}</td>
+                <td class="text-right">{{ $amt($row['rent_arrears']) }}</td>
+                <td class="text-right">{{ $amt($row['vat']) }}</td>
+                <td class="text-right">{{ $amt($row['house_deposit_amt']) }}</td>
+                <td class="text-right">{{ $amt($row['elec_deposit_amt']) }}</td>
+                <td class="text-right">{{ $amt($row['water_deposit_amt']) }}</td>
+                <td class="text-right">{{ $amt($row['elec_bill']) }}</td>
+                <td class="text-right">{{ $amt($row['water_bill']) }}</td>
+                <td class="text-right">{{ $amt($row['service_charge']) }}</td>
+                <td class="text-right">{{ number_format((float) ($row['monthly_rent'] ?? 0), 2) }}</td>
             </tr>
             @empty
             <tr>
