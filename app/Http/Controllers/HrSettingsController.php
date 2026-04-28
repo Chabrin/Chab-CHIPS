@@ -25,7 +25,6 @@ use Illuminate\Support\Facades\DB;
 use App\Models\CommunicationTemplate;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
-use App\Models\ZoneAssignmentProperties;
 use Illuminate\Validation\ValidationException;
 
 class HrSettingsController extends Controller
@@ -990,66 +989,62 @@ class HrSettingsController extends Controller
     public function zoneAssignmentsList()
     {
         try {
-            $assignments = ZoneAssignment::with(['createdBy', 'staff', 'assignment_type', 'zone'])
-                ->orderBy('date_time', 'desc')
-                ->get()
-                ->map(function ($assignment) {
-                    $zone = $assignment->zone;
-                    if (!$zone && $assignment->zone_id) {
-                        $zone = Zone::find($assignment->zone_id);
-                    }
+            $canUpdate = Auth::user()->isAbleTo('update_zone_assignments');
+            $canDelete = Auth::user()->isAbleTo('delete_zone_assignments');
 
-                    $assignmentType = $assignment->assignment_type;
-                    $assignmentTypeName = null;
-                    $assignmentTypeId = null;
+            $rows = DB::table('sys_pm_zones_assignments as za')
+                ->leftJoin('sys_set_zones as z', 'z.id', '=', 'za.zone_id')
+                ->leftJoin('cb_roles as r', 'r.id', '=', 'za.assigned_as')
+                ->leftJoin('sys_staff as s', 's.id', '=', 'za.staff_id')
+                ->leftJoin('josya_users as u', 'u.id', '=', 'za.created_by')
+                ->select(
+                    'za.id',
+                    'za.staff_id',
+                    'za.assigned_as',
+                    'za.zone_id',
+                    'za.property_id',
+                    'za.date_time',
+                    'za.current_status_id',
+                    'z.zone_name',
+                    'r.name as role_name',
+                    'r.display_name as role_display_name',
+                    's.full_names as staff_name',
+                    'u.name as created_by_name'
+                )
+                ->orderBy('za.date_time', 'desc')
+                ->get();
 
-                    if ($assignmentType) {
-                        $assignmentTypeName = $assignmentType->type_name;
-                        $assignmentTypeId = $assignmentType->id;
-                    } elseif (is_numeric($assignment->assigned_as)) {
-                        $role = DB::table('cb_roles')->where('id', $assignment->assigned_as)->first();
-                        if ($role) {
-                            $assignmentTypeName = $role->display_name;
-                            $assignmentTypeId = $role->id;
-                        }
-                    }
-
-                    if (!$assignmentTypeName) {
-                        $assignmentTypeName = $assignment->assigned_as;
-                    }
-
-                    return [
-                        'id' => $assignment->id,
-                        'zone_id' => $assignment->zone_id,
-                        'assigned_as' => $assignment->assigned_as,
-                        'assignment_type' => $assignmentTypeName
-                            ? [
-                                'id' => $assignmentTypeId,
-                                'type_name' => $assignmentTypeName,
-                            ]
-                            : null,
-                        'staff_id' => $assignment->staff_id,
-                        'fo_ids' => $assignment->fo_ids,
-                        'properties_ids' => $assignment->properties_ids,
-                        'current_status_id' => $assignment->current_status_id,
-                        'created_by' => $assignment->createdBy ? [
-                            'id' => $assignment->createdBy->id,
-                            'name' => $assignment->createdBy->name,
-                        ] : null,
-                        'staff' => $assignment->staff ? [
-                            'id' => $assignment->staff->id,
-                            'name' => $assignment->staff->full_names,
-                        ] : null,
-                        'zone' => $zone ? [
-                            'id' => $zone->id,
-                            'zone_name' => $zone->zone_name,
-                        ] : null,
-                        'date_time' => $assignment->date_time,
-                        'can_update' => Auth::user()->isAbleTo('update_zone_assignments'),
-                        'can_delete' => Auth::user()->isAbleTo('delete_zone_assignments'),
+            // Collapse one-row-per-property into one group per (staff, role, zone).
+            $groups = [];
+            foreach ($rows as $row) {
+                $key = $row->staff_id . '|' . $row->assigned_as . '|' . $row->zone_id;
+                if (!isset($groups[$key])) {
+                    $groups[$key] = [
+                        'id' => $row->id, // representative row id; controller resolves the group from it
+                        'staff_id' => $row->staff_id,
+                        'assigned_as' => $row->assigned_as,
+                        'zone_id' => $row->zone_id,
+                        'zone_name' => $row->zone_name,
+                        'role_name' => $row->role_display_name ?: $row->role_name,
+                        'staff_name' => $row->staff_name,
+                        'created_by_name' => $row->created_by_name,
+                        'date_time' => $row->date_time,
+                        'properties_count' => 0,
+                        'property_ids' => [],
+                        'can_update' => $canUpdate,
+                        'can_delete' => $canDelete,
                     ];
-                });
-            return response()->json(['zone_assignments' => $assignments]);
+                }
+                $groups[$key]['properties_count']++;
+                if ($row->property_id !== null) {
+                    $groups[$key]['property_ids'][] = (int) $row->property_id;
+                }
+                if ($row->date_time > $groups[$key]['date_time']) {
+                    $groups[$key]['date_time'] = $row->date_time;
+                }
+            }
+
+            return response()->json(['zone_assignments' => array_values($groups)]);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -1108,7 +1103,7 @@ class HrSettingsController extends Controller
                 'zone_id' => 'required|integer|exists:sys_set_zones,id',
                 'assigned_as' => 'required|string|max:255',
                 'staff_id' => 'required|integer|exists:sys_staff,id',
-                'properties_ids' => 'required|array',
+                'properties_ids' => 'required|array|min:1',
                 'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
 
@@ -1127,20 +1122,33 @@ class HrSettingsController extends Controller
                 }
             }
 
-            // Convert properties array to comma-separated string
-            $propertiesString = implode(',', $validated['properties_ids']);
+            $propertyIds = array_values(array_unique(array_map('intval', $validated['properties_ids'])));
+            $createdBy = Auth::id();
+            $now = now();
 
-            $assignment = new ZoneAssignment();
-            $assignment->zone_id = $validated['zone_id'];
-            $assignment->assigned_as = $validated['assigned_as'];
-            $assignment->staff_id = $validated['staff_id'];
-            $assignment->properties_ids = $propertiesString;
-            $assignment->current_status_id = 1;
-            $assignment->created_by = Auth::id();
-            $assignment->date_time = now();
-            $assignment->save();
+            $insertedIds = DB::transaction(function () use ($validated, $propertyIds, $createdBy, $now) {
+                $ids = [];
+                foreach ($propertyIds as $propertyId) {
+                    $assignment = new ZoneAssignment();
+                    $assignment->zone_id = $validated['zone_id'];
+                    $assignment->assigned_as = $validated['assigned_as'];
+                    $assignment->staff_id = $validated['staff_id'];
+                    $assignment->property_id = $propertyId;
+                    $assignment->current_status_id = 1;
+                    $assignment->created_by = $createdBy;
+                    $assignment->date_time = $now;
+                    $assignment->save();
+                    $ids[] = $assignment->id;
+                }
+                return $ids;
+            });
 
-            return response()->json(['success' => true, 'message' => 'Zone assignment created successfully', 'zone_assignment' => $assignment]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Zone assignment created successfully',
+                'created_count' => count($insertedIds),
+                'ids' => $insertedIds,
+            ]);
         } catch (ValidationException $e) {
             Log::warning('Zone assignment validation error:', $e->errors());
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -1167,18 +1175,28 @@ class HrSettingsController extends Controller
                 'zone_id' => 'required|integer|exists:sys_set_zones,id',
                 'assigned_as' => 'required|string|max:255',
                 'staff_id' => 'required|integer|exists:sys_staff,id',
-                'properties_ids' => 'required|array',
+                'properties_ids' => 'required|array|min:1',
                 'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
 
-            $assignment = ZoneAssignment::findOrFail($id);
+            // The {id} URL parameter is a representative row of the group;
+            // resolve the group by its (staff_id, assigned_as, zone_id) tuple.
+            $existing = ZoneAssignment::findOrFail($id);
+            $groupStaffId = $existing->staff_id;
+            $groupAssignedAs = $existing->assigned_as;
+            $groupZoneId = $existing->zone_id;
 
             // Validate: field officers cannot be assigned to multiple zones
             if ($this->isFieldOfficerRole($validated['assigned_as'])) {
                 $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
                     ->where('assigned_as', $validated['assigned_as'])
                     ->where('zone_id', '!=', $validated['zone_id'])
-                    ->where('id', '!=', $id)
+                    ->where(function ($q) use ($groupStaffId, $groupAssignedAs, $groupZoneId) {
+                        // Don't count the group we're editing as a conflict
+                        $q->where('staff_id', '!=', $groupStaffId)
+                            ->orWhere('assigned_as', '!=', $groupAssignedAs)
+                            ->orWhere('zone_id', '!=', $groupZoneId);
+                    })
                     ->exists();
 
                 if ($existingAssignments) {
@@ -1189,16 +1207,42 @@ class HrSettingsController extends Controller
                 }
             }
 
-            // Convert properties array to comma-separated string
-            $propertiesString = implode(',', $validated['properties_ids']);
+            $propertyIds = array_values(array_unique(array_map('intval', $validated['properties_ids'])));
+            $createdBy = Auth::id();
+            $now = now();
 
-            $assignment->zone_id = $validated['zone_id'];
-            $assignment->assigned_as = $validated['assigned_as'];
-            $assignment->staff_id = $validated['staff_id'];
-            $assignment->properties_ids = $propertiesString;
-            $assignment->save();
+            $insertedIds = DB::transaction(function () use (
+                $groupStaffId, $groupAssignedAs, $groupZoneId,
+                $validated, $propertyIds, $createdBy, $now
+            ) {
+                // Drop the entire existing group, then re-insert one row per property.
+                ZoneAssignment::where('staff_id', $groupStaffId)
+                    ->where('assigned_as', $groupAssignedAs)
+                    ->where('zone_id', $groupZoneId)
+                    ->delete();
 
-            return response()->json(['success' => true, 'message' => 'Zone assignment updated successfully', 'zone_assignment' => $assignment]);
+                $ids = [];
+                foreach ($propertyIds as $propertyId) {
+                    $assignment = new ZoneAssignment();
+                    $assignment->zone_id = $validated['zone_id'];
+                    $assignment->assigned_as = $validated['assigned_as'];
+                    $assignment->staff_id = $validated['staff_id'];
+                    $assignment->property_id = $propertyId;
+                    $assignment->current_status_id = 1;
+                    $assignment->created_by = $createdBy;
+                    $assignment->date_time = $now;
+                    $assignment->save();
+                    $ids[] = $assignment->id;
+                }
+                return $ids;
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Zone assignment updated successfully',
+                'created_count' => count($insertedIds),
+                'ids' => $insertedIds,
+            ]);
         } catch (ValidationException $e) {
             Log::warning('Zone assignment validation error:', $e->errors());
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -1222,9 +1266,16 @@ class HrSettingsController extends Controller
     public function zoneAssignmentsDelete($id)
     {
         try {
+            // {id} is a representative row of the group — delete the whole
+            // (staff_id, assigned_as, zone_id) group it belongs to.
             $assignment = ZoneAssignment::findOrFail($id);
-            $assignment->delete();
-            return response()->json(['success' => true]);
+
+            $deleted = ZoneAssignment::where('staff_id', $assignment->staff_id)
+                ->where('assigned_as', $assignment->assigned_as)
+                ->where('zone_id', $assignment->zone_id)
+                ->delete();
+
+            return response()->json(['success' => true, 'deleted_count' => $deleted]);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -1237,15 +1288,20 @@ class HrSettingsController extends Controller
 
     public function zoneAssignmentView($id)
     {
+        // {id} is a representative row of the group; resolve the whole group
+        // and load every property assigned under (staff, role, zone).
         $assignment = ZoneAssignment::with('createdBy', 'staff', 'assignment_type', 'zone')->findOrFail($id);
 
-        $propertyIds = [];
-        if (!empty($assignment->properties_ids)) {
-            $propertyIds = array_filter(array_map('intval', array_map('trim', explode(',', $assignment->properties_ids))));
-        }
+        $propertyIds = ZoneAssignment::where('staff_id', $assignment->staff_id)
+            ->where('assigned_as', $assignment->assigned_as)
+            ->where('zone_id', $assignment->zone_id)
+            ->pluck('property_id')
+            ->filter()
+            ->map(fn($v) => (int) $v)
+            ->all();
 
         $properties = !empty($propertyIds)
-            ? Property::whereIn('id', $propertyIds)->orderBy('reference_number')->get()
+            ? Property::withAll()->whereIn('id', $propertyIds)->orderBy('reference_number')->get()
             : collect();
 
         return view('settings.hr.zone_assignment_view', compact('assignment', 'properties'));
@@ -1258,40 +1314,37 @@ class HrSettingsController extends Controller
                 'property_id' => 'required|integer|exists:sys_pm_properties,id',
             ]);
 
-            $assignment = ZoneAssignment::findOrFail($id);
+            // {id} is a representative row of the group; locate the matching row
+            // in the same (staff, role, zone) group for the requested property.
+            $representative = ZoneAssignment::findOrFail($id);
 
-            $currentIds = !empty($assignment->properties_ids)
-                ? array_filter(array_map('trim', explode(',', $assignment->properties_ids)))
-                : [];
+            $rowToRemove = ZoneAssignment::where('staff_id', $representative->staff_id)
+                ->where('assigned_as', $representative->assigned_as)
+                ->where('zone_id', $representative->zone_id)
+                ->where('property_id', $validated['property_id'])
+                ->first();
 
-            $remaining = array_values(array_filter($currentIds, function ($pid) use ($validated) {
-                return (int) $pid !== (int) $validated['property_id'];
-            }));
-
-            if (count($remaining) === count($currentIds)) {
+            if (!$rowToRemove) {
                 return response()->json([
                     'success' => false,
                     'error' => 'Property is not part of this assignment.'
                 ], 422);
             }
 
-            if (empty($remaining)) {
-                $assignment->delete();
-                return response()->json([
-                    'success' => true,
-                    'deleted' => true,
-                    'message' => 'Last property unassigned. Assignment removed.'
-                ]);
-            }
+            $rowToRemove->delete();
 
-            $assignment->properties_ids = implode(',', $remaining);
-            $assignment->save();
+            $remainingCount = ZoneAssignment::where('staff_id', $representative->staff_id)
+                ->where('assigned_as', $representative->assigned_as)
+                ->where('zone_id', $representative->zone_id)
+                ->count();
 
             return response()->json([
                 'success' => true,
-                'deleted' => false,
-                'message' => 'Property unassigned successfully.',
-                'remaining_count' => count($remaining)
+                'deleted' => $remainingCount === 0,
+                'message' => $remainingCount === 0
+                    ? 'Last property unassigned. Assignment removed.'
+                    : 'Property unassigned successfully.',
+                'remaining_count' => $remainingCount,
             ]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -1417,8 +1470,9 @@ class HrSettingsController extends Controller
                 return response()->json(['success' => false, 'error' => 'Zone and Role are required'], 400);
             }
 
-            // Get all properties in the zone
-            $allPropertiesInZone = Property::where('zone_id', $zoneId)
+            // Get all properties in the zone (admin view — bypass user_properties scope)
+            $allPropertiesInZone = Property::withAll()
+                ->where('zone_id', $zoneId)
                 ->pluck('id')
                 ->toArray();
 
@@ -1443,31 +1497,23 @@ class HrSettingsController extends Controller
                     ->where('assigned_as', $assignedAs);
             }
 
-            $assignedProperties = $assignedQuery
+            $assignedPropIds = $assignedQuery
                 ->when($staffId, function ($query) use ($staffId) {
                     // Exclude current staff's own assignments
                     return $query->where('staff_id', '!=', $staffId);
                 })
-                ->select('properties_ids')
+                ->whereNotNull('property_id')
                 ->distinct()
-                ->pluck('properties_ids')
-                ->toArray();
-
-            // Parse comma-separated property IDs
-            $assignedPropIds = [];
-            foreach ($assignedProperties as $propIds) {
-                if ($propIds) {
-                    $ids = array_map('trim', explode(',', $propIds));
-                    $assignedPropIds = array_merge($assignedPropIds, $ids);
-                }
-            }
-            $assignedPropIds = array_unique(array_map('intval', $assignedPropIds));
+                ->pluck('property_id')
+                ->map(fn($v) => (int) $v)
+                ->all();
 
             // Get available properties (not assigned for this role)
-            $availablePropIds = array_diff($allPropertiesInZone, $assignedPropIds);
+            $availablePropIds = array_values(array_diff($allPropertiesInZone, $assignedPropIds));
 
             // Fetch property details
-            $properties = Property::whereIn('id', $availablePropIds)
+            $properties = Property::withAll()
+                ->whereIn('id', $availablePropIds)
                 ->select('id', 'reference_number', 'property_name')
                 ->orderBy('reference_number')
                 ->get();

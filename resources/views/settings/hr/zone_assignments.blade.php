@@ -25,6 +25,7 @@
                                         <th>Zone</th>
                                         <th>Assigned As</th>
                                         <th>Staff</th>
+                                        <th>Properties</th>
                                         <th>Added By</th>
                                         <th>Date/Time</th>
                                         <th>Action</th>
@@ -35,6 +36,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
+                                        <th></th>
                                         <th></th>
                                         <th></th>
                                         <th></th>
@@ -193,24 +195,29 @@
                     render: (data, type, row, meta) => meta.row + 1
                 },
                 {
-                    data: 'zone',
+                    data: 'zone_name',
                     title: 'Zone',
-                    render: data => data && data.zone_name ? data.zone_name : '-'
+                    render: data => data ? data : '-'
                 },
                 {
-                    data: 'assignment_type',
+                    data: 'role_name',
                     title: 'Assigned As',
-                    render: data => data && data.type_name ? data.type_name : '-'
+                    render: data => data ? data : '-'
                 },
                 {
-                    data: 'staff',
+                    data: 'staff_name',
                     title: 'Staff',
-                    render: data => data && data.name ? data.name : '-'
+                    render: data => data ? data : '-'
                 },
                 {
-                    data: 'created_by',
-                    title: 'Created By',
-                    render: data => data && data.name ? data.name : '-'
+                    data: 'properties_count',
+                    title: 'Properties',
+                    render: data => (typeof data === 'number' ? data : 0)
+                },
+                {
+                    data: 'created_by_name',
+                    title: 'Added By',
+                    render: data => data ? data : '-'
                 },
                 {
                     data: 'date_time',
@@ -223,17 +230,15 @@
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
-                        // View/Unassign removed per new UX request
                         if (row.can_update) {
+                            const propIds = Array.isArray(row.property_ids) ? row.property_ids.join(',') : '';
                             buttons += `
                                 <button class="btn btn-xs btn-light edit-zone-assignment"
                                     data-id="${row.id}"
-                                    data-zone_id="${row.zone_id || (row.zone && row.zone.id ? row.zone.id : '')}"
-                                    data-assigned_as="${row.assigned_as || (row.assignment_type && row.assignment_type.id ? row.assignment_type.id : '')}"
-                                    data-staff_id="${row.staff_id || (row.staff && row.staff.id ? row.staff.id : '')}"
-                                    data-fo_ids="${row.fo_ids ? row.fo_ids : ''}"
-                                    data-properties_ids="${row.properties_ids ? row.properties_ids : ''}"
-                                    data-current_status_id="${row.current_status_id}"
+                                    data-zone_id="${row.zone_id || ''}"
+                                    data-assigned_as="${row.assigned_as || ''}"
+                                    data-staff_id="${row.staff_id || ''}"
+                                    data-property_ids="${propIds}"
                                     style="padding:1px 2px;">
                                     <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
                                 </button>`;
@@ -745,8 +750,9 @@
 
             $('#zoneAssignmentId').val(assignmentData.id);
 
-            // Parse existing properties IDs robustly (handles string "1,2,3", single number, or empty)
-            let propIdsRaw = String(assignmentData.properties_ids || '');
+            // Parse existing property IDs from the data attribute (CSV "1,2,3" or empty).
+            // jQuery's .data() may auto-parse "1,2,3" into a Number, so coerce to string first.
+            let propIdsRaw = String(assignmentData.property_ids ?? '');
             let selectedPropertyIds = propIdsRaw ?
                 propIdsRaw.split(',').map(p => Number(String(p).trim())).filter(n => !isNaN(n)) : [];
 

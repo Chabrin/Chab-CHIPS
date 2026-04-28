@@ -22,7 +22,7 @@ class ZoneAssignment extends Model
         'current_status_id',
         'date_time',
         'fo_ids',
-        'properties_ids',
+        'property_id',
         'zone_id',
         'assigned_as',
         'staff_id',
@@ -65,4 +65,13 @@ class ZoneAssignment extends Model
         return $this->belongsTo(ZoneAssignmentType::class, 'assigned_as');
     }
 
+    public function property()
+    {
+        return $this->belongsTo(Property::class, 'property_id');
+    }
+
+    public function role()
+    {
+        return $this->belongsTo(\App\Models\Role::class, 'assigned_as');
+    }
 }

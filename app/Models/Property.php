@@ -3,7 +3,10 @@
 namespace App\Models;
 
 use App\Observers\AuditLogsObserver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class Property extends Model
 {
@@ -13,6 +16,41 @@ class Property extends Model
 
         static::addGlobalScope('status_active', function ($query) {
             $query->where('active', 1);
+        });
+
+        static::addGlobalScope('user_properties', function (Builder $query) {
+            if (!Auth::check()) {
+                return;
+            }
+
+            $userId = Auth::id();
+
+            $isGlobal = DB::table('cb_role_user as ru')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('ru.user_id', $userId)
+                ->where('r.is_global', true)
+                ->exists();
+
+            if ($isGlobal) {
+                return;
+            }
+
+            $staffId = DB::table('sys_user_staff_links')
+                ->where('user_id', $userId)
+                ->value('staff_id');
+
+            if (!$staffId) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $query->whereExists(function ($sub) use ($staffId) {
+                $sub->selectRaw('1')
+                    ->from('sys_pm_zones_assignments')
+                    ->whereColumn('sys_pm_zones_assignments.property_id', 'sys_pm_properties.id')
+                    ->where('sys_pm_zones_assignments.staff_id', $staffId)
+                    ->where('sys_pm_zones_assignments.current_status_id', 1);
+            });
         });
 
         static::observe(AuditLogsObserver::class);
@@ -95,8 +133,18 @@ class Property extends Model
         return $this->hasMany(LeaseAgreement::class, 'property_id', 'id');
     }
 
+    public function assignments()
+    {
+        return $this->hasMany(ZoneAssignment::class, 'property_id');
+    }
+
     public function scopeWithInactive($query)
     {
         return $query->withoutGlobalScope('status_active');
+    }
+
+    public function scopeWithAll($query)
+    {
+        return $query->withoutGlobalScope('user_properties');
     }
 }
