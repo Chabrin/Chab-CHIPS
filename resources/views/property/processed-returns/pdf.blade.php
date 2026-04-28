@@ -271,6 +271,9 @@
 </head>
 
 <body>
+    @php
+        $amt = fn($v) => abs(round((float) ($v ?? 0), 2)) > 0 ? number_format((float) $v, 2) : '';
+    @endphp
 
     {{-- ══════ PAGE HEADER ══════ --}}
     <table class="page-header">
@@ -284,7 +287,7 @@
             <td class="col-meta">
                 <strong>Print Date:</strong> {{ date('d/m/Y H:i') }}<br>
                 <strong>Return ID:</strong> {{ $return->return_code }}<br>
-                <strong>Period:</strong> {{ str_pad($return->month, 2, '0', STR_PAD_LEFT) }}/{{ $return->year }}
+                <strong>Period:</strong> {{ date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year)) }}
             </td>
         </tr>
     </table>
@@ -294,17 +297,11 @@
         <table>
             <tr>
                 <td class="lbl">Property:</td>
-                <td>{{ $return->property_code ?? '-' }}</td>
+                <td>{{ $propertyDisplay ?? ($return->property_code ?? '-') }}</td>
                 <td class="lbl">Landlord:</td>
-                <td>{{ $return->landlord_code }}</td>
+                <td>{{ $landlordDisplay ?? ($return->landlord_code ?? '-') }}</td>
                 <td class="lbl">Type:</td>
                 <td>{{ $return->return_type ?? '-' }}</td>
-                <td class="lbl">Commission:</td>
-                <td>{{ number_format($return->commission_rate ?? 0, 2) }}%</td>
-                <td class="lbl">Net Amount:</td>
-                <td><strong>{{ number_format(($summary['bal_less_vat'] + $summary['house_deposits'] + $summary['water_elec_bills']), 2) }}</strong></td>
-                <td class="lbl">Amount Paid:</td>
-                <td><strong>{{ number_format($return->amount_paid ?? 0, 2) }}</strong></td>
                 @if($return->voucher_number)
                 <td class="lbl">Voucher:</td>
                 <td>{{ $return->voucher_number }}</td>
@@ -337,16 +334,16 @@
             <tr>
                 <td class="text-center">{{ $row['unit_code'] ?: '-' }}</td>
                 <td>{{ $row['tenant_name'] }}</td>
-                <td class="text-right">{{ $row['monthly_rent'] > 0 ? number_format($row['monthly_rent'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['rent_arrears'] > 0 ? number_format($row['rent_arrears'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['vat'] > 0 ? number_format($row['vat'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['house_deposit_amt'] > 0 ? number_format($row['house_deposit_amt'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['elec_deposit_amt'] > 0 ? number_format($row['elec_deposit_amt'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['water_deposit_amt'] > 0 ? number_format($row['water_deposit_amt'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['elec_bill'] > 0 ? number_format($row['elec_bill'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['water_bill'] > 0 ? number_format($row['water_bill'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['service_charge'] > 0 ? number_format($row['service_charge'], 2) : '' }}</td>
-                <td class="text-right">{{ $row['monthly_rent'] > 0 ? number_format($row['monthly_rent'], 2) : '' }}</td>
+                <td class="text-right">{{ number_format((float) ($row['monthly_rent'] ?? 0), 2) }}</td>
+                <td class="text-right">{{ $amt($row['rent_arrears']) }}</td>
+                <td class="text-right">{{ $amt($row['vat']) }}</td>
+                <td class="text-right">{{ $amt($row['house_deposit_amt']) }}</td>
+                <td class="text-right">{{ $amt($row['elec_deposit_amt']) }}</td>
+                <td class="text-right">{{ $amt($row['water_deposit_amt']) }}</td>
+                <td class="text-right">{{ $amt($row['elec_bill']) }}</td>
+                <td class="text-right">{{ $amt($row['water_bill']) }}</td>
+                <td class="text-right">{{ $amt($row['service_charge']) }}</td>
+                <td class="text-right">{{ number_format((float) ($row['monthly_rent'] ?? 0), 2) }}</td>
             </tr>
             @empty
             <tr>

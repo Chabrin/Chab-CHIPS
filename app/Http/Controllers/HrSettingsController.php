@@ -21,6 +21,7 @@ use App\Services\ErrorDispatcher;
 use App\Models\ZoneAssignmentType;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\CommunicationTemplate;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
@@ -515,7 +516,7 @@ class HrSettingsController extends Controller
                     'can_delete' => Auth::user()->isAbleTo('delete_workdays'),
                 ];
             });
-    
+
             return response()->json(['workdays' => $workdays]);
         } catch (\Exception $e) {
             try {
@@ -626,10 +627,10 @@ class HrSettingsController extends Controller
                 // Ensure dates are in 'YYYY-MM-DD' format for frontend
                 $start_date = $holiday->start_date ? substr($holiday->start_date, 0, 10) : null;
                 $end_date = $holiday->end_date ? substr($holiday->end_date, 0, 10) : null;
-            
+
                 // Ensure recurrent is always 1 or 2 (int)
                 $recurrent = (int) $holiday->recurrent;
-            
+
                 return [
                     'id' => $holiday->id,
                     'title' => $holiday->title,
@@ -647,16 +648,18 @@ class HrSettingsController extends Controller
                     'can_delete' => Auth::user()->isAbleTo('delete_public_holiday'),
                 ];
             });
-    
+
             return response()->json(['publicholidays' => $holidays]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to load public holidays'], 500);
         }
     }
-    
+
     public function publicHolidaysStore(Request $request)
     {
         try {
@@ -667,7 +670,7 @@ class HrSettingsController extends Controller
                 'pay_rate' => 'required|numeric|min:0|max:100',
                 'recurrent' => 'required|in:1,2',
             ]);
-    
+
             $holiday = new PublicHoliday();
             $holiday->title = $validated['title'];
             $holiday->start_date = $validated['start_date'] . ' 00:00:00';
@@ -678,18 +681,20 @@ class HrSettingsController extends Controller
             $holiday->created_by_id = Auth::id();
             $holiday->date_time = now();
             $holiday->save();
-    
+
             return response()->json(['success' => true, 'publicholiday' => $holiday]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to save public holiday'], 500);
         }
     }
-    
+
     public function publicHolidaysUpdate(Request $request, $id)
     {
         try {
@@ -700,7 +705,7 @@ class HrSettingsController extends Controller
                 'pay_rate' => 'required|numeric|min:0|max:100',
                 'recurrent' => 'required|in:yes,no',
             ]);
-    
+
             $holiday = PublicHoliday::findOrFail($id);
             $holiday->title = $validated['title'];
             $holiday->start_date = $validated['start_date'];
@@ -708,18 +713,20 @@ class HrSettingsController extends Controller
             $holiday->pay_rate = $validated['pay_rate'];
             $holiday->recurrent = $validated['recurrent'];
             $holiday->save();
-    
+
             return response()->json(['success' => true, 'publicholiday' => $holiday]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update public holiday'], 500);
         }
     }
-    
+
     public function publicHolidaysDelete($id)
     {
         try {
@@ -727,13 +734,15 @@ class HrSettingsController extends Controller
             $holiday->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete public holiday'], 500);
         }
     }
-    
+
     // Shift Rates Settings
     public function shifRatesIndex()
     {
@@ -758,16 +767,18 @@ class HrSettingsController extends Controller
                     'can_delete' => Auth::user()->isAbleTo('delete_shif_rates'),
                 ];
             });
-    
+
             return response()->json(['shiftrates' => $rates]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to load shift rates'], 500);
         }
     }
-    
+
     public function shifRatesStore(Request $request)
     {
         try {
@@ -775,7 +786,7 @@ class HrSettingsController extends Controller
                 'rate' => 'required|numeric|min:0|max:100',
                 'from_date' => 'required|date',
             ]);
-    
+
             $rate = new ShifRate();
             $rate->rate = $validated['rate'];
             $rate->from_date = $validated['from_date'] . ' 00:00:00';
@@ -783,18 +794,20 @@ class HrSettingsController extends Controller
             $rate->created_by_id = Auth::id();
             $rate->date_time = now();
             $rate->save();
-    
+
             return response()->json(['success' => true, 'shiftrate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to save shift rate'], 500);
         }
     }
-    
+
     public function shifRatesUpdate(Request $request, $id)
     {
         try {
@@ -802,23 +815,25 @@ class HrSettingsController extends Controller
                 'rate' => 'required|numeric|min:0|max:100',
                 'from_date' => 'required|date',
             ]);
-    
+
             $rate = ShifRate::findOrFail($id);
             $rate->rate = $validated['rate'];
             $rate->from_date = $validated['from_date'] . ' 00:00:00';
             $rate->save();
-    
+
             return response()->json(['success' => true, 'shiftrate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update shift rate'], 500);
         }
     }
-    
+
     public function shifRatesDelete($id)
     {
         try {
@@ -826,7 +841,9 @@ class HrSettingsController extends Controller
             $rate->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete shift rate'], 500);
@@ -861,16 +878,18 @@ class HrSettingsController extends Controller
                     'can_delete' => Auth::user()->isAbleTo('delete_nssf_rates'),
                 ];
             });
-    
+
             return response()->json(['nssfrates' => $rates]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to load NSSF rates'], 500);
         }
     }
-    
+
     public function nssfRatesStore(Request $request)
     {
         try {
@@ -883,7 +902,7 @@ class HrSettingsController extends Controller
                 'maximum_contribution' => 'required|numeric|min:0',
                 'taxable' => 'required|boolean',
             ]);
-    
+
             $rate = new NssfRate();
             $rate->rate = $validated['rate'];
             $rate->from_date = $validated['from_date'] . ' 00:00:00';
@@ -896,18 +915,20 @@ class HrSettingsController extends Controller
             $rate->created_by_id = Auth::id();
             $rate->date_time = now();
             $rate->save();
-    
+
             return response()->json(['success' => true, 'nssfrate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to save NSSF rate'], 500);
         }
     }
-    
+
     public function nssfRatesUpdate(Request $request, $id)
     {
         try {
@@ -920,7 +941,7 @@ class HrSettingsController extends Controller
                 'maximum_contribution' => 'required|numeric|min:0',
                 'taxable' => 'required|boolean',
             ]);
-    
+
             $rate = NssfRate::findOrFail($id);
             $rate->rate = $validated['rate'];
             $rate->from_date = $validated['from_date'] . ' 00:00:00';
@@ -930,18 +951,20 @@ class HrSettingsController extends Controller
             $rate->maximum_contribution = $validated['maximum_contribution'];
             $rate->taxable = $validated['taxable'];
             $rate->save();
-    
+
             return response()->json(['success' => true, 'nssfrate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update NSSF rate'], 500);
         }
     }
-    
+
     public function nssfRatesDelete($id)
     {
         try {
@@ -949,7 +972,9 @@ class HrSettingsController extends Controller
             $rate->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete NSSF rate'], 500);
@@ -995,89 +1020,177 @@ class HrSettingsController extends Controller
                     'can_delete' => Auth::user()->isAbleTo('delete_zone_assignments'),
                 ];
             });
-    
+
             return response()->json(['zone_assignments' => $assignments]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to load zone assignments'], 500);
         }
     }
-    
+
+    /**
+     * Check whether the given assigned_as value refers to the field_officer role.
+     * Resolves against cb_roles (used by the dropdown) with a fallback to ZoneAssignmentType.
+     */
+    private function isFieldOfficerRole($assignedAs): bool
+    {
+        $role = DB::table('cb_roles')->where('id', $assignedAs)->first();
+        if ($role && strtolower($role->name) === 'field_officer') {
+            return true;
+        }
+
+        $type = ZoneAssignmentType::find($assignedAs);
+        if ($type && strtolower($type->type_name) === 'field officer') {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get all role identifiers that represent the field_officer role
+     * across cb_roles and ZoneAssignmentType tables.
+     */
+    private function getFieldOfficerRoleIds(): array
+    {
+        $ids = [];
+
+        $cbIds = DB::table('cb_roles')
+            ->where('name', 'field_officer')
+            ->pluck('id')
+            ->toArray();
+        $ids = array_merge($ids, $cbIds);
+
+        $typeIds = ZoneAssignmentType::whereRaw('LOWER(type_name) = ?', ['field officer'])
+            ->pluck('id')
+            ->toArray();
+        $ids = array_merge($ids, $typeIds);
+
+        return array_values(array_unique($ids));
+    }
+
     public function zoneAssignmentsStore(Request $request)
     {
         try {
             $validated = $request->validate([
-                'zone_id' => 'required|integer',
+                'zone_id' => 'required|integer|exists:sys_set_zones,id',
                 'assigned_as' => 'required|string|max:255',
-                'staff_id' => 'required|integer',
-                'properties_ids' => 'array', // Ensure it's an array
-                'properties_ids.*' => 'integer',
+                'staff_id' => 'required|integer|exists:sys_staff,id',
+                'properties_ids' => 'required|array',
+                'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
-    
+
+            // Validate: field officers cannot be assigned to multiple zones
+            if ($this->isFieldOfficerRole($validated['assigned_as'])) {
+                $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
+                    ->where('assigned_as', $validated['assigned_as'])
+                    ->where('zone_id', '!=', $validated['zone_id'])
+                    ->exists();
+
+                if ($existingAssignments) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Field officers cannot be assigned to multiple zones. This staff member is already assigned to another zone.'
+                    ], 422);
+                }
+            }
+
+            // Convert properties array to comma-separated string
+            $propertiesString = implode(',', $validated['properties_ids']);
+
             $assignment = new ZoneAssignment();
             $assignment->zone_id = $validated['zone_id'];
             $assignment->assigned_as = $validated['assigned_as'];
             $assignment->staff_id = $validated['staff_id'];
-            $assignment->fo_ids = $validated['fo_ids'] ?? null;
-            $assignment->properties_ids = null; // Remove direct storage here
+            $assignment->properties_ids = $propertiesString;
             $assignment->current_status_id = 1;
             $assignment->created_by = Auth::id();
             $assignment->date_time = now();
             $assignment->save();
-    
-            // Store selected properties in ZoneAssignmentProperties
-            if (!empty($validated['properties_ids'])) {
-                foreach ($validated['properties_ids'] as $propertyId) {
-                    ZoneAssignmentProperties::create([
-                        'parent_id' => $assignment->id,
-                        'properties_ids' => $propertyId,
-                        'params' => null,
-                    ]);
-                }
-            }
-    
-            return response()->json(['success' => true, 'zone_assignment' => $assignment]);
+
+            return response()->json(['success' => true, 'message' => 'Zone assignment created successfully', 'zone_assignment' => $assignment]);
         } catch (ValidationException $e) {
+            Log::warning('Zone assignment validation error:', $e->errors());
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            Log::error('Zone assignment store error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to save zone assignment'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to save zone assignment: ' . $e->getMessage()], 500);
         }
     }
-    
+
     public function zoneAssignmentsUpdate(Request $request, $id)
     {
         try {
             $validated = $request->validate([
-                'zone_id' => 'required|integer',
+                'zone_id' => 'required|integer|exists:sys_set_zones,id',
                 'assigned_as' => 'required|string|max:255',
-                'staff_id' => 'required|integer',
+                'staff_id' => 'required|integer|exists:sys_staff,id',
+                'properties_ids' => 'required|array',
+                'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
             ]);
-    
+
             $assignment = ZoneAssignment::findOrFail($id);
+
+            // Validate: field officers cannot be assigned to multiple zones
+            if ($this->isFieldOfficerRole($validated['assigned_as'])) {
+                $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
+                    ->where('assigned_as', $validated['assigned_as'])
+                    ->where('zone_id', '!=', $validated['zone_id'])
+                    ->where('id', '!=', $id)
+                    ->exists();
+
+                if ($existingAssignments) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Field officers cannot be assigned to multiple zones. This staff member is already assigned to another zone.'
+                    ], 422);
+                }
+            }
+
+            // Convert properties array to comma-separated string
+            $propertiesString = implode(',', $validated['properties_ids']);
+
             $assignment->zone_id = $validated['zone_id'];
             $assignment->assigned_as = $validated['assigned_as'];
             $assignment->staff_id = $validated['staff_id'];
-            $assignment->fo_ids = $validated['fo_ids'] ?? null;
-            $assignment->properties_ids = $validated['properties_ids'] ?? null;
-            $assignment->current_status_id = 1;
+            $assignment->properties_ids = $propertiesString;
             $assignment->save();
-    
-            return response()->json(['success' => true, 'zone_assignment' => $assignment]);
+
+            return response()->json(['success' => true, 'message' => 'Zone assignment updated successfully', 'zone_assignment' => $assignment]);
         } catch (ValidationException $e) {
+            Log::warning('Zone assignment validation error:', $e->errors());
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            Log::error('Zone assignment update error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'assignment_id' => $id
+            ]);
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to update zone assignment'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to update zone assignment: ' . $e->getMessage()], 500);
         }
     }
-    
+
     public function zoneAssignmentsDelete($id)
     {
         try {
@@ -1085,10 +1198,82 @@ class HrSettingsController extends Controller
             $assignment->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete zone assignment'], 500);
+        }
+    }
+
+    public function zoneAssignmentView($id)
+    {
+        $assignment = ZoneAssignment::with('createdBy', 'staff', 'assignment_type', 'zone')->findOrFail($id);
+
+        $propertyIds = [];
+        if (!empty($assignment->properties_ids)) {
+            $propertyIds = array_filter(array_map('intval', array_map('trim', explode(',', $assignment->properties_ids))));
+        }
+
+        $properties = !empty($propertyIds)
+            ? Property::whereIn('id', $propertyIds)->orderBy('reference_number')->get()
+            : collect();
+
+        return view('settings.hr.zone_assignment_view', compact('assignment', 'properties'));
+    }
+
+    public function zoneAssignmentUnassignProperty(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'property_id' => 'required|integer|exists:sys_pm_properties,id',
+            ]);
+
+            $assignment = ZoneAssignment::findOrFail($id);
+
+            $currentIds = !empty($assignment->properties_ids)
+                ? array_filter(array_map('trim', explode(',', $assignment->properties_ids)))
+                : [];
+
+            $remaining = array_values(array_filter($currentIds, function ($pid) use ($validated) {
+                return (int) $pid !== (int) $validated['property_id'];
+            }));
+
+            if (count($remaining) === count($currentIds)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Property is not part of this assignment.'
+                ], 422);
+            }
+
+            if (empty($remaining)) {
+                $assignment->delete();
+                return response()->json([
+                    'success' => true,
+                    'deleted' => true,
+                    'message' => 'Last property unassigned. Assignment removed.'
+                ]);
+            }
+
+            $assignment->properties_ids = implode(',', $remaining);
+            $assignment->save();
+
+            return response()->json([
+                'success' => true,
+                'deleted' => false,
+                'message' => 'Property unassigned successfully.',
+                'remaining_count' => count($remaining)
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to unassign property'], 500);
         }
     }
 
@@ -1098,7 +1283,9 @@ class HrSettingsController extends Controller
             $assignmentTypes = ZoneAssignmentType::all();
             return response()->json(['success' => true, 'assignment_types' => $assignmentTypes]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to fetch assignment types'], 500);
@@ -1111,7 +1298,9 @@ class HrSettingsController extends Controller
             $zones = Zone::all();
             return response()->json(['success' => true, 'zones' => $zones]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to fetch zones'], 500);
@@ -1124,21 +1313,23 @@ class HrSettingsController extends Controller
             $staff = Staff::with('position:id,position_name')
                 ->select('id', 'full_names', 'position_id')
                 ->get()
-                ->map(function($employee) {
+                ->map(function ($employee) {
                     return [
                         'id' => $employee->id,
                         'full_names' => $employee->full_names,
                         'position' => $employee->position ? $employee->position->position_name : null
                     ];
                 });
-            
+
             return response()->json([
                 'success' => true,
                 'staff' => $staff
             ]);
             return response()->json(['success' => true, 'staff' => $staff]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to fetch staff'], 500);
@@ -1154,10 +1345,113 @@ class HrSettingsController extends Controller
 
             return response()->json(['success' => true, 'properties' => $properties]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to fetch properties for the zone'], 500);
+        }
+    }
+
+    public function rolesList()
+    {
+        try {
+            $roles = DB::table('cb_roles')
+                ->whereIn('name', [
+                    'field_officer',
+                    'zone_manager',
+                    'senior_field_officer',
+                    'property_manager'
+                ])
+                ->select('id', 'name')
+                ->get();
+
+            return response()->json(['success' => true, 'roles' => $roles]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to fetch roles'], 500);
+        }
+    }
+
+    public function availablePropertiesInZone(Request $request)
+    {
+        try {
+            $zoneId = $request->input('zone_id');
+            $assignedAs = $request->input('assigned_as');
+            $staffId = $request->input('staff_id');
+
+            if (!$zoneId || !$assignedAs) {
+                return response()->json(['success' => false, 'error' => 'Zone and Role are required'], 400);
+            }
+
+            // Get all properties in the zone
+            $allPropertiesInZone = Property::where('zone_id', $zoneId)
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($allPropertiesInZone)) {
+                return response()->json(['success' => true, 'properties' => []]);
+            }
+
+            // For field officers, exclude properties assigned to ANY other field officer
+            // (across all field_officer role identifiers). For other roles, only exclude
+            // assignments under the same role.
+            if ($this->isFieldOfficerRole($assignedAs)) {
+                $excludedRoles = $this->getFieldOfficerRoleIds();
+                if (empty($excludedRoles)) {
+                    $excludedRoles = [$assignedAs];
+                }
+                $assignedQuery = DB::table('sys_pm_zones_assignments')
+                    ->where('zone_id', $zoneId)
+                    ->whereIn('assigned_as', $excludedRoles);
+            } else {
+                $assignedQuery = DB::table('sys_pm_zones_assignments')
+                    ->where('zone_id', $zoneId)
+                    ->where('assigned_as', $assignedAs);
+            }
+
+            $assignedProperties = $assignedQuery
+                ->when($staffId, function ($query) use ($staffId) {
+                    // Exclude current staff's own assignments
+                    return $query->where('staff_id', '!=', $staffId);
+                })
+                ->select('properties_ids')
+                ->distinct()
+                ->pluck('properties_ids')
+                ->toArray();
+
+            // Parse comma-separated property IDs
+            $assignedPropIds = [];
+            foreach ($assignedProperties as $propIds) {
+                if ($propIds) {
+                    $ids = array_map('trim', explode(',', $propIds));
+                    $assignedPropIds = array_merge($assignedPropIds, $ids);
+                }
+            }
+            $assignedPropIds = array_unique(array_map('intval', $assignedPropIds));
+
+            // Get available properties (not assigned for this role)
+            $availablePropIds = array_diff($allPropertiesInZone, $assignedPropIds);
+
+            // Fetch property details
+            $properties = Property::whereIn('id', $availablePropIds)
+                ->select('id', 'reference_number', 'property_name')
+                ->orderBy('reference_number')
+                ->get();
+
+            return response()->json(['success' => true, 'properties' => $properties]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to fetch available properties'], 500);
         }
     }
 
@@ -1188,16 +1482,18 @@ class HrSettingsController extends Controller
                         'send_error' => $comm->send_error,
                     ];
                 });
-    
+
             return response()->json(['success' => true, 'communications' => $communications]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to load communications'], 500);
         }
     }
-    
+
     public function communicationsShow($id)
     {
         try {
@@ -1214,7 +1510,7 @@ class HrSettingsController extends Controller
     }
 
     public function communicationTemplatesEdit($id)
-    {   
+    {
         $decrypted_id = Crypt::decrypt($id);
         $template = CommunicationTemplate::findOrFail($decrypted_id);
         return view('settings.hr.templates.edit', compact('template'));
@@ -1235,19 +1531,19 @@ class HrSettingsController extends Controller
     {
         try {
             $template = CommunicationTemplate::findOrFail($id);
-            
+
             if ($template->attachment_path && Storage::disk('public')->exists($template->attachment_path)) {
                 Storage::disk('public')->delete($template->attachment_path);
                 $template->attachment_path = null;
                 $template->save();
-                
+
                 return response()->json(['success' => true]);
             }
-            
+
             return response()->json(['success' => false, 'error' => 'No file found']);
         } catch (\Exception $e) {
-            try { 
-                ErrorDispatcher::dispatch($e); 
+            try {
+                ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
@@ -1286,16 +1582,18 @@ class HrSettingsController extends Controller
                         'can_read' => Auth::user()->isAbleTo('read_communication_templates'),
                     ];
                 });
-    
+
             return response()->json(['templates' => $templates]);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to load communication templates'], 500);
         }
     }
-    
+
     public function communicationTemplatesStore(Request $request)
     {
         try {
@@ -1309,19 +1607,19 @@ class HrSettingsController extends Controller
                 'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240', // For general templates
                 'general_config' => 'nullable|json',
             ]);
-    
+
             $template = new CommunicationTemplate();
             $template->template_name = $validated['template_name'];
             $template->template_type = $validated['template_type'];
             $template->communication_method = $validated['communication_method'];
             $template->subject = $validated['subject'];
             $template->body = $validated['body'];
-            
+
             // Handle general communication config
             if ($validated['template_type'] === 'general' && $request->has('general_config')) {
                 $template->general_config = json_decode($validated['general_config'], true);
             }
-    
+
             // Handle file upload - for non-general templates
             if ($request->hasFile('file')) {
                 $file = $request->file('file');
@@ -1330,7 +1628,7 @@ class HrSettingsController extends Controller
                 $path = $file->storeAs("communication_templates/{$templateType}", $filename, 'public');
                 $template->attachment_path = $path;
             }
-    
+
             // Handle attachment upload - for general templates
             if ($request->hasFile('attachment')) {
                 $file = $request->file('attachment');
@@ -1338,24 +1636,26 @@ class HrSettingsController extends Controller
                 $path = $file->storeAs('communication_templates/general', $filename, 'public');
                 $template->attachment_path = $path;
             }
-    
+
             $template->current_status_id = 1;
             $template->created_by_id = Auth::id();
             $template->date_time = now();
             $template->save();
-    
+
             return response()->json(['success' => true, 'template' => $template]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             Log::error('Error saving template: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to save template'], 500);
         }
     }
-    
+
     public function communicationTemplatesUpdate(Request $request, $id)
     {
         try {
@@ -1369,7 +1669,7 @@ class HrSettingsController extends Controller
                 'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:10240',
                 'general_config' => 'nullable|json',
             ]);
-    
+
             $template = CommunicationTemplate::findOrFail($id);
             $template->template_name = $validated['template_name'];
             $template->template_type = $validated['template_type'];
@@ -1377,70 +1677,72 @@ class HrSettingsController extends Controller
             $template->subject = $validated['subject'];
             $template->body = $validated['body'];
             $template->current_status_id = 1;
-    
+
             // Handle general communication config
             if ($validated['template_type'] === 'general' && $request->has('general_config')) {
                 $template->general_config = json_decode($validated['general_config'], true);
             } else if ($validated['template_type'] !== 'general') {
                 $template->general_config = null;
             }
-    
+
             // Handle file upload - for non-general templates
             if ($request->hasFile('file')) {
                 // Delete old file if exists
                 if ($template->attachment_path && Storage::disk('public')->exists($template->attachment_path)) {
                     Storage::disk('public')->delete($template->attachment_path);
                 }
-    
+
                 $file = $request->file('file');
                 $templateType = str_replace('_', '-', $validated['template_type']);
                 $filename = time() . '_' . $file->getClientOriginalName();
                 $path = $file->storeAs("communication_templates/{$templateType}", $filename, 'public');
                 $template->attachment_path = $path;
             }
-    
+
             // Handle attachment upload - for general templates
             if ($request->hasFile('attachment')) {
                 // Delete old file if exists
                 if ($template->attachment_path && Storage::disk('public')->exists($template->attachment_path)) {
                     Storage::disk('public')->delete($template->attachment_path);
                 }
-    
+
                 $file = $request->file('attachment');
                 $filename = time() . '_' . $file->getClientOriginalName();
                 $path = $file->storeAs('communication_templates/general', $filename, 'public');
                 $template->attachment_path = $path;
             }
-    
+
             $template->save();
-    
+
             return response()->json(['success' => true, 'template' => $template]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             Log::error('Error updating template: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to update template'], 500);
         }
     }
-    
+
     public function communicationTemplatesDelete($id)
     {
         try {
             $template = CommunicationTemplate::findOrFail($id);
-            
+
             // Delete associated file if exists
             if ($template->attachment_path && Storage::disk('public')->exists($template->attachment_path)) {
                 Storage::disk('public')->delete($template->attachment_path);
             }
-            
+
             $template->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            try { 
-                ErrorDispatcher::dispatch($e); 
+            try {
+                ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
@@ -1448,5 +1750,4 @@ class HrSettingsController extends Controller
             return response()->json(['success' => false, 'error' => 'Failed to delete template'], 500);
         }
     }
-
 }

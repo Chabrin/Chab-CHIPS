@@ -7,24 +7,38 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Handles MASTERRETURN generation using merge batch configuration.
- * 
- * MASTERRETURNs aggregate multiple MAINRETURN summaries for properties
- * configured in the same batch via cb_returns_merge_batches.
- * 
- * The transaction_ref column in cb_returns_clients stores the child
- * return codes as a comma-separated list for traceability.
+ *
+ * Mirrors the legacy merged-return shape observed in production (e.g.
+ * R1202603LAN-01072) so that summary totals and client lines line up
+ * with downstream payment, PDF and Excel logic.
+ *
+ * Summary math:
+ *   total_credit = SUM(child.net_amount)
+ *   total_debit  = SUM(child.total_debit)              [informational]
+ *   commission_amount = SUM(child.commission_amount)   [informational]
+ *   net_amount   = total_credit - landlord_account_deductions_total
+ *   net_balance  = net_amount
+ *
+ * Client lines (cb_returns_clients) for the master:
+ *   - One NETSUM (CR) row per child summary, carrying that child's
+ *     net_amount/total_debit/total_credit for visibility.
+ *   - One DEDUCTION (DR) row per qualifying cb_landlord_account entry
+ *     not yet recovered for the period.
  */
 trait ReturnsMasterReturnTrait
 {
     /**
+     * Entry-type codes from cb_landlord_account that count as
+     * landlord-level deductions to absorb into the master.
+     */
+    protected array $masterLandlordDeductionCodes = [
+        '0007', '0008', '0009', '0010', '0012', '0013', '0014',
+        '0015', '0016', '0019', '0020', '0023', '0024', '0026',
+        '0030', '0036',
+    ];
+
+    /**
      * Generate MASTERRETURN summaries for all active merge batches.
-     *
-     * @param string $returnPeriod YYYYMM format
-     * @param string $transactionDate Display date (DD-Mon-YYYY)
-     * @param int $generatedBy User ID
-     * @param int $returnYear
-     * @param int $returnMonth
-     * @return int Number of MASTERRETURNs created
      */
     protected function generateMasterReturns(
         string $returnPeriod,
@@ -33,313 +47,454 @@ trait ReturnsMasterReturnTrait
         int $returnYear,
         int $returnMonth
     ): int {
-        // Get active merge batches with their aggregated data
-        $masterReturns = DB::select("
-            WITH batch_property_returns AS (
-                -- Get MAINRETURN summaries for properties in active batches
+        $batches = $this->collectMasterBatchAggregates($returnPeriod);
+
+        if (empty($batches)) {
+            return 0;
+        }
+
+        $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
+        $monthName = date('F', mktime(0, 0, 0, $returnMonth, 1, $returnYear));
+        $masterTransactionDate = $transactionDate ?: date('d-M-Y', strtotime("{$returnYear}-{$returnMonth}-05"));
+
+        $created = 0;
+
+        foreach ($batches as $batch) {
+            $landlordCode = $batch->landlord_code ?: $this->getLandlordCodeForClient((int) $batch->batch_client_id);
+            if ($landlordCode === '') {
+                Log::warning('ReturnsMasterReturnTrait: skipping batch without landlord code', [
+                    'batch_id'   => $batch->batch_id,
+                    'client_id'  => $batch->batch_client_id,
+                ]);
+                continue;
+            }
+
+            $masterReturnCode = 'R1' . $returnPeriod . $landlordCode;
+
+            // Master totals
+            $childNetSum   = (float) $batch->child_net_amount_sum;
+            $childDebitSum = (float) $batch->child_total_debit_sum;
+            $childCommSum  = (float) $batch->child_commission_sum;
+
+            $deductionAggregate = $this->aggregateMasterLandlordDeductions(
+                (int) $batch->batch_client_id,
+                $returnYear,
+                $returnMonth
+            );
+            $deductionsTotal = (float) $deductionAggregate['total'];
+
+            $masterNetAmount = round($childNetSum - $deductionsTotal, 2);
+
+            $nextReturnId = (int) DB::selectOne(
+                'SELECT COALESCE(MAX(return_id), 0) + 1 AS next_id FROM cb_returns_summary'
+            )->next_id;
+
+            $description = trim(($batch->landlord_name ?? '') . "-{$monthName}-{$returnYear}-MASTER RETURN");
+
+            DB::insert("
+                INSERT INTO cb_returns_summary (
+                    return_code, landlord_code, property_code,
+                    year, month, return_description, return_period, return_type,
+                    commission_rate, total_credit, commission_total, vatable_total,
+                    commission_amount, total_debit, net_amount,
+                    transaction_amount, net_balance,
+                    prepared_by, prepared_status, prepared_date,
+                    saved_status, finalized_status,
+                    approved_status, paid_status,
+                    return_tag, return_status, remarks,
+                    transaction_ref, return_id,
+                    payable_amount, non_payable_amount, payable_units, total_units,
+                    landlord_name, client_id, zone_id, field_officer_id,
+                    zone_supervisor_id, zone_manager_id,
+                    server_time, user_id
+                ) VALUES (
+                    ?, ?, '',
+                    ?, ?, ?, ?, 'MASTERRETURN',
+                    0, ?, 0, 0,
+                    ?, ?, ?,
+                    0, ?,
+                    ?, 1, NOW(),
+                    1, 0,
+                    0, 0,
+                    '1', 0, 'Master Return Created',
+                    ?, ?,
+                    0, 0, 0, 0,
+                    ?, ?, ?, ?,
+                    ?, ?,
+                    NOW(), ?
+                )
+            ", [
+                $masterReturnCode,
+                $landlordCode,
+                $returnYear, $returnMonth,
+                $description, $returnPeriod,
+                round($childNetSum, 2),
+                round($childCommSum, 2),
+                round($childDebitSum, 2),
+                $masterNetAmount,
+                $masterNetAmount,
+                $preparedByName,
+                $batch->child_return_codes,
+                $nextReturnId,
+                $batch->landlord_name,
+                $batch->batch_client_id,
+                $batch->zone_id,
+                $batch->field_officer_id,
+                $batch->zone_supervisor_id,
+                $batch->zone_manager_id,
+                $generatedBy,
+            ]);
+
+            $this->insertMasterNetSumLines(
+                $masterReturnCode,
+                $returnPeriod,
+                $masterTransactionDate,
+                $nextReturnId,
+                $batch->child_return_codes,
+                $generatedBy
+            );
+
+            $this->insertMasterReturnDeductions(
+                $masterReturnCode,
+                $returnPeriod,
+                $masterTransactionDate,
+                $nextReturnId,
+                (int) $batch->batch_client_id,
+                $returnYear,
+                $returnMonth,
+                $generatedBy
+            );
+
+            $this->markChildReturnsAsMerged(
+                $batch->child_summary_ids,
+                $masterReturnCode,
+                $returnPeriod
+            );
+
+            $created++;
+
+            Log::info('ReturnsMasterReturnTrait: MASTERRETURN created', [
+                'master_code'       => $masterReturnCode,
+                'batch'             => $batch->batch_name,
+                'children'          => $batch->property_count,
+                'child_codes'       => $batch->child_return_codes,
+                'total_credit'      => $childNetSum,
+                'deductions_total'  => $deductionsTotal,
+                'net_amount'        => $masterNetAmount,
+            ]);
+        }
+
+        return $created;
+    }
+
+    /**
+     * Pull aggregated child summaries grouped by merge batch for the period.
+     * Skips any batch that resolves to a single MAINRETURN (nothing to merge).
+     */
+    protected function collectMasterBatchAggregates(string $returnPeriod): array
+    {
+        return DB::select("
+            WITH child_returns AS (
                 SELECT
-                    mb.id AS batch_id,
-                    mb.batch_code,
-                    mb.batch_name,
-                    mb.client_id AS batch_client_id,
-                    rs.id AS child_return_id,
-                    rs.return_code AS child_return_code,
+                    mb.id              AS batch_id,
+                    mb.batch_reference AS batch_code,
+                    mb.landlord_name   AS batch_name,
+                    mb.landlord_id     AS batch_client_id,
+                    rs.id              AS child_summary_id,
+                    rs.return_code     AS child_return_code,
                     rs.property_code,
-                    rs.property_id,
-                    rs.total_returns,
-                    rs.rent_amount,
-                    rs.amount_withheld,
-                    rs.gross_commission,
-                    rs.vat_commission,
-                    rs.net_commission_paid,
-                    rs.deductions,
-                    rs.other_collections,
-                    rs.net_amount_payable,
+                    COALESCE(rs.net_amount, 0)        AS child_net_amount,
+                    COALESCE(rs.total_debit, 0)       AS child_total_debit,
+                    COALESCE(rs.commission_amount, 0) AS child_commission,
                     rs.zone_id,
                     rs.field_officer_id,
                     rs.zone_supervisor_id,
                     rs.zone_manager_id
                 FROM cb_returns_merge_batches mb
                 JOIN cb_returns_merge_batch_items mbi ON mbi.batch_id = mb.id
-                JOIN cb_returns_summary rs ON rs.property_id = mbi.property_id
+                JOIN sys_pm_properties p ON p.id = mbi.property_id
+                JOIN cb_returns_summary rs ON rs.property_code = p.reference_number
                                            AND rs.return_period = ?
-                                           AND rs.return_type = 'MAINRETURN'
-                WHERE mb.is_active = true
-            ),
-            batch_aggregates AS (
-                -- Aggregate per batch
-                SELECT
-                    batch_id,
-                    batch_code,
-                    batch_name,
-                    batch_client_id,
-                    STRING_AGG(child_return_code, ',' ORDER BY child_return_code) AS child_return_codes,
-                    STRING_AGG(child_return_id::text, ',' ORDER BY child_return_code) AS child_return_ids,
-                    COUNT(*) AS property_count,
-                    SUM(total_returns)        AS total_returns,
-                    SUM(rent_amount)          AS rent_amount,
-                    SUM(amount_withheld)      AS amount_withheld,
-                    SUM(gross_commission)     AS gross_commission,
-                    SUM(vat_commission)       AS vat_commission,
-                    SUM(net_commission_paid)  AS net_commission_paid,
-                    SUM(deductions)           AS deductions,
-                    SUM(other_collections)    AS other_collections,
-                    SUM(net_amount_payable)   AS net_amount_payable,
-                    MIN(zone_id) AS zone_id,
-                    MIN(field_officer_id) AS field_officer_id,
-                    MIN(zone_supervisor_id) AS zone_supervisor_id,
-                    MIN(zone_manager_id) AS zone_manager_id
-                FROM batch_property_returns
-                GROUP BY batch_id, batch_code, batch_name, batch_client_id
-                HAVING COUNT(*) > 1  -- Only create MASTERRETURN when multiple properties
+                                           AND rs.return_type   = 'MAINRETURN'
+                                           AND COALESCE(rs.is_merged, FALSE) = FALSE
             )
-            SELECT * FROM batch_aggregates
+            SELECT
+                cr.batch_id,
+                cr.batch_code,
+                cr.batch_name,
+                cr.batch_client_id,
+                cl.reference_number AS landlord_code,
+                cl.names            AS landlord_name,
+                COUNT(*)            AS property_count,
+                STRING_AGG(cr.child_return_code,        ',' ORDER BY cr.child_return_code) AS child_return_codes,
+                STRING_AGG(cr.child_summary_id::text,   ',' ORDER BY cr.child_return_code) AS child_summary_ids,
+                SUM(cr.child_net_amount)   AS child_net_amount_sum,
+                SUM(cr.child_total_debit)  AS child_total_debit_sum,
+                SUM(cr.child_commission)   AS child_commission_sum,
+                MIN(cr.zone_id)            AS zone_id,
+                MIN(cr.field_officer_id)   AS field_officer_id,
+                MIN(cr.zone_supervisor_id) AS zone_supervisor_id,
+                MIN(cr.zone_manager_id)    AS zone_manager_id
+            FROM child_returns cr
+            LEFT JOIN sys_pm_clients cl ON cl.id = cr.batch_client_id
+            GROUP BY cr.batch_id, cr.batch_code, cr.batch_name, cr.batch_client_id, cl.reference_number, cl.names
+            HAVING COUNT(*) > 1
         ", [$returnPeriod]);
+    }
 
-        $masterReturnCount = 0;
+    /**
+     * Pre-compute the landlord-account deduction total so that it can be
+     * subtracted from the master's net_amount before the summary is inserted.
+     */
+    protected function aggregateMasterLandlordDeductions(int $clientId, int $returnYear, int $returnMonth): array
+    {
+        $placeholders = implode(',', array_fill(0, count($this->masterLandlordDeductionCodes), '?'));
 
-        foreach ($masterReturns as $batch) {
-            // Generate MASTERRETURN code: R1YYYYMM + LAN-XXXXX
-            $landlordCode = $this->getLandlordCodeForClient($batch->batch_client_id);
-            $masterReturnCode = 'R1' . $returnPeriod . $landlordCode;
+        $row = DB::selectOne("
+            SELECT
+                COALESCE(SUM(la.debit_amount), 0) AS total_amount,
+                COUNT(*) AS line_count
+            FROM cb_landlord_account la
+            WHERE la.client_id = ?
+              AND la.debit_amount > 0
+              AND COALESCE(la.is_recovered, 0) != 1
+              AND la.year  = ?
+              AND la.month = ?
+              AND la.entry_type_code IN ({$placeholders})
+        ", array_merge([$clientId, $returnYear, $returnMonth], $this->masterLandlordDeductionCodes));
 
-            // Insert MASTERRETURN summary
+        return [
+            'total' => (float) ($row->total_amount ?? 0),
+            'count' => (int)   ($row->line_count   ?? 0),
+        ];
+    }
+
+    /**
+     * Insert one NETSUM (CR) row per child MAINRETURN onto the master.
+     * Each row carries the child's net_amount, total_debit, total_credit
+     * for traceability and downstream rendering.
+     */
+    protected function insertMasterNetSumLines(
+        string $masterReturnCode,
+        string $returnPeriod,
+        string $transactionDate,
+        int $masterReturnId,
+        string $childReturnCodes,
+        int $userId
+    ): int {
+        $codes = array_filter(array_map('trim', explode(',', $childReturnCodes)));
+        if (empty($codes)) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($codes), '?'));
+
+        return DB::affectingStatement("
+            INSERT INTO cb_returns_clients (
+                return_code, return_period, transaction_number, transaction_date,
+                entry_description, entry_type, transaction_code,
+                narration, transaction_ref,
+                property_code, dr_cr,
+                amount_text, amount_payable_landlord, amount_payable_tenant,
+                residual_debit, residual_credit, net_amount,
+                remarks, transaction_source,
+                vat_amount, commission_amount,
+                property_id, client_id, zone_id, field_officer_id,
+                zone_supervisor_id, zone_manager_id,
+                return_id,
+                server_time, user_id
+            )
+            SELECT
+                ?, ?::integer, '', ?,
+                'NETSUM', 'RETURN NET SUM', 'RETURN-NETSUM',
+                COALESCE(p.property_name, rs.property_code) || '-RETURN NET SUM',
+                rs.return_code,
+                rs.property_code, 'CR',
+                TO_CHAR(COALESCE(rs.net_amount, 0), 'FM9999999990.00'),
+                COALESCE(rs.net_amount, 0),
+                0,
+                COALESCE(rs.total_debit, 0),
+                COALESCE(rs.total_credit, 0),
+                COALESCE(rs.net_amount, 0),
+                'Transfered to Master',
+                NULL,
+                0, 0,
+                p.id, rs.client_id, rs.zone_id, rs.field_officer_id,
+                rs.zone_supervisor_id, rs.zone_manager_id,
+                ?,
+                NOW(), ?
+            FROM cb_returns_summary rs
+            LEFT JOIN sys_pm_properties p ON p.reference_number = rs.property_code
+            WHERE rs.return_code IN ({$placeholders})
+              AND rs.return_period = ?
+              AND rs.return_type   = 'MAINRETURN'
+            ORDER BY rs.return_code
+        ", array_merge(
+            [$masterReturnCode, $returnPeriod, $transactionDate, $masterReturnId, $userId],
+            $codes,
+            [$returnPeriod]
+        ));
+    }
+
+    /**
+     * Insert landlord-level deductions from cb_landlord_account onto the master,
+     * preserving property_code/property_id where the deduction is property-specific
+     * (e.g. BANKING SERVICES). Marks consumed entries as recovered.
+     */
+    protected function insertMasterReturnDeductions(
+        string $masterReturnCode,
+        string $returnPeriod,
+        string $transactionDate,
+        int $returnId,
+        int $clientId,
+        int $returnYear,
+        int $returnMonth,
+        int $userId
+    ): int {
+        $placeholders = implode(',', array_fill(0, count($this->masterLandlordDeductionCodes), '?'));
+
+        $inserted = DB::affectingStatement("
+            INSERT INTO cb_returns_clients (
+                return_code, return_period, transaction_number, transaction_date,
+                entry_description, entry_type, transaction_code,
+                narration, transaction_ref, source_date,
+                property_code, dr_cr,
+                amount_text, amount_payable_landlord, amount_payable_tenant,
+                residual_debit, residual_credit, net_amount,
+                remarks, transaction_source,
+                vat_amount, commission_amount,
+                property_id, client_id,
+                return_id,
+                server_time, user_id
+            )
+            SELECT
+                ?, ?::integer, '', ?,
+                'DEDUCTION',
+                'Advance Payments-From Landlord Acc',
+                NULL,
+                COALESCE(la.entry_particulars, la.entry_description),
+                CASE
+                    WHEN COALESCE(la.payment_ref, '') = '' THEN NULL
+                    WHEN COALESCE(la.payment_ref_type, '') = '' THEN la.payment_ref
+                    ELSE la.payment_ref || ' ' || la.payment_ref_type
+                END,
+                la.entry_date,
+                COALESCE(la.property_code, ''),
+                'DR',
+                TO_CHAR(la.debit_amount, 'FM9999999990.00'),
+                0, 0,
+                la.debit_amount, 0, la.debit_amount,
+                'Payment OK',
+                'LANDLORD ACCOUNT',
+                0, 0,
+                la.property_id,
+                la.client_id,
+                ?,
+                NOW(),
+                ?
+            FROM cb_landlord_account la
+            WHERE la.client_id = ?
+              AND la.debit_amount > 0
+              AND COALESCE(la.is_recovered, 0) != 1
+              AND la.year  = ?
+              AND la.month = ?
+              AND la.entry_type_code IN ({$placeholders})
+            ORDER BY la.entry_date, la.id
+        ", array_merge(
+            [$masterReturnCode, $returnPeriod, $transactionDate, $returnId, $userId, $clientId, $returnYear, $returnMonth],
+            $this->masterLandlordDeductionCodes
+        ));
+
+        if ($inserted > 0) {
             DB::statement("
-                INSERT INTO cb_returns_summary (
-                    return_code, return_period, return_date,
-                    property_code, property_name, landlord_name, landlord_code,
-                    total_returns, rent_amount, amount_withheld,
-                    gross_commission, vat_commission, net_commission_paid,
-                    deductions, other_collections, net_amount_payable,
-                    return_type, approved_status, transaction_ref,
-                    client_id, zone_id, field_officer_id,
-                    zone_supervisor_id, zone_manager_id,
-                    year, month,
-                    server_time, user_id
-                )
-                SELECT
-                    ?,
-                    ?::integer,
-                    ?,
-                    ?,  -- batch_code as property_code
-                    ?,  -- batch_name as property_name
-                    CONCAT_WS(' ', c.first_name, c.last_name),
-                    c.reference_number,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    'MASTERRETURN',
-                    0,
-                    ?,  -- child return codes
-                    ?,
-                    ?, ?, ?, ?,
-                    ?, ?,
-                    NOW(),
-                    ?
-                FROM cb_clients c
-                WHERE c.id = ?
-            ", [
-                $masterReturnCode,
-                $returnPeriod,
-                $transactionDate,
-                $batch->batch_code,
-                $batch->batch_name,
-                $batch->total_returns,
-                $batch->rent_amount,
-                $batch->amount_withheld,
-                $batch->gross_commission,
-                $batch->vat_commission,
-                $batch->net_commission_paid,
-                $batch->deductions,
-                $batch->other_collections,
-                $batch->net_amount_payable,
-                $batch->child_return_codes,
-                $batch->batch_client_id,
-                $batch->zone_id,
-                $batch->field_officer_id,
-                $batch->zone_supervisor_id,
-                $batch->zone_manager_id,
-                $returnYear,
-                $returnMonth,
-                $generatedBy,
-                $batch->batch_client_id
-            ]);
+                UPDATE cb_landlord_account
+                SET is_recovered         = 1,
+                    recovery_year        = ?,
+                    recovery_month       = ?,
+                    return_code          = ?,
+                    recovery_server_time = NOW()
+                WHERE client_id = ?
+                  AND debit_amount > 0
+                  AND COALESCE(is_recovered, 0) != 1
+                  AND year  = ?
+                  AND month = ?
+                  AND entry_type_code IN ({$placeholders})
+            ", array_merge(
+                [$returnYear, $returnMonth, $masterReturnCode, $clientId, $returnYear, $returnMonth],
+                $this->masterLandlordDeductionCodes
+            ));
 
-            // Mark child MAINRETURNs as merged
-            $this->markChildReturnsAsMerged(
-                $batch->child_return_ids,
-                $masterReturnCode,
-                $returnPeriod
-            );
-
-            // Copy all line items from child returns to MASTERRETURN
-            $this->copyLinesToMasterReturn(
-                $masterReturnCode,
-                $batch->child_return_ids,
-                $returnPeriod
-            );
-
-            $masterReturnCount++;
-
-            Log::info("ReturnsMasterReturnTrait: MASTERRETURN created", [
-                'master_code'    => $masterReturnCode,
-                'batch'          => $batch->batch_name,
-                'properties'     => $batch->property_count,
-                'child_returns'  => $batch->child_return_codes,
-                'net_payable'    => $batch->net_amount_payable
+            Log::info('ReturnsMasterReturnTrait: landlord deductions absorbed into MASTERRETURN', [
+                'master_code' => $masterReturnCode,
+                'client_id'   => $clientId,
+                'count'       => $inserted,
             ]);
         }
 
-        return $masterReturnCount;
+        return $inserted;
     }
 
     /**
-     * Get landlord reference code for a client.
-     *
-     * @param int $clientId
-     * @return string Landlord code (e.g., LAN-00015)
-     */
-    protected function getLandlordCodeForClient(int $clientId): string
-    {
-        $result = DB::selectOne("
-            SELECT reference_number
-            FROM cb_clients
-            WHERE id = ?
-        ", [$clientId]);
-
-        return $result ? $result->reference_number : '';
-    }
-
-    /**
-     * Mark child MAINRETURN summaries as merged into a MASTERRETURN.
-     *
-     * @param string $childReturnIds Comma-separated return IDs
-     * @param string $masterReturnCode The MASTERRETURN code
-     * @param string $returnPeriod YYYYMM format
-     * @return void
+     * Mark the child MAINRETURN summaries as merged into a MASTERRETURN.
      */
     protected function markChildReturnsAsMerged(
-        string $childReturnIds,
+        string $childSummaryIds,
         string $masterReturnCode,
         string $returnPeriod
     ): void {
-        $ids = explode(',', $childReturnIds);
+        $ids = array_filter(array_map('trim', explode(',', $childSummaryIds)));
+        if (empty($ids)) {
+            return;
+        }
+
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
         DB::statement("
             UPDATE cb_returns_summary
             SET parent_return_code = ?,
-                is_merged         = true
+                is_merged          = TRUE
             WHERE id IN ({$placeholders})
               AND return_period = ?
         ", array_merge([$masterReturnCode], $ids, [$returnPeriod]));
     }
 
     /**
-     * Copy line items from child returns to MASTERRETURN.
-     * Preserves original line details but updates return_code.
-     *
-     * @param string $masterReturnCode The MASTERRETURN code
-     * @param string $childReturnIds Comma-separated child return IDs
-     * @param string $returnPeriod YYYYMM format
-     * @return void
+     * Get landlord reference code for a client.
      */
-    protected function copyLinesToMasterReturn(
-        string $masterReturnCode,
-        string $childReturnIds,
-        string $returnPeriod
-    ): void {
-        $ids = explode(',', $childReturnIds);
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    protected function getLandlordCodeForClient(int $clientId): string
+    {
+        $result = DB::selectOne("
+            SELECT reference_number
+            FROM sys_pm_clients
+            WHERE id = ?
+        ", [$clientId]);
 
-        // Insert new lines with MASTERRETURN code, linking back to original
-        DB::statement("
-            INSERT INTO cb_returns_clients (
-                return_code, return_period, transaction_number, transaction_date,
-                entry_description, entry_type, dr_cr,
-                property_code, unit_code, tenant_name,
-                invoice_amount, commission_rate, gross_commission_rate,
-                commission_amount, vat_amount, net_amount, amount_payable_landlord,
-                narration, pay_percentage, payable_status,
-                property_id, client_id, zone_id, field_officer_id,
-                zone_supervisor_id, zone_manager_id, unit_id, tenant_id,
-                return_id, service_agreement_id, invoice_id,
-                is_commissionable, transaction_source, transaction_ref,
-                deduction_point_2,
-                server_time, user_id
-            )
-            SELECT
-                ?,  -- master return code
-                return_period,
-                transaction_number,
-                transaction_date,
-                entry_description,
-                entry_type,
-                dr_cr,
-                property_code,
-                unit_code,
-                tenant_name,
-                invoice_amount,
-                commission_rate,
-                gross_commission_rate,
-                commission_amount,
-                vat_amount,
-                net_amount,
-                amount_payable_landlord,
-                narration,
-                pay_percentage,
-                payable_status,
-                property_id,
-                client_id,
-                zone_id,
-                field_officer_id,
-                zone_supervisor_id,
-                zone_manager_id,
-                unit_id,
-                tenant_id,
-                NULL,  -- will be linked later
-                service_agreement_id,
-                invoice_id,
-                is_commissionable,
-                transaction_source,
-                return_code,  -- original return code as reference
-                deduction_point_2,
-                server_time,
-                user_id
-            FROM cb_returns_clients
-            WHERE return_id IN ({$placeholders})
-              AND return_period = ?
-        ", array_merge([$masterReturnCode], $ids, [$returnPeriod]));
+        return $result ? (string) $result->reference_number : '';
     }
 
     /**
      * Get batched properties for a landlord.
-     *
-     * @param int $clientId Landlord client ID
-     * @return array Properties in batches
      */
     protected function getBatchedPropertiesForLandlord(int $clientId): array
     {
         return DB::select("
             SELECT
-                mb.id AS batch_id,
-                mb.batch_code,
-                mb.batch_name,
+                mb.id              AS batch_id,
+                mb.batch_reference AS batch_code,
+                mb.landlord_name   AS batch_name,
                 mbi.property_id,
                 p.reference_number AS property_code,
                 p.property_name
             FROM cb_returns_merge_batches mb
             JOIN cb_returns_merge_batch_items mbi ON mbi.batch_id = mb.id
             JOIN sys_pm_properties p ON p.id = mbi.property_id
-            WHERE mb.client_id = ?
-              AND mb.is_active = true
-            ORDER BY mb.batch_code, p.reference_number
+            WHERE mb.landlord_id = ?
+            ORDER BY mb.batch_reference, p.reference_number
         ", [$clientId]);
     }
 
     /**
      * Check if a property is part of an active merge batch.
-     *
-     * @param int $propertyId
-     * @return bool
      */
     protected function isPropertyInMergeBatch(int $propertyId): bool
     {
@@ -348,30 +503,25 @@ trait ReturnsMasterReturnTrait
             FROM cb_returns_merge_batch_items mbi
             JOIN cb_returns_merge_batches mb ON mb.id = mbi.batch_id
             WHERE mbi.property_id = ?
-              AND mb.is_active = true
         ", [$propertyId]);
 
-        return $result->cnt > 0;
+        return $result && (int) $result->cnt > 0;
     }
 
     /**
      * Get MASTERRETURN summaries for a period.
-     *
-     * @param string $returnPeriod YYYYMM format
-     * @return array MASTERRETURN records
      */
     protected function getMasterReturnsForPeriod(string $returnPeriod): array
     {
         return DB::select("
             SELECT
                 rs.*,
-                c.first_name,
-                c.last_name,
-                c.reference_number AS landlord_code
+                c.names            AS landlord_name_lookup,
+                c.reference_number AS landlord_code_lookup
             FROM cb_returns_summary rs
-            JOIN cb_clients c ON c.id = rs.client_id
+            JOIN sys_pm_clients c ON c.id = rs.client_id
             WHERE rs.return_period = ?
-              AND rs.return_type = 'MASTERRETURN'
+              AND rs.return_type   = 'MASTERRETURN'
             ORDER BY rs.return_code
         ", [$returnPeriod]);
     }

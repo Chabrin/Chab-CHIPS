@@ -54,17 +54,15 @@
 
                         <!-- Return Header Info -->
                         <div class="mb-1" id="header-info" style="font-size:0.72rem;color:#666;">
-                            <span class="text-muted">Return Code:</span> <strong id="hdr-return-code">{{ $return->return_code }}</strong>
+                            <span class="text-muted">Return Code:</span> <strong id="hdr-return-code">{{ $headerInfo['return_code'] }}</strong>
                             <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Property:</span> <strong id="hdr-property">{{ $return->property_code ?? '-' }}</strong>
+                            <span class="text-muted">Property:</span> <strong id="hdr-property">{{ $headerInfo['property_label'] }}</strong>
                             <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Landlord:</span> <strong id="hdr-landlord">{{ $return->landlord_code }}</strong>
+                            <span class="text-muted">Landlord:</span> <strong id="hdr-landlord">{{ $headerInfo['landlord_label'] }}</strong>
                             <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Period:</span> <strong id="hdr-period">{{ str_pad($return->month, 2, '0', STR_PAD_LEFT) }}/{{ $return->year }}</strong>
+                            <span class="text-muted">Period:</span> <strong id="hdr-period">{{ $headerInfo['period'] }}</strong>
                             <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Type:</span> <strong id="hdr-type">{{ $return->return_type ?? '-' }}</strong>
-                            <span class="mx-1 text-muted">|</span>
-                            <span class="text-muted">Commission:</span> <strong id="hdr-commission-rate">{{ number_format($return->commission_rate ?? 0, 2) }}%</strong>
+                            <span class="text-muted">Type:</span> <strong id="hdr-type">{{ $headerInfo['return_type'] }}</strong>
                         </div>
 
                         <!-- Financial Summary -->
@@ -100,7 +98,7 @@
                                         </tr>
                                         <tr>
                                             <td class="py-1 fw-bold ps-3">Total Credits</td>
-                                            <td class="text-end py-1 fw-bold text-primary" id="val-total-cr">{{ number_format($lineTotals->total_cr ?? 0, 2) }}</td>
+                                            <td class="text-end py-1 fw-bold" style="color:#3598db;" id="val-total-cr">{{ number_format($lineTotals->total_cr ?? 0, 2) }}</td>
                                         </tr>
                                         <tr>
                                             <td class="py-1 fw-bold" colspan="2">Debits</td>
@@ -123,11 +121,11 @@
                                         </tr>
                                         <tr>
                                             <td class="py-1 fw-bold ps-3">Total Debits</td>
-                                            <td class="text-end py-1 fw-bold text-danger" id="val-total-dr">{{ number_format($lineTotals->total_dr ?? 0, 2) }}</td>
+                                            <td class="text-end py-1 fw-bold" style="color:#3598db;" id="val-total-dr">{{ number_format($lineTotals->total_dr ?? 0, 2) }}</td>
                                         </tr>
                                         <tr>
                                             <td class="fw-bold py-1">Net Amount (Credits − Debits)</td>
-                                            <td class="text-end py-1 fw-bold text-primary" id="val-net">{{ number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2) }}</td>
+                                            <td class="text-end py-1 fw-bold" style="color:#3598db;" id="val-net">{{ number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2) }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -138,7 +136,7 @@
                                         <tr>
                                             <td class="text-muted py-1" width="50%">Status</td>
                                             <td class="text-end py-1 fw-bold" id="val-status">
-                                                <span class="badge {{ $return->approved_status == 1 ? 'badge-light-success' : 'badge-light-warning' }}">
+                                                <span class="badge {{ $return->approved_status == 1 ? 'badge-light-success' : 'badge-light-danger' }}">
                                                     {{ $return->approved_status == 1 ? 'Approved' : 'Pending Approval' }}
                                                 </span>
                                             </td>
@@ -175,7 +173,7 @@
 
                         <div class="row mb-1" id="remarks-row" style="{{ ($return->remarks || $return->remarks_2) ? '' : 'display:none;' }}">
                             <div class="col-12">
-                                <div class="p-1 bg-info rounded" style="font-size:0.7rem;" id="val-remarks">Remarks: {{ $return->remarks }} {{ $return->remarks_2 }}</div>
+                                <div class="p-1" style="font-size:0.7rem;color:#212529;" id="val-remarks">Remarks: {{ $return->remarks }} {{ $return->remarks_2 }}</div>
                             </div>
                         </div>
 
@@ -216,7 +214,7 @@
                                 </button>
                             </li>
                             <li class="ms-auto d-flex align-items-center">
-                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
+                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
                                     <span class="material-symbols-outlined" style="font-size:14px;">download</span>
                                     <span class="ms-1" style="font-size:0.72rem;">Excel</span>
                                 </a>
@@ -246,9 +244,7 @@
                                                 <th>Dr/Cr</th>
                                                 <th class="text-end">Amt</th>
                                                 <th class="text-end">Net</th>
-                                                <th class="text-end">VAT</th>
                                                 <th class="text-end">Pay %</th>
-                                                <th>Period</th>
                                                 <th class="text-center">Payable?</th>
                                                 <th></th>
                                             </tr>
@@ -473,22 +469,15 @@
                     }
                 },
                 {
-                    data: 'vat_amount',
-                    className: 'text-end'
-                },
-                {
                     data: 'pay_percentage',
                     className: 'text-end',
                     render: function(d) {
-                        if (!d || d === '' || d === '0') return '<span class="text-danger">0.00%</span>';
+                        if (!d || d === '' || d === '0') return '<span class="text-danger">0.00</span>';
                         var num = parseFloat(d);
-                        var fmt = num.toFixed(2) + '%';
+                        var fmt = num.toFixed(2);
                         if (num >= 85) return '<span class="text-success">' + fmt + '</span>';
                         return '<span class="text-danger">' + fmt + '</span>';
                     }
-                },
-                {
-                    data: 'return_period'
                 },
                 {
                     data: 'payable_status',
@@ -549,11 +538,10 @@
         function updatePage(r, lt) {
             $('#header-title').text('Unprocessed Return — ' + r.return_code);
             $('#hdr-return-code').text(r.return_code);
-            $('#hdr-property').text(r.property_code);
-            $('#hdr-landlord').text(r.landlord_code);
+            $('#hdr-property').text(r.property_label || r.property_code || '-');
+            $('#hdr-landlord').text(r.landlord_label || r.landlord_code || '-');
             $('#hdr-period').text(r.period);
             $('#hdr-type').text(r.return_type);
-            $('#hdr-commission-rate').text(r.commission_rate + '%');
 
             $('#val-rent').text(lt.rent_total);
             if (lt.add_back_raw > 0) {

@@ -354,28 +354,52 @@ class InvoicingController extends Controller
                 return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
             }
 
-            $tenants = Client::tenants()
+            $tenantsRaw = Client::tenants()
                 ->select('id', 'names', 'mobile_number', 'email_address', 'national_id', 'reference_number')
                 ->where(function ($q) use ($search) {
                     $q->where('names', 'ILIKE', "%{$search}%")
                         ->orWhere('reference_number', 'ILIKE', "%{$search}%")
                         ->orWhere('mobile_number', 'ILIKE', "%{$search}%")
                         ->orWhere('email_address', 'ILIKE', "%{$search}%")
-                        ->orWhere('national_id', 'ILIKE', "%{$search}%");
+                        ->orWhere('national_id', 'ILIKE', "%{$search}%")
+                        ->orWhereExists(function ($sub) use ($search) {
+                            $sub->select(DB::raw(1))
+                                ->from('sys_pm_lease_agreements as la')
+                                ->join('sys_pm_units as u', 'u.id', '=', 'la.unit_id')
+                                ->whereColumn('la.tenant_id', 'sys_pm_clients.id')
+                                ->where('u.unit_code', 'ILIKE', "%{$search}%");
+                        });
                 })
                 ->orderBy('names')
                 ->limit(50)
-                ->get()
-                ->map(function ($t) {
-                    return [
-                        'encrypted_id'     => encrypt($t->id),
-                        'names'            => $t->names ?? 'N/A',
-                        'mobile_number'    => $t->mobile_number,
-                        'email_address'    => $t->email_address,
-                        'national_id'      => $t->national_id,
-                        'reference_number' => $t->reference_number,
-                    ];
-                });
+                ->get();
+
+            $tenantIds = $tenantsRaw->pluck('id')->all();
+            $unitCodesByTenant = [];
+            if (!empty($tenantIds)) {
+                DB::table('sys_pm_lease_agreements as la')
+                    ->join('sys_pm_units as u', 'u.id', '=', 'la.unit_id')
+                    ->whereIn('la.tenant_id', $tenantIds)
+                    ->whereNotNull('u.unit_code')
+                    ->select('la.tenant_id', 'u.unit_code')
+                    ->distinct()
+                    ->get()
+                    ->each(function ($row) use (&$unitCodesByTenant) {
+                        $unitCodesByTenant[$row->tenant_id][] = $row->unit_code;
+                    });
+            }
+
+            $tenants = $tenantsRaw->map(function ($t) use ($unitCodesByTenant) {
+                return [
+                    'encrypted_id'     => encrypt($t->id),
+                    'names'            => $t->names ?? 'N/A',
+                    'mobile_number'    => $t->mobile_number,
+                    'email_address'    => $t->email_address,
+                    'national_id'      => $t->national_id,
+                    'reference_number' => $t->reference_number,
+                    'unit_codes'       => $unitCodesByTenant[$t->id] ?? [],
+                ];
+            });
 
             return response()->json(['success' => true, 'tenants' => $tenants]);
         } catch (Exception $e) {
