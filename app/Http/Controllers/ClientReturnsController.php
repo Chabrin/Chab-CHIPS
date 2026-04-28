@@ -144,6 +144,68 @@ class ClientReturnsController extends Controller
     // ═══════════════════════════════════════════════════════════════════
 
     /**
+     * Build the header info shown above the financial summary on both
+     * the unprocessed and processed return-details pages. For MASTERRETURNs
+     * the property column lists every child property and the period uses
+     * the full month name (e.g. "March 2026").
+     *
+     * @return array{return_code:string,property_label:string,landlord_label:string,period:string,return_type:string}
+     */
+    protected function buildReturnHeaderInfo(ReturnSummary $return): array
+    {
+        $isMaster = ($return->return_type === 'MASTERRETURN');
+
+        $landlordName = $return->landlord_name
+            ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
+        $landlordLabel = trim((string) $return->landlord_code . ($landlordName ? ' - ' . $landlordName : ''));
+
+        if ($isMaster) {
+            $childCodes = [];
+            if (!empty($return->transaction_ref)) {
+                $childCodes = array_filter(array_map('trim', explode(',', $return->transaction_ref)));
+            }
+
+            $childQuery = DB::table('cb_returns_summary as rs')
+                ->leftJoin('sys_pm_properties as p', 'p.reference_number', '=', 'rs.property_code')
+                ->where('rs.return_type', 'MAINRETURN');
+
+            if (!empty($childCodes)) {
+                $childQuery->whereIn('rs.return_code', $childCodes);
+            } else {
+                // Legacy fallback: no transaction_ref recorded → match by landlord/period
+                $childQuery->where('rs.landlord_code', $return->landlord_code)
+                    ->where('rs.year', $return->year)
+                    ->where('rs.month', $return->month);
+            }
+
+            $children = $childQuery->select('rs.property_code', 'p.property_name')
+                ->orderBy('rs.property_code')
+                ->get();
+
+            $propertyLabel = $children
+                ->map(fn ($c) => trim((string) $c->property_code . ($c->property_name ? ' - ' . $c->property_name : '')))
+                ->filter()
+                ->implode(', ');
+        } else {
+            $propertyName = $return->property_name
+                ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
+            $propertyLabel = trim((string) ($return->property_code ?? '') . ($propertyName ? ' - ' . $propertyName : ''));
+        }
+
+        $period = $isMaster
+            ? date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year))
+            : str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year;
+
+        return [
+            'return_code'    => $return->return_code,
+            'property_label' => $propertyLabel !== '' ? $propertyLabel : '-',
+            'landlord_label' => $landlordLabel !== '' ? $landlordLabel : '-',
+            'period'         => $period,
+            'return_type'    => $return->return_type ?? '-',
+        ];
+    }
+
+    /**
      * Show unprocessed return details page
      */
     public function showUnprocessedReturnDetails($id)
@@ -181,7 +243,9 @@ class ClientReturnsController extends Controller
                 ")
                 ->first();
 
-            return view('property.returns.unprocessed-details', compact('return', 'lineTotals', 'allReturns'));
+            $headerInfo = $this->buildReturnHeaderInfo($return);
+
+            return view('property.returns.unprocessed-details', compact('return', 'lineTotals', 'allReturns', 'headerInfo'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading unprocessed return details: ' . $e->getMessage());
@@ -213,15 +277,19 @@ class ClientReturnsController extends Controller
                 ")
                 ->first();
 
+            $headerInfo = $this->buildReturnHeaderInfo($return);
+
             return response()->json([
                 'success' => true,
                 'return' => [
                     'id' => encrypt($return->id),
                     'return_code' => $return->return_code,
                     'property_code' => $return->property_code ?? '-',
+                    'property_label' => $headerInfo['property_label'],
                     'landlord_code' => $return->landlord_code,
-                    'period' => str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year,
-                    'return_type' => $return->return_type ?? '-',
+                    'landlord_label' => $headerInfo['landlord_label'],
+                    'period' => $headerInfo['period'],
+                    'return_type' => $headerInfo['return_type'],
                     'commission_rate' => number_format($return->commission_rate ?? 0, 2),
                     'commission_total' => number_format($return->commission_total ?? 0, 2),
                     'approved_status' => $return->approved_status,
@@ -1319,7 +1387,9 @@ class ClientReturnsController extends Controller
                 ")
                 ->first();
 
-            return view('property.processed-returns.details', compact('return', 'lineTotals', 'allReturns'));
+            $headerInfo = $this->buildReturnHeaderInfo($return);
+
+            return view('property.processed-returns.details', compact('return', 'lineTotals', 'allReturns', 'headerInfo'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading return details: ' . $e->getMessage());
@@ -1351,15 +1421,19 @@ class ClientReturnsController extends Controller
                 ")
                 ->first();
 
+            $headerInfo = $this->buildReturnHeaderInfo($return);
+
             return response()->json([
                 'success' => true,
                 'return' => [
                     'id' => encrypt($return->id),
                     'return_code' => $return->return_code,
                     'property_code' => $return->property_code ?? '-',
+                    'property_label' => $headerInfo['property_label'],
                     'landlord_code' => $return->landlord_code,
-                    'period' => str_pad($return->month, 2, '0', STR_PAD_LEFT) . '/' . $return->year,
-                    'return_type' => $return->return_type ?? '-',
+                    'landlord_label' => $headerInfo['landlord_label'],
+                    'period' => $headerInfo['period'],
+                    'return_type' => $headerInfo['return_type'],
                     'commission_rate' => number_format($return->commission_rate ?? 0, 2),
                     'commission_total' => number_format($return->commission_total ?? 0, 2),
                     'amount_paid' => number_format($return->amount_paid ?? 0, 2),
