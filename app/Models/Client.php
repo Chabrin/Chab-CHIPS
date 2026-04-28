@@ -111,8 +111,7 @@ class Client extends Model
                     ->from('sys_pm_properties as spp')
                     ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
                     ->whereColumn('spp.client_id', 'sys_pm_clients.id')
-                    ->where('spza.staff_id', $staffId)
-                    ->where('spza.current_status_id', 1);
+                    ->where('spza.staff_id', $staffId);
             });
         });
     }
