@@ -88,9 +88,6 @@ class ClientsController extends Controller
                 }
             }
 
-            $recordsTotal = (clone $baseQuery)->count();
-            $recordsFiltered = (clone $query)->count();
-
             $columns = [
                 1 => 'id',
                 2 => 'names',
@@ -99,6 +96,36 @@ class ClientsController extends Controller
                 5 => 'reference_number',
                 6 => 'registered_date',
             ];
+
+            // DataTables per-column search: columns[i][search][value]
+            $requestColumns = data_get($request->all(), 'columns', []);
+            if (is_array($requestColumns)) {
+                foreach ($requestColumns as $index => $column) {
+                    $field = $columns[(int) $index] ?? null;
+                    if ($field === null) {
+                        continue;
+                    }
+                    $colSearch = data_get($column, 'search.value');
+                    if (!is_string($colSearch) && !is_numeric($colSearch)) {
+                        continue;
+                    }
+                    $colSearch = trim((string) $colSearch);
+                    if ($colSearch === '') {
+                        continue;
+                    }
+                    if ($field === 'registered_date') {
+                        $query->whereRaw("CAST({$field} AS TEXT) ILIKE ?", ["%{$colSearch}%"]);
+                    } elseif ($field === 'id') {
+                        $query->where($field, $colSearch);
+                    } else {
+                        $query->where($field, 'ILIKE', "%{$colSearch}%");
+                    }
+                }
+            }
+
+            $recordsTotal = (clone $baseQuery)->count();
+            $recordsFiltered = (clone $query)->count();
+
             $orderIndex = (int) data_get($request->all(), 'order.0.column', 2);
             $orderBy = $columns[$orderIndex] ?? 'names';
             $orderDir = strtolower((string) data_get($request->all(), 'order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
@@ -138,13 +165,13 @@ class ClientsController extends Controller
                     ];
                 });
 
-            Log::info('Loaded clients page', [
-                'rows' => $clients->count(),
-                'start' => $start,
-                'length' => $length,
-                'filtered' => $recordsFiltered,
-                'total' => $recordsTotal,
-            ]);
+            // Log::info('Loaded clients page', [
+            //     'rows' => $clients->count(),
+            //     'start' => $start,
+            //     'length' => $length,
+            //     'filtered' => $recordsFiltered,
+            //     'total' => $recordsTotal,
+            // ]);
 
             return response()->json([
                 'draw' => (int) $request->input('draw', 1),
@@ -224,16 +251,13 @@ class ClientsController extends Controller
                 $tokens = array_filter(explode(' ', preg_replace('/\s+/', ' ', trim($searchValue))));
                 foreach ($tokens as $token) {
                     $query->where(function ($q) use ($token) {
-                        $q->where('names', 'LIKE', "%{$token}%")
-                            ->orWhere('reference_number', 'LIKE', "%{$token}%")
-                            ->orWhere('mobile_number', 'LIKE', "%{$token}%")
-                            ->orWhere('email_address', 'LIKE', "%{$token}%");
+                        $q->where('names', 'ILIKE', "%{$token}%")
+                            ->orWhere('reference_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
+                            ->orWhere('email_address', 'ILIKE', "%{$token}%");
                     });
                 }
             }
-
-            $recordsTotal    = (clone $baseQuery)->count();
-            $recordsFiltered = (clone $query)->count();
 
             $columns = [
                 1 => 'id',
@@ -243,6 +267,36 @@ class ClientsController extends Controller
                 5 => 'reference_number',
                 6 => 'registered_date',
             ];
+
+            // DataTables per-column search: columns[i][search][value]
+            $requestColumns = data_get($request->all(), 'columns', []);
+            if (is_array($requestColumns)) {
+                foreach ($requestColumns as $index => $column) {
+                    $field = $columns[(int) $index] ?? null;
+                    if ($field === null) {
+                        continue;
+                    }
+                    $colSearch = data_get($column, 'search.value');
+                    if (!is_string($colSearch) && !is_numeric($colSearch)) {
+                        continue;
+                    }
+                    $colSearch = trim((string) $colSearch);
+                    if ($colSearch === '') {
+                        continue;
+                    }
+                    if ($field === 'registered_date') {
+                        $query->whereRaw("CAST({$field} AS TEXT) ILIKE ?", ["%{$colSearch}%"]);
+                    } elseif ($field === 'id') {
+                        $query->where($field, $colSearch);
+                    } else {
+                        $query->where($field, 'ILIKE', "%{$colSearch}%");
+                    }
+                }
+            }
+
+            $recordsTotal    = (clone $baseQuery)->count();
+            $recordsFiltered = (clone $query)->count();
+
             $orderIndex = (int) data_get($request->all(), 'order.0.column', 2);
             $orderBy    = $columns[$orderIndex] ?? 'names';
             $orderDir   = strtolower((string) data_get($request->all(), 'order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
