@@ -294,17 +294,11 @@
         <table>
             <tr>
                 <td class="lbl">Property:</td>
-                <td>{{ $return->property_code ?? '-' }}</td>
+                <td>{{ $propertyDisplay ?? ($return->property_code ?? '-') }}</td>
                 <td class="lbl">Landlord:</td>
-                <td>{{ $return->landlord_code }}</td>
+                <td>{{ $landlordDisplay ?? ($return->landlord_code ?? '-') }}</td>
                 <td class="lbl">Type:</td>
                 <td>{{ $return->return_type ?? '-' }}</td>
-                <td class="lbl">Commission:</td>
-                <td>{{ number_format($return->commission_rate ?? 0, 2) }}%</td>
-                <td class="lbl">Net Amount:</td>
-                <td><strong>{{ number_format(($summary['bal_less_vat'] + $summary['house_deposits'] + $summary['water_elec_bills']), 2) }}</strong></td>
-                <td class="lbl">Amount Paid:</td>
-                <td><strong>{{ number_format($return->amount_paid ?? 0, 2) }}</strong></td>
                 @if($return->voucher_number)
                 <td class="lbl">Voucher:</td>
                 <td>{{ $return->voucher_number }}</td>

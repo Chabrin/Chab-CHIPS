@@ -1682,7 +1682,19 @@ class ClientReturnsController extends Controller
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
                 : '';
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff');
+            $landlordName = $return->landlord_name
+                ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
+            $propertyName = $return->property_name
+                ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
+
+            $propertyDisplay = $propertyName
+                ? trim($propertyName . ' - ' . ($return->property_code ?? ''))
+                : ($return->property_code ?? '-');
+            $landlordDisplay = $landlordName
+                ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
+                : ($return->landlord_code ?? '-');
+
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff', 'propertyDisplay', 'landlordDisplay');
 
             $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
             $pdf->setPaper('A4', 'landscape');
@@ -2013,13 +2025,43 @@ class ClientReturnsController extends Controller
             return strcmp($left['sort_date'], $right['sort_date']);
         });
 
-        $landlordName = DB::table('sys_pm_clients')
-            ->where('reference_number', $return->landlord_code)
-            ->value('names') ?: ($return->landlord_code ?? '-');
+        $landlordName = $return->landlord_name
+            ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
+        $landlordDisplay = $landlordName
+            ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
+            : ($return->landlord_code ?? '-');
 
-        $propertyName = DB::table('sys_pm_properties')
-            ->where('reference_number', $return->property_code)
-            ->value('property_name') ?: ($return->property_code ?? '-');
+        $isMaster = ($return->return_type === 'MASTERRETURN');
+        if ($isMaster) {
+            $childCodes = !empty($return->transaction_ref)
+                ? array_filter(array_map('trim', explode(',', $return->transaction_ref)))
+                : [];
+
+            $childQuery = DB::table('cb_returns_summary as rs')
+                ->leftJoin('sys_pm_properties as p', 'p.reference_number', '=', 'rs.property_code')
+                ->where('rs.return_type', 'MAINRETURN');
+            if (!empty($childCodes)) {
+                $childQuery->whereIn('rs.return_code', $childCodes);
+            } else {
+                $childQuery->where('rs.landlord_code', $return->landlord_code)
+                    ->where('rs.year', $return->year)
+                    ->where('rs.month', $return->month);
+            }
+            $children = $childQuery->select('rs.property_code', 'p.property_name')
+                ->orderBy('rs.property_code')
+                ->get();
+
+            $propertyDisplay = $children
+                ->map(fn ($c) => trim(($c->property_name ? $c->property_name . ' - ' : '') . (string) $c->property_code))
+                ->filter()
+                ->implode(', ') ?: '-';
+        } else {
+            $propertyName = $return->property_name
+                ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
+            $propertyDisplay = $propertyName
+                ? trim($propertyName . ' - ' . ($return->property_code ?? ''))
+                : ($return->property_code ?? '-');
+        }
 
         return [
             'credits' => $credits,
@@ -2033,8 +2075,8 @@ class ClientReturnsController extends Controller
                 'amount_paid' => (float) ($return->amount_paid ?? 0),
                 'balance' => (($totalCredits + $totalOtherReceipts) - $totalDebits) - (float) ($return->amount_paid ?? 0),
             ],
-            'landlordName' => $landlordName,
-            'propertyName' => $propertyName,
+            'landlordName' => $landlordDisplay,
+            'propertyName' => $propertyDisplay,
             'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
         ];
     }

@@ -214,7 +214,7 @@
                                 </button>
                             </li>
                             <li class="ms-auto d-flex align-items-center">
-                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
+                                <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
                                     <span class="material-symbols-outlined" style="font-size:14px;">download</span>
                                     <span class="ms-1" style="font-size:0.72rem;">Excel</span>
                                 </a>

@@ -157,7 +157,7 @@
                         <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
                             <h6 class="mb-0" style="font-size:0.8rem;">Detail Lines</h6>
                             <div class="d-flex gap-2">
-                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-success btn-sm py-0 px-2 d-flex align-items-center">
+                                <a href="{{ route('processed.returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
                                     <span class="material-symbols-outlined" style="font-size:14px;">download</span>
                                     <span class="ms-1" id="excel-btn-text" style="font-size:0.72rem;">Excel</span>
                                     <span id="excel-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
