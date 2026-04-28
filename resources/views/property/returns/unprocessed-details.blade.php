@@ -136,7 +136,7 @@
                                         <tr>
                                             <td class="text-muted py-1" width="50%">Status</td>
                                             <td class="text-end py-1 fw-bold" id="val-status">
-                                                <span class="badge {{ $return->approved_status == 1 ? 'badge-light-success' : 'badge-light-warning' }}">
+                                                <span class="badge {{ $return->approved_status == 1 ? 'badge-light-success' : 'badge-light-danger' }}">
                                                     {{ $return->approved_status == 1 ? 'Approved' : 'Pending Approval' }}
                                                 </span>
                                             </td>

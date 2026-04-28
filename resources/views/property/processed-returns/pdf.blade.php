@@ -284,7 +284,7 @@
             <td class="col-meta">
                 <strong>Print Date:</strong> {{ date('d/m/Y H:i') }}<br>
                 <strong>Return ID:</strong> {{ $return->return_code }}<br>
-                <strong>Period:</strong> {{ str_pad($return->month, 2, '0', STR_PAD_LEFT) }}/{{ $return->year }}
+                <strong>Period:</strong> {{ date('F Y', mktime(0, 0, 0, (int) $return->month, 1, (int) $return->year)) }}
             </td>
         </tr>
     </table>
