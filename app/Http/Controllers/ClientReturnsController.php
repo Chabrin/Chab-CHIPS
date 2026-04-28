@@ -14,6 +14,7 @@ use App\Models\ReturnSummary;
 use App\Models\ReturnClient;
 use App\Jobs\UpdateAbstractThresholdsJob;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Traits\GeneralTraits\Reusables;
 
 use App\Traits\ReturnsRentLinesTrait;
 use App\Traits\ReturnsPayThresholdTrait;
@@ -30,6 +31,7 @@ class ClientReturnsController extends Controller
     use ReturnsSummaryTrait;
     use ReturnsMasterReturnTrait;
     use ReturnsLandlordAccountTrait;
+    use Reusables;
     /**
      * Display the unpaid returns listing page
      */
@@ -58,16 +60,16 @@ class ClientReturnsController extends Controller
             $month = $request->input('month', date('m'));
             $userId = auth()->id();
 
+            Log::info("Fetching returns list data for year={$year}, month={$month}, user_id={$userId}");
+
+
             // Check if user has a global role (sees all returns, no property filter)
-            $hasGlobalRole = DB::table('cb_role_user as ru')
-                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                ->where('ru.user_id', $userId)
-                ->whereIn('r.name', ['top_management', 'clerical_officers', 'accountants'])
-                ->exists();
+            $hasGlobalRole = $this->checkGlobalRole($userId);
 
             $query = ReturnSummary::unpaid()
                 ->where('year', $year)
                 ->where('month', $month);
+            //count of lines for sorting in datatable
 
             // Role-based filtering: property-level staff only see their properties
             if (!$hasGlobalRole) {
@@ -86,6 +88,8 @@ class ClientReturnsController extends Controller
             $returns = $query->orderBy('property_code')
                 ->orderBy('landlord_code')
                 ->get();
+            //log count of returns fetched
+            Log::info("Fetched {$returns->count()} returns for year={$year}, month={$month}, user_id={$userId}");
 
             $propertyCodes = $returns->pluck('property_code')->unique()->filter();
             $propertyNames = DB::table('sys_pm_properties')
