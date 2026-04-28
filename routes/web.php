@@ -320,18 +320,18 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
         // HR Settings - Zone Assignments
         Route::get('/hr/zone/assignments', [HrSettingsController::class, 'zoneAssignmentsIndex'])->name('settings.hr.zone.assignments');
-    Route::get('/hr/zone/assignments/{id}/view', [HrSettingsController::class, 'zoneAssignmentView'])->name('settings.hr.zone.assignments.view');
+        Route::get('/hr/zone/assignments/{id}/view', [HrSettingsController::class, 'zoneAssignmentView'])->name('settings.hr.zone.assignments.view');
         Route::get('/ajax/hr/zone/assignments/list', [HrSettingsController::class, 'zoneAssignmentsList'])->name('ajax.zoneAssignments.list');
         Route::post('/ajax/hr/zone/assignments', [HrSettingsController::class, 'zoneAssignmentsStore'])->name('ajax.zoneAssignments.store');
         Route::post('/ajax/hr/zone/assignments/{id}', [HrSettingsController::class, 'zoneAssignmentsUpdate'])->name('ajax.zoneAssignments.update');
-    Route::post('/ajax/hr/zone/assignments/{id}/unassign-property', [HrSettingsController::class, 'zoneAssignmentUnassignProperty'])->name('ajax.zoneAssignments.unassignProperty');
+        Route::post('/ajax/hr/zone/assignments/{id}/unassign-property', [HrSettingsController::class, 'zoneAssignmentUnassignProperty'])->name('ajax.zoneAssignments.unassignProperty');
         Route::delete('/ajax/hr/zone/assignments/{id}', [HrSettingsController::class, 'zoneAssignmentsDelete'])->name('ajax.zoneAssignments.delete');
 
         Route::get('/ajax/hr/properties/by-zone/{zoneId}', [HrSettingsController::class, 'propertiesByZone'])->name('ajax.properties.byZone');
-    Route::get('/ajax/hr/properties/available-in-zone', [HrSettingsController::class, 'availablePropertiesInZone'])->name('ajax.properties.availableInZone');
+        Route::get('/ajax/hr/properties/available-in-zone', [HrSettingsController::class, 'availablePropertiesInZone'])->name('ajax.properties.availableInZone');
         Route::get('/ajax/hr/staff/list', [HrSettingsController::class, 'staffList'])->name('ajax.staff.list');
         Route::get('/ajax/hr/assignment_types/list', [HrSettingsController::class, 'assignmentTypesList'])->name('ajax.assignmentTypes.list');
-    Route::get('/ajax/hr/roles/list', [HrSettingsController::class, 'rolesList'])->name('ajax.roles.list');
+        Route::get('/ajax/hr/roles/list', [HrSettingsController::class, 'rolesList'])->name('ajax.roles.list');
         Route::get('/ajax/hr/zones/list', [HrSettingsController::class, 'zonesList'])->name('ajax.zones.list');
 
         ####### Leave Management Section Start ########
