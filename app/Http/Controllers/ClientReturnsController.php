@@ -140,15 +140,15 @@ class ClientReturnsController extends Controller
                                 $qm->whereIn('id', $visibleMasterIds);
                             }
                         })
-                        // Non-master returns — match by property_code
-                        ->orWhere(function ($qp) use ($allowedPropertyCodes) {
-                            $qp->where('return_type', '!=', 'MASTERRETURN');
-                            if (empty($allowedPropertyCodes)) {
-                                $qp->whereRaw('1 = 0');
-                            } else {
-                                $qp->whereIn('property_code', $allowedPropertyCodes);
-                            }
-                        });
+                            // Non-master returns — match by property_code
+                            ->orWhere(function ($qp) use ($allowedPropertyCodes) {
+                                $qp->where('return_type', '!=', 'MASTERRETURN');
+                                if (empty($allowedPropertyCodes)) {
+                                    $qp->whereRaw('1 = 0');
+                                } else {
+                                    $qp->whereIn('property_code', $allowedPropertyCodes);
+                                }
+                            });
                     });
                 }
             }
@@ -252,7 +252,7 @@ class ClientReturnsController extends Controller
                 ->get();
 
             $propertyLabel = $children
-                ->map(fn ($c) => trim((string) $c->property_code . ($c->property_name ? ' - ' . $c->property_name : '')))
+                ->map(fn($c) => trim((string) $c->property_code . ($c->property_name ? ' - ' . $c->property_name : '')))
                 ->filter()
                 ->implode(', ');
         } else {
@@ -764,9 +764,9 @@ class ClientReturnsController extends Controller
             $properties = Property::select(['id', 'property_name', 'reference_number', 'description'])
                 ->when($search, function ($query, $search) {
                     $query->where(function ($q) use ($search) {
-                        $q->where('property_name', 'LIKE', "%{$search}%")
-                            ->orWhere('description', 'LIKE', "%{$search}%")
-                            ->orWhere('reference_number', 'LIKE', "%{$search}%");
+                        $q->where('property_name', 'ILIKE', "%{$search}%")
+                            ->orWhere('description', 'ILIKE', "%{$search}%")
+                            ->orWhere('reference_number', 'ILIKE', "%{$search}%");
                     });
                 })
                 ->get();
@@ -1450,15 +1450,15 @@ class ClientReturnsController extends Controller
                                 $qm->whereIn('cb_returns_summary.id', $visibleMasterIds);
                             }
                         })
-                        // Non-master returns — match by property_code
-                        ->orWhere(function ($qp) use ($allowedPropertyCodes) {
-                            $qp->where('cb_returns_summary.return_type', '!=', 'MASTERRETURN');
-                            if (empty($allowedPropertyCodes)) {
-                                $qp->whereRaw('1 = 0');
-                            } else {
-                                $qp->whereIn('cb_returns_summary.property_code', $allowedPropertyCodes);
-                            }
-                        });
+                            // Non-master returns — match by property_code
+                            ->orWhere(function ($qp) use ($allowedPropertyCodes) {
+                                $qp->where('cb_returns_summary.return_type', '!=', 'MASTERRETURN');
+                                if (empty($allowedPropertyCodes)) {
+                                    $qp->whereRaw('1 = 0');
+                                } else {
+                                    $qp->whereIn('cb_returns_summary.property_code', $allowedPropertyCodes);
+                                }
+                            });
                     });
                 }
             }
@@ -2205,7 +2205,7 @@ class ClientReturnsController extends Controller
                 ->get();
 
             $propertyDisplay = $children
-                ->map(fn ($c) => trim(($c->property_name ? $c->property_name . ' - ' : '') . (string) $c->property_code))
+                ->map(fn($c) => trim(($c->property_name ? $c->property_name . ' - ' : '') . (string) $c->property_code))
                 ->filter()
                 ->implode(', ') ?: '-';
         } else {
