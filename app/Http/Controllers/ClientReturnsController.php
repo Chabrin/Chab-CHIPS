@@ -71,17 +71,86 @@ class ClientReturnsController extends Controller
                 ->where('month', $month);
             //count of lines for sorting in datatable
 
-            // Role-based filtering: property-level staff only see their properties
+            // Role-based filtering: non-global users only see returns for properties assigned to them
             if (!$hasGlobalRole) {
-                $query->whereIn('property_code', function ($sub) use ($userId) {
-                    $sub->select('reference_number')
-                        ->from('sys_pm_properties')
-                        ->where(function ($q) use ($userId) {
-                            $q->where('field_officer_id', $userId)
-                                ->orWhere('zone_manager_id', $userId)
-                                ->orWhere('zone_supervisor_id', $userId);
+                $staffId = DB::table('sys_user_staff_links')
+                    ->where('user_id', $userId)
+                    ->value('staff_id');
+
+                if (!$staffId) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    // Allowed property reference_numbers (assigned to this staff)
+                    $allowedPropertyCodes = DB::table('sys_pm_properties as spp')
+                        ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
+                        ->where('spza.staff_id', $staffId)
+                        ->where('spza.current_status_id', 1)
+                        ->distinct()
+                        ->pluck('spp.reference_number')
+                        ->all();
+
+                    // Allowed landlord reference_numbers (landlords who own at least one assigned property)
+                    $allowedLandlordCodes = DB::table('sys_pm_clients as spc')
+                        ->join('sys_pm_properties as spp', 'spp.client_id', '=', 'spc.id')
+                        ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
+                        ->where('spza.staff_id', $staffId)
+                        ->where('spza.current_status_id', 1)
+                        ->distinct()
+                        ->pluck('spc.reference_number')
+                        ->all();
+
+                    // Pre-compute visible MASTERRETURN ids for this period: landlord must have an
+                    // assigned property AND the master's children (via transaction_ref CSV, with
+                    // legacy fallback to landlord+period) must include at least one assigned property
+                    $visibleMasterIds = [];
+                    if (!empty($allowedLandlordCodes) && !empty($allowedPropertyCodes)) {
+                        $masters = DB::table('cb_returns_summary')
+                            ->where('return_type', 'MASTERRETURN')
+                            ->where('year', $year)
+                            ->where('month', $month)
+                            ->whereIn('landlord_code', $allowedLandlordCodes)
+                            ->select('id', 'landlord_code', 'transaction_ref')
+                            ->get();
+
+                        foreach ($masters as $m) {
+                            $childCodes = array_filter(array_map('trim', explode(',', (string) ($m->transaction_ref ?? ''))));
+                            $childQ = DB::table('cb_returns_summary')->whereIn('property_code', $allowedPropertyCodes);
+                            if (!empty($childCodes)) {
+                                $childQ->whereIn('return_code', $childCodes);
+                            } else {
+                                // Legacy master without transaction_ref: match children by landlord+period
+                                $childQ->where('landlord_code', $m->landlord_code)
+                                    ->where('year', $year)
+                                    ->where('month', $month)
+                                    ->where('return_type', 'MAINRETURN');
+                            }
+                            if ($childQ->exists()) {
+                                $visibleMasterIds[] = $m->id;
+                            }
+                        }
+                    }
+
+                    $query->where(function ($q) use ($allowedPropertyCodes, $visibleMasterIds) {
+                        // MASTERRETURNs — visibility pre-resolved above
+                        $q->where(function ($qm) use ($visibleMasterIds) {
+                            $qm->where('return_type', 'MASTERRETURN');
+                            if (empty($visibleMasterIds)) {
+                                $qm->whereRaw('1 = 0');
+                            } else {
+                                $qm->whereIn('id', $visibleMasterIds);
+                            }
+                        })
+                        // Non-master returns — match by property_code
+                        ->orWhere(function ($qp) use ($allowedPropertyCodes) {
+                            $qp->where('return_type', '!=', 'MASTERRETURN');
+                            if (empty($allowedPropertyCodes)) {
+                                $qp->whereRaw('1 = 0');
+                            } else {
+                                $qp->whereIn('property_code', $allowedPropertyCodes);
+                            }
                         });
-                });
+                    });
+                }
             }
 
             // Get property names and client names in one lookup
@@ -1304,13 +1373,97 @@ class ClientReturnsController extends Controller
         try {
             $year = $request->input('year', date('Y'));
             $month = $request->input('month', date('m'));
+            $userId = Auth::id();
 
-            $returns = ReturnSummary::paid()
+            $query = ReturnSummary::paid()
                 ->leftJoin('sys_pm_clients', 'sys_pm_clients.reference_number', '=', 'cb_returns_summary.landlord_code')
                 ->leftJoin('sys_pm_properties', 'sys_pm_properties.reference_number', '=', 'cb_returns_summary.property_code')
                 ->where('cb_returns_summary.year', $year)
-                ->where('cb_returns_summary.month', $month)
-                ->orderBy('cb_returns_summary.property_code')
+                ->where('cb_returns_summary.month', $month);
+
+            // Role-based filtering: non-global users only see returns for properties assigned to them
+            if (!$this->checkGlobalRole($userId)) {
+                $staffId = DB::table('sys_user_staff_links')
+                    ->where('user_id', $userId)
+                    ->value('staff_id');
+
+                if (!$staffId) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    // Allowed property reference_numbers (assigned to this staff)
+                    $allowedPropertyCodes = DB::table('sys_pm_properties as spp')
+                        ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
+                        ->where('spza.staff_id', $staffId)
+                        ->where('spza.current_status_id', 1)
+                        ->distinct()
+                        ->pluck('spp.reference_number')
+                        ->all();
+
+                    // Allowed landlord reference_numbers (landlords who own at least one assigned property)
+                    $allowedLandlordCodes = DB::table('sys_pm_clients as spc')
+                        ->join('sys_pm_properties as spp', 'spp.client_id', '=', 'spc.id')
+                        ->join('sys_pm_zones_assignments as spza', 'spza.property_id', '=', 'spp.id')
+                        ->where('spza.staff_id', $staffId)
+                        ->where('spza.current_status_id', 1)
+                        ->distinct()
+                        ->pluck('spc.reference_number')
+                        ->all();
+
+                    // Pre-compute visible MASTERRETURN ids for this period: landlord must have an
+                    // assigned property AND the master's children (via transaction_ref CSV, with
+                    // legacy fallback to landlord+period) must include at least one assigned property
+                    $visibleMasterIds = [];
+                    if (!empty($allowedLandlordCodes) && !empty($allowedPropertyCodes)) {
+                        $masters = DB::table('cb_returns_summary')
+                            ->where('return_type', 'MASTERRETURN')
+                            ->where('year', $year)
+                            ->where('month', $month)
+                            ->whereIn('landlord_code', $allowedLandlordCodes)
+                            ->select('id', 'landlord_code', 'transaction_ref')
+                            ->get();
+
+                        foreach ($masters as $m) {
+                            $childCodes = array_filter(array_map('trim', explode(',', (string) ($m->transaction_ref ?? ''))));
+                            $childQ = DB::table('cb_returns_summary')->whereIn('property_code', $allowedPropertyCodes);
+                            if (!empty($childCodes)) {
+                                $childQ->whereIn('return_code', $childCodes);
+                            } else {
+                                // Legacy master without transaction_ref: match children by landlord+period
+                                $childQ->where('landlord_code', $m->landlord_code)
+                                    ->where('year', $year)
+                                    ->where('month', $month)
+                                    ->where('return_type', 'MAINRETURN');
+                            }
+                            if ($childQ->exists()) {
+                                $visibleMasterIds[] = $m->id;
+                            }
+                        }
+                    }
+
+                    $query->where(function ($q) use ($allowedPropertyCodes, $visibleMasterIds) {
+                        // MASTERRETURNs — visibility pre-resolved above
+                        $q->where(function ($qm) use ($visibleMasterIds) {
+                            $qm->where('cb_returns_summary.return_type', 'MASTERRETURN');
+                            if (empty($visibleMasterIds)) {
+                                $qm->whereRaw('1 = 0');
+                            } else {
+                                $qm->whereIn('cb_returns_summary.id', $visibleMasterIds);
+                            }
+                        })
+                        // Non-master returns — match by property_code
+                        ->orWhere(function ($qp) use ($allowedPropertyCodes) {
+                            $qp->where('cb_returns_summary.return_type', '!=', 'MASTERRETURN');
+                            if (empty($allowedPropertyCodes)) {
+                                $qp->whereRaw('1 = 0');
+                            } else {
+                                $qp->whereIn('cb_returns_summary.property_code', $allowedPropertyCodes);
+                            }
+                        });
+                    });
+                }
+            }
+
+            $returns = $query->orderBy('cb_returns_summary.property_code')
                 ->orderBy('cb_returns_summary.landlord_code')
                 ->select('cb_returns_summary.*', 'sys_pm_clients.names as client_name', 'sys_pm_properties.property_name')
                 ->get();
