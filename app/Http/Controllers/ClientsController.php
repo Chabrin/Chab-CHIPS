@@ -1079,7 +1079,8 @@ class ClientsController extends Controller
     public function getTenantsListingData(Request $request)
     {
         try {
-            $query = Client::where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
+            $query = Client::withoutGlobalScope('user_clients_properties')
+                ->where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
                 ->leftJoin('sys_pm_properties', 'sys_pm_properties.id', '=', 'sys_pm_clients.property_id')
                 ->leftJoin('sys_pm_clients as landlord', 'landlord.id', '=', 'sys_pm_properties.client_id')
                 ->select(
@@ -1090,6 +1091,33 @@ class ClientsController extends Controller
                     'sys_pm_properties.property_name',
                     'landlord.names as landlord_name'
                 );
+
+            // Scope tenants to properties assigned to the logged-in user (unless role is_global)
+            $userId = Auth::id();
+            $isGlobal = DB::table('cb_role_user as ru')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('ru.user_id', $userId)
+                ->where('r.is_global', true)
+                ->exists();
+
+            if (!$isGlobal) {
+                $staffId = DB::table('sys_user_staff_links')
+                    ->where('user_id', $userId)
+                    ->value('staff_id');
+
+                if (!$staffId) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereExists(function ($sub) use ($staffId) {
+                        $sub->selectRaw('1')
+                            ->from('sys_pm_lease_agreements')
+                            ->join('sys_pm_zones_assignments', 'sys_pm_zones_assignments.property_id', '=', 'sys_pm_lease_agreements.property_id')
+                            ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id')
+                            ->where('sys_pm_zones_assignments.staff_id', $staffId)
+                            ->where('sys_pm_zones_assignments.current_status_id', 1);
+                    });
+                }
+            }
 
             // Column filters (only apply when 3+ characters)
             if ($request->filled('filter_names') && strlen($request->filter_names) >= 3) {
@@ -1146,15 +1174,44 @@ class ClientsController extends Controller
         try {
             $searchTerm = $request->search;
 
-            $tenants = Client::select(['id', 'names', 'mobile_number', 'national_id', 'reference_number'])
+            $query = Client::withoutGlobalScope('user_clients_properties')
+                ->select(['id', 'names', 'mobile_number', 'national_id', 'reference_number'])
                 ->tenants()
                 ->where(function ($query) use ($searchTerm) {
                     $query->where('names', 'LIKE', "%{$searchTerm}%")
                         ->orWhere('mobile_number', 'LIKE', "%{$searchTerm}%")
                         ->orWhere('national_id', 'LIKE', "%{$searchTerm}%")
                         ->orWhere('reference_number', 'LIKE', "%{$searchTerm}%");
-                })
-                ->get()
+                });
+
+            // Scope tenants to properties assigned to the logged-in user (unless role is_global)
+            $userId = Auth::id();
+            $isGlobal = DB::table('cb_role_user as ru')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('ru.user_id', $userId)
+                ->where('r.is_global', true)
+                ->exists();
+
+            if (!$isGlobal) {
+                $staffId = DB::table('sys_user_staff_links')
+                    ->where('user_id', $userId)
+                    ->value('staff_id');
+
+                if (!$staffId) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereExists(function ($sub) use ($staffId) {
+                        $sub->selectRaw('1')
+                            ->from('sys_pm_lease_agreements')
+                            ->join('sys_pm_zones_assignments', 'sys_pm_zones_assignments.property_id', '=', 'sys_pm_lease_agreements.property_id')
+                            ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id')
+                            ->where('sys_pm_zones_assignments.staff_id', $staffId)
+                            ->where('sys_pm_zones_assignments.current_status_id', 1);
+                    });
+                }
+            }
+
+            $tenants = $query->get()
                 ->map(function ($tenant) {
                     return [
                         'encrypted_id' => $tenant->encrypted_id,
