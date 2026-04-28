@@ -25,8 +25,7 @@
                                         <th>Zone</th>
                                         <th>Assigned As</th>
                                         <th>Staff</th>
-                                        <th>Status</th>
-                                        <th>Created By</th>
+                                        <th>Added By</th>
                                         <th>Date/Time</th>
                                         <th>Action</th>
                                     </tr>
@@ -36,7 +35,6 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th></th>
                                         <th></th>
                                         <th></th>
                                         <th></th>
@@ -208,11 +206,6 @@
                     data: 'staff',
                     title: 'Staff',
                     render: data => data && data.name ? data.name : '-'
-                },
-                {
-                    data: 'current_status_id',
-                    title: 'Status',
-                    render: data => data == 5 ? 'Active' : 'Pending'
                 },
                 {
                     data: 'created_by',

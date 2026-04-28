@@ -990,37 +990,65 @@ class HrSettingsController extends Controller
     public function zoneAssignmentsList()
     {
         try {
-            $assignments = ZoneAssignment::with('createdBy', 'staff', 'assignment_type', 'zone')->orderBy('date_time', 'desc')->get()->map(function ($assignment) {
-                return [
-                    'id' => $assignment->id,
-                    'zone_id' => $assignment->zone_id,
-                    'assigned_as' => $assignment->assigned_as,
-                    'staff_id' => $assignment->staff_id,
-                    'fo_ids' => $assignment->fo_ids,
-                    'properties_ids' => $assignment->properties_ids,
-                    'current_status_id' => $assignment->current_status_id,
-                    'created_by' => $assignment->createdBy ? [
-                        'id' => $assignment->createdBy->id,
-                        'name' => $assignment->createdBy->name,
-                    ] : null,
-                    'staff' => $assignment->staff ? [
-                        'id' => $assignment->staff->id,
-                        'name' => $assignment->staff->full_names,
-                    ] : null,
-                    'assignment_type' => $assignment->assignment_type ? [
-                        'id' => $assignment->assignment_type->id,
-                        'type_name' => $assignment->assignment_type->type_name,
-                    ] : null,
-                    'zone' => $assignment->zone ? [
-                        'id' => $assignment->zone->id,
-                        'zone_name' => $assignment->zone->zone_name,
-                    ] : null,
-                    'date_time' => $assignment->date_time,
-                    'can_update' => Auth::user()->isAbleTo('update_zone_assignments'),
-                    'can_delete' => Auth::user()->isAbleTo('delete_zone_assignments'),
-                ];
-            });
+            $assignments = ZoneAssignment::with(['createdBy', 'staff', 'assignment_type', 'zone'])
+                ->orderBy('date_time', 'desc')
+                ->get()
+                ->map(function ($assignment) {
+                    $zone = $assignment->zone;
+                    if (!$zone && $assignment->zone_id) {
+                        $zone = Zone::find($assignment->zone_id);
+                    }
 
+                    $assignmentType = $assignment->assignment_type;
+                    $assignmentTypeName = null;
+                    $assignmentTypeId = null;
+
+                    if ($assignmentType) {
+                        $assignmentTypeName = $assignmentType->type_name;
+                        $assignmentTypeId = $assignmentType->id;
+                    } elseif (is_numeric($assignment->assigned_as)) {
+                        $role = DB::table('cb_roles')->where('id', $assignment->assigned_as)->first();
+                        if ($role) {
+                            $assignmentTypeName = $role->display_name;
+                            $assignmentTypeId = $role->id;
+                        }
+                    }
+
+                    if (!$assignmentTypeName) {
+                        $assignmentTypeName = $assignment->assigned_as;
+                    }
+
+                    return [
+                        'id' => $assignment->id,
+                        'zone_id' => $assignment->zone_id,
+                        'assigned_as' => $assignment->assigned_as,
+                        'assignment_type' => $assignmentTypeName
+                            ? [
+                                'id' => $assignmentTypeId,
+                                'type_name' => $assignmentTypeName,
+                            ]
+                            : null,
+                        'staff_id' => $assignment->staff_id,
+                        'fo_ids' => $assignment->fo_ids,
+                        'properties_ids' => $assignment->properties_ids,
+                        'current_status_id' => $assignment->current_status_id,
+                        'created_by' => $assignment->createdBy ? [
+                            'id' => $assignment->createdBy->id,
+                            'name' => $assignment->createdBy->name,
+                        ] : null,
+                        'staff' => $assignment->staff ? [
+                            'id' => $assignment->staff->id,
+                            'name' => $assignment->staff->full_names,
+                        ] : null,
+                        'zone' => $zone ? [
+                            'id' => $zone->id,
+                            'zone_name' => $zone->zone_name,
+                        ] : null,
+                        'date_time' => $assignment->date_time,
+                        'can_update' => Auth::user()->isAbleTo('update_zone_assignments'),
+                        'can_delete' => Auth::user()->isAbleTo('delete_zone_assignments'),
+                    ];
+                });
             return response()->json(['zone_assignments' => $assignments]);
         } catch (\Exception $e) {
             try {
