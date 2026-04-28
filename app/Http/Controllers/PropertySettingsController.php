@@ -6,13 +6,18 @@ use Illuminate\Http\Request;
 use App\Models\ReturnType;
 use App\Models\InvoiceableItem;
 use App\Models\Zone;
+use App\Traits\GeneralTraits\Reusables;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Validation\Rule;
 use App\Services\ErrorDispatcher;
 
 class PropertySettingsController extends Controller
 {
+    use Reusables;
+
     /**
      * Display settings page
      */
@@ -283,8 +288,28 @@ class PropertySettingsController extends Controller
     public function getZones()
     {
         try {
-            $zones = Zone::select(['id', 'zone_name', 'estates_id'])
-                ->orderBy('zone_name', 'asc')
+            $userId = Auth::id();
+            $query = Zone::select(['id', 'zone_name', 'estates_id']);
+
+            // Non-global users only see zones they have assignments in
+            if (!$this->checkGlobalRole($userId)) {
+                $staffId = DB::table('sys_user_staff_links')
+                    ->where('user_id', $userId)
+                    ->value('staff_id');
+
+                if (!$staffId) {
+                    return response()->json(['data' => []]);
+                }
+
+                $query->whereIn('id', function ($sub) use ($staffId) {
+                    $sub->select('zone_id')
+                        ->from('sys_pm_zones_assignments')
+                        ->where('staff_id', $staffId)
+                        ->where('current_status_id', 1);
+                });
+            }
+
+            $zones = $query->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
                     return [
@@ -311,8 +336,13 @@ class PropertySettingsController extends Controller
     {
         try {
             $validated = $request->validate([
-                'zone_name' => 'required|string|max:255',
+                'zone_name' => [
+                    'required', 'string', 'max:255',
+                    Rule::unique('sys_set_zones', 'zone_name'),
+                ],
                 'estates_id' => 'nullable|integer',
+            ], [
+                'zone_name.unique' => 'A zone with this name already exists.',
             ]);
 
             $validated['date_time'] = now();
@@ -340,8 +370,13 @@ class PropertySettingsController extends Controller
             $zone = Zone::findOrFail($id);
 
             $validated = $request->validate([
-                'zone_name' => 'required|string|max:255',
+                'zone_name' => [
+                    'required', 'string', 'max:255',
+                    Rule::unique('sys_set_zones', 'zone_name')->ignore($id),
+                ],
                 'estates_id' => 'nullable|integer',
+            ], [
+                'zone_name.unique' => 'A zone with this name already exists.',
             ]);
 
             $zone->update($validated);

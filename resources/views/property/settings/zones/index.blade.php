@@ -5,8 +5,8 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card card-no-border">
-                    <div class="card-header pb-3 d-flex justify-content-between align-items-center">
+                <div class="card">
+                    <div class="card-header card-no-border d-flex justify-content-between align-items-center">
                         <h5>Zones Management</h5>
                         @permission('create_property_settings_items')
                         <div class="d-flex gap-2">
@@ -21,7 +21,7 @@
                     </div>
                     <div class="card-body custom-scrollbar">
                         <div class="table-responsive">
-                            <table id="zonesTable" class="display table table-bordered table-striped table-hover" style="width:100%;">
+                            <table id="zonesTable" class="display" style="width:100%;">
                                 <thead>
                                     <tr>
                                         <th style="width: 40px;">
