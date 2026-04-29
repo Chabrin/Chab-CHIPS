@@ -1,37 +1,205 @@
 @extends('layouts.main')
 
+@section('styles')
+<style>
+#accountsTable tbody tr, #accountsTable tbody tr.odd, #accountsTable tbody tr.even,
+#tabClassesTable tbody tr, #tabClassesTable tbody tr.odd, #tabClassesTable tbody tr.even,
+#tabGroupsTable tbody tr, #tabGroupsTable tbody tr.odd, #tabGroupsTable tbody tr.even,
+#tabCategoriesTable tbody tr, #tabCategoriesTable tbody tr.odd, #tabCategoriesTable tbody tr.even {
+    background: transparent !important;
+}
+#accountsTable tbody tr:hover,
+#tabClassesTable tbody tr:hover,
+#tabGroupsTable tbody tr:hover,
+#tabCategoriesTable tbody tr:hover { background: rgba(0,0,0,0.03) !important; }
+
+/* ── Ledger Tabs ── */
+.ledger-tab-nav {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.ledger-tab-nav .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 18px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #6c757d;
+    font-size: 0.83rem;
+    font-weight: 500;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    text-decoration: none;
+}
+.ledger-tab-nav .nav-link:hover { color: #333; }
+.ledger-tab-nav .nav-link.active {
+    color: #222;
+    font-weight: 600;
+    border-bottom: 3px solid #3598db;
+}
+.ledger-tab-nav .nav-link .material-symbols-outlined {
+    font-size: 22px;
+    line-height: 1;
+    color: #3598db;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+.ledger-tab-nav .tab-sep {
+    color: #ced4da;
+    font-size: 1rem;
+    line-height: 1;
+    user-select: none;
+}
+.tab-ref-link {
+    font-size: 0.8rem;
+    color: #3598db;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+.tab-ref-link:hover { text-decoration: underline; }
+</style>
+@endsection
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
                 <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center justify-content-between">
-                        <h5 class="mb-0">Chart of Accounts</h5>
+                    <div class="card-header card-no-border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <nav class="ledger-tab-nav nav" id="ledgerTabs" role="tablist">
+                            @if($canReadAccounts)
+                            <a class="nav-link active" data-bs-toggle="tab" href="#tab-accounts" role="tab">
+                                <span class="material-symbols-outlined">account_balance</span> Chart of Accounts
+                            </a>
+                            @endif
+                            @if($canReadClasses)
+                            @if($canReadAccounts)<span class="tab-sep">|</span>@endif
+                            <a class="nav-link {{ !$canReadAccounts ? 'active' : '' }}" data-bs-toggle="tab" href="#tab-classes" role="tab" id="classes-tab-trigger">
+                                <span class="material-symbols-outlined">layers</span> Account Classes
+                            </a>
+                            @endif
+                            @if($canReadGroups)
+                            @if($canReadClasses || $canReadAccounts)<span class="tab-sep">|</span>@endif
+                            <a class="nav-link" data-bs-toggle="tab" href="#tab-groups" role="tab" id="groups-tab-trigger">
+                                <span class="material-symbols-outlined">folder_open</span> Account Groups
+                            </a>
+                            @endif
+                            @if($canReadCategories)
+                            @if($canReadGroups || $canReadClasses || $canReadAccounts)<span class="tab-sep">|</span>@endif
+                            <a class="nav-link" data-bs-toggle="tab" href="#tab-categories" role="tab" id="categories-tab-trigger">
+                                <span class="material-symbols-outlined">label</span> Categories
+                            </a>
+                            @endif
+                        </nav>
                         @permission('create_gl_accounts')
                         <button type="button" id="addAccountBtn" class="btn btn-primary btn-sm">
-                            <i class="fa fa-plus"></i> Add Account
+                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">add</span> Add Account
                         </button>
                         @endpermission
                     </div>
+
                     <div class="card-body">
-                        <div class="table-responsive custom-scrollbar">
-                            <table id="accountsTable" class="display" style="width:100%;">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Code</th>
-                                        <th>Account Name</th>
-                                        <th>Category</th>
-                                        <th>Group</th>
-                                        <th>Class</th>
-                                        <th>Balance</th>
-                                        <th>Status</th>
-                                        <th style="width:90px;">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
+                        <div class="tab-content">
+
+                            {{-- ── ACCOUNTS TAB ── --}}
+                            @if($canReadAccounts)
+                            <div class="tab-pane fade show active" id="tab-accounts" role="tabpanel">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="accountsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Code</th>
+                                                <th>Account Name</th>
+                                                <th>Category</th>
+                                                <th>Group</th>
+                                                <th>Class</th>
+                                                <th>Balance</th>
+                                                <th>Status</th>
+                                                <th style="width:80px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- ── CLASSES TAB ── --}}
+                            @if($canReadClasses)
+                            <div class="tab-pane fade {{ !$canReadAccounts ? 'show active' : '' }}" id="tab-classes" role="tabpanel">
+                                <div class="d-flex justify-content-end mb-2">
+                                    <a href="{{ route('ledger.classes.index') }}" class="tab-ref-link">
+                                        Open Account Classes <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">open_in_new</span>
+                                    </a>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="tabClassesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Class Name</th>
+                                                <th>Balance Nature</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- ── GROUPS TAB ── --}}
+                            @if($canReadGroups)
+                            <div class="tab-pane fade" id="tab-groups" role="tabpanel">
+                                <div class="d-flex justify-content-end mb-2">
+                                    <a href="{{ route('ledger.groups.index') }}" class="tab-ref-link">
+                                        Open Account Groups <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">open_in_new</span>
+                                    </a>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="tabGroupsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Group Name</th>
+                                                <th>Class</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- ── CATEGORIES TAB ── --}}
+                            @if($canReadCategories)
+                            <div class="tab-pane fade" id="tab-categories" role="tabpanel">
+                                <div class="d-flex justify-content-end mb-2">
+                                    <a href="{{ route('ledger.categories.index') }}" class="tab-ref-link">
+                                        Open Account Categories <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">open_in_new</span>
+                                    </a>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="tabCategoriesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Category Name</th>
+                                                <th>Group</th>
+                                                <th>Class</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            @endif
+
                         </div>
                     </div>
                 </div>
@@ -117,24 +285,113 @@
 </div>
 @endsection
 
-@section('styles')
-<style>
-#accountsTable tbody tr, #accountsTable tbody tr.odd, #accountsTable tbody tr.even {
-    background: transparent !important;
-}
-#accountsTable tbody tr:hover { background: rgba(0,0,0,0.03) !important; }
-</style>
-@endsection
-
 @section('scripts')
 <script>
 $(document).ready(function () {
-    // Load classes dropdown once
+
+    // ── Toggle Add button visibility per active tab ──────────────────────────
+    const $addBtn = $('#addAccountBtn');
+    $('#ledgerTabs a[data-bs-toggle="tab"]').on('shown.bs.tab', function () {
+        $addBtn.toggle($(this).attr('href') === '#tab-accounts');
+    });
+
+    // ── ACCOUNTS TABLE ───────────────────────────────────────────────────────
+    @if($canReadAccounts)
+    const accountsTable = $('#accountsTable').DataTable({
+        processing: true,
+        ajax: { url: '{{ route("ledger.accounts.data") }}', dataSrc: 'data', error: () => toastr.error('Failed to load accounts') },
+        columns: [
+            { data: null, orderable: false, searchable: false, render: (d,t,r,m) => m.row + 1 },
+            { data: 'account_code' },
+            { data: 'account_name' },
+            { data: 'category_name' },
+            { data: 'group_name' },
+            { data: 'class_name' },
+            { data: 'normally' },
+            { data: 'status' },
+            {
+                data: null, orderable: false, searchable: false,
+                render: d => {
+                    let a = '';
+                    if (d.can_update) a += `<a href="#" class="edit-account me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_square</span></a>`;
+                    if (d.can_delete) a += `<a href="#" class="delete-account" data-id="${d.encrypted_id}" data-name="${d.account_name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">scan_delete</span></a>`;
+                    return a || '-';
+                }
+            }
+        ],
+        order: [[1, 'asc']], pageLength: 25
+    });
+    @endif
+
+    // ── CLASSES TAB TABLE (lazy, view-only) ──────────────────────────────────
+    @if($canReadClasses)
+    let classesTabLoaded = false;
+    const classesTabTable = $('#tabClassesTable').DataTable({
+        processing: true, pageLength: 10, order: [[1, 'asc']],
+        columns: [
+            { data: null, orderable: false, searchable: false, render: (d,t,r,m) => m.row + 1 },
+            { data: 'name' },
+            { data: 'balance_nature_id' }
+        ]
+    });
+    $('#classes-tab-trigger').on('shown.bs.tab', function () {
+        if (!classesTabLoaded) {
+            classesTabLoaded = true;
+            $.get('{{ route("ledger.classes.data") }}', function (r) {
+                classesTabTable.clear().rows.add(r.data).draw();
+            });
+        }
+    });
+    @endif
+
+    // ── GROUPS TAB TABLE (lazy, view-only) ───────────────────────────────────
+    @if($canReadGroups)
+    let groupsTabLoaded = false;
+    const groupsTabTable = $('#tabGroupsTable').DataTable({
+        processing: true, pageLength: 10, order: [[1, 'asc']],
+        columns: [
+            { data: null, orderable: false, searchable: false, render: (d,t,r,m) => m.row + 1 },
+            { data: 'group_name' },
+            { data: 'class_name' }
+        ]
+    });
+    $('#groups-tab-trigger').on('shown.bs.tab', function () {
+        if (!groupsTabLoaded) {
+            groupsTabLoaded = true;
+            $.get('{{ route("ledger.groups.data") }}', function (r) {
+                groupsTabTable.clear().rows.add(r.data).draw();
+            });
+        }
+    });
+    @endif
+
+    // ── CATEGORIES TAB TABLE (lazy, view-only) ───────────────────────────────
+    @if($canReadCategories)
+    let categoriesTabLoaded = false;
+    const categoriesTabTable = $('#tabCategoriesTable').DataTable({
+        processing: true, pageLength: 10, order: [[1, 'asc']],
+        columns: [
+            { data: null, orderable: false, searchable: false, render: (d,t,r,m) => m.row + 1 },
+            { data: 'category_name' },
+            { data: 'group_name' },
+            { data: 'class_name' }
+        ]
+    });
+    $('#categories-tab-trigger').on('shown.bs.tab', function () {
+        if (!categoriesTabLoaded) {
+            categoriesTabLoaded = true;
+            $.get('{{ route("ledger.categories.data") }}', function (r) {
+                categoriesTabTable.clear().rows.add(r.data).draw();
+            });
+        }
+    });
+    @endif
+
+    // ── CASCADING SELECTS FOR ACCOUNT MODAL ─────────────────────────────────
     $.get('{{ route("ledger.classes.dropdown") }}', function (data) {
         data.forEach(c => $('#accountClassId').append(`<option value="${c.id}">${c.name}</option>`));
     });
 
-    // Class → groups cascade
     $('#accountClassId').on('change', function () {
         const classId = $(this).val();
         $('#accountGroupId').html('<option value="">-- Loading... --</option>').prop('disabled', true);
@@ -148,7 +405,6 @@ $(document).ready(function () {
         });
     });
 
-    // Group → categories cascade
     $('#accountGroupId').on('change', function () {
         const groupId = $(this).val();
         $('#accountCategoryId').html('<option value="">-- Loading... --</option>').prop('disabled', true);
@@ -161,37 +417,8 @@ $(document).ready(function () {
         });
     });
 
-    const table = $('#accountsTable').DataTable({
-        processing: true,
-        ajax: {
-            url: '{{ route("ledger.accounts.data") }}',
-            dataSrc: 'data',
-            error: function () { toastr.error('Failed to load accounts'); }
-        },
-        columns: [
-            { data: null, orderable: false, searchable: false, render: (d, t, r, m) => m.row + 1 },
-            { data: 'account_code' },
-            { data: 'account_name' },
-            { data: 'category_name' },
-            { data: 'group_name' },
-            { data: 'class_name' },
-            { data: 'normally' },
-            { data: 'status' },
-            {
-                data: null, orderable: false, searchable: false,
-                render: function (d) {
-                    let a = '';
-                    if (d.can_update) a += `<a href="#" class="edit-account me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_square</span></a>`;
-                    if (d.can_delete) a += `<a href="#" class="delete-account" data-id="${d.encrypted_id}" data-name="${d.account_name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">scan_delete</span></a>`;
-                    return a || '-';
-                }
-            }
-        ],
-        order: [[1, 'asc']],
-        pageLength: 50
-    });
-
-    function resetModal() {
+    // ── ACCOUNT MODAL HELPERS ────────────────────────────────────────────────
+    function resetAccountModal() {
         $('#accountForm')[0].reset();
         $('#accountId').val('');
         $('#accountClassId').val('');
@@ -199,73 +426,43 @@ $(document).ready(function () {
         $('#accountCategoryId').html('<option value="">-- Select Group first --</option>').prop('disabled', true);
         $('#accountStatus').val('1');
         $('#accountModalLabel').text('Add Account');
-        $('.form-control,.form-select').removeClass('is-invalid');
+        $('.form-control, .form-select').removeClass('is-invalid');
         $('.invalid-feedback').text('');
     }
 
-    function setLoading(on) {
+    function setAccountLoading(on) {
         $('#accountSaveBtn .btn-label').toggleClass('d-none', on);
         $('#accountSaveBtn .btn-spinner').toggleClass('d-none', !on);
         $('#accountSaveBtn').prop('disabled', on);
     }
 
     function showErrors(errors) {
-        $.each(errors, function (field, msgs) {
+        $.each(errors, (field, msgs) => {
             const el = $(`[name="${field}"]`);
             el.addClass('is-invalid');
             el.siblings('.invalid-feedback').text(msgs[0]);
         });
     }
 
-    $('#addAccountBtn').click(function () { resetModal(); $('#accountModal').modal('show'); });
+    $('#addAccountBtn').click(function () { resetAccountModal(); $('#accountModal').modal('show'); });
 
+    @if($canReadAccounts)
     $('#accountsTable').on('click', '.edit-account', function (e) {
         e.preventDefault();
         const d = $(this).data('row');
-        resetModal();
+        resetAccountModal();
         $('#accountId').val(d.encrypted_id);
         $('#accountCode').val(d.account_code !== '-' ? d.account_code : '');
         $('#accountName').val(d.account_name !== '-' ? d.account_name : '');
         $('#accountNormally').val(d.normally !== '-' ? d.normally : '');
         $('#accountStatus').val(d.current_status_id);
         $('#accountModalLabel').text('Edit Account');
-
-        // Cascading selects: class → group → category
         $('#accountClassId').val(d.class_id).trigger('change');
         setTimeout(() => {
             $('#accountGroupId').val(d.account_group_id).trigger('change');
             setTimeout(() => $('#accountCategoryId').val(d.category_id), 400);
         }, 400);
-
         $('#accountModal').modal('show');
-    });
-
-    $('#accountForm').submit(function (e) {
-        e.preventDefault();
-        const id = $('#accountId').val();
-        const url = id
-            ? '{{ route("ledger.accounts.update", "PLACEHOLDER") }}'.replace('PLACEHOLDER', id)
-            : '{{ route("ledger.accounts.store") }}';
-        setLoading(true);
-        $('.form-control,.form-select').removeClass('is-invalid');
-        $('.invalid-feedback').text('');
-
-        $.ajax({
-            url, method: 'POST',
-            data: $(this).serialize(),
-            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
-            success: function (r) {
-                setLoading(false);
-                $('#accountModal').modal('hide');
-                table.ajax.reload();
-                toastr.success(r.message);
-            },
-            error: function (xhr) {
-                setLoading(false);
-                if (xhr.status === 422) showErrors(xhr.responseJSON.errors);
-                else toastr.error(xhr.responseJSON?.message || 'An error occurred');
-            }
-        });
     });
 
     $('#accountsTable').on('click', '.delete-account', function (e) {
@@ -276,8 +473,36 @@ $(document).ready(function () {
             url: '{{ route("ledger.accounts.delete", "PLACEHOLDER") }}'.replace('PLACEHOLDER', id),
             method: 'DELETE',
             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
-            success: r => { table.ajax.reload(); toastr.success(r.message); },
+            success: r => { accountsTable.ajax.reload(); toastr.success(r.message); },
             error: xhr => toastr.error(xhr.responseJSON?.message || 'Failed to delete account')
+        });
+    });
+    @endif
+
+    $('#accountForm').submit(function (e) {
+        e.preventDefault();
+        const id = $('#accountId').val();
+        const url = id
+            ? '{{ route("ledger.accounts.update", "PLACEHOLDER") }}'.replace('PLACEHOLDER', id)
+            : '{{ route("ledger.accounts.store") }}';
+        setAccountLoading(true);
+        $('.form-control, .form-select').removeClass('is-invalid');
+        $('.invalid-feedback').text('');
+        $.ajax({
+            url, method: 'POST',
+            data: $(this).serialize(),
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            success: function (r) {
+                setAccountLoading(false);
+                $('#accountModal').modal('hide');
+                @if($canReadAccounts) accountsTable.ajax.reload(); @endif
+                toastr.success(r.message);
+            },
+            error: function (xhr) {
+                setAccountLoading(false);
+                if (xhr.status === 422) showErrors(xhr.responseJSON.errors);
+                else toastr.error(xhr.responseJSON?.message || 'An error occurred');
+            }
         });
     });
 });

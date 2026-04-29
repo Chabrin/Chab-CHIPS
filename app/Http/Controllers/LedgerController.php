@@ -36,7 +36,13 @@ class LedgerController extends Controller
 
     public function accountsIndex()
     {
-        return view('ledger.accounts');
+        $user = Auth::user();
+        return view('ledger.accounts', [
+            'canReadClasses'     => $user->isAbleTo('read_gl_classes'),
+            'canReadGroups'      => $user->isAbleTo('read_gl_groups'),
+            'canReadCategories'  => $user->isAbleTo('read_gl_categories'),
+            'canReadAccounts'    => $user->isAbleTo('read_gl_accounts'),
+        ]);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -86,14 +92,16 @@ class LedgerController extends Controller
     public function getClasses()
     {
         try {
-            $classes = GlAccClass::orderBy('name')->get()->map(function ($c) {
+            $canUpdate = Auth::user()->isAbleTo('update_gl_classes');
+            $canDelete = Auth::user()->isAbleTo('delete_gl_classes');
+            $classes = GlAccClass::orderBy('name')->get()->map(function ($c) use ($canUpdate, $canDelete) {
                 return [
                     'id'               => $c->id,
                     'encrypted_id'     => Crypt::encrypt($c->id),
                     'name'             => $c->name ?? '-',
                     'balance_nature_id'=> $c->balance_nature_id ?? '-',
-                    'can_update'       => Auth::user()->isAbleTo('update_gl_classes'),
-                    'can_delete'       => Auth::user()->isAbleTo('delete_gl_classes'),
+                    'can_update'       => $canUpdate,
+                    'can_delete'       => $canDelete,
                 ];
             });
             return response()->json(['data' => $classes]);
@@ -174,15 +182,17 @@ class LedgerController extends Controller
     public function getGroups()
     {
         try {
-            $groups = GlAccGroup::with('glClass:id,name')->orderBy('group_name')->get()->map(function ($g) {
+            $canUpdate = Auth::user()->isAbleTo('update_gl_groups');
+            $canDelete = Auth::user()->isAbleTo('delete_gl_groups');
+            $groups = GlAccGroup::with('glClass:id,name')->orderBy('group_name')->get()->map(function ($g) use ($canUpdate, $canDelete) {
                 return [
                     'id'           => $g->id,
                     'encrypted_id' => Crypt::encrypt($g->id),
                     'group_name'   => $g->group_name ?? '-',
                     'class_id'     => $g->class_id,
                     'class_name'   => $g->glClass->name ?? '-',
-                    'can_update'   => Auth::user()->isAbleTo('update_gl_groups'),
-                    'can_delete'   => Auth::user()->isAbleTo('delete_gl_groups'),
+                    'can_update'   => $canUpdate,
+                    'can_delete'   => $canDelete,
                 ];
             });
             return response()->json(['data' => $groups]);
@@ -263,19 +273,22 @@ class LedgerController extends Controller
     public function getCategories()
     {
         try {
+            $canUpdate = Auth::user()->isAbleTo('update_gl_categories');
+            $canDelete = Auth::user()->isAbleTo('delete_gl_categories');
             $cats = GlAccountCategory::with(['group:id,group_name,class_id', 'group.glClass:id,name'])
                 ->orderBy('category_name')
                 ->get()
-                ->map(function ($c) {
+                ->map(function ($c) use ($canUpdate, $canDelete) {
                     return [
                         'id'               => $c->id,
                         'encrypted_id'     => Crypt::encrypt($c->id),
                         'category_name'    => $c->category_name ?? '-',
                         'account_group_id' => $c->account_group_id,
                         'group_name'       => $c->group->group_name ?? '-',
+                        'class_id'         => $c->group->class_id ?? null,
                         'class_name'       => $c->group->glClass->name ?? '-',
-                        'can_update'       => Auth::user()->isAbleTo('update_gl_categories'),
-                        'can_delete'       => Auth::user()->isAbleTo('delete_gl_categories'),
+                        'can_update'       => $canUpdate,
+                        'can_delete'       => $canDelete,
                     ];
                 });
             return response()->json(['data' => $cats]);
@@ -356,6 +369,8 @@ class LedgerController extends Controller
     public function getAccounts()
     {
         try {
+            $canUpdate = Auth::user()->isAbleTo('update_gl_accounts');
+            $canDelete = Auth::user()->isAbleTo('delete_gl_accounts');
             $accounts = ChartAccount::with([
                 'category:id,category_name',
                 'glGroup:id,group_name',
@@ -363,7 +378,7 @@ class LedgerController extends Controller
             ])
             ->orderBy('account_code')
             ->get()
-            ->map(function ($a) {
+            ->map(function ($a) use ($canUpdate, $canDelete) {
                 return [
                     'id'               => $a->id,
                     'encrypted_id'     => Crypt::encrypt($a->id),
@@ -378,8 +393,8 @@ class LedgerController extends Controller
                     'normally'         => $a->normally ?? '-',
                     'status'           => $a->current_status_id == 1 ? 'Active' : 'Inactive',
                     'current_status_id'=> $a->current_status_id,
-                    'can_update'       => Auth::user()->isAbleTo('update_gl_accounts'),
-                    'can_delete'       => Auth::user()->isAbleTo('delete_gl_accounts'),
+                    'can_update'       => $canUpdate,
+                    'can_delete'       => $canDelete,
                 ];
             });
             return response()->json(['data' => $accounts]);
