@@ -53,6 +53,21 @@ class ChartAccount extends Model
         return $this->belongsTo(ChartGroup::class, 'group_id');
     }
 
+    public function category()
+    {
+        return $this->belongsTo(GlAccountCategory::class, 'category_id');
+    }
+
+    public function glClass()
+    {
+        return $this->belongsTo(GlAccClass::class, 'class_id');
+    }
+
+    public function glGroup()
+    {
+        return $this->belongsTo(GlAccGroup::class, 'account_group_id');
+    }
+
     // Accessors
     public function getFullAccountAttribute()
     {

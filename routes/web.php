@@ -836,6 +836,35 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     ###### PROPERTY MANAGEMENT SECTION END ########
 
     Route::get('/get/tenant/balance', [App\Http\Controllers\TenantsController::class, 'getTenantBalance'])->name('get.tenant.balance');
+
+    // ── General Ledger ──────────────────────────────────────────────────────────
+    // Pages
+    Route::get('/ledger/accountclasses',   [App\Http\Controllers\LedgerController::class, 'classesIndex'])->name('ledger.classes.index');
+    Route::get('/ledger/accountgroups',    [App\Http\Controllers\LedgerController::class, 'groupsIndex'])->name('ledger.groups.index');
+    Route::get('/ledger/account/categories', [App\Http\Controllers\LedgerController::class, 'categoriesIndex'])->name('ledger.categories.index');
+    Route::get('/ledger/accounts',         [App\Http\Controllers\LedgerController::class, 'accountsIndex'])->name('ledger.accounts.index');
+    // AJAX data
+    Route::get('/ajax/ledger/accountclasses',      [App\Http\Controllers\LedgerController::class, 'getClasses'])->name('ledger.classes.data');
+    Route::get('/ajax/ledger/accountgroups',       [App\Http\Controllers\LedgerController::class, 'getGroups'])->name('ledger.groups.data');
+    Route::get('/ajax/ledger/account/categories',  [App\Http\Controllers\LedgerController::class, 'getCategories'])->name('ledger.categories.data');
+    Route::get('/ajax/ledger/accounts',            [App\Http\Controllers\LedgerController::class, 'getAccounts'])->name('ledger.accounts.data');
+    // Dropdown helpers
+    Route::get('/ajax/ledger/classes/dropdown',     [App\Http\Controllers\LedgerController::class, 'getClassesDropdown'])->name('ledger.classes.dropdown');
+    Route::get('/ajax/ledger/groups/dropdown',      [App\Http\Controllers\LedgerController::class, 'getGroupsDropdown'])->name('ledger.groups.dropdown');
+    Route::get('/ajax/ledger/categories/dropdown',  [App\Http\Controllers\LedgerController::class, 'getCategoriesDropdown'])->name('ledger.categories.dropdown');
+    // CRUD
+    Route::post('/ledger/accountclasses',                        [App\Http\Controllers\LedgerController::class, 'storeClass'])->name('ledger.classes.store');
+    Route::post('/ledger/accountclasses/{encryptedId}',          [App\Http\Controllers\LedgerController::class, 'updateClass'])->name('ledger.classes.update');
+    Route::delete('/ledger/accountclasses/{encryptedId}',        [App\Http\Controllers\LedgerController::class, 'deleteClass'])->name('ledger.classes.delete');
+    Route::post('/ledger/accountgroups',                         [App\Http\Controllers\LedgerController::class, 'storeGroup'])->name('ledger.groups.store');
+    Route::post('/ledger/accountgroups/{encryptedId}',           [App\Http\Controllers\LedgerController::class, 'updateGroup'])->name('ledger.groups.update');
+    Route::delete('/ledger/accountgroups/{encryptedId}',         [App\Http\Controllers\LedgerController::class, 'deleteGroup'])->name('ledger.groups.delete');
+    Route::post('/ledger/account/categories',                    [App\Http\Controllers\LedgerController::class, 'storeCategory'])->name('ledger.categories.store');
+    Route::post('/ledger/account/categories/{encryptedId}',      [App\Http\Controllers\LedgerController::class, 'updateCategory'])->name('ledger.categories.update');
+    Route::delete('/ledger/account/categories/{encryptedId}',    [App\Http\Controllers\LedgerController::class, 'deleteCategory'])->name('ledger.categories.delete');
+    Route::post('/ledger/accounts',                              [App\Http\Controllers\LedgerController::class, 'storeAccount'])->name('ledger.accounts.store');
+    Route::post('/ledger/accounts/{encryptedId}',                [App\Http\Controllers\LedgerController::class, 'updateAccount'])->name('ledger.accounts.update');
+    Route::delete('/ledger/accounts/{encryptedId}',              [App\Http\Controllers\LedgerController::class, 'deleteAccount'])->name('ledger.accounts.delete');
 });
 
 ##### END CHABRIN - ROUTES FILE #####
