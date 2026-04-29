@@ -127,8 +127,8 @@ $(document).ready(function () {
                 data: null, orderable: false, searchable: false,
                 render: function (d) {
                     let a = '';
-                    if (d.can_update) a += `<a href="#" class="text-warning edit-cat me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>`;
-                    if (d.can_delete) a += `<a href="#" class="text-danger delete-cat" data-id="${d.encrypted_id}" data-name="${d.category_name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>`;
+                    if (d.can_update) a += `<a href="#" class="edit-cat me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_square</span></a>`;
+                    if (d.can_delete) a += `<a href="#" class="delete-cat" data-id="${d.encrypted_id}" data-name="${d.category_name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">scan_delete</span></a>`;
                     return a || '-';
                 }
             }

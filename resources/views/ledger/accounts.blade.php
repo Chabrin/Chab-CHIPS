@@ -175,24 +175,14 @@ $(document).ready(function () {
             { data: 'category_name' },
             { data: 'group_name' },
             { data: 'class_name' },
-            {
-                data: 'normally',
-                render: d => d === 'Debit'
-                    ? '<span class="badge bg-primary">Debit</span>'
-                    : (d === 'Credit' ? '<span class="badge bg-success">Credit</span>' : '-')
-            },
-            {
-                data: 'status',
-                render: d => d === 'Active'
-                    ? '<span class="badge bg-success">Active</span>'
-                    : '<span class="badge bg-secondary">Inactive</span>'
-            },
+            { data: 'normally' },
+            { data: 'status' },
             {
                 data: null, orderable: false, searchable: false,
                 render: function (d) {
                     let a = '';
-                    if (d.can_update) a += `<a href="#" class="text-warning edit-account me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>`;
-                    if (d.can_delete) a += `<a href="#" class="text-danger delete-account" data-id="${d.encrypted_id}" data-name="${d.account_name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>`;
+                    if (d.can_update) a += `<a href="#" class="edit-account me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_square</span></a>`;
+                    if (d.can_delete) a += `<a href="#" class="delete-account" data-id="${d.encrypted_id}" data-name="${d.account_name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">scan_delete</span></a>`;
                     return a || '-';
                 }
             }

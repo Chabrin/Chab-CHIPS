@@ -98,18 +98,13 @@ $(document).ready(function () {
         columns: [
             { data: null, orderable: false, searchable: false, render: (d, t, r, m) => m.row + 1 },
             { data: 'name' },
-            {
-                data: 'balance_nature_id',
-                render: (d) => d === 'Debit'
-                    ? '<span class="badge bg-primary">Debit</span>'
-                    : '<span class="badge bg-success">Credit</span>'
-            },
+            { data: 'balance_nature_id' },
             {
                 data: null, orderable: false, searchable: false,
                 render: function (d) {
                     let a = '';
-                    if (d.can_update) a += `<a href="#" class="text-warning edit-class me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>`;
-                    if (d.can_delete) a += `<a href="#" class="text-danger delete-class" data-id="${d.encrypted_id}" data-name="${d.name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>`;
+                    if (d.can_update) a += `<a href="#" class="edit-class me-2" data-row='${JSON.stringify(d)}' title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_square</span></a>`;
+                    if (d.can_delete) a += `<a href="#" class="delete-class" data-id="${d.encrypted_id}" data-name="${d.name}" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">scan_delete</span></a>`;
                     return a || '-';
                 }
             }
