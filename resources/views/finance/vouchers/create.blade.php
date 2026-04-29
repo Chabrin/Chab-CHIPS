@@ -346,9 +346,10 @@ $(document).ready(function () {
         pendingEntries.push({ uid: uidCounter, description: desc, account_number: accNo, cheque_number: chequeNo, amount: amount });
         refreshTable();
 
-        // Clear entry fields, keep account no and cheque no as defaults
         $('#entryDesc').val('').focus();
         $('#entryAmount').val('');
+        $('#entryAccountNo').val('');
+        $('#entryChequeNo').val('');
     });
 
     // ─── Delete entry (client-side only) ─────────────────────────────
