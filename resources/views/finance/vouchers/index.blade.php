@@ -134,7 +134,7 @@
                     orderable: false,
                     searchable: false,
                     render: function(d, t, r) {
-                        return '<a href="/payment/vouchers/' + r.encrypted_id + '/details" title="View Details" style="color:#7366ff;">' +
+                        return '<a href="/payment/vouchers/' + r.encrypted_id + '/details" target="_blank" title="View Details" style="color:#7366ff;">' +
                             '<span class="material-symbols-outlined" style="font-size:18px;">open_in_new</span></a>';
                     }
                 }
@@ -147,7 +147,7 @@
             order: [
                 [1, 'desc']
             ],
-            pageLength: 50
+            pageLength: 10
         });
 
         function loadData() {

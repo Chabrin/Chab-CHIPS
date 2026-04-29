@@ -1,13 +1,68 @@
 @extends('layouts.main')
 
+@section('styles')
+<style>
+#extraInfoPanel {
+    animation: fadeSlideIn 0.18s ease;
+}
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.info-toggle-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    line-height: 1;
+    cursor: pointer;
+}
+.info-toggle-btn .material-symbols-outlined {
+    font-size: 30px;
+    color: #3598db;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+    transition: color 0.15s;
+}
+.info-toggle-btn:hover .material-symbols-outlined,
+.info-toggle-btn.active .material-symbols-outlined {
+    color: #1a6fa8;
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.hdr-label {
+    font-size: 0.67rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8e9bae;
+    margin-bottom: 2px;
+}
+.hdr-value {
+    font-size: 0.85rem;
+    color: #222;
+}
+.extra-label {
+    font-size: 0.67rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8e9bae;
+    margin-bottom: 2px;
+}
+.extra-value {
+    font-size: 0.82rem;
+    color: #333;
+}
+</style>
+@endsection
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <!-- Header -->
+
+                <!-- Page header -->
                 <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h6 class="mb-0">{{ $voucher->voucher_number }}</h6>
+                    <h6 class="mb-0 text-muted">Voucher Details</h6>
                     <a href="{{ route('payment.vouchers.index') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
                         <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span> Back
                     </a>
@@ -15,59 +70,69 @@
 
                 <!-- Summary Card -->
                 <div class="card mb-3">
-                    <div class="card-body py-2">
-                        <div class="row" style="font-size:0.78rem;">
-                            <div class="col-md-2">
-                                <strong>Voucher No.</strong><br>
-                                <span id="hdr_voucher_number">{{ $voucher->voucher_number }}</span>
+                    <div class="card-body py-3 position-relative">
+
+                        <!-- Info icon — top right -->
+                        <button type="button" id="toggleInfoBtn" class="info-toggle-btn position-absolute" style="top:10px; right:14px;" title="More details">
+                            <span class="material-symbols-outlined">tips_and_updates</span>
+                        </button>
+
+                        <!-- Primary fields -->
+                        <div class="row g-3 align-items-end pe-5">
+                            <div class="col-auto">
+                                <div class="hdr-label">Voucher No.</div>
+                                <div class="hdr-value fw-bold">{{ $voucher->voucher_number }}</div>
                             </div>
-                            <div class="col-md-2">
-                                <strong>Date</strong><br>
-                                <span id="hdr_date">{{ $voucher->voucher_date?->format('d/m/Y') ?? '-' }}</span>
+                            <div class="col-auto">
+                                <div class="hdr-label">Date</div>
+                                <div class="hdr-value">{{ $voucher->voucher_date?->format('d/m/Y') ?? '-' }}</div>
                             </div>
-                            <div class="col-md-3">
-                                <strong>Landlord</strong><br>
-                                <span id="hdr_vendor" title="{{ $voucher->vendor_id }}">{{ $voucher->vendor_name ?? '-' }}</span>
+                            <div class="col">
+                                <div class="hdr-label">Landlord</div>
+                                <div class="hdr-value" title="{{ $voucher->vendor_id }}">{{ $voucher->vendor_name ?? '-' }}</div>
                             </div>
-                            <div class="col-md-2">
-                                <strong>Amount</strong><br>
-                                <span class="fw-bold" id="hdr_amount">{{ number_format($voucher->debit_amount ?? 0, 2) }}</span>
+                            <div class="col-auto">
+                                <div class="hdr-label">Amount</div>
+                                <div class="hdr-value fw-bold">{{ number_format($voucher->debit_amount ?? 0, 2) }}</div>
                             </div>
-                            <div class="col-md-1">
-                                <strong>Status</strong><br>
-                                @if($voucher->voucher_status === 'Paid')
-                                <span class="badge badge-light-success">Paid</span>
-                                @else
-                                <span class="badge badge-light-danger">Pending</span>
-                                @endif
-                            </div>
-                            <div class="col-md-2">
-                                <strong>Prepared By</strong><br>
-                                <span>{{ $voucher->prepared_by ?? '-' }}</span>
-                            </div>
-                        </div>
-                        <div class="row mt-2" style="font-size:0.78rem;">
-                            <div class="col-md-3">
-                                <strong>Description</strong><br>
-                                <span>{{ $voucher->description ?? '-' }}</span>
-                            </div>
-                            <div class="col-md-2">
-                                <strong>Checked By</strong><br>
-                                <span>{{ $voucher->checked_by ?? '-' }}</span>
-                            </div>
-                            <div class="col-md-2">
-                                <strong>Checked Status</strong><br>
-                                <span>{{ $voucher->checked_status ?? '-' }}</span>
-                            </div>
-                            <div class="col-md-2">
-                                <strong>Authorized By</strong><br>
-                                <span>{{ $voucher->authorized_by ?? '-' }}</span>
-                            </div>
-                            <div class="col-md-2">
-                                <strong>Auth. Status</strong><br>
-                                <span>{{ $voucher->authorized_status ?? '-' }}</span>
+                            <div class="col-auto">
+                                <div class="hdr-label">Status</div>
+                                <div class="hdr-value">
+                                    @if($voucher->voucher_status === 'Paid')
+                                    <span class="badge badge-light-success">Paid</span>
+                                    @else
+                                    <span class="badge badge-light-danger">Pending</span>
+                                    @endif
+                                </div>
                             </div>
                         </div>
+
+                        <!-- Extra info panel (hidden by default) -->
+                        <div id="extraInfoPanel" class="border-top mt-3 pt-3" style="display:none;">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <div class="extra-label">Description</div>
+                                    <div class="extra-value">{{ $voucher->description ?? '-' }}</div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="extra-label">Checked By</div>
+                                    <div class="extra-value">{{ $voucher->checked_by ?? '-' }}</div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="extra-label">Checked Status</div>
+                                    <div class="extra-value">{{ $voucher->checked_status ?? 'No' }}</div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="extra-label">Authorized By</div>
+                                    <div class="extra-value">{{ $voucher->authorized_by ?? '-' }}</div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="extra-label">Auth. Status</div>
+                                    <div class="extra-value">{{ $voucher->authorized_status ?? 'No' }}</div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
@@ -107,6 +172,15 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
+
+        // Info icon toggle
+        $('#toggleInfoBtn').on('click', function() {
+            const $panel = $('#extraInfoPanel');
+            const $btn   = $(this);
+            $panel.toggle();
+            $btn.toggleClass('active', $panel.is(':visible'));
+        });
+
         var table = $('#lines-table').DataTable({
             data: [],
             columns: [{
@@ -154,7 +228,7 @@
             order: [
                 [0, 'asc']
             ],
-            pageLength: 50
+            pageLength: 25
         });
 
         function loadLines() {
