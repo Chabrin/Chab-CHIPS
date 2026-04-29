@@ -192,7 +192,8 @@ body[class="dark-only"] {
     --text-gray: hsla(240, 9%, 63%, 0.8);
     --product-shadow: 0px 1px 0px #374657;
     --light-shade-primary: rgba(43, 94, 94, 0.2);
-    --light-gray-1: linear-gradient(0deg, #fcfcfd, #fcfcfd),
+    --light-gray-1:
+        linear-gradient(0deg, #fcfcfd, #fcfcfd),
         linear-gradient(0deg, #fff, #fff);
     --bs-heading-color: #ffffffd7;
     --bs-card-color: #ffffffd7;
@@ -225,9 +226,9 @@ body[class="rtl dark-only modal-open"] {
     --light-slate: #1c1d26;
 }
 
-#href{
-    font-weight:bold;
-    color:#3598db;
+#href {
+    font-weight: bold;
+    color: #3598db;
 }
 body.dark-only.box-layout {
     --light-background: rgba(31, 32, 40, 0.65);
@@ -2459,7 +2460,9 @@ table thead .border-bottom-warning th {
     border-left-color: rgba(43, 95, 96, 0.2);
 }
 div.dataTables_wrapper {
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
 }
 .learning-block .card .card-body {
     border-radius: 10px;
@@ -2891,7 +2894,9 @@ div.dataTables_wrapper {
 }
 body {
     color: #1f2f3e;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: 14px;
     overflow-x: hidden;
 }
@@ -3839,7 +3844,7 @@ strong ~ p {
         padding: 17px 14px;
     }
 }
-.alert-success {  
+.alert-success {
     background-color: #d1e7dd;
     color: #0f5132;
 }
@@ -4000,7 +4005,6 @@ strong ~ p {
     color: #842029;
     background-color: #f8d7da;
     border-color: #f5c2c7;
-   
 }
 .alert-danger .progress {
     background-color: #db3141;
@@ -5723,7 +5727,7 @@ body.modal-open .select2-container--open .select2-dropdown {
 .card {
     background-color: #fff;
     border: 1px solid #ecf3fa;
-    border-radius: 0px;
+    border-radius: 10px;
     letter-spacing: 0.5px;
     margin-bottom: 10px;
 }
@@ -5743,8 +5747,8 @@ body.modal-open .select2-container--open .select2-dropdown {
     border-bottom-right-radius: 0px;
     padding: 10px;
     position: relative;
-    font-size:11px !important;
-    color:#000000 !important;
+    font-size: 11px !important;
+    color: #000000 !important;
 }
 .card .card-header.card-no-border {
     border-bottom: none !important;
@@ -5862,7 +5866,9 @@ body.modal-open .select2-container--open .select2-dropdown {
 }
 .page-body-wrapper .card .sub-title {
     color: #1f2f3e;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-weight: 400;
 }
 .card-absolute {
@@ -6652,7 +6658,9 @@ table.dataTable.display tbody tr.odd .badge {
     color: #fff;
 }
 .dropdown .dropdown-menu {
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
 }
 .docs-toggles .dropdown .dropdown-toggle {
     width: auto;
@@ -9649,7 +9657,9 @@ btn-group .dropdown-wrapper .input-group .input-group-text {
     content: "";
     height: 19px;
     margin-left: -16px;
-    transition: border 0.15s ease-in-out, color 0.15s ease-in-out;
+    transition:
+        border 0.15s ease-in-out,
+        color 0.15s ease-in-out;
     width: 19px;
 }
 .checkbox label:after,
@@ -11608,7 +11618,9 @@ btn-group .dropdown-wrapper .input-group .input-group-text {
     opacity: 0;
     position: absolute;
     transform: scaleX(0);
-    transition: opacity 0.35s, transform 0.35s;
+    transition:
+        opacity 0.35s,
+        transform 0.35s;
     width: 80%;
 }
 #sideline-tab .nav-effect:hover:after {
@@ -11982,7 +11994,9 @@ tr {
     width: 100%;
 }
 .bootstrap-touchspin .input-group {
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
 }
 .bootstrap-touchspin .input-group .btn {
     border-radius: 0 !important;
@@ -14129,7 +14143,9 @@ input[type="number"] {
 .chart-sparkline,
 .chart-sparkline .jqsfield {
     color: #fff;
-    font: 10px Nunito Sans, sans-serif;
+    font:
+        10px Nunito Sans,
+        sans-serif;
     text-align: left;
 }
 .radial-bar {
@@ -14168,12 +14184,8 @@ input[type="number"] {
     z-index: 3;
 }
 .radial-bar-danger.radial-bar-20 {
-    background-image: linear-gradient(
-            90deg,
-            #eaeaea 50%,
-            transparent 0,
-            transparent
-        ),
+    background-image:
+        linear-gradient(90deg, #eaeaea 50%, transparent 0, transparent),
         linear-gradient(162deg, #dc3545 50%, #eaeaea 0, #eaeaea);
 }
 .radial-bar.radial-bar-lg {
@@ -23176,7 +23188,8 @@ footer {
     align-items: center;
     background-color: #fff;
     border-radius: 10px;
-    box-shadow: 0 1.9217px 1.53736px 0 rgba(43, 94, 94, 0.03),
+    box-shadow:
+        0 1.9217px 1.53736px 0 rgba(43, 94, 94, 0.03),
         0 4.6181px 3.69448px 0 rgba(43, 94, 94, 0.05),
         0 8.69547px 6.95638px 0 rgba(43, 94, 94, 0.06),
         0 10px 10px 0 rgba(43, 94, 94, 0.04);
@@ -23968,7 +23981,9 @@ footer {
     .flex-grow-1
     p {
     color: #c06240;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: 18px;
     font-weight: 500;
 }
@@ -23986,7 +24001,9 @@ footer {
 }
 .landing-page .landing-home .home-bg .home-text h2 {
     color: #fff;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: calc(3px + 2.8125vw);
     font-weight: 600;
     margin-bottom: 10px;
@@ -24074,14 +24091,18 @@ footer {
 }
 .landing-page .landing-home .home-bg .home-text p {
     color: #fff;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: 17px;
     font-weight: 400;
     margin-bottom: 34px;
 }
 .landing-page .landing-home .home-bg .home-text p.description-name {
     display: -webkit-box !important;
-    font-family: DM Sans, sans-serif;
+    font-family:
+        DM Sans,
+        sans-serif;
     font-size: 20px;
     font-weight: 500;
     overflow: hidden;
@@ -24103,7 +24124,9 @@ footer {
     .home-text
     .docutment-button
     a:first-child {
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: 16px;
     font-weight: 500;
     margin-right: 10px;
@@ -24182,14 +24205,17 @@ footer {
     text-transform: uppercase;
 }
 .landing-page .landing-home .content h1 span {
-    background: linear-gradient(90deg, #ffb905 20.35%, #6aebad 50%),
+    background:
+        linear-gradient(90deg, #ffb905 20.35%, #6aebad 50%),
         linear-gradient(0deg, #fff, #fff);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 .landing-page .landing-home .content p {
     color: #fff;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: calc(13.25926px + 0.24691vw);
     font-weight: 500;
     margin: 0 auto;
@@ -24433,7 +24459,9 @@ footer {
     -webkit-background-clip: text;
     background-image: linear-gradient(26deg, #3598db, rgba(13, 126, 126, 0.19));
     color: #fff;
-    font-family: DM Sans, sans-serif;
+    font-family:
+        DM Sans,
+        sans-serif;
     font-size: calc(-2px + 6.875vw);
     font-weight: 700;
     letter-spacing: 0.1;
@@ -26157,7 +26185,8 @@ footer {
         background: var(--active);
     }
     45% {
-        box-shadow: inset 3px -3px 4px var(--active-shadow),
+        box-shadow:
+            inset 3px -3px 4px var(--active-shadow),
             inset 0 8px 10px var(--active-shadow-angry);
     }
 }
@@ -26174,7 +26203,10 @@ footer {
     border-radius: 50%;
     box-shadow: inset 3px -3px 4px var(--sh, var(--normal-shadow));
     position: relative;
-    transition: background 0.4s, box-shadow 0.4s, transform 0.3s;
+    transition:
+        background 0.4s,
+        box-shadow 0.4s,
+        transform 0.3s;
     -webkit-tap-highlight-color: transparent;
 }
 .feedback li:not(:last-child) {
@@ -27519,7 +27551,9 @@ html {
 }
 .user-profile .follow .follow-num {
     color: #1f2f3e;
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
     font-size: 20px;
     font-weight: 600;
 }
@@ -27555,7 +27589,9 @@ html {
     color: #dc3545;
 }
 .user-profile .like-comment span {
-    font-family: Nunito Sans, sans-serif;
+    font-family:
+        Nunito Sans,
+        sans-serif;
 }
 .user-profile .social-media a {
     color: #59667a;
@@ -28802,7 +28838,9 @@ body.dark-only .invoice-5 .back add-products td {
     background-color: #171818 !important;
 }
 body.dark-only .social-widget .social-icons {
-    box-shadow: 0 42.1092px 27.8569px #121313, 0 8.90772px 7.12618px #121313,
+    box-shadow:
+        0 42.1092px 27.8569px #121313,
+        0 8.90772px 7.12618px #121313,
         0 2.02448px 3.44162px #121313;
 }
 body.dark-only .calendar-basic .md-sidebar-aside {
