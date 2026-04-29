@@ -8,6 +8,11 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center justify-content-between">
                         <h5 class="mb-0">Payment Vouchers</h5>
+                        @permission('create_payment_vouchers')
+                        <a href="{{ route('payment.vouchers.create') }}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
+                            <span class="material-symbols-outlined" style="font-size:16px;">add</span> Create Payment Voucher
+                        </a>
+                        @endpermission
                     </div>
                     <div class="card-body">
                         <!-- Filters -->
@@ -64,7 +69,7 @@
                                         <th>#</th>
                                         <th>Voucher No.</th>
                                         <th>Date</th>
-                                        <th>Landlord</th>
+                                        <th>Payee</th>
                                         <th>Description</th>
                                         <th class="text-end">Amount</th>
                                         <th>Lines</th>
