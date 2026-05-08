@@ -105,7 +105,7 @@
             processing: true,
             serverSide: false,
             ajax: {
-                url: "{{ url('/ajax/hr/publicholidays/list') }}",
+                url: "{{ url('/get/ajax/hr/publicholidays/list') }}",
                 type: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
