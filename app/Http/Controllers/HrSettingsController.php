@@ -163,7 +163,6 @@ class HrSettingsController extends Controller
         try {
             $validated = $request->validate([
                 'type_name' => 'required|string|max:255',
-                'current_status_id' => 'required|integer',
                 'entitled_days' => 'required|integer|min:0',
                 'salary_rate' => 'required|numeric|min:0|max:100',
                 'leave_type_id' => 'nullable|integer',

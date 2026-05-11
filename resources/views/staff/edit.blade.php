@@ -39,9 +39,19 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm">
+                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" novalidate>
                             @csrf
                             @method('PUT')
+
+                            <div id="validationSummary" class="alert alert-danger d-none mb-3" role="alert">
+                                <div class="d-flex align-items-start gap-2">
+                                    <span class="material-symbols-outlined mt-1" style="font-size:18px;">error</span>
+                                    <div>
+                                        <strong>Please fill in all required fields before saving.</strong>
+                                        <div id="validationSummaryBody" class="mt-1" style="font-size:0.88rem;"></div>
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Nav Tabs -->
                             <ul class="nav nav-tabs" id="staffEditTabs" role="tablist">
@@ -78,21 +88,21 @@
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
                                             <label for="staff_number" class="form-label">Staff Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('staff_number') is-invalid @enderror" id="staff_number" name="staff_number" value="{{ old('staff_number', $staff->staff_number) }}" required readonly>
+                                            <input type="text" class="form-control @error('staff_number') is-invalid @enderror" id="staff_number" name="staff_number" value="{{ old('staff_number', $staff->staff_number) }}" data-required="true" readonly>
                                             @error('staff_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="full_names" class="form-label">Full Names <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('full_names') is-invalid @enderror" id="full_names" name="full_names" value="{{ old('full_names', $staff->full_names) }}" required>
+                                            <input type="text" class="form-control @error('full_names') is-invalid @enderror" id="full_names" name="full_names" value="{{ old('full_names', $staff->full_names) }}" data-required="true">
                                             @error('full_names')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="gender" class="form-label">Gender <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender" required>
+                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender" data-required="true">
                                                 <option value="">Select Gender</option>
                                                 <option value="Male" {{ old('gender', $staff->gender) == 'Male' ? 'selected' : '' }}>Male</option>
                                                 <option value="Female" {{ old('gender', $staff->gender) == 'Female' ? 'selected' : '' }}>Female</option>
@@ -103,14 +113,14 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="birth_date" class="form-label">Date of Birth <span class="text-danger">*</span></label>
-                                            <input type="date" class="form-control @error('birth_date') is-invalid @enderror" id="birth_date" name="birth_date" value="{{ old('birth_date', $staff->birth_date ? $staff->birth_date->format('Y-m-d') : '') }}" required>
+                                            <input type="date" class="form-control @error('birth_date') is-invalid @enderror" id="birth_date" name="birth_date" value="{{ old('birth_date', $staff->birth_date ? $staff->birth_date->format('Y-m-d') : '') }}" data-required="true">
                                             @error('birth_date')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id', $staff->national_id) }}" readonly required>
+                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id', $staff->national_id) }}" readonly data-required="true">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -124,7 +134,7 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="marital" class="form-label">Marital Status <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('marital') is-invalid @enderror" id="marital" name="marital" required>
+                                            <select class="form-select @error('marital') is-invalid @enderror" id="marital" name="marital" data-required="true">
                                                 <option value="">Select Status</option>
                                                 <option value="Single" {{ old('marital', $staff->marital) == 'Single' ? 'selected' : '' }}>Single</option>
                                                 <option value="Married" {{ old('marital', $staff->marital) == 'Married' ? 'selected' : '' }}>Married</option>
@@ -144,7 +154,7 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="citizenship" class="form-label">Citizenship <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('citizenship') is-invalid @enderror" id="citizenship" name="citizenship" required>
+                                            <select class="form-select @error('citizenship') is-invalid @enderror" id="citizenship" name="citizenship" data-required="true">
                                                 <option value="">Select Option</option>
                                                 <option value="RESIDENT" {{ old('citizenship', $staff->citizenship) == 'RESIDENT' ? 'selected' : '' }}>RESIDENT</option>
                                                 <option value="NO" {{ old('citizenship', $staff->citizenship) == 'NO' ? 'selected' : '' }}>NO</option>
@@ -155,7 +165,7 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="disability" class="form-label">Disability <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('disability') is-invalid @enderror" id="disability" name="disability" required>
+                                            <select class="form-select @error('disability') is-invalid @enderror" id="disability" name="disability" data-required="true">
                                                 <option value="">Select Option</option>
                                                 <option value="YES" {{ old('disability', $staff->disability) == 'YES' ? 'selected' : '' }}>YES</option>
                                                 <option value="NO" {{ old('disability', $staff->disability) == 'NO' ? 'selected' : '' }}>NO</option>
@@ -250,7 +260,7 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="email_address" class="form-label">Email Address <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" readonly required>
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" readonly data-required="true">
                                             @error('email_address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -362,71 +372,196 @@
         </div>
     </div>
 </div>
+<style>
+    .nav-link .tab-error-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #dc3545;
+        color: #fff;
+        border-radius: 50%;
+        font-size: 0.65rem;
+        font-weight: 700;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 3px;
+        margin-left: 5px;
+        vertical-align: middle;
+        line-height: 1;
+    }
+    @@keyframes btnShake {
+        0%, 100% { transform: translateX(0); }
+        20%       { transform: translateX(-4px); }
+        40%       { transform: translateX(4px); }
+        60%       { transform: translateX(-3px); }
+        80%       { transform: translateX(3px); }
+    }
+    .btn-shake { animation: btnShake 0.4s ease; }
+</style>
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
-    $(document).ready(function() {
-        // Handle form submission
-        $('#staffEditForm').on('submit', function() {
-            var submitButton = $('#updateButton');
-            var spinner = $('#submitSpinner');
+document.addEventListener('DOMContentLoaded', function () {
 
-            // Show spinner and disable button
-            spinner.removeClass('d-none');
-            submitButton.prop('disabled', true);
-            submitButton.css('opacity', '0.6');
+    var TABS = [
+        { pane: 'personal',   btn: 'personal-tab',   label: 'Personal Information' },
+        { pane: 'employment', btn: 'employment-tab',  label: 'Employment Details'   },
+        { pane: 'contact',    btn: 'contact-tab',     label: 'Contact Information'  },
+        { pane: 'banking',    btn: 'banking-tab',     label: 'Banking & Statutory'  },
+    ];
+
+    function clearValidationState() {
+        document.getElementById('validationSummary').classList.add('d-none');
+        document.getElementById('validationSummaryBody').innerHTML = '';
+        document.querySelectorAll('.tab-error-badge').forEach(function (el) { el.remove(); });
+        document.querySelectorAll('#staffEditForm .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+        document.querySelectorAll('#staffEditForm .invalid-feedback.js-feedback').forEach(function (el) { el.remove(); });
+    }
+
+    function validateForm() {
+        var errors = {};
+        var firstErrorTab = null;
+
+        document.querySelectorAll('#staffEditForm [data-required]').forEach(function (el) {
+            var val = el.value;
+            if (val !== null && val !== undefined && val.trim() !== '') return;
+
+            var pane   = el.closest('.tab-pane');
+            var paneId = pane ? pane.id : 'general';
+            var tabMeta  = TABS.find(function (t) { return t.pane === paneId; });
+            var tabLabel = tabMeta ? tabMeta.label : 'General';
+
+            var labelEl    = document.querySelector('label[for="' + el.id + '"]');
+            var fieldLabel = labelEl
+                ? labelEl.textContent.replace(/[*]/g, '').trim()
+                : (el.placeholder || el.name || 'Unknown field');
+
+            if (!errors[tabLabel]) errors[tabLabel] = [];
+            errors[tabLabel].push(fieldLabel);
+
+            el.classList.add('is-invalid');
+            if (!el.nextElementSibling || !el.nextElementSibling.classList.contains('invalid-feedback')) {
+                el.insertAdjacentHTML('afterend', '<div class="invalid-feedback js-feedback">' + fieldLabel + ' is required</div>');
+            }
+
+            if (!firstErrorTab) firstErrorTab = tabMeta;
         });
 
-        // Handle zone change to filter zone areas
-        $('#zone_id').on('change', function() {
-            var zoneId = $(this).val();
-            var zoneAreaSelect = $('#zone_area_id');
+        return { errors: errors, firstErrorTab: firstErrorTab };
+    }
 
-            // Clear zone area dropdown
-            zoneAreaSelect.html('<option value="">Select Zone Area</option>');
+    function showValidationUI(errors, firstErrorTab) {
+        var html = '<ul class="mb-0 ps-3">';
+        Object.keys(errors).forEach(function (tabLabel) {
+            html += '<li><strong>' + tabLabel + ':</strong> ' + errors[tabLabel].join(', ') + '</li>';
+        });
+        html += '</ul>';
+        document.getElementById('validationSummaryBody').innerHTML = html;
+        document.getElementById('validationSummary').classList.remove('d-none');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
 
-            if (zoneId) {
-                // Fetch zone areas for selected zone
-                $.ajax({
-                    url: '/ajax/zone-areas/' + zoneId,
-                    type: 'GET',
-                    success: function(data) {
-                        $.each(data, function(index, zoneArea) {
-                            zoneAreaSelect.append(
-                                $('<option></option>')
-                                .attr('value', zoneArea.id)
-                                .text(zoneArea.area_name)
-                            );
-                        });
-                    },
-                    error: function() {
-                        console.error('Failed to load zone areas');
-                    }
-                });
-            }
+        Object.keys(errors).forEach(function (tabLabel) {
+            var tabMeta = TABS.find(function (t) { return t.label === tabLabel; });
+            if (!tabMeta) return;
+            var btn = document.getElementById(tabMeta.btn);
+            if (!btn) return;
+            var existing = btn.querySelector('.tab-error-badge');
+            if (existing) existing.remove();
+            btn.insertAdjacentHTML('beforeend', '<span class="tab-error-badge">' + errors[tabLabel].length + '</span>');
         });
 
-        // If there are validation errors, find which tab has errors and activate it
-        var firstErrorField = $('.is-invalid').first();
-        if (firstErrorField.length) {
-            var tabPane = firstErrorField.closest('.tab-pane');
-            if (tabPane.length) {
-                var tabId = tabPane.attr('id');
-                var tabButton = document.getElementById(tabId + '-tab');
-                if (tabButton) {
-                    var tab = new bootstrap.Tab(tabButton);
-                    tab.show();
-                }
-            }
+        if (firstErrorTab) {
+            var btn = document.getElementById(firstErrorTab.btn);
+            if (btn && window.bootstrap) { new bootstrap.Tab(btn).show(); }
         }
 
-        // Auto-dismiss success alert after 5 seconds
-        if ($('.alert-success').length) {
-            setTimeout(function() {
-                $('.alert-success').fadeOut(function() {
-                    $(this).remove();
-                });
-            }, 5000);
+        var updateBtn = document.getElementById('updateButton');
+        updateBtn.classList.add('btn-shake');
+        updateBtn.addEventListener('animationend', function () {
+            updateBtn.classList.remove('btn-shake');
+        }, { once: true });
+    }
+
+    document.getElementById('staffEditForm').addEventListener('input',  function (e) { handleFieldFix(e.target); });
+    document.getElementById('staffEditForm').addEventListener('change', function (e) { handleFieldFix(e.target); });
+
+    function handleFieldFix(el) {
+        if (!el.hasAttribute('data-required') || !el.value || el.value.trim() === '') return;
+        el.classList.remove('is-invalid');
+        var next = el.nextElementSibling;
+        if (next && next.classList.contains('js-feedback')) next.remove();
+
+        var pane = el.closest('.tab-pane');
+        if (pane) {
+            var tabMeta = TABS.find(function (t) { return t.pane === pane.id; });
+            if (tabMeta) {
+                var remaining = document.querySelectorAll('#' + pane.id + ' [data-required].is-invalid').length;
+                var badge = document.querySelector('#' + tabMeta.btn + ' .tab-error-badge');
+                if (remaining === 0) { if (badge) badge.remove(); }
+                else { if (badge) badge.textContent = remaining; }
+            }
         }
+        if (document.querySelectorAll('#staffEditForm .is-invalid').length === 0) {
+            document.getElementById('validationSummary').classList.add('d-none');
+        }
+    }
+
+    document.getElementById('staffEditForm').addEventListener('submit', function (e) {
+        clearValidationState();
+        var result = validateForm();
+        if (Object.keys(result.errors).length > 0) {
+            e.preventDefault();
+            showValidationUI(result.errors, result.firstErrorTab);
+            return;
+        }
+        var btn = document.getElementById('updateButton');
+        document.getElementById('submitSpinner').classList.remove('d-none');
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
     });
+
+    document.getElementById('zone_id').addEventListener('change', function () {
+        var zoneId = this.value;
+        var zoneArea = document.getElementById('zone_area_id');
+        zoneArea.innerHTML = '<option value="">Select Zone Area</option>';
+        if (!zoneId) return;
+        fetch('/ajax/zone-areas/' + zoneId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                data.forEach(function (za) {
+                    var opt = document.createElement('option');
+                    opt.value = za.id;
+                    opt.textContent = za.area_name;
+                    zoneArea.appendChild(opt);
+                });
+            })
+            .catch(function () { console.error('Failed to load zone areas'); });
+    });
+
+    var serverErrors = document.querySelectorAll('#staffEditForm .is-invalid');
+    if (serverErrors.length) {
+        var firstPane = serverErrors[0].closest('.tab-pane');
+        if (firstPane) {
+            var btn = document.getElementById(firstPane.id + '-tab');
+            if (btn && window.bootstrap) { new bootstrap.Tab(btn).show(); }
+        }
+        TABS.forEach(function (t) {
+            var count = document.querySelectorAll('#' + t.pane + ' .is-invalid').length;
+            if (count > 0) {
+                var btn = document.getElementById(t.btn);
+                if (btn) btn.insertAdjacentHTML('beforeend', '<span class="tab-error-badge">' + count + '</span>');
+            }
+        });
+    }
+
+    var successAlert = document.querySelector('.alert-success');
+    if (successAlert) {
+        setTimeout(function () {
+            successAlert.style.transition = 'opacity 0.5s';
+            successAlert.style.opacity = '0';
+            setTimeout(function () { successAlert.remove(); }, 500);
+        }, 5000);
+    }
+
+});
 </script>
 @endsection

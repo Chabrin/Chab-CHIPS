@@ -249,7 +249,7 @@
                                 </div>
                             </div>
 
-                            <!-- Returns Grouping Settings Section -->
+                            {{-- <!-- Returns Grouping Settings Section -->
                             <div class="row mb-4">
                                 <div class="col-12 mb-3">
                                     <h6 class="text-muted border-bottom pb-2">Returns Grouping Settings</h6>
@@ -269,7 +269,7 @@
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </div> --}}
 
                         </form>
                     </div>
@@ -429,7 +429,7 @@
                         populateBillingItems();
                         
                         // Add first return group automatically after items are loaded
-                        addReturnGroupEntry();
+                        // addReturnGroupEntry();
                     }
                 },
                 error: function(xhr, status, error) {
