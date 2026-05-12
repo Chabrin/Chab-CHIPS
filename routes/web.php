@@ -779,6 +779,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/service-agreements/data', [SLAController::class, 'getAllSLA'])->name('service.agreements.data');
     Route::get('/property/service-agreements', [SLAController::class, 'index'])->name('service.agreements.index');
     Route::get('/property/service-agreements/create', [SLAController::class, 'create'])->name('service.agreements.create');
+    Route::get('/ajax/clients/search-select2', [SLAController::class, 'searchClientsAjax'])->name('ajax.clients.search.select2');
     Route::post('/property/service-agreements', [SLAController::class, 'store'])->name('service.agreements.store');
     Route::get('/property/service-agreements/{id}', [SLAController::class, 'show'])->name('service.agreements.show');
     Route::get('/property/service-agreements/{id}/edit', [SLAController::class, 'edit'])->name('service.agreements.edit');
@@ -860,15 +861,13 @@ Route::middleware(['throttle:5,1'])->group(function () {
 
 
 
-
-
 Route::redirect('/', '/dashboard');
-
 //Create the login routes
 Route::get('/login', [LoginController::class, 'login'])->name('login');
 Route::post('/login/submit', [LoginController::class, 'authenticate'])->name('login.authenticate');
 Route::get('/authenticator/{two_factor_token}', [LoginController::class, 'show2faForm'])->name('authenticator.form');
 Route::post('/authenticator/verify', [LoginController::class, 'verify2fa'])->name('authenticator.verify');
+
 
 // Password Reset Routes
 Route::get('/forgot-password', [AuthController::class, 'showForgotPasswordForm'])->name('password.request');
@@ -876,17 +875,16 @@ Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name
 Route::get('/reset-password/{token}', [AuthController::class, 'showResetPasswordForm'])->name('password.reset');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
 
+
 Route::middleware(['auth'])->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
     Route::get('/dashboard/stats', [DashboardController::class, 'getStats'])->name('dashboard.stats');
     Route::get('/dashboard/age-distribution', [DashboardController::class, 'getAgeDistributionData'])->name('dashboard.age-distribution');
-
     // User Access Log Routes
     Route::get('/admin/access-logs', [UserAccessLogController::class, 'index'])->name('admin.access-logs');
     Route::get('/admin/access-logs/user/{userId}', [UserAccessLogController::class, 'userLogs'])->name('admin.access-logs.user');
     Route::get('/admin/access-logs/statistics', [UserAccessLogController::class, 'statistics'])->name('admin.access-logs.statistics');
     Route::post('/admin/access-logs/test', [UserAccessLogController::class, 'test'])->name('admin.access-logs.test');
-
     // User Access Logs Interface
     Route::get('/user/access', [UserAccessLogController::class, 'userAccessInterface'])->name('user.access');
     Route::get('/user/access/summary', [UserAccessLogController::class, 'accessSummary'])->name('user.access.summary');
@@ -910,14 +908,12 @@ Route::post('/activate-account/{token}', [AuthController::class, 'activateAccoun
 
 //rolestrict section
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
-
     // Roles management
     Route::get('/list/roles', [RolesController::class, 'listRoles'])->name('listroles');
     Route::get('/role/modules/{encryptedId}', [RolesController::class, 'modulesAccess'])->name('role.modules');
     Route::get('/role/permissions/{encryptedId}', [RolesController::class, 'permissionsAccess'])->name('role.permissions');
     // Add permission view
     Route::get('/create/permission', [RolesController::class, 'addPermissionView'])->name('permissions.addview');
-
     // System Users
     Route::get('/roles/users', [UsersController::class, 'systemUsers'])->name('system.users');
     Route::get('/users/ajax/list', [UsersController::class, 'systemUsersAjax'])->name('user.ajax.list');

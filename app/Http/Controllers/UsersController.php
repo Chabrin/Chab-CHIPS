@@ -2,22 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Gender;
-use App\Models\Employee;
-use App\Models\Department;
 use Illuminate\Http\Request;
-use App\Models\MaritalStatus;
-use App\Models\EmploymentTerm;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Crypt;
 use App\Services\ErrorDispatcher;
 use App\Models\User;
-use App\Models\Staff;
 use App\Models\UserStaffLink;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class UsersController extends Controller
@@ -253,10 +243,11 @@ class UsersController extends Controller
         try {
             $query = trim($request->input('q', ''));
 
+            $lower = strtolower($query);
             $staff = DB::table('sys_staff')
-                ->where(function ($q) use ($query) {
-                    $q->where('full_names', 'like', '%' . $query . '%')
-                      ->orWhere('staff_number', 'like', '%' . $query . '%');
+                ->where(function ($q) use ($lower) {
+                    $q->whereRaw('LOWER(full_names) LIKE ?', ['%' . $lower . '%'])
+                      ->orWhereRaw('LOWER(staff_number) LIKE ?', ['%' . $lower . '%']);
                 })
                 ->select('id', 'full_names', 'staff_number')
                 ->orderBy('full_names')

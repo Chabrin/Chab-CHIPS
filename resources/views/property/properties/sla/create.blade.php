@@ -51,8 +51,8 @@
                                 @else
                                     <div class="col-md-6 mb-3">
                                         <label for="client_id" class="form-label">Client <span class="text-danger">*</span></label>
-                                        <select name="client_id" id="client_id" class="form-control" required>
-                                            <option value="">Please select a client</option>
+                                        <select name="client_id" id="client_id" class="form-control" required style="width:100%;">
+                                            <option value="">Type to search client...</option>
                                         </select>
                                         @error('client_id')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
@@ -336,51 +336,35 @@
         if (clientIdInput) {
             loadProperties(clientIdInput);
         } else {
-            // Load clients for dropdown if no client is preset
-            loadClients();
-        }
+            // Select2 AJAX search for client
+            $('#client_id').select2({
+                placeholder: 'Type to search client...',
+                allowClear: true,
+                minimumInputLength: 2,
+                width: '100%',
+                ajax: {
+                    url: '{{ route("ajax.clients.search.select2") }}',
+                    dataType: 'json',
+                    delay: 300,
+                    data: function(params) { return { q: params.term }; },
+                    processResults: function(data) { return { results: data.results }; },
+                    cache: true
+                }
+            });
 
-        // Handle client selection from dropdown
-        $('#client_id').on('change', function() {
-            const selectedClientId = $(this).val();
-            if (selectedClientId) {
-                loadProperties(selectedClientId);
-            } else {
-                $('#property_id').html('<option value="">Select client first</option>').prop('disabled', true);
-            }
-        });
-
-        // Load invoiceable items on page load
-        loadInvoiceableItems();
-
-        // Function to load clients for dropdown
-        function loadClients() {
-            $.ajax({
-                url: '/ajax/clients/list',
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#client_id').empty().append('<option value="">Please select a client</option>');
-                    let clients = response.data || response.clients || [];
-                    if (clients.length > 0) {
-                        clients.forEach(function(client) {
-                            $('#client_id').append(`<option value="${client.id}">${client.names} - ${client.reference_number || ''}</option>`);
-                        });
-                    }
-                    
-                    // Initialize select2 after options are loaded
-                    $('#client_id').select2({
-                        placeholder: 'Please select a client',
-                        allowClear: true,
-                        width: '100%'
-                    });
-                },
-                error: function(xhr) {
-                    console.error('Error loading clients:', xhr);
-                    $('#client_id').empty().append('<option value="">Error loading clients</option>');
+            // Load properties when a client is selected
+            $('#client_id').on('change', function() {
+                const val = $(this).val();
+                if (val) {
+                    loadProperties(val);
+                } else {
+                    $('#property_id').html('<option value="">Select client first</option>').prop('disabled', true);
                 }
             });
         }
+
+        // Load invoiceable items on page load
+        loadInvoiceableItems();
 
         // Function to load properties for the client
         function loadProperties(clientId) {
