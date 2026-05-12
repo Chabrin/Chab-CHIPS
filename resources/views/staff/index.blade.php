@@ -268,7 +268,7 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
 <div class="modal fade" id="convertUserModal" tabindex="-1" aria-labelledby="convertUserModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" id="convert-user-form" action="#">
+            <form id="convert-user-form">
                 @csrf
                 <div class="modal-header">
                     <h5 class="modal-title" id="convertUserModalLabel">Convert Staff To User</h5>
@@ -277,17 +277,26 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                 <div class="modal-body">
                     <p class="text-muted mb-3" id="convert-user-staff-name" style="font-weight:600;"></p>
                     <div class="mb-3">
-                        <label for="convert-user-email" class="form-label">Company Email</label>
-                        <input type="email" class="form-control" id="convert-user-email" name="email" required>
+                        <label for="convert-user-email" class="form-label">Company Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="convert-user-email" name="email" required autocomplete="off">
+                        <div class="invalid-feedback" id="convert-email-feedback"></div>
                     </div>
                     <div class="mb-3">
-                        <label for="convert-user-password" class="form-label">Password</label>
+                        <label for="convert-user-password" class="form-label">Password <span class="text-danger">*</span></label>
                         <input type="password" class="form-control" id="convert-user-password" name="password" required minlength="6">
+                        <div class="invalid-feedback" id="convert-password-feedback"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save User</button>
+                    <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm d-flex align-items-center" id="convertUserBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                        <span class="material-symbols-outlined me-1" style="font-size:18px;">manage_accounts</span>
+                        <span>Save User</span>
+                    </button>
                 </div>
             </form>
         </div>
@@ -378,20 +387,96 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
         });
 
         if (canCreateUsers) {
+            var convertEncryptedId = null;
+
+            function resetConvertForm() {
+                $('#convert-user-email').val('').removeClass('is-invalid is-valid');
+                $('#convert-user-password').val('').removeClass('is-invalid');
+                $('#convert-email-feedback').text('');
+                $('#convert-password-feedback').text('');
+            }
+
             // Open convert staff to user modal
             $(document).on('click', '.btn-convert-user', function() {
-                var encryptedId = $(this).data('id');
+                convertEncryptedId = $(this).data('id');
                 var name = $(this).data('name');
                 var email = $(this).data('email') || '';
-                var actionUrl = convertUserRoute.replace(':id', encryptedId);
 
-                $('#convert-user-form').attr('action', actionUrl);
+                resetConvertForm();
                 $('#convert-user-staff-name').text(name);
                 $('#convert-user-email').val(email);
-                $('#convert-user-password').val('');
 
                 var modal = new bootstrap.Modal(document.getElementById('convertUserModal'));
                 modal.show();
+            });
+
+            // Reset on modal hide
+            $('#convertUserModal').on('hidden.bs.modal', function() {
+                resetConvertForm();
+                convertEncryptedId = null;
+            });
+
+            // Email uniqueness check on blur
+            $('#convert-user-email').on('blur', function() {
+                var email = $.trim($(this).val());
+                if (!email) return;
+                $.get('{{ route("user.ajax.check-email") }}', { email: email }, function(res) {
+                    if (res.exists) {
+                        $('#convert-user-email').addClass('is-invalid').removeClass('is-valid');
+                        $('#convert-email-feedback').text('This email is already registered as a system user.');
+                    } else {
+                        $('#convert-user-email').removeClass('is-invalid').addClass('is-valid');
+                        $('#convert-email-feedback').text('');
+                    }
+                });
+            });
+
+            // AJAX form submit
+            $('#convert-user-form').on('submit', function(e) {
+                e.preventDefault();
+
+                // Block if email already taken
+                if ($('#convert-user-email').hasClass('is-invalid')) return;
+                if (!convertEncryptedId) return;
+
+                var btn = $('#convertUserBtn');
+                var spinner = btn.find('.spinner-border');
+                btn.prop('disabled', true);
+                spinner.removeClass('d-none');
+
+                var actionUrl = convertUserRoute.replace(':id', convertEncryptedId);
+                $.ajax({
+                    url: actionUrl,
+                    method: 'POST',
+                    data: $(this).serialize(),
+                    headers: { 'Accept': 'application/json' },
+                    success: function(res) {
+                        if (res.success) {
+                            bootstrap.Modal.getInstance(document.getElementById('convertUserModal')).hide();
+                            toastr.success(res.message || 'Staff converted successfully.');
+                            setTimeout(function() { location.reload(); }, 1200);
+                        }
+                    },
+                    error: function(xhr) {
+                        var json = xhr.responseJSON || {};
+                        if (xhr.status === 422 && json.errors) {
+                            if (json.errors.email) {
+                                $('#convert-user-email').addClass('is-invalid');
+                                $('#convert-email-feedback').text(json.errors.email[0]);
+                            }
+                            if (json.errors.password) {
+                                $('#convert-user-password').addClass('is-invalid');
+                                $('#convert-password-feedback').text(json.errors.password[0]);
+                            }
+                        } else {
+                            toastr.error(json.error || 'Failed to convert staff to user.');
+                        }
+                    },
+                    complete: function() {
+                        btn.prop('disabled', false);
+                        spinner.addClass('d-none');
+                    }
+                });
             });
         }
 

@@ -69,6 +69,11 @@
                         <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
+                        <label for="add_password" class="form-label">Password <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="add_password" name="password" required minlength="8" autocomplete="new-password">
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
                         <label for="add_role" class="form-label">Role <span class="text-danger">*</span></label>
                         <select class="form-select" id="add_role" name="role_id" required>
                             <option value="">Select Role</option>
@@ -129,6 +134,11 @@
                     <div class="mb-3">
                         <label for="edit_email" class="form-label">Email <span class="text-danger">*</span></label>
                         <input type="email" class="form-control" id="edit_email" name="email" required>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_password" class="form-label">New Password <span class="text-muted small">(leave blank to keep current)</span></label>
+                        <input type="password" class="form-control" id="edit_password" name="password" minlength="8" autocomplete="new-password">
                         <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
@@ -434,6 +444,7 @@
                         $('#edit_username').val(response.user.username);
                         $('#edit_email').val(response.user.email);
                         $('#edit_role').val(response.user.role_id);
+                        $('#edit_password').val('');
 
                         // Init Select2 then pre-populate linked staff
                         const $staffSelect = $('#edit_staff_id');

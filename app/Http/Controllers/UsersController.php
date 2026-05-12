@@ -2,22 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Gender;
-use App\Models\Employee;
-use App\Models\Department;
 use Illuminate\Http\Request;
-use App\Models\MaritalStatus;
-use App\Models\EmploymentTerm;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Crypt;
 use App\Services\ErrorDispatcher;
 use App\Models\User;
-use App\Models\Staff;
 use App\Models\UserStaffLink;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class UsersController extends Controller
@@ -127,6 +117,7 @@ class UsersController extends Controller
                 'name' => 'required|string|max:255',
                 'username' => 'required|string|max:100|unique:josya_users,username',
                 'email' => 'required|email|max:255|unique:josya_users,email',
+                'password' => 'required|string|min:8|max:255',
                 'role_id' => 'required|integer|exists:cb_roles,id',
                 'staff_id' => 'nullable|integer|exists:sys_staff,id|unique:sys_user_staff_links,staff_id',
             ]);
@@ -135,7 +126,7 @@ class UsersController extends Controller
                 'name' => $validated['name'],
                 'username' => $validated['username'],
                 'email' => $validated['email'],
-                'password' => Hash::make(Str::random(12)),
+                'password' => $validated['password'],
                 'block' => 0,
                 'sendEmail' => 0,
                 'registerDate' => now(),
@@ -180,6 +171,7 @@ class UsersController extends Controller
                 'name' => 'required|string|max:255',
                 'username' => ['required', 'string', 'max:100', Rule::unique('josya_users', 'username')->ignore($user->id)],
                 'email' => ['required', 'email', 'max:255', Rule::unique('josya_users', 'email')->ignore($user->id)],
+                'password' => 'nullable|string|min:8|max:255',
                 'role_id' => 'required|integer|exists:cb_roles,id',
                 'staff_id' => [
                     'nullable', 'integer', 'exists:sys_staff,id',
@@ -190,6 +182,9 @@ class UsersController extends Controller
             $user->name = $validated['name'];
             $user->username = $validated['username'];
             $user->email = $validated['email'];
+            if (!empty($validated['password'])) {
+                $user->password = $validated['password'];
+            }
             $user->save();
 
             DB::table('cb_role_user')->where('user_id', $id)->delete();
@@ -248,10 +243,11 @@ class UsersController extends Controller
         try {
             $query = trim($request->input('q', ''));
 
+            $lower = strtolower($query);
             $staff = DB::table('sys_staff')
-                ->where(function ($q) use ($query) {
-                    $q->where('full_names', 'like', '%' . $query . '%')
-                      ->orWhere('staff_number', 'like', '%' . $query . '%');
+                ->where(function ($q) use ($lower) {
+                    $q->whereRaw('LOWER(full_names) LIKE ?', ['%' . $lower . '%'])
+                      ->orWhereRaw('LOWER(staff_number) LIKE ?', ['%' . $lower . '%']);
                 })
                 ->select('id', 'full_names', 'staff_number')
                 ->orderBy('full_names')
@@ -263,5 +259,12 @@ class UsersController extends Controller
             Log::error('Error searching staff: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to search staff'], 500);
         }
+    }
+
+    public function checkEmailExists(Request $request)
+    {
+        $email = trim($request->input('email', ''));
+        $exists = $email !== '' && DB::table('josya_users')->where('email', $email)->exists();
+        return response()->json(['exists' => $exists]);
     }
 }

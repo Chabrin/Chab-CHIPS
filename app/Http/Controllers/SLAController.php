@@ -18,9 +18,11 @@ use App\Models\ServiceAgreementBillCharge;
 use App\Models\ServiceAgreementReturnItem;
 use App\Models\ServiceAgreementReturnType;
 use App\Models\ServiceAgreementInvoiceClient;
+use App\Traits\ClientSearchTrait;
 
 class SLAController extends Controller
 {
+    use ClientSearchTrait;
     /**
      * Display a listing of service agreements
      */
