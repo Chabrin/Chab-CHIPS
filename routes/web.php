@@ -673,7 +673,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Property edit routes
     Route::get('/property/properties/{encryptedId}/edit', [PropertiesController::class, 'edit'])->name('property.properties.edit');
     Route::put('/property/properties/{encryptedId}', [PropertiesController::class, 'update'])->name('property.properties.update');
-
     // Property Settings
     Route::get('/property/settings/items', [App\Http\Controllers\PropertySettingsController::class, 'index'])->name('property.settings.index');
 
@@ -928,6 +927,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/users/ajax/update/{id}', [UsersController::class, 'updateSystemUser'])->name('user.ajax.update');
     Route::post('/users/ajax/suspend/{id}', [UsersController::class, 'suspendUser'])->name('user.ajax.suspend');
     Route::post('/users/ajax/activate/{id}', [UsersController::class, 'activateUser'])->name('user.ajax.activate');
+    Route::get('/users/ajax/check-email', [UsersController::class, 'checkEmailExists'])->name('user.ajax.check-email');
 
     Route::get('/user/profile', [LoginController::class, 'profile'])->name('user.profile');
     Route::get('/email/templates', [EmailTemplateController::class, 'index'])->name('email_templates.index');

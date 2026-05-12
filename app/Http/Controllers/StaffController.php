@@ -99,19 +99,25 @@ class StaffController extends Controller
     public function convertToUser(Request $request, $encryptedId)
     {
         if (!auth()->user()->hasPermission('create_users')) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'error' => 'Unauthorized'], 403);
+            }
             abort(403);
         }
 
-        $validated = $request->validate([
-            'email' => 'required|email|max:255|unique:josya_users,email',
-            'password' => 'required|string|min:6|max:255',
-        ]);
-
         try {
+            $validated = $request->validate([
+                'email' => 'required|email|max:255|unique:josya_users,email',
+                'password' => 'required|string|min:6|max:255',
+            ]);
+
             $id = Crypt::decrypt($encryptedId);
             $staff = Staff::findOrFail($id);
 
             if (UserStaffLink::where('staff_id', $staff->id)->exists()) {
+                if ($request->wantsJson()) {
+                    return response()->json(['success' => false, 'error' => 'This staff member is already linked to a user account.'], 422);
+                }
                 return redirect()->route('staff.index')->with('error', 'This staff member is already linked to a user account.');
             }
 
@@ -140,11 +146,20 @@ class StaffController extends Controller
                 ]);
             });
 
+            if ($request->wantsJson()) {
+                return response()->json(['success' => true, 'message' => 'Staff converted to system user successfully.']);
+            }
             return redirect()->route('staff.index')->with('success', 'Staff converted to system user successfully.');
         } catch (ValidationException $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            }
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             Log::error('Error converting staff to user: ' . $e->getMessage());
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'error' => 'Failed to convert staff to user.'], 500);
+            }
             return redirect()->route('staff.index')->with('error', 'Failed to convert staff to user.');
         }
     }
