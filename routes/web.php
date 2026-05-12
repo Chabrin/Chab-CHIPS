@@ -648,11 +648,19 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
     Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
 
+
+
     // Payment Vouchers
     Route::get('/payment/vouchers', [App\Http\Controllers\PaymentVouchersController::class, 'index'])->name('payment.vouchers.index');
     Route::get('/ajax/payment/vouchers/data', [App\Http\Controllers\PaymentVouchersController::class, 'getVouchersData'])->name('ajax.payment.vouchers.data');
+    Route::get('/create/payment/voucher', [App\Http\Controllers\PaymentVouchersController::class, 'create'])->name('payment.vouchers.create');
+    Route::post('/payment/vouchers/create-full', [App\Http\Controllers\PaymentVouchersController::class, 'createFull'])->name('payment.vouchers.create.full');
+    Route::post('/ajax/payment/vouchers/store-header', [App\Http\Controllers\PaymentVouchersController::class, 'storeHeader'])->name('ajax.payment.vouchers.store.header');
+    Route::get('/ajax/payment/vouchers/gl-accounts', [App\Http\Controllers\PaymentVouchersController::class, 'searchGlAccounts'])->name('ajax.payment.vouchers.gl.accounts');
     Route::get('/payment/vouchers/{id}/details', [App\Http\Controllers\PaymentVouchersController::class, 'show'])->name('payment.vouchers.details');
     Route::get('/ajax/payment/vouchers/{id}/lines', [App\Http\Controllers\PaymentVouchersController::class, 'getVoucherLines'])->name('ajax.payment.vouchers.lines');
+    Route::post('/ajax/payment/vouchers/{id}/lines/add', [App\Http\Controllers\PaymentVouchersController::class, 'addLine'])->name('ajax.payment.vouchers.lines.add');
+    Route::delete('/ajax/payment/vouchers/lines/{lineId}/remove', [App\Http\Controllers\PaymentVouchersController::class, 'removeLine'])->name('ajax.payment.vouchers.lines.remove');
 
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
