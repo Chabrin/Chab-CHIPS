@@ -1137,6 +1137,8 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/cheque-book-leaves/{bookId}', [ChequeBookController::class, 'getLeavesData']);
     Route::post('/ajax/cheque-books/leaves/{leafId}/release-lock', [ChequeBookController::class, 'releaseLock']);
     Route::post('/ajax/cheque-books/leaves/{leafId}/cancel', [ChequeBookController::class, 'cancelLeaf']);
+    Route::post('/ajax/voucher-cheque/lock', [ChequeBookController::class, 'lockNextAvailable'])->name('ajax.voucher-cheque.lock');
+    Route::post('/ajax/voucher-cheque/release', [ChequeBookController::class, 'releaseVoucherCheque'])->name('ajax.voucher-cheque.release');
 
     // Banks AJAX CRUD
     Route::get('/settings/banks/list', [SettingsController::class, 'banksList']);

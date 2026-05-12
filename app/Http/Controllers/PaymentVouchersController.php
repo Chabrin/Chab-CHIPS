@@ -12,6 +12,8 @@ use App\Services\ErrorDispatcher;
 use App\Models\PaymentVoucherHeader;
 use App\Models\PaymentVoucherLine;
 use App\Models\ChartAccount;
+use App\Models\InvoiceableItem;
+use App\Models\CompanyBankAccount;
 
 class PaymentVouchersController extends Controller
 {
@@ -43,7 +45,18 @@ class PaymentVouchersController extends Controller
             $currentMonth = (int) date('m');
             $years        = range($currentYear, $currentYear - 4);
 
-            return view('finance.vouchers.create', compact('currentYear', 'currentMonth', 'years'));
+            $invoiceableItems = InvoiceableItem::orderBy('item_name')
+                ->get(['id', 'item_name', 'billing_code']);
+
+            $bankAccounts = CompanyBankAccount::with('bank')
+                ->where('current_status_id', 1)
+                ->orderBy('account_name')
+                ->get(['id', 'account_name', 'account_number', 'bank_id']);
+
+            return view('finance.vouchers.create', compact(
+                'currentYear', 'currentMonth', 'years',
+                'invoiceableItems', 'bankAccounts'
+            ));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading create voucher page: ' . $e->getMessage());
@@ -124,8 +137,10 @@ class PaymentVouchersController extends Controller
                 'month'                     => ['required', 'integer', 'min:1', 'max:12'],
                 'lines'                     => ['required', 'array', 'min:1'],
                 'lines.*.entry_description' => ['required', 'string', 'max:500'],
+                'lines.*.entry_number'      => ['nullable', 'string', 'max:100'],
                 'lines.*.amount'            => ['required', 'numeric', 'min:0.01'],
                 'lines.*.account_number'    => ['nullable', 'string', 'max:100'],
+                'lines.*.account_bank'      => ['nullable', 'string', 'max:255'],
                 'lines.*.cheque_number'     => ['nullable', 'string', 'max:50'],
             ], [
                 'lines.required' => 'Add at least one entry before creating the voucher.',
@@ -156,15 +171,17 @@ class PaymentVouchersController extends Controller
                 'is_printed'       => 0,
             ]);
 
-            foreach ($validated['lines'] as $i => $line) {
+            foreach ($validated['lines'] as $line) {
                 PaymentVoucherLine::create([
                     'voucher_number'    => $voucherNum,
-                    'entry_number'      => $i + 1,
+                    'entry_number'      => $line['entry_number'] ?? null,
                     'entry_year'        => $validated['year'],
                     'entry_month'       => $validated['month'],
                     'account_number'    => $line['account_number'] ?? null,
+                    'account_bank'      => $line['account_bank'] ?? null,
                     'cheque_number'     => $line['cheque_number'] ?? null,
                     'entry_description' => $line['entry_description'],
+                    'payee_name'        => $validated['vendor_name'],
                     'amount'            => $line['amount'],
                     'dr_cr'             => 'DR',
                     'is_approved'       => 'No',
@@ -366,7 +383,7 @@ class PaymentVouchersController extends Controller
             $voucher = PaymentVoucherHeader::findOrFail($id);
 
             $lines = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)
-                ->orderBy('entry_number')
+                ->orderBy('id')
                 ->get();
 
             return response()->json([
@@ -378,6 +395,7 @@ class PaymentVouchersController extends Controller
                     'description'    => $voucher->description,
                     'vendor_id'      => $voucher->vendor_id,
                     'vendor_name'    => $voucher->vendor_name,
+                    'vendor_type'    => $voucher->vendor_type,
                     'debit_amount'   => number_format($voucher->debit_amount ?? 0, 2),
                     'credit_amount'  => number_format($voucher->credit_amount ?? 0, 2),
                     'voucher_status' => $voucher->voucher_status,
@@ -387,16 +405,15 @@ class PaymentVouchersController extends Controller
                 ],
                 'data'    => $lines->map(function ($l) {
                     return [
-                        'entry_number'         => $l->entry_number,
-                        'property_code'        => $l->property_code ?? '-',
-                        'property_description' => $l->property_description ?? '-',
-                        'entry_description'    => $l->entry_description ?? '-',
-                        'dr_cr'                => $l->dr_cr ?? 'DR',
-                        'amount'               => number_format($l->amount ?? 0, 2),
-                        'gl_account'           => $l->gl_account ?? '-',
-                        'payee_name'           => $l->payee_name ?? '-',
-                        'is_approved'          => $l->is_approved ?? '-',
-                        'cheque_number'        => $l->cheque_number ?? '-',
+                        'billing_code'     => $l->entry_number ?? '-',
+                        'entry_description' => $l->entry_description ?? '-',
+                        'payee_name'        => $l->payee_name ?? '-',
+                        'account_number'    => $l->account_number ?? '-',
+                        'account_bank'      => $l->account_bank ?? '-',
+                        'cheque_number'     => $l->cheque_number ?? '-',
+                        'amount'            => number_format($l->amount ?? 0, 2),
+                        'gl_account'        => $l->gl_account ?? '-',
+                        'is_approved'       => $l->is_approved ?? '-',
                     ];
                 }),
             ]);

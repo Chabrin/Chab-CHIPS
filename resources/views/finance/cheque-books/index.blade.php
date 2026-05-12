@@ -21,15 +21,10 @@
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Reference</th>
                                         <th>Bank Account</th>
                                         <th>Bank</th>
                                         <th>First Cheque No.</th>
                                         <th class="text-center">Total</th>
-                                        <th class="text-center">Available</th>
-                                        <th class="text-center">Used</th>
-                                        <th class="text-center">Cancelled</th>
-                                        <th>Status</th>
                                         <th>Created</th>
                                         <th>Action</th>
                                     </tr>
@@ -118,20 +113,10 @@ $(function () {
         },
         columns: [
             { data: null, render: function(d,t,r,m) { return m.row + 1; }, orderable: false },
-            { data: 'reference_number', defaultContent: '—' },
             { data: 'bank_account_name' },
             { data: 'bank_name', defaultContent: '—' },
             { data: 'first_cheque_number' },
             { data: 'leafs', className: 'text-center' },
-            { data: 'available_count', className: 'text-center',
-              render: function(d) { return '<span class="badge badge-light-success">' + d + '</span>'; } },
-            { data: 'used_count', className: 'text-center',
-              render: function(d) { return '<span class="badge badge-light-secondary">' + d + '</span>'; } },
-            { data: 'cancelled_count', className: 'text-center',
-              render: function(d) { return '<span class="badge badge-light-danger">' + d + '</span>'; } },
-            { data: null, render: function(d,t,r) {
-                return '<span class="badge ' + r.status_badge + '">' + r.status_label + '</span>';
-            }},
             { data: 'created_at', defaultContent: '—' },
             {
                 data: null, orderable: false, searchable: false,

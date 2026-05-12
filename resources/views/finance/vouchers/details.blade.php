@@ -39,6 +39,14 @@
     font-size: 0.85rem;
     color: #222;
 }
+.section-divider {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: #3598db;
+    margin-bottom: 8px;
+}
 .extra-label {
     font-size: 0.67rem;
     font-weight: 600;
@@ -51,6 +59,7 @@
     font-size: 0.82rem;
     color: #333;
 }
+#lines-table td, #lines-table th { font-size: 0.8rem; }
 </style>
 @endsection
 
@@ -87,9 +96,15 @@
                                 <div class="hdr-label">Date</div>
                                 <div class="hdr-value">{{ $voucher->voucher_date?->format('d/m/Y') ?? '-' }}</div>
                             </div>
+                            <div class="col-auto">
+                                <div class="hdr-label">Payee Type</div>
+                                <div class="hdr-value">
+                                    <span class="badge badge-light-info">{{ $voucher->vendor_type ?? '-' }}</span>
+                                </div>
+                            </div>
                             <div class="col">
-                                <div class="hdr-label">Landlord</div>
-                                <div class="hdr-value" title="{{ $voucher->vendor_id }}">{{ $voucher->vendor_name ?? '-' }}</div>
+                                <div class="hdr-label">Payee</div>
+                                <div class="hdr-value fw-semibold" title="{{ $voucher->vendor_id }}">{{ $voucher->vendor_name ?? '-' }}</div>
                             </div>
                             <div class="col-auto">
                                 <div class="hdr-label">Amount</div>
@@ -107,29 +122,70 @@
                             </div>
                         </div>
 
-                        <!-- Extra info panel (hidden by default) -->
+                        <!-- Extra info panel -->
                         <div id="extraInfoPanel" class="border-top mt-3 pt-3" style="display:none;">
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <div class="extra-label">Description</div>
-                                    <div class="extra-value">{{ $voucher->description ?? '-' }}</div>
+                            <div class="row g-0">
+
+                                <!-- Left: Voucher meta -->
+                                <div class="col-md-7 pe-4">
+                                    <div class="section-divider">Voucher Info</div>
+                                    <div class="row g-2">
+                                        <div class="col-md-4">
+                                            <div class="extra-label">Description</div>
+                                            <div class="extra-value">{{ $voucher->description ?? '-' }}</div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="extra-label">Prepared By</div>
+                                            <div class="extra-value">{{ $voucher->prepared_by ?? '-' }}</div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="extra-label">Checked By</div>
+                                            <div class="extra-value">{{ $voucher->checked_by ?? '-' }}</div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="extra-label">Check Status</div>
+                                            <div class="extra-value">{{ $voucher->checked_status ?? 'No' }}</div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="extra-label">Auth. By</div>
+                                            <div class="extra-value">{{ $voucher->authorized_by ?? '-' }}</div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <div class="extra-label">Checked By</div>
-                                    <div class="extra-value">{{ $voucher->checked_by ?? '-' }}</div>
+
+                                <!-- Divider -->
+                                <div class="col-auto d-none d-md-flex px-3">
+                                    <div style="width:1px; background:#e9ecef;"></div>
                                 </div>
-                                <div class="col-md-2">
-                                    <div class="extra-label">Checked Status</div>
-                                    <div class="extra-value">{{ $voucher->checked_status ?? 'No' }}</div>
+
+                                <!-- Right: Payee details -->
+                                <div class="col-md-4 ps-md-3 pt-3 pt-md-0">
+                                    <div class="section-divider">Payee Details</div>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="extra-label">Name</div>
+                                            <div class="extra-value fw-semibold">{{ $voucher->vendor_name ?? '-' }}</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="extra-label">Type</div>
+                                            <div class="extra-value">{{ $voucher->vendor_type ?? '-' }}</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="extra-label">Ref / ID</div>
+                                            <div class="extra-value">{{ $voucher->vendor_id ?? '-' }}</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="extra-label">Month / Year</div>
+                                            <div class="extra-value">
+                                                @php
+                                                    $monthName = \Carbon\Carbon::createFromDate(null, $voucher->month, null)->format('F');
+                                                @endphp
+                                                {{ $monthName }} {{ $voucher->year }}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <div class="extra-label">Authorized By</div>
-                                    <div class="extra-value">{{ $voucher->authorized_by ?? '-' }}</div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="extra-label">Auth. Status</div>
-                                    <div class="extra-value">{{ $voucher->authorized_status ?? 'No' }}</div>
-                                </div>
+
                             </div>
                         </div>
 
@@ -148,12 +204,12 @@
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Property</th>
-                                        <th>Unit</th>
                                         <th>Description</th>
-                                        <th>DR/CR</th>
+                                        <th>Payee</th>
+                                        <th>Source Account No.</th>
+                                        <th>Source Bank / Account</th>
+                                        <th>Cheque No.</th>
                                         <th class="text-end">Amount</th>
-                                        <th>GL Account</th>
                                         <th>Approved</th>
                                     </tr>
                                 </thead>
@@ -183,41 +239,59 @@
 
         var table = $('#lines-table').DataTable({
             data: [],
-            columns: [{
-                    data: 'entry_number'
-                },
+            columns: [
                 {
-                    data: 'property_code'
-                },
-                {
-                    data: 'property_description',
-                    render: function(d) {
-                        return '<small>' + (d || '-') + '</small>';
-                    }
+                    data: null,
+                    orderable: false,
+                    render: function(d, t, r, m) { return m.row + 1; }
                 },
                 {
                     data: 'entry_description',
+                    render: function(d) { return '<span style="font-size:0.8rem;">' + (d || '-') + '</span>'; }
+                },
+                {
+                    data: 'payee_name',
                     render: function(d) {
-                        return '<small>' + (d || '-') + '</small>';
+                        return d && d !== '-'
+                            ? '<span class="fw-semibold" style="font-size:0.8rem;">' + d + '</span>'
+                            : '<span class="text-muted">—</span>';
                     }
                 },
                 {
-                    data: 'dr_cr',
-                    className: 'text-center'
+                    data: 'account_number',
+                    render: function(d) {
+                        return d && d !== '-'
+                            ? '<code style="font-size:0.78rem;">' + d + '</code>'
+                            : '<span class="text-muted">—</span>';
+                    }
+                },
+                {
+                    data: 'account_bank',
+                    render: function(d) {
+                        return d && d !== '-'
+                            ? '<small>' + d + '</small>'
+                            : '<span class="text-muted">—</span>';
+                    }
+                },
+                {
+                    data: 'cheque_number',
+                    render: function(d) {
+                        return d && d !== '-'
+                            ? '<span class="badge badge-light-warning fw-semibold">' + d + '</span>'
+                            : '<span class="text-muted">—</span>';
+                    }
                 },
                 {
                     data: 'amount',
                     className: 'text-end fw-bold'
                 },
                 {
-                    data: 'gl_account'
-                },
-                {
                     data: 'is_approved',
+                    className: 'text-center',
                     render: function(d) {
-                        if (d === 'Yes') return '<span class="text-success">Yes</span>';
-                        if (d === 'No') return '<span class="text-danger">No</span>';
-                        return d || '-';
+                        if (d === 'Yes') return '<span class="badge badge-light-success">Yes</span>';
+                        if (d === 'No')  return '<span class="badge badge-light-danger">No</span>';
+                        return d || '—';
                     }
                 }
             ],
@@ -225,9 +299,7 @@
             info: true,
             searching: true,
             ordering: true,
-            order: [
-                [0, 'asc']
-            ],
+            order: [[0, 'asc']],
             pageLength: 25
         });
 
@@ -245,7 +317,7 @@
                     }
                 },
                 error: function() {
-                    alert('Failed to load voucher lines.');
+                    toastr.error('Failed to load voucher lines.');
                 }
             });
         }

@@ -171,6 +171,64 @@ class ChequeBookController extends Controller
         // }
     }
 
+    /**
+     * Find and lock the next available cheque leaf for a given bank account (called from voucher creation).
+     */
+    public function lockNextAvailable(Request $request)
+    {
+        try {
+            $request->validate(['bank_account_id' => 'required|integer']);
+
+            $leaf = ChequeLeaf::where('bank_account_id', $request->bank_account_id)
+                ->where('current_status_id', ChequeLeaf::STATUS_AVAILABLE)
+                ->orderBy('cheque_number')
+                ->first();
+
+            if (!$leaf) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No available cheques for this bank account.',
+                ], 404);
+            }
+
+            $locked = $this->service->lockCheque($leaf->id, Auth::id());
+
+            return response()->json([
+                'success'        => true,
+                'leaf_id'        => $locked->id,
+                'cheque_number'  => $locked->cheque_number,
+                'lock_token'     => $locked->lock_token,
+            ]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            return response()->json(['success' => false, 'message' => 'Failed to lock cheque.'], 500);
+        }
+    }
+
+    /**
+     * Release a cheque lock that was acquired during voucher creation.
+     */
+    public function releaseVoucherCheque(Request $request)
+    {
+        try {
+            $request->validate([
+                'leaf_id'    => 'required|integer',
+                'lock_token' => 'required|string',
+            ]);
+
+            $this->service->releaseCheque((int) $request->leaf_id, $request->lock_token);
+
+            return response()->json(['success' => true]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            return response()->json(['success' => false, 'message' => 'Failed to release cheque lock.'], 500);
+        }
+    }
+
     public function releaseLock($leafId)
     {
         try {
