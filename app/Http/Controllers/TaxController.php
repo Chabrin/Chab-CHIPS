@@ -17,7 +17,7 @@ class TaxController extends Controller
     public function index()
     {
         try {
-            return view('tax.index');
+            return view('finance.taxes.index');
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading tax bands index: ' . $e->getMessage());
@@ -226,14 +226,18 @@ class TaxController extends Controller
             if ($rangeTo) {
                 // New range has an end, check for any overlap
                 $q->where(function ($subQ) use ($rangeFrom, $rangeTo) {
-                    // Case 1: Existing range starts within new range
-                    $subQ->whereBetween('range_from', [$rangeFrom, $rangeTo])
-                        // Case 2: Existing range ends within new range  
-                        ->orWhereBetween('range_to', [$rangeFrom, $rangeTo])
+                    // Case 1: Existing range starts within new range (exclusive of boundaries)
+                    $subQ->where('range_from', '>', $rangeFrom)
+                        ->where('range_from', '<', $rangeTo)
+                        // Case 2: Existing range ends within new range (exclusive of boundaries)
+                        ->orWhere(function ($q2) use ($rangeFrom, $rangeTo) {
+                            $q2->where('range_to', '>', $rangeFrom)
+                                ->where('range_to', '<', $rangeTo);
+                        })
                         // Case 3: New range is completely within existing range
                         ->orWhere(function ($innerQ) use ($rangeFrom, $rangeTo) {
-                            $innerQ->where('range_from', '<=', $rangeFrom)
-                                ->where('range_to', '>=', $rangeTo);
+                            $innerQ->where('range_from', '<', $rangeFrom)
+                                ->where('range_to', '>', $rangeTo);
                         })
                         // Case 4: Existing range is completely within new range
                         ->orWhere(function ($innerQ) use ($rangeFrom, $rangeTo) {
@@ -245,10 +249,10 @@ class TaxController extends Controller
                 // New range has no end (goes to infinity), check if any existing range starts from this point or higher
                 $q->where('range_from', '>=', $rangeFrom)
                     ->orWhere(function ($subQ) use ($rangeFrom) {
-                        $subQ->where('range_from', '<=', $rangeFrom)
+                        $subQ->where('range_from', '<', $rangeFrom)
                             ->where(function ($innerQ) use ($rangeFrom) {
                                 $innerQ->whereNull('range_to')
-                                    ->orWhere('range_to', '>=', $rangeFrom);
+                                    ->orWhere('range_to', '>', $rangeFrom);
                             });
                     });
             }

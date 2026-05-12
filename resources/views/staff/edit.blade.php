@@ -260,7 +260,7 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="email_address" class="form-label">Email Address <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" readonly data-required="true">
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" @if( $staff->email_address) readonly @endif data-required="true">
                                             @error('email_address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror

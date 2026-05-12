@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SLAController;
 use App\Http\Controllers\TaxController;
+use App\Http\Controllers\FinanceTaxController;
+use App\Http\Controllers\FinanceTaxSettingsController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LogsController;
 use App\Http\Controllers\FundsController;
@@ -1042,6 +1044,38 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Cheque Books
     Route::get('/finance/cheque-books', [ChequeBookController::class, 'index'])->name('cheque-books.index');
     Route::get('/finance/cheque-books/{id}', [ChequeBookController::class, 'show'])->name('cheque-books.show');
+
+    // Finance Tax Setup
+    Route::get('/finance/taxes', [FinanceTaxController::class, 'index'])->name('finance.taxes.index');
+    Route::get('/finance/taxes/create', [FinanceTaxController::class, 'create'])->name('finance.taxes.create');
+    Route::get('/ajax/finance/taxes/data', [FinanceTaxController::class, 'getData'])->name('ajax.finance.taxes.data');
+    Route::get('/ajax/finance/taxes/accounts', [FinanceTaxController::class, 'getAccounts'])->name('ajax.finance.taxes.accounts');
+    Route::get('/ajax/finance/taxes/options', [FinanceTaxSettingsController::class, 'getOptions'])->name('ajax.finance.taxes.options');
+    Route::post('/ajax/finance/taxes', [FinanceTaxController::class, 'store'])->name('ajax.finance.taxes.store');
+
+    // Finance Tax Settings - Default Types
+    Route::get('/finance/tax-settings/default-types', [FinanceTaxSettingsController::class, 'defaultTypesIndex'])->name('finance.tax-settings.default-types');
+    Route::get('/ajax/finance/tax-settings/default-types/list', [FinanceTaxSettingsController::class, 'defaultTypesList']);
+    Route::get('/ajax/finance/tax-settings/default-types/{id}', [FinanceTaxSettingsController::class, 'defaultTypesShow']);
+    Route::post('/ajax/finance/tax-settings/default-types', [FinanceTaxSettingsController::class, 'defaultTypesStore']);
+    Route::post('/ajax/finance/tax-settings/default-types/{id}', [FinanceTaxSettingsController::class, 'defaultTypesUpdate']);
+    Route::delete('/ajax/finance/tax-settings/default-types/{id}', [FinanceTaxSettingsController::class, 'defaultTypesDelete']);
+
+    // Finance Tax Settings - Computations
+    Route::get('/finance/tax-settings/computations', [FinanceTaxSettingsController::class, 'computationsIndex'])->name('finance.tax-settings.computations');
+    Route::get('/ajax/finance/tax-settings/computations/list', [FinanceTaxSettingsController::class, 'computationsList']);
+    Route::get('/ajax/finance/tax-settings/computations/{id}', [FinanceTaxSettingsController::class, 'computationsShow']);
+    Route::post('/ajax/finance/tax-settings/computations', [FinanceTaxSettingsController::class, 'computationsStore']);
+    Route::post('/ajax/finance/tax-settings/computations/{id}', [FinanceTaxSettingsController::class, 'computationsUpdate']);
+    Route::delete('/ajax/finance/tax-settings/computations/{id}', [FinanceTaxSettingsController::class, 'computationsDelete']);
+
+    // Finance Tax Settings - Categories
+    Route::get('/finance/tax-settings/categories', [FinanceTaxSettingsController::class, 'categoriesIndex'])->name('finance.tax-settings.categories');
+    Route::get('/ajax/finance/tax-settings/categories/list', [FinanceTaxSettingsController::class, 'categoriesList']);
+    Route::get('/ajax/finance/tax-settings/categories/{id}', [FinanceTaxSettingsController::class, 'categoriesShow']);
+    Route::post('/ajax/finance/tax-settings/categories', [FinanceTaxSettingsController::class, 'categoriesStore']);
+    Route::post('/ajax/finance/tax-settings/categories/{id}', [FinanceTaxSettingsController::class, 'categoriesUpdate']);
+    Route::delete('/ajax/finance/tax-settings/categories/{id}', [FinanceTaxSettingsController::class, 'categoriesDelete']);
 
     // Tax Bands Management
     Route::get('/tax/bands', [TaxController::class, 'index'])->name('tax.index');
