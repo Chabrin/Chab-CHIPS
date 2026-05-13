@@ -133,7 +133,7 @@ class UsersController extends Controller
                 'lastvisitDate' => now(),
                 'activation' => '',
                 'params' => '',
-                'lastResetTime' => '0000-00-00 00:00:00',
+                // 'lastResetTime' => '',
                 'resetCount' => 0,
                 'otpKey' => '',
                 'otep' => '',
