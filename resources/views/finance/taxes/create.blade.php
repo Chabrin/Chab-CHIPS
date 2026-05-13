@@ -82,7 +82,6 @@
 $(function() {
 
     $('select').select2({
-        placeholder: 'Select Staff',
         allowClear: true
     });
     
@@ -116,31 +115,31 @@ $(function() {
     }
 
     function loadAccounts() {
-        $.get("{{ url('/ajax/finance/taxes/accounts') }}", function(res) {
+        var debitPromise = $.get("{{ url('/ajax/finance/taxes/accounts') }}?type=debit", function(res) {
             if (!res.success) {
-                toastr.error(res.error || 'Unable to load chart accounts');
+                toastr.error(res.error || 'Unable to load debit accounts');
                 return;
             }
-
             var debit = $('#debit_account_id');
-            var credit = $('#credit_account_id');
-
-            // Clear existing options except placeholder
             debit.find('option:gt(0)').remove();
-            credit.find('option:gt(0)').remove();
-
             (res.accounts || []).forEach(function(account) {
-                var option = '<option value="' + account.id + '">' + account.label + '</option>';
-
-                if (account.type === 'Debit') {
-                    debit.append(option);
-                } else if (account.type === 'Credit') {
-                    credit.append(option);
-                }
+                debit.append('<option value="' + account.id + '">' + account.label + '</option>');
             });
-        }).fail(function() {
-            toastr.error('Failed to load chart accounts');
         });
+
+        var creditPromise = $.get("{{ url('/ajax/finance/taxes/accounts') }}?type=credit", function(res) {
+            if (!res.success) {
+                toastr.error(res.error || 'Unable to load credit accounts');
+                return;
+            }
+            var credit = $('#credit_account_id');
+            credit.find('option:gt(0)').remove();
+            (res.accounts || []).forEach(function(account) {
+                credit.append('<option value="' + account.id + '">' + account.label + '</option>');
+            });
+        });
+
+        return $.when(debitPromise, creditPromise);
     }
 
     loadTaxOptions();

@@ -1044,10 +1044,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Finance Tax Setup
     Route::get('/finance/taxes', [FinanceTaxController::class, 'index'])->name('finance.taxes.index');
     Route::get('/finance/taxes/create', [FinanceTaxController::class, 'create'])->name('finance.taxes.create');
+    Route::get('/finance/taxes/{encrypted_id}/edit', [FinanceTaxController::class, 'edit'])->name('finance.taxes.edit');
     Route::get('/ajax/finance/taxes/data', [FinanceTaxController::class, 'getData'])->name('ajax.finance.taxes.data');
     Route::get('/ajax/finance/taxes/accounts', [FinanceTaxController::class, 'getAccounts'])->name('ajax.finance.taxes.accounts');
     Route::get('/ajax/finance/taxes/options', [FinanceTaxSettingsController::class, 'getOptions'])->name('ajax.finance.taxes.options');
     Route::post('/ajax/finance/taxes', [FinanceTaxController::class, 'store'])->name('ajax.finance.taxes.store');
+    Route::post('/ajax/finance/taxes/{encrypted_id}', [FinanceTaxController::class, 'update'])->name('ajax.finance.taxes.update');
 
     // Finance Tax Settings - Default Types
     Route::get('/finance/tax-settings/default-types', [FinanceTaxSettingsController::class, 'defaultTypesIndex'])->name('finance.tax-settings.default-types');

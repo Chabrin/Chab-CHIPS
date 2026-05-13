@@ -1,6 +1,10 @@
 ﻿@extends('layouts.main')
 
 @section('content')
+@php
+$canCreateTax = auth()->user()->hasPermission('create_taxes');
+@endphp
+
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
@@ -8,12 +12,14 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Finance Tax Setup</h4>
+                        @if($canCreateTax)
                         <div class="ms-auto d-flex gap-2">
                             <a href="{{ route('finance.taxes.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">add_circle</span>
                                 <span class="ms-1">Create Tax</span>
                             </a>
                         </div>
+                        @endif
                     </div>
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
@@ -31,6 +37,7 @@
                                         <th>Status</th>
                                         <th>Created By</th>
                                         <th>Created At</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -64,7 +71,25 @@ $(function () {
             { data: 'amount', className: 'text-end', render: function(data) { return data !== null ? parseFloat(data).toFixed(2) : '-'; } },
             { data: 'current_status_id', render: function(data) { return data === 5 ? 'Active' : (data === 1 ? 'Inactive' : data); } },
             { data: 'created_by', defaultContent: '-' },
-            { data: 'created_at', defaultContent: '-' }
+            { data: 'created_at', defaultContent: '-' },
+            {
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id, type, row) {
+                        let buttons = '<div class="d-flex flex-row gap-1">';
+                        // Edit button
+                        if (row.can_edit && row.encrypted_id) {
+                            buttons += `
+                                <a href="/finance/taxes/${row.encrypted_id}/edit" title="Edit">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                                </a>
+                            `;
+                        }
+                        buttons += '</div>';
+                        return buttons;
+                    }
+                }
         ],
         paging: true,
         info: true,
