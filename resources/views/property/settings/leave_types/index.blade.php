@@ -128,26 +128,19 @@
                 <div class="modal-body">
                     <input type="hidden" id="invoiceableItemId" name="id">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label for="itemName" class="form-label">Item Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="itemName" name="item_name" required>
                             <div class="invalid-feedback"></div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="billingCode" class="form-label">Billing Code</label>
-                            <input type="text" class="form-control" id="billingCode" name="billing_code">
-                            <div class="invalid-feedback"></div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label for="defaultCycle" class="form-label">Default Cycle</label>
                             <select class="form-select" id="defaultCycle" name="default_cycle_id">
                                 <option value="">Select Cycle</option>
                             </select>
                             <div class="invalid-feedback"></div>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label for="commissionable" class="form-label">Commissionable</label>
                             <select class="form-select" id="commissionable" name="commissionable">
                                 <option value="No">No</option>

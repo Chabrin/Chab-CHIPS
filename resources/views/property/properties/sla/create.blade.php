@@ -169,34 +169,36 @@
                                     <h6 class="text-muted border-bottom pb-2">Invoice Client</h6>
                                 </div>
 
-                                <div class="col-md-6 mb-3">
-                                    <label for="charge_client" class="form-label">Charge Client</label>
-                                    <select class="form-select @error('charge_client') is-invalid @enderror" id="charge_client" name="charge_client">
-                                        <option value="">Loading items...</option>
-                                    </select>
-                                    @error('charge_client')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                <div class="col-12 p-3 border rounded">
+                                    <div class="col-md-12 mb-3">
+                                        <label for="charge_client" class="form-label">Charge Client</label>
+                                        <select class="form-select @error('charge_client') is-invalid @enderror" id="charge_client" name="charge_client">
+                                            <option value="">Loading items...</option>
+                                        </select>
+                                        @error('charge_client')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                <div class="col-md-6 mb-3">
-                                    <label for="charge_amount" class="form-label">Amount</label>
-                                    <input type="number" step="0.01" class="form-control @error('charge_amount') is-invalid @enderror" 
-                                           id="charge_amount" name="charge_amount" 
-                                           value="{{ old('charge_amount', '0.00') }}" placeholder="0.00">
-                                    @error('charge_amount')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                    <div class="col-md-12 mb-3">
+                                        <label for="charge_amount" class="form-label">Amount</label>
+                                        <input type="number" step="0.01" class="form-control @error('charge_amount') is-invalid @enderror" 
+                                            id="charge_amount" name="charge_amount" 
+                                            value="{{ old('charge_amount', '0.00') }}" placeholder="0.00">
+                                        @error('charge_amount')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                <div class="col-12 mb-3">
-                                    <div class="d-flex justify-content-end gap-2">
-                                        <button type="button" class="btn btn-success btn-sm" id="addInvoiceCharge">
-                                            <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                        </button>
-                                        <button type="button" class="btn btn-danger btn-sm" id="removeInvoiceCharge">
-                                            <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
-                                        </button>
+                                    <div class="col-12 mb-3">
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button type="button" class="btn btn-success btn-sm" id="addInvoiceCharge">
+                                                <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm" id="removeInvoiceCharge">
+                                                <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -207,46 +209,49 @@
                                     <h6 class="text-muted border-bottom pb-2">Billing Charges</h6>
                                 </div>
 
-                                <div class="col-md-4 mb-3">
-                                    <label for="billing_item" class="form-label">Item</label>
-                                    <select class="form-select @error('billing_item') is-invalid @enderror" id="billing_item" name="billing_item">
-                                        <option value="">Loading items...</option>
-                                    </select>
-                                    @error('billing_item')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                <div class="col-12 p-3 border rounded">
 
-                                <div class="col-md-4 mb-3">
-                                    <label for="cost_per_unit" class="form-label">Cost per Unit</label>
-                                    <input type="number" step="0.01" class="form-control @error('cost_per_unit') is-invalid @enderror" 
-                                           id="cost_per_unit" name="cost_per_unit">
-                                    @error('cost_per_unit')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-                                <div class="col-md-4 mb-3">
-                                    <label for="commissionable" class="form-label">Commissionable</label>
-                                    <select class="form-select @error('commissionable') is-invalid @enderror" id="commissionable" name="commissionable">
-                                        <option value="No" {{ old('commissionable') == 'No' ? 'selected' : '' }}>No</option>
-                                        <option value="Yes" {{ old('commissionable') == 'Yes' ? 'selected' : '' }}>Yes</option>
-                                    </select>
-                                    @error('commissionable')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-                                <div class="col-12 mb-3">
-                                    <div class="d-flex justify-content-end gap-2">
-                                        <button type="button" class="btn btn-success btn-sm" id="addBillingCharge">
-                                            <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                        </button>
-                                        <button type="button" class="btn btn-danger btn-sm" id="removeBillingCharge">
-                                            <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
-                                        </button>
+                                    <div class="col-md-12 mb-3">
+                                        <label for="billing_item" class="form-label">Item</label>
+                                        <select class="form-select @error('billing_item') is-invalid @enderror" id="billing_item" name="billing_item">
+                                            <option value="">Loading items...</option>
+                                        </select>
+                                        @error('billing_item')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
                                     </div>
-                                </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="cost_per_unit" class="form-label">Cost per Unit</label>
+                                        <input type="number" step="0.01" class="form-control @error('cost_per_unit') is-invalid @enderror" 
+                                            id="cost_per_unit" name="cost_per_unit">
+                                        @error('cost_per_unit')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="commissionable" class="form-label">Commissionable</label>
+                                        <select class="form-select @error('commissionable') is-invalid @enderror" id="commissionable" name="commissionable">
+                                            <option value="No" {{ old('commissionable') == 'No' ? 'selected' : '' }}>No</option>
+                                            <option value="Yes" {{ old('commissionable') == 'Yes' ? 'selected' : '' }}>Yes</option>
+                                        </select>
+                                        @error('commissionable')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+
+                                    <div class="col-12 mb-3">
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button type="button" class="btn btn-success btn-sm" id="addBillingCharge">
+                                                <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm" id="removeBillingCharge">
+                                                <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>  
                             </div>
 
                             {{-- <!-- Returns Grouping Settings Section -->
@@ -428,17 +433,7 @@
             $('#charge_client').append('<option value="">Select Charge Type</option>');
             
             // Filter items where feature array contains only "1"
-            const invoiceClientItems = invoiceableItems.filter(function(item) {
-                if (!item.feature) return false;
-                
-                // Parse feature if it's a string (JSON), otherwise use as-is
-                let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
-                
-                // Check if feature array contains only "1"
-                return featureArray.length === 1 && String(featureArray[0]) === '1';
-            });
-            
-            console.log('Invoice client items:', invoiceClientItems);
+            const invoiceClientItems = invoiceableItems.filter(item => item.is_bill === 'No')
             
             if (invoiceClientItems.length > 0) {
                 invoiceClientItems.forEach(function(item) {
@@ -447,6 +442,11 @@
             } else {
                 $('#charge_client').append('<option value="">No invoice items available</option>');
             }
+
+            $('#charge_client').last().select2({
+                placeholder: "Select Charge Type",
+                width: '100%'
+            });
         }
 
         // Function to populate billing items dropdown
@@ -465,6 +465,11 @@
             } else {
                 $('#billing_item').append('<option value="">No billing items available</option>');
             }
+
+            $('#billing_item').last().select2({
+                placeholder: "Select Charge Type",
+                width: '100%'
+            });
         }
 
         // Calculate duration end date
@@ -484,11 +489,7 @@
         $('#addInvoiceCharge').on('click', function() {
             // Generate invoice client items options
             let invoiceItemOptions = '<option value="">Select Charge Type</option>';
-            const invoiceClientItems = invoiceableItems.filter(function(item) {
-                if (!item.feature) return false;
-                let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
-                return featureArray.length === 1 && String(featureArray[0]) === '1';
-            });
+            const invoiceClientItems = invoiceableItems.filter(item => item.is_bill === 'No');
             invoiceClientItems.forEach(function(item) {
                 invoiceItemOptions += `<option value="${item.id}">${item.item_name}</option>`;
             });
@@ -497,15 +498,17 @@
                 <div class="col-12 invoice-charge-entry mb-3">
                     <div class="p-3 border rounded">
                         <div class="row">
-                            <div class="col-md-5 mb-2">
+                            <div class="col-md-12 mb-2">
                                 <label class="form-label">Charge Type</label>
-                                <select class="form-select" name="invoice_charges[${invoiceChargeCounter}][type]">
+                                <select class="form-select invoice-charge-select" 
+                                        name="invoice_charges[${invoiceChargeCounter}][type]">
                                     ${invoiceItemOptions}
                                 </select>
                             </div>
-                            <div class="col-md-5 mb-2">
+                            <div class="col-md-12 mb-2">
                                 <label class="form-label">Amount</label>
-                                <input type="number" step="0.01" class="form-control" name="invoice_charges[${invoiceChargeCounter}][amount]" placeholder="0.00">
+                                <input type="number" step="0.01" class="form-control" 
+                                    name="invoice_charges[${invoiceChargeCounter}][amount]" placeholder="0.00">
                             </div>
                             <div class="col-md-2 mb-2">
                                 <label class="form-label d-block">&nbsp;</label>
@@ -518,6 +521,13 @@
                 </div>
             `;
             $('#addInvoiceCharge').closest('.col-12').before(chargeEntry);
+
+            // Initialize Select2 on the newly added select
+            $('.invoice-charge-select').last().select2({
+                placeholder: "Select Charge Type",
+                width: '100%'
+            });
+
             invoiceChargeCounter++;
         });
 
@@ -545,19 +555,22 @@
                 <div class="col-12 billing-charge-entry mb-3">
                     <div class="p-3 border rounded">
                         <div class="row">
-                            <div class="col-md-4 mb-2">
+                            <div class="col-md-12 mb-2">
                                 <label class="form-label">Item</label>
-                                <select class="form-select" name="billing_charges[${billingChargeCounter}][item]">
+                                <select class="form-select billing-charge-select" 
+                                        name="billing_charges[${billingChargeCounter}][item]">
                                     ${billingItemOptions}
                                 </select>
                             </div>
-                            <div class="col-md-3 mb-2">
+                            <div class="col-md-6 mb-2">
                                 <label class="form-label">Cost per Unit</label>
-                                <input type="number" step="0.01" class="form-control" name="billing_charges[${billingChargeCounter}][cost]">
+                                <input type="number" step="0.01" class="form-control" 
+                                    name="billing_charges[${billingChargeCounter}][cost]">
                             </div>
-                            <div class="col-md-3 mb-2">
+                            <div class="col-md-6 mb-2">
                                 <label class="form-label">Commissionable</label>
-                                <select class="form-select" name="billing_charges[${billingChargeCounter}][commissionable]">
+                                <select class="form-select billing-commission-select" 
+                                        name="billing_charges[${billingChargeCounter}][commissionable]">
                                     <option value="No">No</option>
                                     <option value="Yes">Yes</option>
                                 </select>
@@ -573,6 +586,12 @@
                 </div>
             `;
             $('#addBillingCharge').closest('.col-12').before(chargeEntry);
+            // Initialize Select2 on the newly added selects
+            $('.billing-charge-select').last().select2({
+                placeholder: "Select Item",
+                width: '100%'
+            });
+            
             billingChargeCounter++;
         });
 
@@ -587,99 +606,99 @@
         });
 
         // Function to add a return group entry
-        function addReturnGroupEntry() {
-            if (invoiceableItems.length === 0) {
-                alert('Loading invoiceable items, please wait...');
-                return;
-            }
+        // function addReturnGroupEntry() {
+        //     if (invoiceableItems.length === 0) {
+        //         alert('Loading invoiceable items, please wait...');
+        //         return;
+        //     }
         
-            // Filter items where feature array contains 1, 2, or 3
-            const filteredItems = invoiceableItems.filter(function(item) {
-                if (!item.feature) return false;
+        //     // Filter items where feature array contains 1, 2, or 3
+        //     const filteredItems = invoiceableItems.filter(function(item) {
+        //         if (!item.feature) return false;
                 
-                // Parse feature if it's a string (JSON), otherwise use as-is
-                let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
+        //         // Parse feature if it's a string (JSON), otherwise use as-is
+        //         let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
                 
-                // Check if feature array contains "1", "2", or "3" (as strings or numbers)
-                return featureArray.some(function(feature) {
-                    const featureStr = String(feature);
-                    return featureStr === '1' || featureStr === '2' || featureStr === '3';
-                });
-            });
+        //         // Check if feature array contains "1", "2", or "3" (as strings or numbers)
+        //         return featureArray.some(function(feature) {
+        //             const featureStr = String(feature);
+        //             return featureStr === '1' || featureStr === '2' || featureStr === '3';
+        //         });
+        //     });
         
-            console.log('Filtered return items:', filteredItems);
+        //     console.log('Filtered return items:', filteredItems);
         
-            // Generate return type dropdown
-            let returnTypeOptions = '<option value="">Select Return Type</option>';
-            @foreach($returnTypes as $type)
-            returnTypeOptions += '<option value="{{ $type->id }}">{{ $type->type_name }}</option>';
-            @endforeach
+        //     // Generate return type dropdown
+        //     let returnTypeOptions = '<option value="">Select Return Type</option>';
+        //     @foreach($returnTypes as $type)
+        //     returnTypeOptions += '<option value="{{ $type->id }}">{{ $type->type_name }}</option>';
+        //     @endforeach
         
-            // Generate invoiceable items checkboxes (split into 3 columns)
-            let itemsPerColumn = Math.ceil(filteredItems.length / 3);
-            let checkboxColumns = ['', '', ''];
+        //     // Generate invoiceable items checkboxes (split into 3 columns)
+        //     let itemsPerColumn = Math.ceil(filteredItems.length / 3);
+        //     let checkboxColumns = ['', '', ''];
             
-            filteredItems.forEach(function(item, index) {
-                let columnIndex = Math.floor(index / itemsPerColumn);
-                if (columnIndex > 2) columnIndex = 2; // Ensure we don't exceed 3 columns
+        //     filteredItems.forEach(function(item, index) {
+        //         let columnIndex = Math.floor(index / itemsPerColumn);
+        //         if (columnIndex > 2) columnIndex = 2; // Ensure we don't exceed 3 columns
                 
-                checkboxColumns[columnIndex] += `
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" 
-                               name="return_groups[${returnGroupCounter}][items][]" 
-                               value="${item.id}" 
-                               id="return_item_${returnGroupCounter}_${item.id}"
-                               data-commissionable="${item.commissionable}">
-                        <label class="form-check-label" for="return_item_${returnGroupCounter}_${item.id}">
-                            ${item.item_name}
-                        </label>
-                    </div>
-                `;
-            });
+        //         checkboxColumns[columnIndex] += `
+        //             <div class="form-check mb-2">
+        //                 <input class="form-check-input" type="checkbox" 
+        //                        name="return_groups[${returnGroupCounter}][items][]" 
+        //                        value="${item.id}" 
+        //                        id="return_item_${returnGroupCounter}_${item.id}"
+        //                        data-commissionable="${item.commissionable}">
+        //                 <label class="form-check-label" for="return_item_${returnGroupCounter}_${item.id}">
+        //                     ${item.item_name}
+        //                 </label>
+        //             </div>
+        //         `;
+        //     });
         
-            const returnGroupEntry = `
-                <div class="col-12 return-group-entry mb-3">
-                    <div class="p-3 border rounded">
-                        <div class="row mb-3">
-                            <div class="col-md-10">
-                                <label class="form-label">Return Type <span class="text-danger">*</span></label>
-                                <select class="form-select" name="return_groups[${returnGroupCounter}][return_type]" required>
-                                    ${returnTypeOptions}
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label d-block">&nbsp;</label>
-                                <button type="button" class="btn btn-danger btn-sm remove-return-group w-100">
-                                    <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-12 mb-2">
-                                <label class="form-label fw-bold">Select Return Items <span class="text-danger">*</span></label>
-                            </div>
-                            <div class="col-md-4">
-                                ${checkboxColumns[0]}
-                            </div>
-                            <div class="col-md-4">
-                                ${checkboxColumns[1]}
-                            </div>
-                            <div class="col-md-4">
-                                ${checkboxColumns[2]}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+        //     const returnGroupEntry = `
+        //         <div class="col-12 return-group-entry mb-3">
+        //             <div class="p-3 border rounded">
+        //                 <div class="row mb-3">
+        //                     <div class="col-md-10">
+        //                         <label class="form-label">Return Type <span class="text-danger">*</span></label>
+        //                         <select class="form-select" name="return_groups[${returnGroupCounter}][return_type]" required>
+        //                             ${returnTypeOptions}
+        //                         </select>
+        //                     </div>
+        //                     <div class="col-md-2">
+        //                         <label class="form-label d-block">&nbsp;</label>
+        //                         <button type="button" class="btn btn-danger btn-sm remove-return-group w-100">
+        //                             <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
+        //                         </button>
+        //                     </div>
+        //                 </div>
+        //                 <div class="row">
+        //                     <div class="col-12 mb-2">
+        //                         <label class="form-label fw-bold">Select Return Items <span class="text-danger">*</span></label>
+        //                     </div>
+        //                     <div class="col-md-4">
+        //                         ${checkboxColumns[0]}
+        //                     </div>
+        //                     <div class="col-md-4">
+        //                         ${checkboxColumns[1]}
+        //                     </div>
+        //                     <div class="col-md-4">
+        //                         ${checkboxColumns[2]}
+        //                     </div>
+        //                 </div>
+        //             </div>
+        //         </div>
+        //     `;
             
-            $('#addReturnGroup').closest('.col-12').before(returnGroupEntry);
-            returnGroupCounter++;
-        }
+        //     $('#addReturnGroup').closest('.col-12').before(returnGroupEntry);
+        //     returnGroupCounter++;
+        // }
 
-        // Dynamic Return Groups Repeater
-        $('#addReturnGroup').on('click', function() {
-            addReturnGroupEntry();
-        });
+        // // Dynamic Return Groups Repeater
+        // $('#addReturnGroup').on('click', function() {
+        //     addReturnGroupEntry();
+        // });
 
         $(document).on('click', '.remove-return-group', function() {
             $(this).closest('.return-group-entry').remove();

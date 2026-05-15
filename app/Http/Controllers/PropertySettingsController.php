@@ -206,7 +206,6 @@ class PropertySettingsController extends Controller
         try {
             $validated = $request->validate([
                 'item_name' => 'required|string|max:255',
-                'billing_code' => 'nullable|string|max:255',
                 'commissionable' => 'nullable|string|max:10',
                 'advance_payable' => 'nullable|string|max:10',
                 'is_bill' => 'nullable|string|max:10',
@@ -217,6 +216,16 @@ class PropertySettingsController extends Controller
 
             $validated['date_time'] = now();
             $validated['current_status_id'] = 1;
+            
+            // Get the latest billing_code from InvoiceableItem
+            $lastCode = InvoiceableItem::orderBy('billing_code', 'desc')
+                ->value('billing_code'); 
+
+            // If none exists, start from 1
+            $newCode = $lastCode ? $lastCode + 1 : 1;
+
+            // Assign to validated array
+            $validated['billing_code'] = $newCode;
 
             InvoiceableItem::create($validated);
 
