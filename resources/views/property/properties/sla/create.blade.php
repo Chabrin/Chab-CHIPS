@@ -501,7 +501,8 @@
                             <div class="col-md-12 mb-2">
                                 <label class="form-label">Charge Type</label>
                                 <select class="form-select invoice-charge-select" 
-                                        name="invoice_charges[${invoiceChargeCounter}][type]">
+                                        name="invoice_charges[${invoiceChargeCounter}][type]"
+                                        style="width: 100%;">
                                     ${invoiceItemOptions}
                                 </select>
                             </div>
@@ -525,6 +526,7 @@
             // Initialize Select2 on the newly added select
             $('.invoice-charge-select').last().select2({
                 placeholder: "Select Charge Type",
+                allowClear: true,
                 width: '100%'
             });
 
@@ -558,7 +560,8 @@
                             <div class="col-md-12 mb-2">
                                 <label class="form-label">Item</label>
                                 <select class="form-select billing-charge-select" 
-                                        name="billing_charges[${billingChargeCounter}][item]">
+                                        name="billing_charges[${billingChargeCounter}][item]"
+                                        style="width: 100%;">
                                     ${billingItemOptions}
                                 </select>
                             </div>
@@ -570,7 +573,8 @@
                             <div class="col-md-6 mb-2">
                                 <label class="form-label">Commissionable</label>
                                 <select class="form-select billing-commission-select" 
-                                        name="billing_charges[${billingChargeCounter}][commissionable]">
+                                        name="billing_charges[${billingChargeCounter}][commissionable]"
+                                        style="width: 100%;">
                                     <option value="No">No</option>
                                     <option value="Yes">Yes</option>
                                 </select>
@@ -589,6 +593,13 @@
             // Initialize Select2 on the newly added selects
             $('.billing-charge-select').last().select2({
                 placeholder: "Select Item",
+                allowClear: true,
+                width: '100%'
+            });
+            
+            $('.billing-commission-select').last().select2({
+                placeholder: "Select Option",
+                allowClear: true,
                 width: '100%'
             });
             

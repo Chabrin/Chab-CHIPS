@@ -23,4 +23,24 @@ class TransactionType extends Model
         'default_amount',
         'item_code',
     ];
+
+    public function category()
+    {
+        return $this->belongsTo(TaxCategory::class, 'category_id');
+    }
+
+    public function debitAccount()
+    {
+        return $this->belongsTo(ChartAccount::class, 'debit_account_id');
+    }
+
+    public function creditAccount()
+    {
+        return $this->belongsTo(ChartAccount::class, 'credit_account_id');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
 }

@@ -5,6 +5,7 @@ use App\Http\Controllers\SLAController;
 use App\Http\Controllers\TaxController;
 use App\Http\Controllers\FinanceTaxController;
 use App\Http\Controllers\FinanceTaxSettingsController;
+use App\Http\Controllers\Finance\TransactionTypesController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LogsController;
 use App\Http\Controllers\FundsController;
@@ -1082,6 +1083,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/tax/bands/{id}', [TaxController::class, 'show'])->name('tax.show');
     Route::put('/tax/bands/{id}', [TaxController::class, 'update'])->name('tax.update');
     Route::delete('/tax/bands/{id}', [TaxController::class, 'destroy'])->name('tax.destroy');
+
+    // Transaction Types Management
+    Route::get('/finance/transaction-types', [TransactionTypesController::class, 'index'])->name('finance.transaction-types.index');
+    Route::get('/finance/transaction-types/create', [TransactionTypesController::class, 'create'])->name('finance.transaction-types.create');
+    Route::post('/finance/transaction-types', [TransactionTypesController::class, 'store'])->name('finance.transaction-types.store');
+    Route::get('/finance/transaction-types/{id}/edit', [TransactionTypesController::class, 'edit'])->name('finance.transaction-types.edit');
+    Route::put('/finance/transaction-types/{id}', [TransactionTypesController::class, 'update'])->name('finance.transaction-types.update');
+    Route::delete('/finance/transaction-types/{id}', [TransactionTypesController::class, 'destroy'])->name('finance.transaction-types.destroy');
+    Route::get('/ajax/finance/transaction-types/data', [TransactionTypesController::class, 'getData'])->name('ajax.finance.transaction-types.data');
 });
 
 //norolerestrict sections
