@@ -50,6 +50,7 @@ class ClientsController extends Controller
             $baseQuery = Client::clients();
             $query = Client::clients()->select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
             $user = Auth::user();
+
             if (!$user) {
                 Log::warning('Unauthenticated request to clients data', [
                     'path' => $request->path(),
@@ -82,9 +83,11 @@ class ClientsController extends Controller
                 foreach ($tokens as $token) {
                     $query->where(function ($q) use ($token) {
                         $q->where('names', 'ILIKE', "%{$token}%")
+                            ->orWhere('id', $token)
                             ->orWhere('reference_number', 'ILIKE', "%{$token}%")
                             ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
                             ->orWhere('email_address', 'ILIKE', "%{$token}%");
+                            
                     });
                 }
             }
@@ -165,15 +168,6 @@ class ClientsController extends Controller
                         'can_update' => $can_update,
                     ];
                 });
-
-            // Log::info('Loaded clients page', [
-            //     'rows' => $clients->count(),
-            //     'start' => $start,
-            //     'length' => $length,
-            //     'filtered' => $recordsFiltered,
-            //     'total' => $recordsTotal,
-            // ]);
-
             return response()->json([
                 'draw' => (int) $request->input('draw', 1),
                 'recordsTotal' => $recordsTotal,

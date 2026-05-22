@@ -6,6 +6,7 @@ use App\Http\Controllers\TaxController;
 use App\Http\Controllers\FinanceTaxController;
 use App\Http\Controllers\FinanceTaxSettingsController;
 use App\Http\Controllers\Finance\TransactionTypesController;
+use App\Http\Controllers\Finance\RecurrentClientRemittancesController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LogsController;
 use App\Http\Controllers\FundsController;
@@ -1092,6 +1093,28 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/finance/transaction-types/{id}', [TransactionTypesController::class, 'update'])->name('finance.transaction-types.update');
     Route::delete('/finance/transaction-types/{id}', [TransactionTypesController::class, 'destroy'])->name('finance.transaction-types.destroy');
     Route::get('/ajax/finance/transaction-types/data', [TransactionTypesController::class, 'getData'])->name('ajax.finance.transaction-types.data');
+
+    // Recurrent Client Remittances - AJAX endpoints
+    Route::prefix('ajax/finance/recurrent-client-remittances')->name('ajax.finance.recurrent-client-remittances.')->group(function () {
+        Route::get('data',              [RecurrentClientRemittancesController::class, 'getData'])         ->name('data');
+        Route::get('properties',        [RecurrentClientRemittancesController::class, 'getProperties'])   ->name('properties');
+        Route::get('slas',              [RecurrentClientRemittancesController::class, 'getSlas'])          ->name('slas');
+        Route::get('invoiceable-items', [RecurrentClientRemittancesController::class, 'getInvoiceableItems'])->name('invoiceable-items');
+        Route::get('providers',         [RecurrentClientRemittancesController::class, 'getProviders'])    ->name('providers');
+        Route::get('banks',             [RecurrentClientRemittancesController::class, 'getBanks'])         ->name('banks');
+        Route::get('bank-branches',     [RecurrentClientRemittancesController::class, 'getBankBranches']) ->name('bank-branches');
+        Route::get('team-members',      [RecurrentClientRemittancesController::class, 'getTeamMembers'])  ->name('team-members');
+    });
+
+    // Recurrent Client Remittances - Resource routes
+    Route::prefix('finance/recurrent-client-remittances')->name('finance.recurrent-client-remittances.')->group(function () {
+        Route::get('/',                  [RecurrentClientRemittancesController::class, 'index'])          ->name('index');
+        Route::get('create',             [RecurrentClientRemittancesController::class, 'create'])         ->name('create');
+        Route::post('/',                 [RecurrentClientRemittancesController::class, 'store'])           ->name('store');
+        Route::get('{id}/edit',          [RecurrentClientRemittancesController::class, 'edit'])           ->name('edit');
+        Route::put('{id}',               [RecurrentClientRemittancesController::class, 'update'])         ->name('update');
+        Route::delete('{id}',            [RecurrentClientRemittancesController::class, 'destroy'])        ->name('destroy');
+    });
 });
 
 //norolerestrict sections

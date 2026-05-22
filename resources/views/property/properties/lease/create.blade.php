@@ -307,7 +307,7 @@
                     },
                     processResults: function(response) {
                         return {
-                            results: response.clients.map(function(client) {
+                            results: response.data.map(function(client) {
                                 return {
                                     id: client.id,
                                     text: `${client.names} (${client.reference_number})`
