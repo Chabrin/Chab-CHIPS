@@ -26,12 +26,12 @@ trait ClientSearchTrait
                 ->select('id', 'names', 'reference_number')
                 ->where(function ($q) use ($lower) {
                     $q->whereRaw('LOWER(names) LIKE ?', ["%{$lower}%"])
-                      ->orWhereRaw('LOWER(reference_number) LIKE ?', ["%{$lower}%"]);
+                        ->orWhereRaw('LOWER(reference_number) LIKE ?', ["%{$lower}%"]);
                 })
                 ->orderBy('names')
                 ->limit(20)
                 ->get()
-                ->map(fn ($c) => [
+                ->map(fn($c) => [
                     'id'   => $c->id,
                     'text' => $c->names . ($c->reference_number ? ' (' . $c->reference_number . ')' : ''),
                 ]);

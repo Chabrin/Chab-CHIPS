@@ -1278,6 +1278,13 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::post('/ledger/accounts/{encryptedId}',                [App\Http\Controllers\LedgerController::class, 'updateAccount'])->name('ledger.accounts.update');
     Route::delete('/ledger/accounts/{encryptedId}',              [App\Http\Controllers\LedgerController::class, 'deleteAccount'])->name('ledger.accounts.delete');
 
+    // GL Periods
+    Route::get('/accounting/fiscalyears',                        [App\Http\Controllers\LedgerController::class, 'periodsIndex'])->name('gl.periods.index');
+    Route::get('/ajax/accounting/gl-periods',                    [App\Http\Controllers\LedgerController::class, 'getPeriods'])->name('gl.periods.data');
+    Route::post('/accounting/gl-periods',                        [App\Http\Controllers\LedgerController::class, 'storePeriod'])->name('gl.periods.store');
+    Route::post('/accounting/gl-periods/{encryptedId}',          [App\Http\Controllers\LedgerController::class, 'updatePeriod'])->name('gl.periods.update');
+    Route::delete('/accounting/gl-periods/{encryptedId}',        [App\Http\Controllers\LedgerController::class, 'deletePeriod'])->name('gl.periods.delete');
+
 
 
 

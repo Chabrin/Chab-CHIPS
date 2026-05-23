@@ -7,6 +7,7 @@ use App\Models\GlAccClass;
 use App\Models\GlAccGroup;
 use App\Models\GlAccountCategory;
 use App\Models\ChartAccount;
+use App\Models\GlPeriod;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
@@ -471,6 +472,140 @@ class LedgerController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error deleting GL account: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to delete account'], 500);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // GL PERIODS
+    // ═══════════════════════════════════════════════════════
+
+    public function periodsIndex()
+    {
+        return view('ledger.periods');
+    }
+
+    public function getPeriods()
+    {
+        try {
+            $canUpdate = Auth::user()->isAbleTo('update_gl_periods');
+            $canDelete = Auth::user()->isAbleTo('delete_gl_periods');
+
+            // Resolve user names in one query
+            $userNames = \Illuminate\Support\Facades\DB::table('josya_users')
+                ->pluck('name', 'id');
+
+            $periods = GlPeriod::orderByDesc('period_start')->get()->map(function ($p) use ($canUpdate, $canDelete, $userNames) {
+                return [
+                    'encrypted_id'         => Crypt::encrypt($p->id),
+                    'period_start'         => $p->period_start?->format('Y-m-d'),
+                    'period_end'           => $p->period_end?->format('Y-m-d'),
+                    'period_start_display' => $p->period_start?->format('d/m/Y') ?? '-',
+                    'period_end_display'   => $p->period_end?->format('d/m/Y') ?? '-',
+                    'added_by_name'        => $p->added_by ? ($userNames[$p->added_by] ?? 'User #' . $p->added_by) : '-',
+                    'added_on_display'     => $p->added_on?->format('d/m/Y H:i') ?? '-',
+                    'can_update'           => $canUpdate,
+                    'can_delete'           => $canDelete,
+                ];
+            });
+
+            return response()->json(['data' => $periods]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading GL periods: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load periods'], 500);
+        }
+    }
+
+    public function storePeriod(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'period_start' => ['required', 'date'],
+                'period_end'   => ['required', 'date', 'after:period_start'],
+            ]);
+
+            $overlap = $this->findOverlappingPeriod($validated['period_start'], $validated['period_end']);
+            if ($overlap) {
+                return response()->json([
+                    'success' => false,
+                    'errors'  => ['period_start' => ["This period overlaps with an existing period ({$overlap->period_start->format('d/m/Y')} – {$overlap->period_end->format('d/m/Y')})."]],
+                ], 422);
+            }
+
+            GlPeriod::create([
+                'period_start'      => $validated['period_start'],
+                'period_end'        => $validated['period_end'],
+                'date_time'         => now(),
+                'current_status_id' => 1,
+                'added_by'          => Auth::id(),
+                'added_on'          => now(),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Period created successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating GL period: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to create period'], 500);
+        }
+    }
+
+    public function updatePeriod(Request $request, $encryptedId)
+    {
+        try {
+            $id     = Crypt::decrypt($encryptedId);
+            $period = GlPeriod::findOrFail($id);
+
+            $validated = $request->validate([
+                'period_start' => ['required', 'date'],
+                'period_end'   => ['required', 'date', 'after:period_start'],
+            ]);
+
+            $overlap = $this->findOverlappingPeriod($validated['period_start'], $validated['period_end'], $id);
+            if ($overlap) {
+                return response()->json([
+                    'success' => false,
+                    'errors'  => ['period_start' => ["This period overlaps with an existing period ({$overlap->period_start->format('d/m/Y')} – {$overlap->period_end->format('d/m/Y')})."]],
+                ], 422);
+            }
+
+            $period->update([
+                'period_start' => $validated['period_start'],
+                'period_end'   => $validated['period_end'],
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Period updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating GL period: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update period'], 500);
+        }
+    }
+
+    private function findOverlappingPeriod(string $start, string $end, ?int $excludeId = null): ?GlPeriod
+    {
+        // Two ranges overlap when: existing.start <= new.end AND existing.end >= new.start
+        return GlPeriod::where('period_start', '<=', $end)
+            ->where('period_end', '>=', $start)
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+            ->first();
+    }
+
+    public function deletePeriod($encryptedId)
+    {
+        try {
+            $id     = Crypt::decrypt($encryptedId);
+            $period = GlPeriod::findOrFail($id);
+            $period->delete();
+
+            return response()->json(['success' => true, 'message' => 'Period deleted successfully']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error deleting GL period: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to delete period'], 500);
         }
     }
 }
