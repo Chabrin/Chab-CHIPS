@@ -13,8 +13,10 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use App\Exports\GlTransactionsExport;
 use App\Services\ErrorDispatcher;
 use Carbon\Carbon;
+use Maatwebsite\Excel\Facades\Excel;
 
 class LedgerController extends Controller
 {
@@ -684,6 +686,80 @@ class LedgerController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading GL transactions: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load transactions'], 500);
+        }
+    }
+
+    public function downloadGlTransactionsExcel(Request $request)
+    {
+        Log::info('GL Transactions export requested', ['start' => $request->input('start'), 'end' => $request->input('end')]);
+        ini_set('memory_limit', '512M');
+        set_time_limit(120);
+        try {
+            $start = $request->input('start');
+            $end   = $request->input('end');
+
+            if (!$start || !$end) {
+                $maxDate = DB::table('sys_gl_transactions')->max('journal_date');
+                if (!$maxDate) {
+                    return back()->with('error', 'No transactions found.');
+                }
+                $dt    = Carbon::parse($maxDate);
+                $end   = $dt->toDateString();
+                $start = $dt->copy()->subDays(9)->toDateString();
+            }
+
+            $startCarbon = Carbon::parse($start)->startOfDay();
+            $endCarbon   = Carbon::parse($end)->endOfDay();
+
+            if ($startCarbon->diffInDays($endCarbon) > 31) {
+                abort(422, 'Date range cannot exceed 31 days.');
+            }
+
+            $rows = DB::table('sys_gl_transactions_91_repeat as d')
+                ->join('sys_gl_transactions as h', 'h.id', '=', 'd.parent_id')
+                ->whereBetween('h.journal_date', [$startCarbon, $endCarbon])
+                ->select('d.parent_id', 'h.journal_date', 'h.reference', 'd.account_id', 'd.narration', 'd.entry_type', 'd.amount')
+                ->orderBy('d.parent_id')
+                ->orderBy('d.id')
+                ->get()
+                ->map(function ($row) {
+                    $isDebit = $row->entry_type === 'Debit';
+                    $amount  = abs((float) ($row->amount ?? 0));
+                    return [
+                        'parent_id' => $row->parent_id,
+                        'date'      => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
+                        'reference' => $row->reference ?? '-',
+                        'account'   => $row->account_id ?? '-',
+                        'narration' => $row->narration ?? '-',
+                        'debit'     => $isDebit ? number_format($amount, 2) : '',
+                        'credit'    => !$isDebit ? number_format($amount, 2) : '',
+                    ];
+                })
+                ->toArray();
+
+            $startLabel = Carbon::parse($start)->format('d-m-Y');
+            $endLabel   = Carbon::parse($end)->format('d-m-Y');
+            $filename   = 'gl-transactions-' . $start . '-to-' . $end . '.xlsx';
+
+            // Force eager generation inside try-catch so any export error is caught here
+            $content = Excel::raw(
+                new GlTransactionsExport($rows, $startLabel, $endLabel),
+                \Maatwebsite\Excel\Excel::XLSX
+            );
+
+            return response($content, 200, [
+                'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Content-Length'      => strlen($content),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error exporting GL transactions: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            ErrorDispatcher::dispatch($e);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 }

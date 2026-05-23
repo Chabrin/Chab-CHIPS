@@ -44,6 +44,18 @@
                             </span>
                         </button>
                     </div>
+                    <div>
+                        <button id="exportBtn" class="btn btn-success btn-sm d-flex align-items-center gap-1" disabled>
+                            <span class="btn-dl-label d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size:17px;">download</span>
+                                <span>Download</span>
+                            </span>
+                            <span class="btn-dl-spinner d-none d-flex align-items-center gap-1">
+                                <span class="spinner-border spinner-border-sm"></span>
+                                <span>Preparing...</span>
+                            </span>
+                        </button>
+                    </div>
                     <div class="ms-auto d-flex align-items-center gap-2">
                         <small class="text-muted" id="rangeLabel"></small>
                         <small class="text-muted" id="rowCountLabel"></small>
@@ -189,6 +201,11 @@ $(document).ready(function () {
                     // Sync inputs if server auto-detected range
                     if (!start) $('#filterStart').val(res.range.start);
                     if (!end)   $('#filterEnd').val(res.range.end);
+
+                    // Enable export with current range
+                    lastExportStart = res.range.start;
+                    lastExportEnd   = res.range.end;
+                    $('#exportBtn').prop('disabled', count === 0);
                 }
             },
             error: function (xhr) {
@@ -214,6 +231,54 @@ $(document).ready(function () {
 
     // ── Auto-load on page open (server picks most recent month) ───────────────
     loadData(null, null);
+
+    // ── Export button ──────────────────────────────────────────────────────────
+    let lastExportStart = null;
+    let lastExportEnd   = null;
+
+    function resetExportBtn() {
+        $('#exportBtn .btn-dl-label').removeClass('d-none');
+        $('#exportBtn .btn-dl-spinner').addClass('d-none');
+        $('#exportBtn').prop('disabled', false);
+    }
+
+    $('#exportBtn').on('click', function () {
+        if (!lastExportStart || !lastExportEnd) return;
+
+        $('#exportBtn .btn-dl-label').addClass('d-none');
+        $('#exportBtn .btn-dl-spinner').removeClass('d-none');
+        $('#exportBtn').prop('disabled', true);
+
+        const url = '{{ route("gl.transactions.export") }}'
+            + '?start=' + encodeURIComponent(lastExportStart)
+            + '&end='   + encodeURIComponent(lastExportEnd);
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (response) {
+                if (!response.ok) {
+                    return response.json().then(function (data) {
+                        throw new Error(data.error || 'Export failed (' + response.status + ')');
+                    }).catch(function () {
+                        throw new Error('Export failed (' + response.status + ')');
+                    });
+                }
+                return response.blob();
+            })
+            .then(function (blob) {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'gl-transactions-' + lastExportStart + '-to-' + lastExportEnd + '.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+                resetExportBtn();
+            })
+            .catch(function (err) {
+                toastr.error(err.message || 'Export failed.');
+                resetExportBtn();
+            });
+    });
 });
 </script>
 @endsection

@@ -1288,6 +1288,7 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     // GL Transactions
     Route::get('/accounting/gltransactions',      [App\Http\Controllers\LedgerController::class, 'glTransactionsIndex'])->name('gl.transactions.index');
     Route::get('/ajax/accounting/gl-transactions',[App\Http\Controllers\LedgerController::class, 'getGlTransactions'])->name('gl.transactions.data');
+    Route::get('/accounting/gl-transactions/export',[App\Http\Controllers\LedgerController::class, 'downloadGlTransactionsExcel'])->name('gl.transactions.export');
 
 
 
