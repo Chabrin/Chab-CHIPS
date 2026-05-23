@@ -1285,6 +1285,10 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::post('/accounting/gl-periods/{encryptedId}',          [App\Http\Controllers\LedgerController::class, 'updatePeriod'])->name('gl.periods.update');
     Route::delete('/accounting/gl-periods/{encryptedId}',        [App\Http\Controllers\LedgerController::class, 'deletePeriod'])->name('gl.periods.delete');
 
+    // GL Transactions
+    Route::get('/accounting/gltransactions',      [App\Http\Controllers\LedgerController::class, 'glTransactionsIndex'])->name('gl.transactions.index');
+    Route::get('/ajax/accounting/gl-transactions',[App\Http\Controllers\LedgerController::class, 'getGlTransactions'])->name('gl.transactions.data');
+
 
 
 

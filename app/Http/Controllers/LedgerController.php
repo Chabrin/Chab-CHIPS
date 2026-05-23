@@ -10,9 +10,11 @@ use App\Models\ChartAccount;
 use App\Models\GlPeriod;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use App\Services\ErrorDispatcher;
+use Carbon\Carbon;
 
 class LedgerController extends Controller
 {
@@ -606,6 +608,82 @@ class LedgerController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error deleting GL period: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to delete period'], 500);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // GL TRANSACTIONS
+    // ═══════════════════════════════════════════════════════
+
+    public function glTransactionsIndex()
+    {
+        return view('ledger.transactions');
+    }
+
+    public function getGlTransactions(Request $request)
+    {
+        try {
+            $start = $request->input('start');
+            $end   = $request->input('end');
+
+            // Default: most recent 10 days that have data
+            if (!$start || !$end) {
+                $maxDate = DB::table('sys_gl_transactions')->max('journal_date');
+                if (!$maxDate) {
+                    return response()->json(['data' => [], 'range' => null]);
+                }
+                $dt    = Carbon::parse($maxDate);
+                $end   = $dt->toDateString();
+                $start = $dt->copy()->subDays(9)->toDateString();
+            }
+
+            // Server-side: reject ranges > 31 days
+            $startCarbon = Carbon::parse($start)->startOfDay();
+            $endCarbon   = Carbon::parse($end)->endOfDay();
+
+            if ($startCarbon->diffInDays($endCarbon) > 31) {
+                return response()->json(['error' => 'Date range cannot exceed 31 days.'], 422);
+            }
+
+            $lines = DB::table('sys_gl_transactions_91_repeat as d')
+                ->join('sys_gl_transactions as h', 'h.id', '=', 'd.parent_id')
+                ->whereBetween('h.journal_date', [$startCarbon, $endCarbon])
+                ->select(
+                    'd.parent_id',
+                    'h.journal_date',
+                    'h.reference',
+                    'd.account_id',
+                    'd.narration',
+                    'd.entry_type',
+                    'd.amount'
+                )
+                ->orderBy('d.parent_id')
+                ->orderBy('d.id')
+                ->get()
+                ->map(function ($row) {
+                    $isDebit = $row->entry_type === 'Debit';
+                    $amount  = abs((float) ($row->amount ?? 0));
+                    return [
+                        'parent_id' => $row->parent_id,
+                        'date'      => $row->journal_date
+                                        ? Carbon::parse($row->journal_date)->format('d/m/Y')
+                                        : '-',
+                        'reference' => $row->reference ?? '-',
+                        'account'   => $row->account_id ?? '-',
+                        'narration' => $row->narration ?? '-',
+                        'debit'     => $isDebit ? number_format($amount, 2) : '',
+                        'credit'    => !$isDebit ? number_format($amount, 2) : '',
+                    ];
+                });
+
+            return response()->json([
+                'data'  => $lines,
+                'range' => ['start' => $start, 'end' => $end],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading GL transactions: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load transactions'], 500);
         }
     }
 }

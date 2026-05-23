@@ -35,8 +35,6 @@ $canCreateTax = auth()->user()->hasPermission('create_taxes');
                                         <th>Credit Account</th>
                                         <th class="text-end">Amount</th>
                                         <th>Status</th>
-                                        <th>Created By</th>
-                                        <th>Created At</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -52,27 +50,59 @@ $canCreateTax = auth()->user()->hasPermission('create_taxes');
 
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
-$(function () {
-    var table = $('#financeTaxesTable').DataTable({
-        processing: true,
-        serverSide: false,
-        ajax: {
-            url: "{{ route('ajax.finance.taxes.data') }}",
-            dataSrc: 'data'
-        },
-        columns: [
-            { data: null, orderable: false, render: function(data, type, row, meta) { return meta.row + 1; } },
-            { data: 'name' },
-            { data: 'default_type', defaultContent: '-' },
-            { data: 'computation', defaultContent: '-' },
-            { data: 'category', defaultContent: '-' },
-            { data: 'debit_account', defaultContent: '-' },
-            { data: 'credit_account', defaultContent: '-' },
-            { data: 'amount', className: 'text-end', render: function(data) { return data !== null ? parseFloat(data).toFixed(2) : '-'; } },
-            { data: 'current_status_id', render: function(data) { return data === 5 ? 'Active' : (data === 1 ? 'Inactive' : data); } },
-            { data: 'created_by', defaultContent: '-' },
-            { data: 'created_at', defaultContent: '-' },
-            {
+    $(function() {
+        var table = $('#financeTaxesTable').DataTable({
+            processing: true,
+            serverSide: false,
+            ajax: {
+                url: "{{ route('ajax.finance.taxes.data') }}",
+                dataSrc: 'data'
+            },
+            columns: [{
+                    data: null,
+                    orderable: false,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                {
+                    data: 'name'
+                },
+                {
+                    data: 'default_type',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'computation',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'category',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'debit_account',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'credit_account',
+                    defaultContent: '-'
+                },
+                {
+                    data: 'amount',
+                    className: 'text-end',
+                    render: function(data) {
+                        return data !== null ? parseFloat(data).toFixed(2) : '-';
+                    }
+                },
+                {
+                    data: 'current_status_id',
+                    render: function(data) {
+                        return data === 5 ? 'Active' : (data === 1 ? 'Inactive' : data);
+                    }
+                },
+
+                {
                     data: 'id',
                     orderable: false,
                     searchable: false,
@@ -90,14 +120,19 @@ $(function () {
                         return buttons;
                     }
                 }
-        ],
-        paging: true,
-        info: true,
-        lengthChange: true,
-        lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'All']],
-        order: [[0, 'asc']]
+            ],
+            paging: true,
+            info: true,
+            lengthChange: true,
+            lengthMenu: [
+                [10, 25, 50, -1],
+                [10, 25, 50, 'All']
+            ],
+            order: [
+                [0, 'asc']
+            ]
+        });
     });
-});
 </script>
 
 @endsection
