@@ -7,6 +7,7 @@ use App\Models\GlAccClass;
 use App\Models\GlAccGroup;
 use App\Models\GlAccountCategory;
 use App\Models\ChartAccount;
+use App\Models\GlAccountSetup;
 use App\Models\GlPeriod;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
@@ -761,5 +762,103 @@ class LedgerController extends Controller
             ErrorDispatcher::dispatch($e);
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    // ── GL Settings ────────────────────────────────────────────────────────────
+
+    public function glSettingsIndex()
+    {
+        $setup = GlAccountSetup::first();
+
+        $accountFields = [
+            'retained_earnings_id', 'income_summary_account_id', 'receivable_control_id',
+            'payable_control_account_id', 'bank_charges_account_id', 'vat_control_account_id',
+            'other_income_account_id', 'bank_interest_account_id', 'accrued_payroll_expense_account_id',
+            'payroll_expense_account_id', 'net_salaries_account_id', 'other_employee_deductions_id',
+            'clients_account_id', 'tenants_account_id', 'revenues_account_id',
+            'clients_bank_account_id', 'petty_cash_account_id', 'loans_receivable_account_id',
+            'interests_receivable_account_id', 'business_bank_account_id', 'tenants_suspense_account_id',
+            'loans_interests_revenue_account_id', 'rent_commission_account_id',
+            'returns_payable_account_id', 'clients_advance_loans_payable_id',
+            'co_op_bank_id', 'equity_bank_account_id', 'mpesa_account_id',
+            'earned_commission_acc_id', 'deposits_payable_account_id',
+            'miscallenous_revenue_id', 'payment_voucher_control_account_id',
+        ];
+
+        $ids = [];
+        if ($setup) {
+            foreach ($accountFields as $f) {
+                if ($setup->$f) $ids[] = (int) $setup->$f;
+            }
+        }
+
+        $accounts = ChartAccount::whereIn('id', array_unique($ids))
+            ->select('id', 'account_name', 'account_code')
+            ->get()->keyBy('id');
+
+        $periods = GlPeriod::orderBy('period_start', 'desc')->get();
+
+        return view('ledger.gl_settings', compact('setup', 'accounts', 'periods'));
+    }
+
+    public function updateGlSettings(Request $request)
+    {
+        if (!Auth::user()->isAbleTo('update_gl_settings')) {
+            return response()->json(['error' => 'Unauthorised'], 403);
+        }
+
+        $fields = [
+            'retained_earnings_id', 'income_summary_account_id', 'receivable_control_id',
+            'payable_control_account_id', 'bank_charges_account_id', 'vat_control_account_id',
+            'other_income_account_id', 'bank_interest_account_id', 'accrued_payroll_expense_account_id',
+            'payroll_expense_account_id', 'net_salaries_account_id', 'other_employee_deductions_id',
+            'clients_account_id', 'tenants_account_id', 'revenues_account_id',
+            'clients_bank_account_id', 'petty_cash_account_id', 'loans_receivable_account_id',
+            'interests_receivable_account_id', 'business_bank_account_id', 'tenants_suspense_account_id',
+            'revenue_vat', 'loans_interests_revenue_account_id', 'rent_commission_account_id',
+            'active_fiscal_year_id', 'returns_payable_account_id', 'clients_advance_loans_payable_id',
+            'co_op_bank_id', 'equity_bank_account_id', 'mpesa_account_id',
+            'earned_commission_acc_id', 'clients_vat', 'deposits_payable_account_id',
+            'miscallenous_revenue_id', 'payment_voucher_control_account_id',
+        ];
+
+        $data = $request->only($fields);
+        // Nullify blank strings
+        foreach ($data as $k => $v) {
+            if ($v === '' || $v === null) $data[$k] = null;
+        }
+
+        try {
+            $setup = GlAccountSetup::first();
+            if ($setup) {
+                $setup->fill($data)->save();
+            } else {
+                $data['date_time'] = now();
+                GlAccountSetup::create($data);
+            }
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            Log::error('GL Settings save error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to save settings.'], 500);
+        }
+    }
+
+    public function searchGlAccountsAjax(Request $request)
+    {
+        $q = trim($request->get('q', ''));
+        $query = ChartAccount::select('id', 'account_name', 'account_code');
+
+        if (strlen($q) > 0) {
+            $lower = strtolower($q);
+            $query->where(function ($qb) use ($lower) {
+                $qb->whereRaw('LOWER(account_name) LIKE ?', ["%{$lower}%"])
+                   ->orWhereRaw('LOWER(account_code) LIKE ?', ["%{$lower}%"]);
+            });
+        }
+
+        $results = $query->orderBy('account_code')->limit(40)->get()
+            ->map(fn($a) => ['id' => $a->id, 'text' => $a->account_code . ' — ' . $a->account_name]);
+
+        return response()->json(['results' => $results]);
     }
 }

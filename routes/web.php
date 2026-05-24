@@ -1290,6 +1290,11 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/accounting/gl-transactions',[App\Http\Controllers\LedgerController::class, 'getGlTransactions'])->name('gl.transactions.data');
     Route::get('/accounting/gl-transactions/export',[App\Http\Controllers\LedgerController::class, 'downloadGlTransactionsExcel'])->name('gl.transactions.export');
 
+    // GL Settings
+    Route::get('/generalledger/settings',              [App\Http\Controllers\LedgerController::class, 'glSettingsIndex'])->name('gl.settings.index');
+    Route::post('/generalledger/settings',             [App\Http\Controllers\LedgerController::class, 'updateGlSettings'])->name('gl.settings.update');
+    Route::get('/ajax/gl/accounts/search',             [App\Http\Controllers\LedgerController::class, 'searchGlAccountsAjax'])->name('ajax.gl.accounts.search');
+
 
 
 
