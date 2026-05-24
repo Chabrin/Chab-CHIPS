@@ -7,7 +7,6 @@ use App\Models\TransactionType;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class TransactionTypesController extends Controller
@@ -36,15 +35,12 @@ class TransactionTypesController extends Controller
                         'name' => $transaction_type->type_name,
                         'item_code' => $transaction_type->item_code,
                         'category_id' => $transaction_type->category_id,
-                        'debit_account' => $transaction_type->debitAccount ? $transaction_type->debitAccount->account_name : null,
-                        'credit_account' => $transaction_type->creditAccount ? $transaction_type->creditAccount->account_name : null,
-                        'amount' => $transaction_type->default_amount,
+                        'debit_account_code' => $transaction_type->debitAccount?->account_code,
+                        'debit_account_name' => $transaction_type->debitAccount?->account_name,
+                        'credit_account_code' => $transaction_type->creditAccount?->account_code,
+                        'credit_account_name' => $transaction_type->creditAccount?->account_name,
                         'current_status_id' => $transaction_type->current_status_id,
-                        'created_by' => optional($transaction_type->createdBy)->name,
-                        'created_at' => optional($transaction_type->date_time)->format('Y-m-d H:i:s'),
-                        'category' => $transaction_type->category ? $transaction_type->category->category_name : null,
                         'can_edit' => $can_edit_transaction_types,
-                        'encrypted_id' => encrypt($transaction_type->id),
                     ];
                 })
             ]);
@@ -77,7 +73,7 @@ class TransactionTypesController extends Controller
                 'debit_account_id' => 'nullable|integer',
                 'credit_account_id' => 'nullable|integer',
             ]);
-            $validated['created_by_id'] = 1;
+            $validated['created_by_id'] = Auth::id();
 
             TransactionType::create($validated);
 
@@ -166,5 +162,31 @@ class TransactionTypesController extends Controller
         }
     }
 
-   
+    public function getOne($id)
+    {
+        try {
+            $t = TransactionType::with(['debitAccount', 'creditAccount'])->findOrFail($id);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id'                  => $t->id,
+                    'type_name'           => $t->type_name,
+                    'item_code'           => $t->item_code,
+                    'default_amount'      => $t->default_amount,
+                    'debit_account_id'    => $t->debit_account_id,
+                    'debit_account_code'  => $t->debitAccount?->account_code,
+                    'debit_account_name'  => $t->debitAccount?->account_name,
+                    'credit_account_id'   => $t->credit_account_id,
+                    'credit_account_code' => $t->creditAccount?->account_code,
+                    'credit_account_name' => $t->creditAccount?->account_name,
+                    'is_commissionable'   => (int) $t->is_commissionable,
+                    'is_recovery'         => (int) $t->is_recovery,
+                    'is_client_expense'   => (int) $t->is_client_expense,
+                    'current_status_id'   => $t->current_status_id,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'error' => 'Not found'], 404);
+        }
+    }
 }

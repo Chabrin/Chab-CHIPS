@@ -1093,6 +1093,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/finance/transaction-types/{id}', [TransactionTypesController::class, 'update'])->name('finance.transaction-types.update');
     Route::delete('/finance/transaction-types/{id}', [TransactionTypesController::class, 'destroy'])->name('finance.transaction-types.destroy');
     Route::get('/ajax/finance/transaction-types/data', [TransactionTypesController::class, 'getData'])->name('ajax.finance.transaction-types.data');
+    Route::get('/ajax/finance/transaction-types/{id}', [TransactionTypesController::class, 'getOne'])->name('ajax.finance.transaction-types.get-one');
 
     // Recurrent Client Remittances - AJAX endpoints
     Route::prefix('ajax/finance/recurrent-client-remittances')->name('ajax.finance.recurrent-client-remittances.')->group(function () {
