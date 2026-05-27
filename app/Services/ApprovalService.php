@@ -9,6 +9,7 @@ use App\Models\ApprovalRequest;
 use App\Models\ApprovalRequestLog;
 use App\Models\ApprovalWorkflow;
 use App\Models\WorkflowApprover;
+use App\Models\PaymentVoucherHeader;
 
 class ApprovalService
 {
@@ -95,6 +96,8 @@ class ApprovalService
                     'completed_on' => now(),
                 ]);
 
+                $this->updateRelatedItemStatus($request, 'approved');
+
                 return [
                     'success' => true,
                     'message' => 'Final approval granted. Request is now approved.',
@@ -141,6 +144,8 @@ class ApprovalService
                 'status' => ApprovalRequest::STATUS_REJECTED,
                 'completed_on' => now(),
             ]);
+
+            $this->updateRelatedItemStatus($request, 'rejected');
 
             return [
                 'success' => true,
@@ -429,5 +434,27 @@ class ApprovalService
                 'initiated_on' => $request->initiated_on?->format('d M Y'),
             ];
         })->values()->toArray();
+    }
+
+    /**
+     * Update the status of the related item (e.g., voucher) based on approval outcome.
+     */
+    protected function updateRelatedItemStatus(ApprovalRequest $request, string $status): void
+    {
+        try {
+            if ($request->request_type === 'voucher') {
+                $voucher = PaymentVoucherHeader::find($request->request_id);
+                if ($voucher) {
+                    $voucherStatus = match($status) {
+                        'approved' => 'Approved',
+                        'rejected' => 'Rejected',
+                        default => $voucher->voucher_status,
+                    };
+                    $voucher->update(['voucher_status' => $voucherStatus]);
+                }
+            }
+        } catch (Exception $e) {
+            Log::error("Failed to update related item status: " . $e->getMessage());
+        }
     }
 }

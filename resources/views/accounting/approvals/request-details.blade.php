@@ -16,12 +16,12 @@
 }
 .approval-timeline {
     position: relative;
-    padding-left: 24px;
+    padding-left: 30px;
 }
 .approval-timeline::before {
     content: '';
     position: absolute;
-    left: 7px;
+    left: 9px;
     top: 6px;
     bottom: 6px;
     width: 2px;
@@ -36,16 +36,17 @@
 }
 .timeline-icon {
     position: absolute;
-    left: -21px;
-    top: 1px;
-    width: 16px;
-    height: 16px;
+    left: -26px;
+    top: 0;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 .timeline-icon .material-symbols-outlined {
-    font-size: 14px;
+    font-size: 20px;
+    color: #3598db;
 }
 .timeline-approver {
     font-weight: 600;
@@ -106,17 +107,17 @@
                                     <div class="timeline-item">
                                         <div class="timeline-icon">
                                             @if($item['action'] === 'approved')
-                                            <span class="material-symbols-outlined text-success">check_circle</span>
+                                            <span class="material-symbols-outlined">check_circle</span>
                                             @elseif($item['action'] === 'rejected')
-                                            <span class="material-symbols-outlined text-danger">cancel</span>
+                                            <span class="material-symbols-outlined">cancel</span>
                                             @elseif($item['action'] === 'changes_requested')
-                                            <span class="material-symbols-outlined text-warning">edit_note</span>
+                                            <span class="material-symbols-outlined">edit_note</span>
                                             @elseif($item['action'] === 'returned')
-                                            <span class="material-symbols-outlined text-secondary">undo</span>
+                                            <span class="material-symbols-outlined">undo</span>
                                             @elseif($item['action'] === 'submitted' || $item['action'] === 'resubmitted')
-                                            <span class="material-symbols-outlined text-info">send</span>
+                                            <span class="material-symbols-outlined">send</span>
                                             @else
-                                            <span class="material-symbols-outlined text-muted">circle</span>
+                                            <span class="material-symbols-outlined">circle</span>
                                             @endif
                                         </div>
                                         <div class="d-flex justify-content-between align-items-start">
