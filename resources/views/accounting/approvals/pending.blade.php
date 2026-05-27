@@ -67,8 +67,8 @@
                                             <tr>
                                                 <th>#</th>
                                                 <th>Type</th>
-                                                <th>Current Level</th>
-                                                <th>Status</th>
+                                                <th>Level</th>
+                                                <th>Stage</th>
                                                 <th>Initiated By</th>
                                                 <th>Date</th>
                                                 <th>Actions</th>
@@ -150,9 +150,12 @@ $(document).ready(function() {
                 render: (d) => 'Level ' + d
             },
             { 
-                data: 'status',
+                data: 'stage',
                 render: function(d) {
-                    return d.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    if (d === 'approved') return '<span class="text-success">Approved</span>';
+                    if (d === 'rejected') return '<span class="text-danger">Rejected</span>';
+                    if (d === 'passed') return '<span class="text-muted">Passed my level</span>';
+                    return '<span class="text-muted">Not yet reached</span>';
                 }
             },
             { data: 'initiated_by', render: (d) => d || '-' },

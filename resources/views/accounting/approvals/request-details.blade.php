@@ -16,55 +16,55 @@
 }
 .approval-timeline {
     position: relative;
-    padding-left: 32px;
+    padding-left: 24px;
 }
 .approval-timeline::before {
     content: '';
     position: absolute;
-    left: 9px;
-    top: 8px;
-    bottom: 8px;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
     width: 2px;
-    background: #dee2e6;
+    background: #e9ecef;
 }
 .timeline-item {
     position: relative;
-    padding-bottom: 24px;
+    padding-bottom: 12px;
 }
 .timeline-item:last-child {
     padding-bottom: 0;
 }
 .timeline-icon {
     position: absolute;
-    left: -28px;
-    top: 2px;
-    width: 20px;
-    height: 20px;
+    left: -21px;
+    top: 1px;
+    width: 16px;
+    height: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 .timeline-icon .material-symbols-outlined {
-    font-size: 18px;
+    font-size: 14px;
 }
 .timeline-approver {
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     color: #333;
 }
 .timeline-action {
-    font-size: 0.82rem;
-    color: #666;
+    font-size: 0.75rem;
+    color: #777;
 }
 .timeline-date {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: #999;
 }
 .timeline-comment {
-    font-size: 0.82rem;
-    color: #555;
-    margin-top: 6px;
-    padding-left: 12px;
+    font-size: 0.75rem;
+    color: #666;
+    margin-top: 4px;
+    padding-left: 10px;
     border-left: 2px solid #e9ecef;
 }
 .status-card {
@@ -93,8 +93,57 @@
                 </div>
 
                 <div class="row">
-                    <!-- Left: Request Info & Actions -->
-                    <div class="col-lg-5">
+                    <!-- Left: Timeline -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0">Approval Trail</h6>
+                            </div>
+                            <div class="card-body">
+                                @if(count($details['timeline']) > 0)
+                                <div class="approval-timeline">
+                                    @foreach($details['timeline'] as $item)
+                                    <div class="timeline-item">
+                                        <div class="timeline-icon">
+                                            @if($item['action'] === 'approved')
+                                            <span class="material-symbols-outlined text-success">check_circle</span>
+                                            @elseif($item['action'] === 'rejected')
+                                            <span class="material-symbols-outlined text-danger">cancel</span>
+                                            @elseif($item['action'] === 'changes_requested')
+                                            <span class="material-symbols-outlined text-warning">edit_note</span>
+                                            @elseif($item['action'] === 'returned')
+                                            <span class="material-symbols-outlined text-secondary">undo</span>
+                                            @elseif($item['action'] === 'submitted' || $item['action'] === 'resubmitted')
+                                            <span class="material-symbols-outlined text-info">send</span>
+                                            @else
+                                            <span class="material-symbols-outlined text-muted">circle</span>
+                                            @endif
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <span class="timeline-approver">{{ $item['approver_name'] }}</span>
+                                                @if($item['level'] > 0)
+                                                <span class="text-muted" style="font-size:0.78rem;">(Level {{ $item['level'] }})</span>
+                                                @endif
+                                            </div>
+                                            <span class="timeline-date">{{ $item['action_on'] }}</span>
+                                        </div>
+                                        <div class="timeline-action">{{ $item['action_label'] }}</div>
+                                        @if($item['comment'])
+                                        <div class="timeline-comment">{{ $item['comment'] }}</div>
+                                        @endif
+                                    </div>
+                                    @endforeach
+                                </div>
+                                @else
+                                <p class="text-muted text-center py-4 mb-0">No activity recorded yet.</p>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Request Info & Actions -->
+                    <div class="col-lg-6">
                         <!-- Status Card -->
                         <div class="card status-card status-{{ $details['status'] }} mb-3">
                             <div class="card-body">
@@ -175,7 +224,7 @@
                                     </button>
                                     @if($details['current_level'] > 1)
                                     <button type="button" class="btn btn-primary btn-sm" id="btnReturn">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">undo</span> Return
+                                        <span class="material-symbols-outlined" style="font-size:16px;">undo</span> Return to Level {{ $details['current_level'] - 1 }}
                                     </button>
                                     @endif
                                 </div>
@@ -194,55 +243,6 @@
                         </div>
                         @endif
                     </div>
-
-                    <!-- Right: Timeline -->
-                    <div class="col-lg-7">
-                        <div class="card">
-                            <div class="card-header py-2">
-                                <h6 class="mb-0">Approval Trail</h6>
-                            </div>
-                            <div class="card-body">
-                                @if(count($details['timeline']) > 0)
-                                <div class="approval-timeline">
-                                    @foreach($details['timeline'] as $item)
-                                    <div class="timeline-item">
-                                        <div class="timeline-icon">
-                                            @if($item['action'] === 'approved')
-                                            <span class="material-symbols-outlined text-success">check_circle</span>
-                                            @elseif($item['action'] === 'rejected')
-                                            <span class="material-symbols-outlined text-danger">cancel</span>
-                                            @elseif($item['action'] === 'changes_requested')
-                                            <span class="material-symbols-outlined text-warning">edit_note</span>
-                                            @elseif($item['action'] === 'returned')
-                                            <span class="material-symbols-outlined text-secondary">undo</span>
-                                            @elseif($item['action'] === 'submitted' || $item['action'] === 'resubmitted')
-                                            <span class="material-symbols-outlined text-info">send</span>
-                                            @else
-                                            <span class="material-symbols-outlined text-muted">circle</span>
-                                            @endif
-                                        </div>
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <span class="timeline-approver">{{ $item['approver_name'] }}</span>
-                                                @if($item['level'] > 0)
-                                                <span class="text-muted" style="font-size:0.78rem;">(Level {{ $item['level'] }})</span>
-                                                @endif
-                                            </div>
-                                            <span class="timeline-date">{{ $item['action_on'] }}</span>
-                                        </div>
-                                        <div class="timeline-action">{{ $item['action_label'] }}</div>
-                                        @if($item['comment'])
-                                        <div class="timeline-comment">{{ $item['comment'] }}</div>
-                                        @endif
-                                    </div>
-                                    @endforeach
-                                </div>
-                                @else
-                                <p class="text-muted text-center py-4 mb-0">No activity recorded yet.</p>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
             </div>
@@ -260,14 +260,6 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="approvalAction">
-                <div class="mb-3" id="returnLevelWrap" style="display:none;">
-                    <label class="form-label">Return to Level</label>
-                    <select class="form-select form-select-sm" id="returnToLevel">
-                        @for($i = 1; $i < $details['current_level']; $i++)
-                        <option value="{{ $i }}">Level {{ $i }}</option>
-                        @endfor
-                    </select>
-                </div>
                 <div class="mb-3">
                     <label class="form-label" id="commentLabel">Comment</label>
                     <textarea class="form-control" id="approvalComment" rows="3" placeholder="Enter your comment..."></textarea>
@@ -387,7 +379,7 @@ $(document).ready(function() {
     });
 
     $('#btnReturn').on('click', function() {
-        openActionModal('return', 'Return to Previous Level', 'Add a comment (optional)', false);
+        openActionModal('return', 'Return to Level {{ $details['current_level'] - 1 }}', 'Add a comment (optional)', false);
     });
 
     $('#btnResubmit').on('click', function() {
@@ -400,7 +392,6 @@ $(document).ready(function() {
         $('#approvalComment').val('');
         $('#commentHint').text(hint);
         $('#commentLabel').text(required ? 'Comment (Required)' : 'Comment (Optional)');
-        $('#returnLevelWrap').toggle(action === 'return');
         approvalActionModal.show();
     }
 
@@ -430,7 +421,7 @@ $(document).ready(function() {
                 break;
             case 'return':
                 url = '/ajax/approval-requests/' + encryptedId + '/return';
-                data.target_level = parseInt($('#returnToLevel').val());
+                data.target_level = {{ $details['current_level'] - 1 }};
                 break;
             case 'resubmit':
                 url = '/ajax/approval-requests/' + encryptedId + '/resubmit';

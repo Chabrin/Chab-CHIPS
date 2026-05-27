@@ -203,6 +203,10 @@ class ApprovalService
             return ['success' => false, 'message' => 'Invalid target level'];
         }
 
+        if ($targetLevel !== $request->current_level - 1) {
+            return ['success' => false, 'message' => 'Can only return to the immediate previous level'];
+        }
+
         $targetApprover = WorkflowApprover::where('workflow_id', $request->workflow_id)
             ->where('approval_level', $targetLevel)
             ->where('is_active', 1)
@@ -363,7 +367,7 @@ class ApprovalService
     }
 
     /**
-     * Get historical approval requests for a user (not yet at their stage or already passed).
+     * Get historical approval requests for a user (not at their stage, already passed, or completed).
      */
     public function getHistoricalForUser(int $userId): array
     {
@@ -375,16 +379,23 @@ class ApprovalService
             return [];
         }
 
-        $requests = ApprovalRequest::pending()
+        $workflowIds = $approverLevels->pluck('workflow_id')->unique()->toArray();
+
+        $requests = ApprovalRequest::whereIn('workflow_id', $workflowIds)
             ->with(['workflow', 'initiator'])
+            ->orderBy('initiated_on', 'desc')
             ->get()
-            ->filter(function ($request) use ($approverLevels) {
+            ->filter(function ($request) use ($approverLevels, $userId) {
                 $userLevel = $approverLevels->first(function ($level) use ($request) {
                     return $level->workflow_id === $request->workflow_id;
                 });
 
                 if (!$userLevel) {
                     return false;
+                }
+
+                if ($request->isComplete()) {
+                    return true;
                 }
 
                 return $request->current_level !== $userLevel->approval_level;
@@ -396,7 +407,11 @@ class ApprovalService
             });
 
             $stage = 'waiting';
-            if ($userLevel && $request->current_level > $userLevel->approval_level) {
+            if ($request->status === ApprovalRequest::STATUS_APPROVED) {
+                $stage = 'approved';
+            } elseif ($request->status === ApprovalRequest::STATUS_REJECTED) {
+                $stage = 'rejected';
+            } elseif ($userLevel && $request->current_level > $userLevel->approval_level) {
                 $stage = 'passed';
             }
 
@@ -408,7 +423,6 @@ class ApprovalService
                 'encrypted_request_id' => encrypt($request->request_id),
                 'workflow_name' => $request->workflow?->workflow_name,
                 'current_level' => $request->current_level,
-                'my_level' => $userLevel?->approval_level,
                 'stage' => $stage,
                 'status' => $request->status,
                 'initiated_by' => $request->initiator?->name,
