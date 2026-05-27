@@ -208,7 +208,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             <div class="card-header bg-light py-2">
                                                 <h6 class="mb-0" style="font-size:0.9rem;">
                                                     <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">account_balance</span>
-                                                    Banking &amp; Tax Details
+                                                    Bank and Tax Details
                                                 </h6>
                                             </div>
                                             <div class="card-body py-2">
