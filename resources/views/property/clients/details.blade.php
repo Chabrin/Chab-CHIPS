@@ -175,7 +175,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                             <!-- Profile Information Tab -->
                             <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
                                 <div class="row g-3">
-                                    <div class="col-lg-4 col-md-6">
+                                    <div class="col-lg-3 col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
                                                 <h6 class="mb-0" style="font-size:0.9rem;">
@@ -208,7 +208,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-lg-8 col-md-6">
+                                    <div class="col-lg-9 col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
                                                 <h6 class="mb-0" style="font-size:0.9rem;">
@@ -229,13 +229,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                                 <th>Branch</th>
                                                                 <th>Account Name</th>
                                                                 <th>Account Number</th>
-                                                                <th>Default</th>
                                                                 <th>Actions</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody id="bankDetailsTableBody">
                                                             <tr>
-                                                                <td colspan="7" class="text-center text-muted">Loading...</td>
+                                                                <td colspan="6" class="text-center text-muted">Loading...</td>
                                                             </tr>
                                                         </tbody>
                                                     </table>
@@ -2358,23 +2357,18 @@ COPY PERMISSIONS (paste when re-enabling checks):
         // Render the bank details table
         function renderBankDetailsTable(data) {
             if (data.length === 0) {
-                $('#bankDetailsTableBody').html('<tr><td colspan="7" class="text-center text-muted">No bank details found. Click "Add Bank" to add one.</td></tr>');
+                $('#bankDetailsTableBody').html('<tr><td colspan="6" class="text-center text-muted">No bank details found. Click "Add Bank" to add one.</td></tr>');
                 return;
             }
 
             var html = '';
             data.forEach(function(item, index) {
-                var defaultBadge = item.is_default == 1 
-                    ? '<span class="badge bg-success">Default</span>' 
-                    : '<a href="#" class="text-primary small btn-set-default" data-id="' + item.encrypted_id + '">Set Default</a>';
-                
                 html += '<tr>';
                 html += '<td>' + (index + 1) + '</td>';
                 html += '<td>' + item.bank_name + '</td>';
                 html += '<td>' + item.branch_name + '</td>';
                 html += '<td>' + item.account_name + '</td>';
                 html += '<td>' + item.account_number + '</td>';
-                html += '<td>' + defaultBadge + '</td>';
                 html += '<td>';
                 html += '<div class="d-flex gap-1">';
                 html += '<a href="#" class="text-primary btn-edit-bank" title="Edit" data-id="' + item.encrypted_id + '">';
@@ -2615,31 +2609,6 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 error: function(xhr, status, error) {
                     console.error('Error deleting bank detail:', error);
                     toastr.error('Failed to delete bank detail');
-                }
-            });
-        });
-
-        // Set default - event delegation
-        $(document).on('click', '.btn-set-default', function(e) {
-            e.preventDefault();
-            var encryptedId = $(this).data('id');
-            
-            $.ajax({
-                url: "{{ url('ajax/clients/bank-details') }}/" + encryptedId + "/set-default",
-                type: 'POST',
-                data: { _token: '{{ csrf_token() }}' },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        toastr.success(response.message || 'Default bank detail updated');
-                        loadBankDetails();
-                    } else {
-                        toastr.error(response.message || 'Failed to set default bank detail');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error setting default:', error);
-                    toastr.error('Failed to set default bank detail');
                 }
             });
         });
