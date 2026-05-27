@@ -16,12 +16,12 @@
 }
 .approval-timeline {
     position: relative;
-    padding-left: 24px;
+    padding-left: 32px;
 }
 .approval-timeline::before {
     content: '';
     position: absolute;
-    left: 7px;
+    left: 9px;
     top: 8px;
     bottom: 8px;
     width: 2px;
@@ -34,23 +34,19 @@
 .timeline-item:last-child {
     padding-bottom: 0;
 }
-.timeline-item::before {
-    content: '';
+.timeline-icon {
     position: absolute;
-    left: -20px;
-    top: 6px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #dee2e6;
+    left: -28px;
+    top: 2px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.timeline-item.action-submitted::before,
-.timeline-item.action-resubmitted::before { border-color: #17a2b8; }
-.timeline-item.action-approved::before { border-color: #28a745; }
-.timeline-item.action-rejected::before { border-color: #dc3545; }
-.timeline-item.action-changes_requested::before { border-color: #ffc107; }
-.timeline-item.action-returned::before { border-color: #6c757d; }
+.timeline-icon .material-symbols-outlined {
+    font-size: 18px;
+}
 .timeline-approver {
     font-weight: 600;
     font-size: 0.9rem;
@@ -152,10 +148,10 @@
                         @if($approvalRequest->request_type === 'voucher')
                         <div class="card mb-3">
                             <div class="card-body py-3">
-                                <a href="/payment/vouchers/{{ encrypt($approvalRequest->request_id) }}/details" class="btn btn-outline-primary btn-sm" target="_blank">
-                                    <span class="material-symbols-outlined" style="font-size:16px;">open_in_new</span>
-                                    View Payment Voucher
-                                </a>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="btnViewVoucher" data-id="{{ encrypt($approvalRequest->request_id) }}">
+                                    <span class="material-symbols-outlined" style="font-size:16px;">receipt_long</span>
+                                    View Voucher Summary
+                                </button>
                             </div>
                         </div>
                         @endif
@@ -209,7 +205,22 @@
                                 @if(count($details['timeline']) > 0)
                                 <div class="approval-timeline">
                                     @foreach($details['timeline'] as $item)
-                                    <div class="timeline-item action-{{ $item['action'] }}">
+                                    <div class="timeline-item">
+                                        <div class="timeline-icon">
+                                            @if($item['action'] === 'approved')
+                                            <span class="material-symbols-outlined text-success">check_circle</span>
+                                            @elseif($item['action'] === 'rejected')
+                                            <span class="material-symbols-outlined text-danger">cancel</span>
+                                            @elseif($item['action'] === 'changes_requested')
+                                            <span class="material-symbols-outlined text-warning">edit_note</span>
+                                            @elseif($item['action'] === 'returned')
+                                            <span class="material-symbols-outlined text-secondary">undo</span>
+                                            @elseif($item['action'] === 'submitted' || $item['action'] === 'resubmitted')
+                                            <span class="material-symbols-outlined text-info">send</span>
+                                            @else
+                                            <span class="material-symbols-outlined text-muted">circle</span>
+                                            @endif
+                                        </div>
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div>
                                                 <span class="timeline-approver">{{ $item['approver_name'] }}</span>
@@ -266,6 +277,91 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary btn-sm" id="confirmApprovalAction">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Voucher Summary Modal -->
+<div class="modal fade" id="voucherSummaryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-symbols-outlined" style="font-size:20px;vertical-align:middle;">receipt_long</span>
+                    Voucher Summary
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="voucherLoading" class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    <span class="ms-2">Loading...</span>
+                </div>
+                <div id="voucherContent" style="display:none;">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Voucher No.</small>
+                            <strong id="voucherNumber">-</strong>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Date</small>
+                            <span id="voucherDate">-</span>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Payee Type</small>
+                            <span id="voucherVendorType">-</span>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Total Amount</small>
+                            <strong id="voucherAmount">-</strong>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <small class="text-muted d-block">Payee</small>
+                            <span id="voucherVendorName">-</span>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted d-block">Description</small>
+                            <span id="voucherDescription">-</span>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Prepared By</small>
+                            <span id="voucherPreparedBy">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Status</small>
+                            <span id="voucherStatus">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block">Entries</small>
+                            <span id="voucherEntryCount">-</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-3">Voucher Lines</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered" id="voucherLinesTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Description</th>
+                                    <th>Payee</th>
+                                    <th>Account</th>
+                                    <th>Cheque No.</th>
+                                    <th class="text-end">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -366,6 +462,64 @@ $(document).ready(function() {
             },
             complete: function() {
                 $('#confirmApprovalAction').prop('disabled', false).text('Confirm');
+            }
+        });
+    });
+
+    // Voucher Summary Modal
+    var voucherSummaryModal = new bootstrap.Modal(document.getElementById('voucherSummaryModal'));
+
+    $('#btnViewVoucher').on('click', function() {
+        var voucherId = $(this).data('id');
+        $('#voucherLoading').show();
+        $('#voucherContent').hide();
+        voucherSummaryModal.show();
+
+        $.ajax({
+            url: '/ajax/payment/vouchers/' + voucherId + '/lines',
+            type: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    $('#voucherNumber').text(response.header.voucher_number);
+                    $('#voucherDate').text(response.header.voucher_date);
+                    $('#voucherVendorType').text(response.header.vendor_type || '-');
+                    $('#voucherAmount').text(response.header.debit_amount);
+                    $('#voucherVendorName').text(response.header.vendor_name || '-');
+                    $('#voucherDescription').text(response.header.description || '-');
+                    $('#voucherPreparedBy').text(response.header.prepared_by || '-');
+                    $('#voucherStatus').text(response.header.voucher_status || '-');
+                    $('#voucherEntryCount').text(response.count);
+
+                    var $tbody = $('#voucherLinesTable tbody');
+                    $tbody.empty();
+                    if (response.data && response.data.length > 0) {
+                        response.data.forEach(function(line, idx) {
+                            $tbody.append(
+                                '<tr>' +
+                                '<td>' + (idx + 1) + '</td>' +
+                                '<td>' + (line.entry_description || '-') + '</td>' +
+                                '<td>' + (line.payee_name || '-') + '</td>' +
+                                '<td>' + (line.account_number || '-') + '</td>' +
+                                '<td>' + (line.cheque_number || '-') + '</td>' +
+                                '<td class="text-end">' + (line.amount || '0.00') + '</td>' +
+                                '</tr>'
+                            );
+                        });
+                    } else {
+                        $tbody.append('<tr><td colspan="6" class="text-center text-muted">No lines</td></tr>');
+                    }
+
+                    $('#voucherLoading').hide();
+                    $('#voucherContent').show();
+                } else {
+                    toastr.error('Failed to load voucher details');
+                    voucherSummaryModal.hide();
+                }
+            },
+            error: function(xhr) {
+                toastr.error('Failed to load voucher details');
+                voucherSummaryModal.hide();
             }
         });
     });
