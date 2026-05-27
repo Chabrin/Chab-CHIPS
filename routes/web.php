@@ -1305,7 +1305,21 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::post('/generalledger/settings',             [App\Http\Controllers\LedgerController::class, 'updateGlSettings'])->name('gl.settings.update');
     Route::get('/ajax/gl/accounts/search',             [App\Http\Controllers\LedgerController::class, 'searchGlAccountsAjax'])->name('ajax.gl.accounts.search');
 
+    // Approval Workflows
+    Route::get('/accounting/approvals', [App\Http\Controllers\WorkflowsController::class, 'index'])->name('accounting.approvals.index');
+    Route::get('/accounting/approvals/{encryptedId}', [App\Http\Controllers\WorkflowsController::class, 'show'])->name('accounting.approvals.show');
+    Route::get('/ajax/accounting/approvals/data', [App\Http\Controllers\WorkflowsController::class, 'getWorkflowsData'])->name('ajax.accounting.approvals.data');
+    Route::post('/ajax/accounting/approvals', [App\Http\Controllers\WorkflowsController::class, 'store'])->name('ajax.accounting.approvals.store');
+    Route::put('/ajax/accounting/approvals/{encryptedId}', [App\Http\Controllers\WorkflowsController::class, 'update'])->name('ajax.accounting.approvals.update');
+    Route::delete('/ajax/accounting/approvals/{encryptedId}', [App\Http\Controllers\WorkflowsController::class, 'destroy'])->name('ajax.accounting.approvals.destroy');
 
+    // Workflow Approvers
+    Route::get('/ajax/accounting/approvals/{encryptedId}/approvers', [App\Http\Controllers\WorkflowsController::class, 'getApprovers'])->name('ajax.accounting.approvals.approvers');
+    Route::post('/ajax/accounting/approvals/{encryptedId}/approvers', [App\Http\Controllers\WorkflowsController::class, 'addApprover'])->name('ajax.accounting.approvals.approvers.add');
+    Route::put('/ajax/accounting/approvals/approvers/{encryptedId}', [App\Http\Controllers\WorkflowsController::class, 'updateApprover'])->name('ajax.accounting.approvals.approvers.update');
+    Route::delete('/ajax/accounting/approvals/approvers/{encryptedId}', [App\Http\Controllers\WorkflowsController::class, 'removeApprover'])->name('ajax.accounting.approvals.approvers.remove');
+    Route::get('/ajax/accounting/approvals/{encryptedId}/logs', [App\Http\Controllers\WorkflowsController::class, 'getChangeLogs'])->name('ajax.accounting.approvals.logs');
+    Route::get('/ajax/accounting/approvals/users/search', [App\Http\Controllers\WorkflowsController::class, 'searchUsers'])->name('ajax.accounting.approvals.users.search');
 
 
 
