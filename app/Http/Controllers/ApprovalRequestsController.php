@@ -83,6 +83,27 @@ class ApprovalRequestsController extends Controller
     }
 
     /**
+     * Get historical approvals for current user (AJAX).
+     */
+    public function getHistoricalApprovals()
+    {
+        try {
+            $userId = Auth::id();
+            $historical = $this->approvalService->getHistoricalForUser($userId);
+
+            return response()->json([
+                'success' => true,
+                'count' => count($historical),
+                'data' => $historical,
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching historical approvals: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch historical approvals'], 500);
+        }
+    }
+
+    /**
      * Get approval request details (AJAX).
      */
     public function getRequestDetails($encryptedId)

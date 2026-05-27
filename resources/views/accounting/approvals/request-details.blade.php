@@ -116,14 +116,6 @@
 
                                 <div class="row g-3">
                                     <div class="col-6">
-                                        <div class="info-label">Type</div>
-                                        <div class="info-value">{{ ucfirst($approvalRequest->request_type) }}</div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="info-label">Workflow</div>
-                                        <div class="info-value">{{ $details['workflow_name'] ?? '-' }}</div>
-                                    </div>
-                                    <div class="col-6">
                                         <div class="info-label">Progress</div>
                                         <div class="info-value">Level {{ $details['current_level'] }} of {{ $details['max_level'] }}</div>
                                     </div>
@@ -145,7 +137,7 @@
 
                                 @if($details['current_approver'] && !$details['is_complete'])
                                 <div class="mt-3 pt-3 border-top">
-                                    <div class="info-label">Current Approver</div>
+                                    <div class="info-label">Current Approver Stage</div>
                                     <div class="info-value">
                                         <span class="material-symbols-outlined text-primary" style="font-size:18px;vertical-align:middle;">person</span>
                                         {{ $details['current_approver']['name'] }}
@@ -176,17 +168,17 @@
                             </div>
                             <div class="card-body">
                                 <div class="d-flex flex-wrap gap-2">
-                                    <button type="button" class="btn btn-success btn-sm" id="btnApprove">
+                                    <button type="button" class="btn btn-primary btn-sm" id="btnApprove">
                                         <span class="material-symbols-outlined" style="font-size:16px;">check</span> Approve
                                     </button>
-                                    <button type="button" class="btn btn-danger btn-sm" id="btnReject">
+                                    <button type="button" class="btn btn-primary btn-sm" id="btnReject">
                                         <span class="material-symbols-outlined" style="font-size:16px;">close</span> Reject
                                     </button>
-                                    <button type="button" class="btn btn-warning btn-sm" id="btnRequestChanges">
+                                    <button type="button" class="btn btn-primary btn-sm" id="btnRequestChanges">
                                         <span class="material-symbols-outlined" style="font-size:16px;">edit_note</span> Request Changes
                                     </button>
                                     @if($details['current_level'] > 1)
-                                    <button type="button" class="btn btn-secondary btn-sm" id="btnReturn">
+                                    <button type="button" class="btn btn-primary btn-sm" id="btnReturn">
                                         <span class="material-symbols-outlined" style="font-size:16px;">undo</span> Return
                                     </button>
                                     @endif

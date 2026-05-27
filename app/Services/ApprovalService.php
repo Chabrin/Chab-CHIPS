@@ -361,4 +361,59 @@ class ApprovalService
             ];
         })->values()->toArray();
     }
+
+    /**
+     * Get historical approval requests for a user (not yet at their stage or already passed).
+     */
+    public function getHistoricalForUser(int $userId): array
+    {
+        $approverLevels = WorkflowApprover::where('approver_id', $userId)
+            ->where('is_active', 1)
+            ->get(['workflow_id', 'approval_level']);
+
+        if ($approverLevels->isEmpty()) {
+            return [];
+        }
+
+        $requests = ApprovalRequest::pending()
+            ->with(['workflow', 'initiator'])
+            ->get()
+            ->filter(function ($request) use ($approverLevels) {
+                $userLevel = $approverLevels->first(function ($level) use ($request) {
+                    return $level->workflow_id === $request->workflow_id;
+                });
+
+                if (!$userLevel) {
+                    return false;
+                }
+
+                return $request->current_level !== $userLevel->approval_level;
+            });
+
+        return $requests->map(function ($request) use ($approverLevels) {
+            $userLevel = $approverLevels->first(function ($level) use ($request) {
+                return $level->workflow_id === $request->workflow_id;
+            });
+
+            $stage = 'waiting';
+            if ($userLevel && $request->current_level > $userLevel->approval_level) {
+                $stage = 'passed';
+            }
+
+            return [
+                'id' => $request->id,
+                'encrypted_id' => encrypt($request->id),
+                'request_type' => $request->request_type,
+                'request_id' => $request->request_id,
+                'encrypted_request_id' => encrypt($request->request_id),
+                'workflow_name' => $request->workflow?->workflow_name,
+                'current_level' => $request->current_level,
+                'my_level' => $userLevel?->approval_level,
+                'stage' => $stage,
+                'status' => $request->status,
+                'initiated_by' => $request->initiator?->name,
+                'initiated_on' => $request->initiated_on?->format('d M Y'),
+            ];
+        })->values()->toArray();
+    }
 }
