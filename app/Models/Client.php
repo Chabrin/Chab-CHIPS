@@ -178,7 +178,7 @@ class Client extends Model
 
     public function bankAccounts()
     {
-        return $this->hasMany(ClientBankAccount::class, 'parent_id', 'id');
+        return $this->hasMany(ClientBankDetail::class, 'client_id', 'id');
     }
 
     public function documents()

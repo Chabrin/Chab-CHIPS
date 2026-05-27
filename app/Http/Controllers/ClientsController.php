@@ -9,6 +9,7 @@ use App\Models\Property;
 use App\Models\BankBranch;
 use Illuminate\Http\Request;
 use App\Models\ClientDocument;
+use App\Models\ClientBankDetail;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
 use App\Models\ClientBankAccount;
@@ -1517,13 +1518,15 @@ class ClientsController extends Controller
                 continue;
             }
 
-            ClientBankAccount::create([
-                'parent_id' => $clientId,
-                'bank_id' => $bankData['bank_id'] ?? null,
-                'branch' => $bankData['branch_id'] ?? null,
-                'account_name' => $bankData['account_name'] ?? null,
+            ClientBankDetail::create([
+                'client_id'=> $clientId,
+                'bank_id'=> $bankData['bank_id'] ?? null,
+                'branch_id' => $bankData['branch_id'] ?? null,
                 'account_number' => $bankData['account_number'] ?? null,
-                'return_percentage' => $bankData['return_percentage'] ?? null,
+                'account_name' => $bankData['account_name'] ?? null,
+                'is_default' => $bankData['is_default'] ?? null,
+                'added_by' => Auth::id(),
+                'added_on' => now(),
             ]);
         }
     }
