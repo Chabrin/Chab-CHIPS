@@ -722,7 +722,7 @@ $(document).ready(function () {
             const entryTypeLbl = e.entry_type_label  ? '<small>' + escHtml(e.entry_type_label)  + '</small>' : '<small class="text-muted">—</small>';
             const sourceAccLbl = e.source_account_label ? '<small>' + escHtml(e.source_account_label) + '</small>' : '<small class="text-muted">—</small>';
             const chequeLbl    = e.cheque_number
-                ? '<span class="badge badge-light-warning">' + escHtml(e.cheque_number) + '</span>'
+                ? escHtml(e.cheque_number)
                 : '<small class="text-muted">—</small>';
             tbody.append(
                 '<tr data-uid="' + e.uid + '">' +
@@ -839,7 +839,7 @@ $(document).ready(function () {
             ? '<span class="badge badge-light-primary">' + escHtml(entry.source_account_label) + '</span>'
             : '<span class="text-muted">—</span>');
         $('#det_cheque').html(entry.cheque_number
-            ? '<span class="badge badge-light-warning fw-semibold">' + escHtml(entry.cheque_number) + '</span> <small class="text-success ms-1">locked</small>'
+            ? escHtml(entry.cheque_number)
             : '<span class="text-muted">—</span>');
         $('#det_amount').text('KES ' + fmtNum(entry.amount));
 

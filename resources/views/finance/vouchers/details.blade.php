@@ -277,7 +277,7 @@
                     data: 'cheque_number',
                     render: function(d) {
                         return d && d !== '-'
-                            ? '<span class="badge badge-light-warning fw-semibold">' + d + '</span>'
+                            ? d
                             : '<span class="text-muted">—</span>';
                     }
                 },
