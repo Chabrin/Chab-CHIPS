@@ -439,6 +439,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/property/tenants', [App\Http\Controllers\ClientsController::class, 'getTenants'])->name('ajax.property.tenants.get');
     Route::get('/ajax/banks-and-branches', [ClientsController::class, 'getBanksAndBranches'])->name('ajax.banks.branches');
 
+    // Client Bank Details AJAX CRUD
+    Route::get('/ajax/clients/{encryptedClientId}/bank-details', [App\Http\Controllers\ClientBankDetailsController::class, 'getClientBankDetails'])->name('ajax.clients.bank-details');
+    Route::get('/ajax/clients/bank-details/{encryptedId}', [App\Http\Controllers\ClientBankDetailsController::class, 'getBankDetail'])->name('ajax.clients.bank-details.show');
+    Route::post('/ajax/clients/bank-details', [App\Http\Controllers\ClientBankDetailsController::class, 'store'])->name('ajax.clients.bank-details.store');
+    Route::put('/ajax/clients/bank-details/{encryptedId}', [App\Http\Controllers\ClientBankDetailsController::class, 'update'])->name('ajax.clients.bank-details.update');
+    Route::delete('/ajax/clients/bank-details/{encryptedId}', [App\Http\Controllers\ClientBankDetailsController::class, 'destroy'])->name('ajax.clients.bank-details.destroy');
+    Route::post('/ajax/clients/bank-details/{encryptedId}/set-default', [App\Http\Controllers\ClientBankDetailsController::class, 'setDefault'])->name('ajax.clients.bank-details.set-default');
+    Route::get('/ajax/client-bank-details/banks', [App\Http\Controllers\ClientBankDetailsController::class, 'getBanks'])->name('ajax.client-bank-details.banks');
+    Route::get('/ajax/client-bank-details/branches/{bankId}', [App\Http\Controllers\ClientBankDetailsController::class, 'getBranches'])->name('ajax.client-bank-details.branches');
 
     // Tenants
     Route::get('/tenants/listing', [App\Http\Controllers\ClientsController::class, 'tenantsListing'])->name('property.tenants.listing');

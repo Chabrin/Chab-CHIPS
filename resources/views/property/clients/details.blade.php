@@ -175,12 +175,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
                             <!-- Profile Information Tab -->
                             <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
                                 <div class="row g-3">
-                                    <div class="col-md-6">
+                                    <div class="col-lg-4 col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
                                                 <h6 class="mb-0" style="font-size:0.9rem;">
                                                     <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">badge</span>
-                                                    Personal Information
+                                                    Personal & Tax Information
                                                 </h6>
                                             </div>
                                             <div class="card-body py-2">
@@ -199,28 +199,46 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                     <div class="col-7"><small><strong>{{ $client->registered_date ? $client->registered_date->format('d-m-Y') : '-' }}</strong></small></div>
                                                     <div class="col-12 mt-2"><small class="text-muted">Address:</small></div>
                                                     <div class="col-12"><small><strong>{{ $client->address ?? '-' }}</strong></small></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size:0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">account_balance</span>
-                                                    Bank and Tax Details
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Account Name:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $client->account_name ?? '-' }}</strong></small></div>
-                                                    <div class="col-5"><small class="text-muted">Account Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $client->account_number ?? '-' }}</strong></small></div>
+                                                    <div class="col-12"><hr class="my-2"></div>
                                                     <div class="col-5"><small class="text-muted">VAT Number:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->vat_number ?? '-' }}</strong></small></div>
                                                     <div class="col-5"><small class="text-muted">PIN Number:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->pin_number ?? '-' }}</strong></small></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-8 col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                                <h6 class="mb-0" style="font-size:0.9rem;">
+                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">account_balance</span>
+                                                    Bank Details
+                                                </h6>
+                                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bankDetailModal" id="addBankDetailBtn">
+                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">add</span> Add Bank
+                                                </button>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                <div class="table-responsive">
+                                                    <table id="bankDetailsTable" class="table table-sm table-hover" style="width:100%;font-size:0.85rem;">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>#</th>
+                                                                <th>Bank</th>
+                                                                <th>Branch</th>
+                                                                <th>Account Name</th>
+                                                                <th>Account Number</th>
+                                                                <th>Default</th>
+                                                                <th>Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="bankDetailsTableBody">
+                                                            <tr>
+                                                                <td colspan="7" class="text-center text-muted">Loading...</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
                                                 </div>
                                             </div>
                                         </div>
@@ -667,6 +685,87 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bank Detail Modal -->
+<div class="modal fade" id="bankDetailModal" tabindex="-1" aria-labelledby="bankDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bankDetailModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">account_balance</span>
+                    <span id="bankDetailModalTitle">Add Bank Detail</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bankDetailForm">
+                    <input type="hidden" id="bankDetailId" name="bank_detail_id" value="">
+                    <input type="hidden" id="bankDetailClientId" name="client_id" value="{{ $client->encrypted_id }}">
+                    <div class="mb-3">
+                        <label for="bankSelect" class="form-label">Bank <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="bankSelect" name="bank_id" required>
+                            <option value="">Select Bank</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="branchSelect" class="form-label">Branch</label>
+                        <select class="form-select form-select-sm" id="branchSelect" name="branch_id">
+                            <option value="">Select Branch (Optional)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="accountName" class="form-label">Account Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="accountName" name="account_name" required maxlength="255">
+                    </div>
+                    <div class="mb-3">
+                        <label for="accountNumber" class="form-label">Account Number <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="accountNumber" name="account_number" required maxlength="50">
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="isDefault" name="is_default" value="1">
+                            <label class="form-check-label" for="isDefault">Set as default bank account</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="saveBankDetailBtn">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">save</span>
+                    <span id="saveBankDetailBtnText">Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Bank Detail Confirmation Modal -->
+<div class="modal fade" id="deleteBankDetailModal" tabindex="-1" aria-labelledby="deleteBankDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteBankDetailModalLabel">
+                    <span class="material-symbols-outlined text-danger" style="font-size:20px; vertical-align:middle;">warning</span>
+                    Confirm Delete
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this bank detail?</p>
+                <p class="mb-0"><strong id="deleteBankDetailInfo"></strong></p>
+            </div>
+            <div class="modal-footer">
+                <input type="hidden" id="deleteBankDetailId" value="">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmDeleteBankDetailBtn">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">delete</span>
+                    Delete
+                </button>
             </div>
         </div>
     </div>
@@ -2224,6 +2323,333 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 }
             });
         }
+
+        // =====================================================
+        // Bank Details CRUD Functions
+        // =====================================================
+
+        var banksList = [];
+        var branchesByBank = {};
+
+        // Load bank details on page load
+        loadBankDetails();
+        loadBanksDropdown();
+
+        // Load all bank details for the client
+        function loadBankDetails() {
+            $.ajax({
+                url: "{{ route('ajax.clients.bank-details', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.data) {
+                        renderBankDetailsTable(response.data);
+                    } else {
+                        $('#bankDetailsTableBody').html('<tr><td colspan="7" class="text-center text-muted">No bank details found</td></tr>');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading bank details:', error);
+                    $('#bankDetailsTableBody').html('<tr><td colspan="7" class="text-center text-danger">Failed to load bank details</td></tr>');
+                }
+            });
+        }
+
+        // Render the bank details table
+        function renderBankDetailsTable(data) {
+            if (data.length === 0) {
+                $('#bankDetailsTableBody').html('<tr><td colspan="7" class="text-center text-muted">No bank details found. Click "Add Bank" to add one.</td></tr>');
+                return;
+            }
+
+            var html = '';
+            data.forEach(function(item, index) {
+                var defaultBadge = item.is_default == 1 
+                    ? '<span class="badge bg-success">Default</span>' 
+                    : '<a href="#" class="text-primary small btn-set-default" data-id="' + item.encrypted_id + '">Set Default</a>';
+                
+                html += '<tr>';
+                html += '<td>' + (index + 1) + '</td>';
+                html += '<td>' + item.bank_name + '</td>';
+                html += '<td>' + item.branch_name + '</td>';
+                html += '<td>' + item.account_name + '</td>';
+                html += '<td>' + item.account_number + '</td>';
+                html += '<td>' + defaultBadge + '</td>';
+                html += '<td>';
+                html += '<div class="d-flex gap-1">';
+                html += '<a href="#" class="text-primary btn-edit-bank" title="Edit" data-id="' + item.encrypted_id + '">';
+                html += '<span class="material-symbols-outlined" style="font-size:18px;">edit</span>';
+                html += '</a>';
+                html += '<a href="#" class="text-danger btn-delete-bank" title="Delete" data-id="' + item.encrypted_id + '" data-info="' + item.bank_name + ' - ' + item.account_number + '">';
+                html += '<span class="material-symbols-outlined" style="font-size:18px;">delete</span>';
+                html += '</a>';
+                html += '</div>';
+                html += '</td>';
+                html += '</tr>';
+            });
+            $('#bankDetailsTableBody').html(html);
+        }
+
+        // Load banks dropdown
+        function loadBanksDropdown() {
+            $.ajax({
+                url: "{{ route('ajax.client-bank-details.banks') }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.data) {
+                        banksList = response.data;
+                        var options = '<option value="">Select Bank</option>';
+                        response.data.forEach(function(bank) {
+                            options += '<option value="' + bank.id + '">' + bank.bank_name + '</option>';
+                        });
+                        $('#bankSelect').html(options);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading banks:', error);
+                }
+            });
+        }
+
+        // Load branches when bank is selected
+        $('#bankSelect').on('change', function() {
+            var bankId = $(this).val();
+            if (!bankId) {
+                $('#branchSelect').html('<option value="">Select Branch (Optional)</option>');
+                return;
+            }
+
+            // Check if we already have branches cached
+            if (branchesByBank[bankId]) {
+                populateBranches(branchesByBank[bankId]);
+                return;
+            }
+
+            $.ajax({
+                url: "{{ url('ajax/client-bank-details/branches') }}/" + bankId,
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.data) {
+                        branchesByBank[bankId] = response.data;
+                        populateBranches(response.data);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading branches:', error);
+                    $('#branchSelect').html('<option value="">Select Branch (Optional)</option>');
+                }
+            });
+        });
+
+        function populateBranches(branches) {
+            var options = '<option value="">Select Branch (Optional)</option>';
+            branches.forEach(function(branch) {
+                options += '<option value="' + branch.id + '">' + branch.branch_name + '</option>';
+            });
+            $('#branchSelect').html(options);
+        }
+
+        // Add Bank button click handler
+        $('#addBankDetailBtn').on('click', function() {
+            $('#bankDetailId').val('');
+            $('#bankDetailForm')[0].reset();
+            $('#bankDetailModalTitle').text('Add Bank Detail');
+            $('#saveBankDetailBtnText').text('Save');
+            $('#branchSelect').html('<option value="">Select Branch (Optional)</option>');
+        });
+
+        // Edit bank detail - event delegation
+        $(document).on('click', '.btn-edit-bank', function(e) {
+            e.preventDefault();
+            var encryptedId = $(this).data('id');
+            
+            $.ajax({
+                url: "{{ url('ajax/clients/bank-details') }}/" + encryptedId,
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.data) {
+                        var data = response.data;
+                        $('#bankDetailId').val(encryptedId);
+                        $('#bankSelect').val(data.bank_id);
+                        $('#accountName').val(data.account_name);
+                        $('#accountNumber').val(data.account_number);
+                        $('#isDefault').prop('checked', data.is_default == 1);
+                        $('#bankDetailModalTitle').text('Edit Bank Detail');
+                        $('#saveBankDetailBtnText').text('Update');
+
+                        // Load branches for the selected bank
+                        if (data.bank_id) {
+                            $.ajax({
+                                url: "{{ url('ajax/client-bank-details/branches') }}/" + data.bank_id,
+                                type: 'GET',
+                                dataType: 'json',
+                                success: function(branchResponse) {
+                                    if (branchResponse.success && branchResponse.data) {
+                                        branchesByBank[data.bank_id] = branchResponse.data;
+                                        populateBranches(branchResponse.data);
+                                        if (data.branch_id) {
+                                            $('#branchSelect').val(data.branch_id);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+
+                        $('#bankDetailModal').modal('show');
+                    } else {
+                        toastr.error('Failed to load bank detail');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading bank detail:', error);
+                    toastr.error('Failed to load bank detail');
+                }
+            });
+        });
+
+        // Save bank detail button click handler
+        $('#saveBankDetailBtn').on('click', function() {
+            var encryptedId = $('#bankDetailId').val();
+            var isEdit = encryptedId !== '';
+
+            var formData = {
+                client_id: $('#bankDetailClientId').val(),
+                bank_id: $('#bankSelect').val(),
+                branch_id: $('#branchSelect').val() || null,
+                account_name: $('#accountName').val(),
+                account_number: $('#accountNumber').val(),
+                is_default: $('#isDefault').is(':checked') ? 1 : 0,
+                _token: '{{ csrf_token() }}'
+            };
+
+            // Validate required fields
+            if (!formData.bank_id) {
+                toastr.error('Please select a bank');
+                return;
+            }
+            if (!formData.account_name) {
+                toastr.error('Please enter account name');
+                return;
+            }
+            if (!formData.account_number) {
+                toastr.error('Please enter account number');
+                return;
+            }
+
+            $('#saveBankDetailBtn').prop('disabled', true);
+            $('#saveBankDetailBtnText').text(isEdit ? 'Updating...' : 'Saving...');
+
+            var url = isEdit 
+                ? "{{ url('ajax/clients/bank-details') }}/" + encryptedId
+                : "{{ route('ajax.clients.bank-details.store') }}";
+
+            var method = isEdit ? 'PUT' : 'POST';
+
+            $.ajax({
+                url: url,
+                type: method,
+                data: formData,
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        toastr.success(response.message || (isEdit ? 'Bank detail updated successfully' : 'Bank detail added successfully'));
+                        $('#bankDetailModal').modal('hide');
+                        loadBankDetails();
+                    } else {
+                        var errorMsg = response.message || 'Failed to save bank detail';
+                        if (response.errors) {
+                            errorMsg = Object.values(response.errors).flat().join('<br>');
+                        }
+                        toastr.error(errorMsg);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error saving bank detail:', error);
+                    var errorMsg = 'Failed to save bank detail';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        errorMsg = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+                    }
+                    toastr.error(errorMsg);
+                },
+                complete: function() {
+                    $('#saveBankDetailBtn').prop('disabled', false);
+                    $('#saveBankDetailBtnText').text(isEdit ? 'Update' : 'Save');
+                }
+            });
+        });
+
+        // Delete bank detail - event delegation
+        $(document).on('click', '.btn-delete-bank', function(e) {
+            e.preventDefault();
+            var encryptedId = $(this).data('id');
+            var info = $(this).data('info');
+            $('#deleteBankDetailId').val(encryptedId);
+            $('#deleteBankDetailInfo').text(info);
+            $('#deleteBankDetailModal').modal('show');
+        });
+
+        // Confirm delete button click handler
+        $('#confirmDeleteBankDetailBtn').on('click', function() {
+            var encryptedId = $('#deleteBankDetailId').val();
+
+            $.ajax({
+                url: "{{ url('ajax/clients/bank-details') }}/" + encryptedId,
+                type: 'DELETE',
+                data: { _token: '{{ csrf_token() }}' },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        toastr.success(response.message || 'Bank detail deleted successfully');
+                        $('#deleteBankDetailModal').modal('hide');
+                        loadBankDetails();
+                    } else {
+                        toastr.error(response.message || 'Failed to delete bank detail');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error deleting bank detail:', error);
+                    toastr.error('Failed to delete bank detail');
+                }
+            });
+        });
+
+        // Set default - event delegation
+        $(document).on('click', '.btn-set-default', function(e) {
+            e.preventDefault();
+            var encryptedId = $(this).data('id');
+            
+            $.ajax({
+                url: "{{ url('ajax/clients/bank-details') }}/" + encryptedId + "/set-default",
+                type: 'POST',
+                data: { _token: '{{ csrf_token() }}' },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        toastr.success(response.message || 'Default bank detail updated');
+                        loadBankDetails();
+                    } else {
+                        toastr.error(response.message || 'Failed to set default bank detail');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error setting default:', error);
+                    toastr.error('Failed to set default bank detail');
+                }
+            });
+        });
+
+        // Reset modal on close
+        $('#bankDetailModal').on('hidden.bs.modal', function() {
+            $('#bankDetailForm')[0].reset();
+            $('#bankDetailId').val('');
+            $('#branchSelect').html('<option value="">Select Branch (Optional)</option>');
+        });
     });
 </script>
 @endsection

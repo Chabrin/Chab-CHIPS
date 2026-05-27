@@ -215,4 +215,14 @@ class Client extends Model
     {
         return $this->hasMany(ClientAdvance::class, 'client_id', 'id');
     }
+
+    public function bankDetails()
+    {
+        return $this->hasMany(ClientBankDetail::class, 'client_id', 'id');
+    }
+
+    public function defaultBankDetail()
+    {
+        return $this->hasOne(ClientBankDetail::class, 'client_id', 'id')->where('is_default', 1);
+    }
 }
