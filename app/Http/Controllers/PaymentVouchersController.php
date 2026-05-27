@@ -14,6 +14,7 @@ use App\Models\PaymentVoucherLine;
 use App\Models\ChartAccount;
 use App\Models\InvoiceableItem;
 use App\Models\CompanyBankAccount;
+use App\Services\ApprovalService;
 
 class PaymentVouchersController extends Controller
 {
@@ -188,11 +189,25 @@ class PaymentVouchersController extends Controller
                 ]);
             }
 
+            $approvalRequest = null;
+            try {
+                $approvalService = app(ApprovalService::class);
+                $approvalRequest = $approvalService->initiateApproval(
+                    'voucher',
+                    $header->id,
+                    'voucher_approval',
+                    Auth::id()
+                );
+            } catch (Exception $e) {
+                Log::warning('Could not initiate approval workflow for voucher: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success'        => true,
-                'message'        => 'Voucher ' . $voucherNum . ' created successfully',
+                'message'        => 'Voucher ' . $voucherNum . ' created successfully' . ($approvalRequest ? ' and submitted for approval' : ''),
                 'voucher_number' => $voucherNum,
                 'encrypted_id'   => encrypt($header->id),
+                'approval_initiated' => $approvalRequest !== null,
             ]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
