@@ -131,6 +131,7 @@
                     data: 'voucher_status',
                     render: function(d) {
                         if (d === 'Paid') return '<span class="badge badge-light-success">Paid</span>';
+                        if (d === 'Approved') return '<span class="badge badge-light-primary">Approved</span>';
                         return '<span class="badge badge-light-danger">Pending</span>';
                     }
                 },

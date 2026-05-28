@@ -10,6 +10,7 @@ use App\Models\ApprovalRequestLog;
 use App\Models\ApprovalWorkflow;
 use App\Models\WorkflowApprover;
 use App\Models\PaymentVoucherHeader;
+use App\Models\PaymentVoucherLine;
 
 class ApprovalService
 {
@@ -451,6 +452,11 @@ class ApprovalService
                         default => $voucher->voucher_status,
                     };
                     $voucher->update(['voucher_status' => $voucherStatus]);
+
+                    if ($status === 'approved') {
+                        PaymentVoucherLine::where('entry_id', $voucher->id)
+                            ->update(['is_approved' => 'Yes']);
+                    }
                 }
             }
         } catch (Exception $e) {

@@ -115,6 +115,8 @@
                                 <div class="hdr-value">
                                     @if($voucher->voucher_status === 'Paid')
                                     <span class="badge badge-light-success">Paid</span>
+                                    @elseif($voucher->voucher_status === 'Approved')
+                                    <span class="badge badge-light-primary">Approved</span>
                                     @else
                                     <span class="badge badge-light-danger">Pending</span>
                                     @endif

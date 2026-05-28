@@ -174,6 +174,7 @@ class PaymentVouchersController extends Controller
 
             foreach ($validated['lines'] as $line) {
                 PaymentVoucherLine::create([
+                    'entry_id'          => $header->id,
                     'voucher_number'    => $voucherNum,
                     'entry_number'      => $line['entry_number'] ?? null,
                     'entry_year'        => $validated['year'],
@@ -295,6 +296,7 @@ class PaymentVouchersController extends Controller
             $nextEntry = $maxEntry + 1;
 
             $line = PaymentVoucherLine::create([
+                'entry_id'          => $voucher->id,
                 'voucher_number'    => $voucher->voucher_number,
                 'entry_number'      => $nextEntry,
                 'entry_year'        => $voucher->year,
