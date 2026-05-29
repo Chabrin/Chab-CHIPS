@@ -389,11 +389,82 @@
              TAB 2: RETURNS VOUCHERS
         ════════════════════════════════════════════════════ --}}
         <div class="tab-pane fade" id="returns-vouchers" role="tabpanel" aria-labelledby="returns-tab">
-            <div class="card">
-                <div class="card-body text-center py-5">
-                    <span class="material-symbols-outlined text-muted" style="font-size:48px;">assignment_return</span>
-                    <h6 class="mt-3 text-muted">Returns Vouchers</h6>
-                    <p class="text-muted mb-0" style="font-size:0.85rem;">Content coming soon...</p>
+            <div class="row">
+                {{-- Left Column: Approved Returns List --}}
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header card-no-border py-2">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <h6 class="mb-0">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">checklist</span>
+                                    Approved Returns
+                                    <span class="badge badge-light-primary ms-1" id="returnsCount">0</span>
+                                </h6>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <select class="form-select form-select-sm" id="returnsYear" style="width:100px;">
+                                        @foreach($years as $yr)
+                                        <option value="{{ $yr }}" {{ $yr == $currentYear ? 'selected' : '' }}>{{ $yr }}</option>
+                                        @endforeach
+                                    </select>
+                                    <select class="form-select form-select-sm" id="returnsMonth" style="width:120px;">
+                                        @foreach([1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'] as $num => $name)
+                                        <option value="{{ $num }}" {{ $num == $currentMonth ? 'selected' : '' }}>{{ $name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <button type="button" class="btn btn-primary btn-sm" id="loadReturnsBtn">
+                                        <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body pt-0">
+                            <div class="table-responsive custom-scrollbar">
+                                <table class="display" id="returnsTable" style="width:100%; font-size:0.82rem;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:30px;"></th>
+                                            <th>Landlord</th>
+                                            <th>Reference</th>
+                                            <th class="text-end">Net Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                                <div>
+                                    <small class="text-muted">Selected: <strong id="selectedReturnsCount">0</strong> items</small>
+                                    <span class="ms-3 text-muted">|</span>
+                                    <small class="ms-3 text-muted">Total: <strong id="selectedReturnsTotal">0.00</strong></small>
+                                </div>
+                                <button type="button" class="btn btn-success btn-sm" id="createReturnsVoucherBtn" disabled>
+                                    <span class="material-symbols-outlined" style="font-size:16px;">arrow_forward</span>
+                                    Create Voucher
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Right Column: Voucher Preview / Creation --}}
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header card-no-border py-2">
+                            <h6 class="mb-0">
+                                <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">receipt_long</span>
+                                Voucher Preview
+                            </h6>
+                        </div>
+                        <div class="card-body pt-0">
+                            <div id="returnsVoucherPreview" class="text-center py-5 text-muted">
+                                <span class="material-symbols-outlined" style="font-size:48px;">info</span>
+                                <p class="mt-2 mb-0" style="font-size:0.85rem;">Select returns from the left to preview voucher</p>
+                            </div>
+                            <div id="returnsVoucherForm" style="display:none;">
+                                {{-- Voucher form will be populated here --}}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1083,6 +1154,166 @@ $(document).ready(function () {
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RETURNS VOUCHERS TAB
+    // ═══════════════════════════════════════════════════════════════════
+
+    var returnsTable = null;
+    var selectedReturns = [];
+
+    // Initialize Returns DataTable
+    function initReturnsTable() {
+        if (returnsTable) {
+            returnsTable.destroy();
+        }
+
+        returnsTable = $('#returnsTable').DataTable({
+            data: [],
+            columns: [
+                {
+                    data: null,
+                    orderable: false,
+                    className: 'text-center',
+                    render: function(d, t, r) {
+                        return '<input type="checkbox" class="form-check-input return-checkbox" data-id="' + r.id + '" data-amount="' + r.net_balance_raw + '" data-landlord="' + escHtml(r.landlord_name) + '" data-code="' + r.landlord_code + '">';
+                    }
+                },
+                { data: 'landlord_name' },
+                { data: 'landlord_code' },
+                {
+                    data: 'net_balance',
+                    className: 'text-end'
+                }
+            ],
+            paging: true,
+            pageLength: 10,
+            info: true,
+            searching: true,
+            ordering: true,
+            order: [[1, 'asc']],
+            language: {
+                emptyTable: 'No approved returns found for selected period',
+                zeroRecords: 'No matching records found'
+            }
+        });
+    }
+
+    // Load returns data
+    function loadReturnsData() {
+        var year = $('#returnsYear').val();
+        var month = $('#returnsMonth').val();
+
+        $.ajax({
+            url: '{{ route("ajax.payment.vouchers.approved-returns") }}',
+            type: 'GET',
+            data: { year: year, month: month },
+            dataType: 'json',
+            beforeSend: function() {
+                $('#loadReturnsBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+            },
+            success: function(response) {
+                if (response.success) {
+                    if (!returnsTable) {
+                        initReturnsTable();
+                    }
+                    returnsTable.clear();
+                    returnsTable.rows.add(response.data);
+                    returnsTable.draw();
+
+                    $('#returnsCount').text(response.summary.total_count);
+
+                    selectedReturns = [];
+                    updateSelectedReturnsInfo();
+                } else {
+                    toastr.error(response.message || 'Failed to load returns');
+                }
+            },
+            error: function(xhr) {
+                toastr.error('Failed to load returns data');
+            },
+            complete: function() {
+                $('#loadReturnsBtn').prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px;">refresh</span>');
+            }
+        });
+    }
+
+    // Handle checkbox selection
+    $(document).on('change', '.return-checkbox', function() {
+        var id = $(this).data('id');
+        var amount = parseFloat($(this).data('amount')) || 0;
+        var landlord = $(this).data('landlord');
+        var code = $(this).data('code');
+
+        if ($(this).is(':checked')) {
+            selectedReturns.push({ id: id, amount: amount, landlord: landlord, code: code });
+        } else {
+            selectedReturns = selectedReturns.filter(function(r) { return r.id !== id; });
+        }
+
+        updateSelectedReturnsInfo();
+    });
+
+    // Update selected returns info
+    function updateSelectedReturnsInfo() {
+        var count = selectedReturns.length;
+        var total = selectedReturns.reduce(function(sum, r) { return sum + r.amount; }, 0);
+
+        $('#selectedReturnsCount').text(count);
+        $('#selectedReturnsTotal').text(fmtNum(total));
+        $('#createReturnsVoucherBtn').prop('disabled', count === 0);
+
+        if (count > 0) {
+            showReturnsVoucherPreview();
+        } else {
+            hideReturnsVoucherPreview();
+        }
+    }
+
+    // Show voucher preview
+    function showReturnsVoucherPreview() {
+        var html = '<div class="mb-3">';
+        html += '<div class="entry-section-label">Selected Returns</div>';
+        html += '<div class="table-responsive"><table class="table table-sm" style="font-size:0.8rem;">';
+        html += '<thead><tr><th>Landlord</th><th>Reference</th><th class="text-end">Amount</th></tr></thead><tbody>';
+
+        selectedReturns.forEach(function(r) {
+            html += '<tr><td>' + escHtml(r.landlord) + '</td>';
+            html += '<td>' + r.code + '</td>';
+            html += '<td class="text-end">' + fmtNum(r.amount) + '</td></tr>';
+        });
+
+        var total = selectedReturns.reduce(function(sum, r) { return sum + r.amount; }, 0);
+        html += '</tbody><tfoot><tr class="table-light"><td colspan="2">Total</td>';
+        html += '<td class="text-end">' + fmtNum(total) + '</td></tr></tfoot></table></div>';
+        html += '</div>';
+
+        $('#returnsVoucherPreview').hide();
+        $('#returnsVoucherForm').html(html).show();
+    }
+
+    // Hide voucher preview
+    function hideReturnsVoucherPreview() {
+        $('#returnsVoucherForm').hide().html('');
+        $('#returnsVoucherPreview').show();
+    }
+
+    // Load returns when tab is shown
+    $('#returns-tab').on('shown.bs.tab', function() {
+        if (!returnsTable) {
+            loadReturnsData();
+        }
+    });
+
+    // Reload button click
+    $('#loadReturnsBtn').on('click', function() {
+        loadReturnsData();
+    });
+
+    // Year/Month filter change
+    $('#returnsYear, #returnsMonth').on('change', function() {
+        loadReturnsData();
+    });
 
 });
 </script>
