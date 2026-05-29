@@ -11,13 +11,9 @@
     border-radius: 50%;
     font-weight: 600;
     font-size: 0.85rem;
+    background: #e9ecef;
+    color: #495057;
 }
-.level-1 { background: #e3f2fd; color: #1565c0; }
-.level-2 { background: #fff3e0; color: #e65100; }
-.level-3 { background: #f3e5f5; color: #7b1fa2; }
-.level-4 { background: #e8f5e9; color: #2e7d32; }
-.level-5 { background: #fce4ec; color: #c2185b; }
-.final-badge { background: #ffeb3b; color: #333; font-size: 0.7rem; padding: 2px 6px; border-radius: 3px; }
 </style>
 @endsection
 
@@ -81,34 +77,6 @@
                     </div>
                 </div>
 
-                <!-- Change Logs Section -->
-                <div class="card">
-                    <div class="card-header card-no-border py-2">
-                        <h6 class="mb-0">
-                            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">history</span>
-                            Change History
-                        </h6>
-                    </div>
-                    <div class="card-body pt-0">
-                        <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
-                            <table class="table table-sm" id="logsTable" style="font-size:0.8rem;">
-                                <thead>
-                                    <tr>
-                                        <th>Action</th>
-                                        <th>Details</th>
-                                        <th>Changed By</th>
-                                        <th>Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="logsTableBody">
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted py-3">Loading...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Info Sidebar -->
@@ -292,19 +260,16 @@ $(document).ready(function() {
 
         var html = '';
         data.forEach(function(item) {
-            var levelClass = 'level-' + Math.min(item.approval_level, 5);
             var statusBadge = item.is_active == 1
                 ? '<span class="badge badge-light-success">Active</span>'
                 : '<span class="badge badge-light-secondary">Inactive</span>';
-            var finalBadge = item.is_final == 1
-                ? '<span class="final-badge">FINAL</span>'
-                : '-';
+            var finalLabel = item.is_final == 1 ? 'Yes' : '-';
 
             html += '<tr' + (item.is_active == 0 ? ' class="text-muted"' : '') + '>';
-            html += '<td><span class="level-badge ' + levelClass + '">' + item.approval_level + '</span></td>';
+            html += '<td><span class="level-badge">' + item.approval_level + '</span></td>';
             html += '<td><strong>' + item.approver_name + '</strong></td>';
             html += '<td><small>' + item.approver_email + '</small></td>';
-            html += '<td>' + finalBadge + '</td>';
+            html += '<td>' + finalLabel + '</td>';
             html += '<td>' + statusBadge + '</td>';
             html += '<td>';
             html += '<div class="d-flex gap-1">';
@@ -321,54 +286,7 @@ $(document).ready(function() {
         $('#approversTableBody').html(html);
     }
 
-    // Load change logs
-    function loadChangeLogs() {
-        $.ajax({
-            url: '/ajax/accounting/approvals/' + workflowEncryptedId + '/logs',
-            type: 'GET',
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    renderLogsTable(response.data);
-                }
-            },
-            error: function() {
-                $('#logsTableBody').html('<tr><td colspan="4" class="text-center text-danger">Failed to load logs</td></tr>');
-            }
-        });
-    }
-
-    // Render logs table
-    function renderLogsTable(data) {
-        if (data.length === 0) {
-            $('#logsTableBody').html('<tr><td colspan="4" class="text-center text-muted py-3">No change history</td></tr>');
-            return;
-        }
-
-        var html = '';
-        data.forEach(function(log) {
-            var actionBadge = '';
-            switch(log.action) {
-                case 'WORKFLOW_CREATED': actionBadge = '<span class="badge badge-light-success">Created</span>'; break;
-                case 'WORKFLOW_UPDATED': actionBadge = '<span class="badge badge-light-info">Updated</span>'; break;
-                case 'APPROVER_ADDED': actionBadge = '<span class="badge badge-light-primary">Approver Added</span>'; break;
-                case 'APPROVER_UPDATED': actionBadge = '<span class="badge badge-light-warning">Approver Updated</span>'; break;
-                case 'APPROVER_REMOVED': actionBadge = '<span class="badge badge-light-danger">Approver Removed</span>'; break;
-                default: actionBadge = '<span class="badge badge-light-secondary">' + log.action + '</span>';
-            }
-
-            html += '<tr>';
-            html += '<td>' + actionBadge + '</td>';
-            html += '<td><small>' + (log.details || '-') + '</small></td>';
-            html += '<td>' + log.changed_by_name + '</td>';
-            html += '<td><small>' + log.changed_on + '</small></td>';
-            html += '</tr>';
-        });
-        $('#logsTableBody').html(html);
-    }
-
     loadApprovers();
-    loadChangeLogs();
 
     // Add Approver Button
     $('#addApproverBtn').on('click', function() {
@@ -444,7 +362,6 @@ $(document).ready(function() {
                     toastr.success(response.message);
                     $('#approverModal').modal('hide');
                     loadApprovers();
-                    loadChangeLogs();
                 } else {
                     var msg = response.message || 'Failed to save approver';
                     if (response.errors) {
@@ -491,13 +408,16 @@ $(document).ready(function() {
                     toastr.success(response.message);
                     $('#removeApproverModal').modal('hide');
                     loadApprovers();
-                    loadChangeLogs();
                 } else {
                     toastr.error(response.message || 'Failed to remove approver');
                 }
             },
-            error: function() {
-                toastr.error('Failed to remove approver');
+            error: function(xhr) {
+                var msg = 'Failed to remove approver';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                }
+                toastr.error(msg);
             }
         });
     });

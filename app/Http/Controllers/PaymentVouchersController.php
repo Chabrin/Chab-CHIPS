@@ -14,6 +14,7 @@ use App\Models\PaymentVoucherLine;
 use App\Models\ChartAccount;
 use App\Models\InvoiceableItem;
 use App\Models\CompanyBankAccount;
+use App\Services\ApprovalService;
 
 class PaymentVouchersController extends Controller
 {
@@ -135,13 +136,13 @@ class PaymentVouchersController extends Controller
                 'voucher_date'              => ['required', 'date'],
                 'year'                      => ['required', 'integer', 'min:2000', 'max:2099'],
                 'month'                     => ['required', 'integer', 'min:1', 'max:12'],
+                'cheque_number'             => ['nullable', 'string', 'max:50'],
                 'lines'                     => ['required', 'array', 'min:1'],
                 'lines.*.entry_description' => ['required', 'string', 'max:500'],
                 'lines.*.entry_number'      => ['nullable', 'string', 'max:100'],
                 'lines.*.amount'            => ['required', 'numeric', 'min:0.01'],
                 'lines.*.account_number'    => ['nullable', 'string', 'max:100'],
                 'lines.*.account_bank'      => ['nullable', 'string', 'max:255'],
-                'lines.*.cheque_number'     => ['nullable', 'string', 'max:50'],
             ], [
                 'lines.required' => 'Add at least one entry before creating the voucher.',
                 'lines.min'      => 'Add at least one entry before creating the voucher.',
@@ -166,6 +167,7 @@ class PaymentVouchersController extends Controller
                 'credit_amount'    => 0,
                 'entry_count'      => count($validated['lines']),
                 'voucher_status'   => 'Pending',
+                'cheque_number'    => $validated['cheque_number'] ?? null,
                 'is_deleted'       => 0,
                 'prepared_by'      => Auth::user()->name,
                 'is_printed'       => 0,
@@ -173,13 +175,13 @@ class PaymentVouchersController extends Controller
 
             foreach ($validated['lines'] as $line) {
                 PaymentVoucherLine::create([
+                    'entry_id'          => $header->id,
                     'voucher_number'    => $voucherNum,
                     'entry_number'      => $line['entry_number'] ?? null,
                     'entry_year'        => $validated['year'],
                     'entry_month'       => $validated['month'],
                     'account_number'    => $line['account_number'] ?? null,
                     'account_bank'      => $line['account_bank'] ?? null,
-                    'cheque_number'     => $line['cheque_number'] ?? null,
                     'entry_description' => $line['entry_description'],
                     'payee_name'        => $validated['vendor_name'],
                     'amount'            => $line['amount'],
@@ -188,11 +190,25 @@ class PaymentVouchersController extends Controller
                 ]);
             }
 
+            $approvalRequest = null;
+            try {
+                $approvalService = app(ApprovalService::class);
+                $approvalRequest = $approvalService->initiateApproval(
+                    'voucher',
+                    $header->id,
+                    'voucher_approval',
+                    Auth::id()
+                );
+            } catch (Exception $e) {
+                Log::warning('Could not initiate approval workflow for voucher: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success'        => true,
-                'message'        => 'Voucher ' . $voucherNum . ' created successfully',
+                'message'        => 'Voucher ' . $voucherNum . ' created successfully' . ($approvalRequest ? ' and submitted for approval' : ''),
                 'voucher_number' => $voucherNum,
                 'encrypted_id'   => encrypt($header->id),
+                'approval_initiated' => $approvalRequest !== null,
             ]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -280,6 +296,7 @@ class PaymentVouchersController extends Controller
             $nextEntry = $maxEntry + 1;
 
             $line = PaymentVoucherLine::create([
+                'entry_id'          => $voucher->id,
                 'voucher_number'    => $voucher->voucher_number,
                 'entry_number'      => $nextEntry,
                 'entry_year'        => $voucher->year,

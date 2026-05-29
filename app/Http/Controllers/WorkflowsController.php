@@ -317,15 +317,44 @@ class WorkflowsController extends Controller
                 'is_final' => 'nullable|in:0,1',
             ]);
 
-            $exists = WorkflowApprover::where('workflow_id', $workflowId)
+            $existingApprover = WorkflowApprover::where('workflow_id', $workflowId)
                 ->where('approver_id', $validated['approver_id'])
-                ->exists();
+                ->first();
 
-            if ($exists) {
+            if ($existingApprover) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'This approver is already added to this workflow',
+                    'message' => 'This user is already an approver at Level ' . $existingApprover->approval_level . '. Same approver cannot be in multiple levels.',
                 ], 422);
+            }
+
+            $requestedLevel = (int) $validated['approval_level'];
+
+            $levelExists = WorkflowApprover::where('workflow_id', $workflowId)
+                ->where('approval_level', $requestedLevel)
+                ->where('is_active', 1)
+                ->exists();
+
+            if ($levelExists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Level ' . $requestedLevel . ' already has an approver. Only one approver per level is allowed.',
+                ], 422);
+            }
+
+            if ($requestedLevel > 1) {
+                $previousLevel = $requestedLevel - 1;
+                $previousLevelExists = WorkflowApprover::where('workflow_id', $workflowId)
+                    ->where('approval_level', $previousLevel)
+                    ->where('is_active', 1)
+                    ->exists();
+
+                if (!$previousLevelExists) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot add Level ' . $requestedLevel . ' approver. Please add Level ' . $previousLevel . ' approver first.',
+                    ], 422);
+                }
             }
 
             $isFinal = $validated['is_final'] ?? 0;
@@ -413,8 +442,54 @@ class WorkflowsController extends Controller
             $oldIsFinal = $approver->is_final;
             $oldIsActive = $approver->is_active;
 
+            $newLevel = (int) $validated['approval_level'];
             $isFinal = $validated['is_final'] ?? 0;
-            $isActive = $validated['is_active'] ?? $approver->is_active;
+            $isActive = (int) ($validated['is_active'] ?? $approver->is_active);
+
+            if ($isActive == 1 && $oldIsActive == 0) {
+                $levelHasActive = WorkflowApprover::where('workflow_id', $approver->workflow_id)
+                    ->where('approval_level', $newLevel)
+                    ->where('is_active', 1)
+                    ->where('id', '!=', $id)
+                    ->exists();
+
+                if ($levelHasActive) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot reactivate. Level ' . $newLevel . ' already has an active approver.',
+                    ], 422);
+                }
+            }
+
+            if ($newLevel != $oldLevel) {
+                $levelExists = WorkflowApprover::where('workflow_id', $approver->workflow_id)
+                    ->where('approval_level', $newLevel)
+                    ->where('is_active', 1)
+                    ->where('id', '!=', $id)
+                    ->exists();
+
+                if ($levelExists) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Level ' . $newLevel . ' already has an approver. Only one approver per level is allowed.',
+                    ], 422);
+                }
+
+                if ($newLevel > 1) {
+                    $previousLevel = $newLevel - 1;
+                    $previousLevelExists = WorkflowApprover::where('workflow_id', $approver->workflow_id)
+                        ->where('approval_level', $previousLevel)
+                        ->where('is_active', 1)
+                        ->exists();
+
+                    if (!$previousLevelExists && $oldLevel != $previousLevel) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Cannot change to Level ' . $newLevel . '. Level ' . $previousLevel . ' must have an active approver.',
+                        ], 422);
+                    }
+                }
+            }
 
             if ($isFinal == 1 && $oldIsFinal != 1) {
                 WorkflowApprover::where('workflow_id', $approver->workflow_id)
@@ -424,7 +499,7 @@ class WorkflowsController extends Controller
             }
 
             $approver->update([
-                'approval_level' => $validated['approval_level'],
+                'approval_level' => $newLevel,
                 'is_final' => $isFinal,
                 'is_active' => $isActive,
             ]);
@@ -498,6 +573,18 @@ class WorkflowsController extends Controller
             $approverId = $approver->approver_id;
             $approverName = $approver->approver->name ?? 'Unknown';
             $level = $approver->approval_level;
+
+            $higherLevelExists = WorkflowApprover::where('workflow_id', $workflowId)
+                ->where('approval_level', '>', $level)
+                ->where('is_active', 1)
+                ->exists();
+
+            if ($higherLevelExists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot remove Level ' . $level . ' approver. Please remove higher level approvers first.',
+                ], 422);
+            }
 
             $approver->delete();
 
@@ -576,7 +663,7 @@ class WorkflowsController extends Controller
             $search = $request->input('search', '');
 
             $query = User::select(['id', 'name', 'email'])
-                ->where('current_status_id', 1);
+                ->where('block', 0);
 
             if (strlen($search) >= 2) {
                 $query->where(function ($q) use ($search) {

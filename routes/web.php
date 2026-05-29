@@ -1321,6 +1321,19 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/accounting/approvals/{encryptedId}/logs', [App\Http\Controllers\WorkflowsController::class, 'getChangeLogs'])->name('ajax.accounting.approvals.logs');
     Route::get('/ajax/accounting/approvals/users/search', [App\Http\Controllers\WorkflowsController::class, 'searchUsers'])->name('ajax.accounting.approvals.users.search');
 
+    // Approval Requests
+    Route::get('/accounting/pending/approvals', [App\Http\Controllers\ApprovalRequestsController::class, 'index'])->name('accounting.pending.approvals');
+    Route::get('/accounting/pending/approvals/{encryptedId}', [App\Http\Controllers\ApprovalRequestsController::class, 'show'])->name('accounting.pending.approvals.show');
+    Route::get('/ajax/approval-requests/pending', [App\Http\Controllers\ApprovalRequestsController::class, 'getPendingApprovals'])->name('ajax.approval-requests.pending');
+    Route::get('/ajax/approval-requests/historical', [App\Http\Controllers\ApprovalRequestsController::class, 'getHistoricalApprovals'])->name('ajax.approval-requests.historical');
+    Route::get('/ajax/approval-requests/{encryptedId}', [App\Http\Controllers\ApprovalRequestsController::class, 'getRequestDetails'])->name('ajax.approval-requests.details');
+    Route::get('/ajax/approval-requests/{encryptedId}/timeline', [App\Http\Controllers\ApprovalRequestsController::class, 'getTimeline'])->name('ajax.approval-requests.timeline');
+    Route::post('/ajax/approval-requests/{encryptedId}/approve', [App\Http\Controllers\ApprovalRequestsController::class, 'approve'])->name('ajax.approval-requests.approve');
+    Route::post('/ajax/approval-requests/{encryptedId}/reject', [App\Http\Controllers\ApprovalRequestsController::class, 'reject'])->name('ajax.approval-requests.reject');
+    Route::post('/ajax/approval-requests/{encryptedId}/request-changes', [App\Http\Controllers\ApprovalRequestsController::class, 'requestChanges'])->name('ajax.approval-requests.request-changes');
+    Route::post('/ajax/approval-requests/{encryptedId}/return', [App\Http\Controllers\ApprovalRequestsController::class, 'returnToPrevious'])->name('ajax.approval-requests.return');
+    Route::post('/ajax/approval-requests/{encryptedId}/resubmit', [App\Http\Controllers\ApprovalRequestsController::class, 'resubmit'])->name('ajax.approval-requests.resubmit');
+    Route::get('/ajax/approval-requests/for-item', [App\Http\Controllers\ApprovalRequestsController::class, 'getForItem'])->name('ajax.approval-requests.for-item');
 
 
     // Activity logs

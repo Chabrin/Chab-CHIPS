@@ -149,6 +149,17 @@
                     </div>
 
                     <div class="col-md-2">
+                        <label class="form-label">
+                            Cheque No.
+                            <span id="chequeLoadingSpinner" class="spinner-border spinner-border-sm text-primary ms-1" style="display:none; width:10px; height:10px;"></span>
+                        </label>
+                        <input type="text" class="form-control form-control-sm" id="voucherChequeNo"
+                               placeholder="Auto from book" readonly
+                               style="background-color:#eef3f8; color:#1a2e44; font-weight:600; letter-spacing:0.5px;">
+                        <div id="chequeNoMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                    </div>
+
+                    <div class="col-md-2">
                         <label class="form-label">Post to Year <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" id="postYear">
                             @foreach($years as $yr)
@@ -198,7 +209,7 @@
 
                 </div>
 
-                {{-- Row 2: Source Account → auto-locked Cheque No + Amount + Add Entry --}}
+                {{-- Row 2: Source Account + Amount + Add Entry --}}
                 <div class="row g-2 align-items-start">
 
                     <div class="col-md-4">
@@ -222,17 +233,6 @@
                                 <span id="sourceAccBank"></span>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">
-                            Cheque No.
-                            <span id="chequeLoadingSpinner" class="spinner-border spinner-border-sm text-primary ms-1" style="display:none; width:10px; height:10px;"></span>
-                        </label>
-                        <input type="text" class="form-control form-control-sm" id="entryChequeNo"
-                               placeholder="Auto from book" readonly
-                               style="background-color:#eef3f8; color:#1a2e44; font-weight:600; letter-spacing:0.5px;">
-                        <div id="chequeNoMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
                     </div>
 
                     <div class="col-md-2">
@@ -278,14 +278,13 @@
                             <th>Entry Type</th>
                             <th>Description</th>
                             <th>Source Account</th>
-                            <th>Cheque No</th>
                             <th class="text-end">Amount</th>
                             <th style="width:70px;"></th>
                         </tr>
                     </thead>
                     <tbody id="entriesTableBody">
                         <tr id="noEntriesRow">
-                            <td colspan="7" class="text-center text-muted py-4" style="font-size:0.82rem;">
+                            <td colspan="6" class="text-center text-muted py-4" style="font-size:0.82rem;">
                                 No entries added yet — fill the form above and click Add Entry
                             </td>
                         </tr>
@@ -373,9 +372,6 @@
                             <dt class="col-5 text-muted fw-normal">Source Account</dt>
                             <dd class="col-7 mb-0" id="det_account"></dd>
 
-                            <dt class="col-5 text-muted fw-normal">Cheque No.</dt>
-                            <dd class="col-7 mb-0" id="det_cheque"></dd>
-
                             <dt class="col-5 text-muted fw-normal">Amount</dt>
                             <dd class="col-7 mb-0 fw-bold text-dark" id="det_amount" style="font-size:0.9rem;"></dd>
                         </dl>
@@ -400,8 +396,8 @@ $(document).ready(function () {
     let pendingEntries = [];
     let uidCounter     = 0;
 
-    // Tracks the cheque lock held on the current (not yet added) entry form
-    let currentLock = { leaf_id: null, lock_token: null, cheque_number: null };
+    // Tracks the cheque lock held at the voucher level
+    let voucherCheque = { leaf_id: null, lock_token: null, cheque_number: null };
 
     // ─── Payee Type toggle ────────────────────────────────────────────
     $('#vendorType').on('change', function () {
@@ -593,16 +589,16 @@ $(document).ready(function () {
         if (itemName) { $('#entryDesc').val(itemName.toUpperCase()); }
     });
 
-    // ─── Source Account: show info pill + auto-lock next cheque ──────
+    // ─── Source Account: show info pill + auto-lock next cheque (voucher level) ──────
     $('#sourceAccount').on('change', function () {
         const bankAccountId = $(this).val();
         const opt           = $(this).find(':selected');
 
-        // Release any existing lock before doing anything else
-        releaseCurrentLock();
+        // Release any existing voucher-level lock before doing anything else
+        releaseVoucherChequeLock();
 
         $('#chequeNoMsg').text('');
-        $('#entryChequeNo').val('');
+        $('#voucherChequeNo').val('');
 
         if (!bankAccountId) {
             $('#sourceAccountInfo').hide();
@@ -617,7 +613,7 @@ $(document).ready(function () {
         $('#sourceAccBank').text(accName + (bankName ? ' — ' + bankName : ''));
         $('#sourceAccountInfo').show();
 
-        // Fetch and lock next available cheque
+        // Fetch and lock next available cheque for the voucher
         $('#chequeLoadingSpinner').show();
         $('#sourceAccount').prop('disabled', true);
 
@@ -629,11 +625,11 @@ $(document).ready(function () {
                 $('#chequeLoadingSpinner').hide();
                 $('#sourceAccount').prop('disabled', false);
 
-                currentLock.leaf_id       = r.leaf_id;
-                currentLock.lock_token    = r.lock_token;
-                currentLock.cheque_number = r.cheque_number;
+                voucherCheque.leaf_id       = r.leaf_id;
+                voucherCheque.lock_token    = r.lock_token;
+                voucherCheque.cheque_number = r.cheque_number;
 
-                $('#entryChequeNo').val(r.cheque_number);
+                $('#voucherChequeNo').val(r.cheque_number);
             },
             error: function (xhr) {
                 $('#chequeLoadingSpinner').hide();
@@ -650,25 +646,15 @@ $(document).ready(function () {
         });
     });
 
-    // ─── Release the current form-level cheque lock ───────────────────
-    function releaseCurrentLock() {
-        if (!currentLock.leaf_id) return;
+    // ─── Release the voucher-level cheque lock ───────────────────
+    function releaseVoucherChequeLock() {
+        if (!voucherCheque.leaf_id) return;
         $.post('{{ route("ajax.voucher-cheque.release") }}', {
-            leaf_id:    currentLock.leaf_id,
-            lock_token: currentLock.lock_token,
+            leaf_id:    voucherCheque.leaf_id,
+            lock_token: voucherCheque.lock_token,
             _token:     '{{ csrf_token() }}',
         });
-        currentLock = { leaf_id: null, lock_token: null, cheque_number: null };
-    }
-
-    // ─── Release a specific entry's cheque lock ───────────────────────
-    function releaseEntryLock(entry) {
-        if (!entry.leaf_id) return;
-        $.post('{{ route("ajax.voucher-cheque.release") }}', {
-            leaf_id:    entry.leaf_id,
-            lock_token: entry.lock_token,
-            _token:     '{{ csrf_token() }}',
-        });
+        voucherCheque = { leaf_id: null, lock_token: null, cheque_number: null };
     }
 
     // ─── Validate voucher-level fields ────────────────────────────────
@@ -709,7 +695,7 @@ $(document).ready(function () {
         tbody.empty();
 
         if (!pendingEntries.length) {
-            tbody.html('<tr id="noEntriesRow"><td colspan="7" class="text-center text-muted py-4" style="font-size:0.82rem;">No entries added yet — fill the form above and click Add Entry</td></tr>');
+            tbody.html('<tr id="noEntriesRow"><td colspan="6" class="text-center text-muted py-4" style="font-size:0.82rem;">No entries added yet — fill the form above and click Add Entry</td></tr>');
             $('#entriesCountBadge').text(0);
             $('#entriesTotalDisplay').hide();
             $('#createVoucherBtn').prop('disabled', true);
@@ -721,16 +707,12 @@ $(document).ready(function () {
             total += e.amount;
             const entryTypeLbl = e.entry_type_label  ? '<small>' + escHtml(e.entry_type_label)  + '</small>' : '<small class="text-muted">—</small>';
             const sourceAccLbl = e.source_account_label ? '<small>' + escHtml(e.source_account_label) + '</small>' : '<small class="text-muted">—</small>';
-            const chequeLbl    = e.cheque_number
-                ? escHtml(e.cheque_number)
-                : '<small class="text-muted">—</small>';
             tbody.append(
                 '<tr data-uid="' + e.uid + '">' +
                 '<td>' + (i + 1) + '</td>' +
                 '<td>' + entryTypeLbl + '</td>' +
                 '<td>' + escHtml(e.description) + '</td>' +
                 '<td>' + sourceAccLbl + '</td>' +
-                '<td>' + chequeLbl + '</td>' +
                 '<td class="text-end fw-bold">' + fmtNum(e.amount) + '</td>' +
                 '<td class="text-nowrap">' +
                 '<a href="#" class="view-entry-detail text-primary me-2" data-uid="' + e.uid + '" title="View details">' +
@@ -778,32 +760,22 @@ $(document).ready(function () {
             account_number:       accountNumber,
             account_bank:         accountBank,
             source_account_label: sourceAccLabel,
-            cheque_number:        currentLock.cheque_number,
-            leaf_id:              currentLock.leaf_id,
-            lock_token:           currentLock.lock_token,
             amount:               amount,
         });
-
-        // Lock is now owned by the entry — clear form-level lock tracking
-        currentLock = { leaf_id: null, lock_token: null, cheque_number: null };
 
         refreshTable();
 
         $('#entryDesc').val('').focus();
         $('#entryAmount').val('');
-        $('#entryChequeNo').val('');
-        $('#chequeNoMsg').text('');
         $('#entryType').val('');
         $('#sourceAccount').val('');
         $('#sourceAccountInfo').hide();
     });
 
-    // ─── Delete entry — release its cheque lock ───────────────────────
+    // ─── Delete entry ───────────────────────────────────────────────
     $('#entriesTableBody').on('click', '.delete-entry', function (e) {
         e.preventDefault();
-        const uid   = parseInt($(this).data('uid'));
-        const entry = pendingEntries.find(function (x) { return x.uid === uid; });
-        if (entry) { releaseEntryLock(entry); }
+        const uid = parseInt($(this).data('uid'));
         pendingEntries = pendingEntries.filter(function (x) { return x.uid !== uid; });
         refreshTable();
     });
@@ -837,9 +809,6 @@ $(document).ready(function () {
         $('#det_desc').text(entry.description      || '—');
         $('#det_account').html(entry.source_account_label
             ? '<span class="badge badge-light-primary">' + escHtml(entry.source_account_label) + '</span>'
-            : '<span class="text-muted">—</span>');
-        $('#det_cheque').html(entry.cheque_number
-            ? escHtml(entry.cheque_number)
             : '<span class="text-muted">—</span>');
         $('#det_amount').text('KES ' + fmtNum(entry.amount));
 
@@ -879,13 +848,13 @@ $(document).ready(function () {
                 voucher_date:       $('#voucherDate').val(),
                 year:               $('#postYear').val(),
                 month:              $('#postMonth').val(),
+                cheque_number:      voucherCheque.cheque_number,
                 lines: pendingEntries.map(function (e) {
                     return {
                         entry_number:      e.entry_number,
                         entry_description: e.description,
                         account_number:    e.account_number,
                         account_bank:      e.account_bank,
-                        cheque_number:     e.cheque_number,
                         amount:            e.amount,
                     };
                 }),
@@ -908,12 +877,12 @@ $(document).ready(function () {
         });
     });
 
-    // ─── Release form-level lock if user navigates away ───────────────
+    // ─── Release voucher-level cheque lock if user navigates away ───────────────
     $(window).on('beforeunload', function () {
-        if (currentLock.leaf_id) {
+        if (voucherCheque.leaf_id) {
             navigator.sendBeacon(
                 '{{ route("ajax.voucher-cheque.release") }}',
-                new URLSearchParams({ leaf_id: currentLock.leaf_id, lock_token: currentLock.lock_token, _token: '{{ csrf_token() }}' })
+                new URLSearchParams({ leaf_id: voucherCheque.leaf_id, lock_token: voucherCheque.lock_token, _token: '{{ csrf_token() }}' })
             );
         }
     });

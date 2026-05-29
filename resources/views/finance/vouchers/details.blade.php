@@ -115,11 +115,19 @@
                                 <div class="hdr-value">
                                     @if($voucher->voucher_status === 'Paid')
                                     <span class="badge badge-light-success">Paid</span>
+                                    @elseif($voucher->voucher_status === 'Approved')
+                                    <span class="badge badge-light-primary">Approved</span>
                                     @else
                                     <span class="badge badge-light-danger">Pending</span>
                                     @endif
                                 </div>
                             </div>
+                            @if($voucher->cheque_number)
+                            <div class="col-auto">
+                                <div class="hdr-label">Cheque No.</div>
+                                <div class="hdr-value fw-semibold">{{ $voucher->cheque_number }}</div>
+                            </div>
+                            @endif
                         </div>
 
                         <!-- Extra info panel -->
@@ -208,7 +216,6 @@
                                         <th>Payee</th>
                                         <th>Source Account No.</th>
                                         <th>Source Bank / Account</th>
-                                        <th>Cheque No.</th>
                                         <th class="text-end">Amount</th>
                                         <th>Approved</th>
                                     </tr>
@@ -270,14 +277,6 @@
                     render: function(d) {
                         return d && d !== '-'
                             ? '<small>' + d + '</small>'
-                            : '<span class="text-muted">—</span>';
-                    }
-                },
-                {
-                    data: 'cheque_number',
-                    render: function(d) {
-                        return d && d !== '-'
-                            ? d
                             : '<span class="text-muted">—</span>';
                     }
                 },

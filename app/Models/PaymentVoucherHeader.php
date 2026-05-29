@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PaymentVoucherHeader extends Model
 {
@@ -22,6 +23,7 @@ class PaymentVoucherHeader extends Model
         'credit_amount',
         'entry_count',
         'voucher_status',
+        'cheque_number',
         'is_deleted',
         'prepared_by',
         'checked_status',
@@ -44,5 +46,18 @@ class PaymentVoucherHeader extends Model
     public function lines()
     {
         return $this->hasMany(PaymentVoucherLine::class, 'voucher_number', 'voucher_number');
+    }
+
+    public function approvalRequest()
+    {
+        return ApprovalRequest::where('request_type', 'voucher')
+            ->where('request_id', $this->id)
+            ->first();
+    }
+
+    public function getApprovalStatus(): ?string
+    {
+        $request = $this->approvalRequest();
+        return $request?->status;
     }
 }

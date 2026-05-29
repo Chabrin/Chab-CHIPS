@@ -2,418 +2,358 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Member;
-use App\Models\MembersHost;
-use App\Models\ApprovalItem;
+use Exception;
 use Illuminate\Http\Request;
-use App\Models\ApprovalAction;
-use App\Models\ApprovalWorkflow;
-use App\Services\ErrorDispatcher;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
-use App\Traits\Retirement\RetirementActions;
-use App\Traits\Retirement\ProcessRetirementBalances;
+use Illuminate\Support\Facades\Log;
+use App\Services\ErrorDispatcher;
+use App\Services\ApprovalService;
+use App\Models\ApprovalRequest;
 
 class ApprovalRequestsController extends Controller
 {
-    use RetirementActions, ProcessRetirementBalances;
+    protected ApprovalService $approvalService;
 
+    public function __construct(ApprovalService $approvalService)
+    {
+        $this->approvalService = $approvalService;
+    }
+
+    /**
+     * Display the pending approvals page.
+     */
     public function index()
     {
-        return view('approvals.requests');
-    }
-
-
-    public function list(Request $request)
-    {
         try {
-            $user = Auth::user();
-            $userRoleIds = $user->roles->pluck('id')->toArray();
-
-            $draw = $request->get('draw');
-            $start = $request->get('start', 0);
-            $length = $request->get('length', 10);
-
-            $items = ApprovalItem::with(['workflow.approvers', 'actions.approver'])
-                ->whereHas('workflow.approvers', function ($q) use ($user, $userRoleIds) {
-                    $q->where('user_id', $user->id)
-                        ->orWhereIn('role_id', $userRoleIds);
-                })
-                ->get();
-
-            $filtered = $items->filter(function ($item) use ($user, $userRoleIds) {
-                $workflow = $item->workflow;
-                if (!$workflow) {
-                    return false;
-                }
-
-                $approvers = $workflow->approvers->sortBy('hierarchy_level')->values();
-
-                $userApprovers = $approvers->filter(function ($a) use ($user, $userRoleIds) {
-                    return ($a->user_id === $user->id) ||
-                        ($a->role_id && in_array($a->role_id, $userRoleIds));
-                });
-
-                if ($userApprovers->isEmpty()) {
-                    return false;
-                }
-
-                $actionsWithLevels = DB::table('approval_actions')
-                    ->join('workflow_approvers', 'approval_actions.approver_id', '=', 'workflow_approvers.user_id')
-                    ->where('approval_actions.approval_item_id', $item->id)
-                    ->where('workflow_approvers.workflow_id', $workflow->id)
-                    ->select('approval_actions.*', 'workflow_approvers.hierarchy_level')
-                    ->get();
-
-                $approvedLevels = $actionsWithLevels
-                    ->where('action_type', 'approve')
-                    ->pluck('hierarchy_level')
-                    ->unique()
-                    ->toArray();
-
-                foreach ($userApprovers as $ua) {
-                    $currentLevel = $ua->hierarchy_level;
-
-                    $currentLevelAction = $actionsWithLevels
-                        ->where('hierarchy_level', $currentLevel)
-                        ->where('approver_id', $user->id)
-                        ->first();
-
-                    if ($currentLevelAction && $currentLevelAction->action_type) {
-                        continue;
-                    }
-
-                    $lowerLevels = $approvers
-                        ->where('hierarchy_level', '<', $currentLevel)
-                        ->pluck('hierarchy_level')
-                        ->unique()
-                        ->toArray();
-
-                    $allLowerLevelsApproved = empty($lowerLevels) ||
-                        count(array_intersect($lowerLevels, $approvedLevels)) === count($lowerLevels);
-
-                    if ($allLowerLevelsApproved) {
-                        return true;
-                    }
-                }
-
-                return false;
-            })->values();
-
-            $recordsTotal = $filtered->count();
-            $paged = $filtered->slice($start, $length);
-
-            $data = $paged->map(function ($it) {
-                return [
-                    'id' => $it->id,
-                    'encrypted_id' => encrypt($it->id),
-                    'item_type' => $it->item_type,
-                    'member_no' => $it->member_no,
-                    'status' => $it->status,
-                    'requested_by' => $it->requested_by,
-                    'requested_on' => $it->requested_on,
-                ];
-            });
-
-            return response()->json([
-                'draw' => $draw,
-                'recordsTotal' => $recordsTotal,
-                'recordsFiltered' => $recordsTotal,
-                'data' => $data,
-            ]);
-        } catch (\Throwable $e) {
+            return view('accounting.approvals.pending');
+        } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Approval list failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['success' => false, 'error' => 'Failed to list approvals'], 500);
+            Log::error('Error loading pending approvals page: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load pending approvals page');
         }
     }
 
-
-
-    public function action(Request $request)
-    {
-        try {
-            Log::info('Approval action request received', [
-                'user_id' => Auth::id(),
-                'request_data' => $request->all()
-            ]);
-
-            $request->validate([
-                'action_type' => 'required|in:approve,reject',
-                'remarks' => 'nullable|string|max:1000',
-                'approval_item_id' => 'required|exists:approval_items,id'
-            ]);
-
-            $action = ApprovalAction::where('approval_item_id', $request->approval_item_id)
-                ->where('approver_id', Auth::id())
-                ->first();
-
-            if ($action) {
-                // Check if action has already been taken
-                if ($action->action_type !== null) {
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'You have already taken action on this approval request. Multiple actions are not allowed.'
-                    ], 400);
-                }
-
-                // Start database transaction
-                DB::beginTransaction();
-
-                try {
-                    $action->update([
-                        'action_type' => $request->action_type,
-                        'remarks' => $request->remarks,
-                        'updated_at' => now()
-                    ]);
-
-                    // Get the approval item and workflow
-                    $approvalItem = ApprovalItem::with('workflow.approvers')->find($request->approval_item_id);
-
-                    if ($approvalItem && $approvalItem->workflow) {
-                        // If action is reject, immediately set status to rejected
-                        if ($request->action_type === 'reject') {
-                            $approvalItem->update([
-                                'status' => 'Rejected',
-                                'updated_at' => now()
-                            ]);
-
-                            // If the workflow is for retire_members and member_no exists, unflag retirement
-                            if ($approvalItem->workflow_name === 'retire_members' && $approvalItem->member_no) {
-                                $this->unflagMemberRetirement($approvalItem->member_no);
-                            }
-                        }
-                        // If action is approve, check if this is the last approval level
-                        else if ($request->action_type === 'approve') {
-                            $workflow = $approvalItem->workflow;
-
-                            // Get all hierarchy levels in the workflow
-                            $allLevels = $workflow->approvers->pluck('hierarchy_level')->unique()->sort()->values();
-
-                            // Get all approved actions with their hierarchy levels
-                            $actionsWithLevels = DB::table('approval_actions')
-                                ->join('workflow_approvers', 'approval_actions.approver_id', '=', 'workflow_approvers.user_id')
-                                ->where('approval_actions.approval_item_id', $approvalItem->id)
-                                ->where('workflow_approvers.workflow_id', $workflow->id)
-                                ->where('approval_actions.action_type', 'approve')
-                                ->select('workflow_approvers.hierarchy_level')
-                                ->distinct()
-                                ->pluck('hierarchy_level')
-                                ->toArray();
-
-                            // Check if all levels have been approved
-                            $allLevelsApproved = count($allLevels) === count($actionsWithLevels) &&
-                                empty(array_diff($allLevels->toArray(), $actionsWithLevels));
-
-                            if ($allLevelsApproved) {
-                                // If workflow is for retirement, process it BEFORE updating to approved
-                                if ($approvalItem->workflow_name === 'retire_members' && $approvalItem->member_no) {
-                                    Log::info('Processing retirement after final approval', [
-                                        'member_no' => $approvalItem->member_no,
-                                        'approval_item_id' => $approvalItem->id,
-                                        'approved_by' => Auth::id()
-                                    ]);
-
-                                    // Get company_id for the member
-                                    $member = DB::table('members')
-                                        ->where('member_no', $approvalItem->member_no)
-                                        ->first();
-                                    $memberHost = DB::table('members_host')
-                                        ->where('member_no', $approvalItem->member_no)
-                                        ->first();
-
-                                    if (!$member && !$memberHost) {
-                                        throw new \Exception("Member not found: {$approvalItem->member_no}");
-                                    }
-
-                                    $companyId = $member ? $member->company_id : $memberHost->company_id;
-                                    $retirementResult = $this->processRetirement($approvalItem->member_no, $companyId);
-
-                                    if (!$retirementResult['success']) {
-                                        throw new \Exception('Retirement processing failed: ' . $retirementResult['message']);
-                                    } else {
-                                        // Update retired status using Eloquent
-                                        $eloquentMember = \App\Models\Member::where('member_no', $approvalItem->member_no)->first();
-                                        if ($eloquentMember) {
-                                            $eloquentMember->retired = 1;
-                                            $eloquentMember->save();
-                                        }
-                                        $eloquentHost = \App\Models\MembersHost::where('member_no', $approvalItem->member_no)->first();
-                                        if ($eloquentHost) {
-                                            $eloquentHost->retired = 1;
-                                            $eloquentHost->save();
-                                        }
-                                    }
-
-                                    Log::info('Retirement processed successfully', [
-                                        'member_no' => $approvalItem->member_no,
-                                        'retirement_account' => $retirementResult['retirement_account'] ?? null,
-                                        'balances_inserted' => $retirementResult['balances_inserted'] ?? 0
-                                    ]);
-                                }
-
-                                // Only update to approved if retirement succeeded (or not applicable)
-                                $approvalItem->update([
-                                    'status' => 'Approved',
-                                    'updated_at' => now()
-                                ]);
-                            }
-                        }
-                    }
-
-                    // Commit transaction if everything is successful
-                    DB::commit();
-
-                    return response()->json(['success' => true, 'message' => 'Action recorded successfully']);
-                } catch (\Exception $e) {
-                    // Rollback transaction on error
-                    DB::rollBack();
-                    ErrorDispatcher::dispatch($e);
-                    Log::error('Approval action transaction failed: ' . $e->getMessage(), [
-                        'user_id' => Auth::id(),
-                        'approval_item_id' => $request->approval_item_id,
-                        'action_type' => $request->action_type,
-                        'trace' => $e->getTraceAsString()
-                    ]);
-
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'Failed to process approval action. Changes have been rolled back.'
-                    ], 500);
-                }
-            } else {
-                return response()->json(['success' => false, 'error' => 'No existing approval action found for user'], 400);
-            }
-        } catch (\Throwable $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Approval action failed: ' . $e->getMessage(), [
-                'user_id' => Auth::id(),
-                'request_data' => $request->all(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return response()->json(['success' => false, 'error' => 'Failed to record action'], 500);
-        }
-    }
-
-    public function details($encryptedId)
+    /**
+     * Display approval request detail page.
+     */
+    public function show($encryptedId)
     {
         try {
             $id = decrypt($encryptedId);
-            $approvalItem = ApprovalItem::findOrFail($id);
+            $approvalRequest = ApprovalRequest::with(['workflow', 'initiator'])->findOrFail($id);
+            $details = $this->approvalService->getRequestDetails($approvalRequest);
 
-            // Check if current user has already taken action
-            $userAction = ApprovalAction::where('approval_item_id', $approvalItem->id)
-                ->where('approver_id', Auth::id())
-                ->first();
+            $canApprove = $approvalRequest->canUserApprove(Auth::id());
+            $canResubmit = $approvalRequest->status === ApprovalRequest::STATUS_CHANGES_REQUESTED
+                && $approvalRequest->initiated_by === Auth::id();
 
-            $approvalChain = ApprovalAction::where('approval_item_id', $approvalItem->id)
-                ->join('workflow_approvers', 'approval_actions.approver_id', '=', 'workflow_approvers.user_id')
-                ->join('users', 'approval_actions.approver_id', '=', 'users.id')
-                ->select('approval_actions.*', 'users.username as approver_name', 'workflow_approvers.hierarchy_level')
-                ->orderBy('workflow_approvers.hierarchy_level')
-                ->get();
-            return view('approvals.details', [
-                'approvalItem' => $approvalItem,
-                'approvalChain' => $approvalChain,
-                'userAction' => $userAction
+            return view('accounting.approvals.request-details', [
+                'approvalRequest' => $approvalRequest,
+                'details' => $details,
+                'canApprove' => $canApprove,
+                'canResubmit' => $canResubmit,
+                'encryptedId' => $encryptedId,
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Failed to load approval request details: ' . $e->getMessage());
-            return abort(404, 'Approval request not found.');
+            Log::error('Error loading approval request details: ' . $e->getMessage());
+            return redirect()->route('accounting.pending.approvals')->with('error', 'Failed to load approval details');
         }
     }
 
-    public function logs()
-    {
-        return view('approvals.logs');
-    }
-
-    public function logsList(Request $request)
+    /**
+     * Get pending approvals for current user (AJAX).
+     */
+    public function getPendingApprovals()
     {
         try {
-            $user = Auth::user();
-
-            $draw = $request->get('draw');
-            $start = $request->get('start', 0);
-            $length = $request->get('length', 10);
-
-            // Fetch all items where user has taken an action
-            $query = ApprovalItem::with(['workflow.approvers'])
-                ->whereHas('actions', function ($q) use ($user) {
-                    $q->where('approver_id', $user->id)
-                        ->whereNotNull('action_type');
-                });
-
-            $recordsTotal = $query->count();
-
-            $items = $query->skip($start)
-                ->take($length)
-                ->orderBy('updated_at', 'desc')
-                ->get();
-
-            $data = $items->map(function ($item) use ($user) {
-                $userAction = $item->actions->where('approver_id', $user->id)->first();
-
-                return [
-                    'id' => $item->id,
-                    'encrypted_id' => encrypt($item->id),
-                    'item_type' => $item->item_type,
-                    'member_no' => $item->member_no,
-                    'status' => $item->status,
-                    'requested_by' => $item->requested_by,
-                    'requested_on' => $item->requested_on,
-                    'action_type' => $userAction ? $userAction->action_type : null,
-                    'action_date' => $userAction ? $userAction->updated_at : null,
-                ];
-            });
+            $userId = Auth::id();
+            $pending = $this->approvalService->getPendingForUser($userId);
 
             return response()->json([
-                'draw' => $draw,
-                'recordsTotal' => $recordsTotal,
-                'recordsFiltered' => $recordsTotal,
-                'data' => $data,
+                'success' => true,
+                'count' => count($pending),
+                'data' => $pending,
             ]);
-        } catch (\Throwable $e) {
+        } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Approval logs list failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['success' => false, 'error' => 'Failed to list approval logs'], 500);
+            Log::error('Error fetching pending approvals: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch pending approvals'], 500);
         }
     }
 
-    public function logsDetails($encryptedId)
+    /**
+     * Get historical approvals for current user (AJAX).
+     */
+    public function getHistoricalApprovals()
+    {
+        try {
+            $userId = Auth::id();
+            $historical = $this->approvalService->getHistoricalForUser($userId);
+
+            return response()->json([
+                'success' => true,
+                'count' => count($historical),
+                'data' => $historical,
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching historical approvals: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch historical approvals'], 500);
+        }
+    }
+
+    /**
+     * Get approval request details (AJAX).
+     */
+    public function getRequestDetails($encryptedId)
     {
         try {
             $id = decrypt($encryptedId);
-            $approvalItem = ApprovalItem::findOrFail($id);
+            $request = ApprovalRequest::findOrFail($id);
+            $details = $this->approvalService->getRequestDetails($request);
 
-            // Check if current user has acted on this item
-            $userAction = ApprovalAction::where('approval_item_id', $approvalItem->id)
-                ->where('approver_id', Auth::id())
-                ->whereNotNull('action_type')
-                ->first();
+            $canApprove = $request->canUserApprove(Auth::id());
+            $canResubmit = $request->status === ApprovalRequest::STATUS_CHANGES_REQUESTED
+                && $request->initiated_by === Auth::id();
 
-            if (!$userAction) {
-                return abort(403, 'You have not acted on this approval request.');
+            return response()->json([
+                'success' => true,
+                'data' => array_merge($details, [
+                    'can_approve' => $canApprove,
+                    'can_resubmit' => $canResubmit,
+                    'is_initiator' => $request->initiated_by === Auth::id(),
+                ]),
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching approval request details: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch approval details'], 500);
+        }
+    }
+
+    /**
+     * Get approval timeline (AJAX).
+     */
+    public function getTimeline($encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $request = ApprovalRequest::findOrFail($id);
+            $timeline = $this->approvalService->getTimeline($request);
+
+            return response()->json([
+                'success' => true,
+                'count' => count($timeline),
+                'data' => $timeline,
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching approval timeline: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch timeline'], 500);
+        }
+    }
+
+    /**
+     * Approve request (AJAX).
+     */
+    public function approve(Request $request, $encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $approvalRequest = ApprovalRequest::findOrFail($id);
+
+            $validated = $request->validate([
+                'comment' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $result = $this->approvalService->approve(
+                $approvalRequest,
+                Auth::id(),
+                $validated['comment'] ?? null
+            );
+
+            if (!$result['success']) {
+                return response()->json($result, 400);
             }
 
-            $approvalChain = ApprovalAction::where('approval_item_id', $approvalItem->id)
-                ->join('workflow_approvers', 'approval_actions.approver_id', '=', 'workflow_approvers.user_id')
-                ->join('users', 'approval_actions.approver_id', '=', 'users.id')
-                ->select('approval_actions.*', 'users.username as approver_name', 'workflow_approvers.hierarchy_level')
-                ->orderBy('workflow_approvers.hierarchy_level')
-                ->get();
-
-            return view('approvals.logs_details', [
-                'approvalItem' => $approvalItem,
-                'approvalChain' => $approvalChain,
-                'userAction' => $userAction
-            ]);
-        } catch (\Exception $e) {
+            return response()->json($result);
+        } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Failed to load approval log details: ' . $e->getMessage());
-            return abort(404, 'Approval log not found.');
+            Log::error('Error approving request: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to approve request'], 500);
+        }
+    }
+
+    /**
+     * Reject request (AJAX).
+     */
+    public function reject(Request $request, $encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $approvalRequest = ApprovalRequest::findOrFail($id);
+
+            $validated = $request->validate([
+                'comment' => ['required', 'string', 'max:1000'],
+            ]);
+
+            $result = $this->approvalService->reject(
+                $approvalRequest,
+                Auth::id(),
+                $validated['comment']
+            );
+
+            if (!$result['success']) {
+                return response()->json($result, 400);
+            }
+
+            return response()->json($result);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error rejecting request: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to reject request'], 500);
+        }
+    }
+
+    /**
+     * Request changes (AJAX).
+     */
+    public function requestChanges(Request $request, $encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $approvalRequest = ApprovalRequest::findOrFail($id);
+
+            $validated = $request->validate([
+                'comment' => ['required', 'string', 'max:1000'],
+            ]);
+
+            $result = $this->approvalService->requestChanges(
+                $approvalRequest,
+                Auth::id(),
+                $validated['comment']
+            );
+
+            if (!$result['success']) {
+                return response()->json($result, 400);
+            }
+
+            return response()->json($result);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error requesting changes: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to request changes'], 500);
+        }
+    }
+
+    /**
+     * Return to previous level (AJAX).
+     */
+    public function returnToPrevious(Request $request, $encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $approvalRequest = ApprovalRequest::findOrFail($id);
+
+            $validated = $request->validate([
+                'target_level' => ['required', 'integer', 'min:1'],
+                'comment' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $result = $this->approvalService->returnToPreviousLevel(
+                $approvalRequest,
+                Auth::id(),
+                $validated['target_level'],
+                $validated['comment'] ?? null
+            );
+
+            if (!$result['success']) {
+                return response()->json($result, 400);
+            }
+
+            return response()->json($result);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error returning request: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to return request'], 500);
+        }
+    }
+
+    /**
+     * Resubmit after changes (AJAX).
+     */
+    public function resubmit(Request $request, $encryptedId)
+    {
+        try {
+            $id = decrypt($encryptedId);
+            $approvalRequest = ApprovalRequest::findOrFail($id);
+
+            $validated = $request->validate([
+                'comment' => ['nullable', 'string', 'max:1000'],
+            ]);
+
+            $result = $this->approvalService->resubmit(
+                $approvalRequest,
+                Auth::id(),
+                $validated['comment'] ?? null
+            );
+
+            if (!$result['success']) {
+                return response()->json($result, 400);
+            }
+
+            return response()->json($result);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error resubmitting request: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to resubmit request'], 500);
+        }
+    }
+
+    /**
+     * Get approval request for a specific item (AJAX).
+     */
+    public function getForItem(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'request_type' => ['required', 'string'],
+                'request_id' => ['required', 'integer'],
+            ]);
+
+            $approvalRequest = ApprovalRequest::forRequest(
+                $validated['request_type'],
+                $validated['request_id']
+            )->first();
+
+            if (!$approvalRequest) {
+                return response()->json([
+                    'success' => true,
+                    'data' => null,
+                    'has_approval' => false,
+                ]);
+            }
+
+            $details = $this->approvalService->getRequestDetails($approvalRequest);
+            $canApprove = $approvalRequest->canUserApprove(Auth::id());
+            $canResubmit = $approvalRequest->status === ApprovalRequest::STATUS_CHANGES_REQUESTED
+                && $approvalRequest->initiated_by === Auth::id();
+
+            return response()->json([
+                'success' => true,
+                'has_approval' => true,
+                'encrypted_id' => encrypt($approvalRequest->id),
+                'data' => array_merge($details, [
+                    'can_approve' => $canApprove,
+                    'can_resubmit' => $canResubmit,
+                    'is_initiator' => $approvalRequest->initiated_by === Auth::id(),
+                ]),
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching approval for item: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch approval info'], 500);
         }
     }
 }
