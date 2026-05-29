@@ -295,7 +295,16 @@ class WorkflowsController extends Controller
     }
 
     /**
-     * Add approver to workflow (AJAX).
+     * Get level label (Checker/Verifier/Approver).
+     */
+    private function getLevelLabel(int $level): string
+    {
+        $labels = [1 => 'Checker', 2 => 'Verifier', 3 => 'Approver'];
+        return $labels[$level] ?? 'Level ' . $level;
+    }
+
+    /**
+     * Add approvers to workflow (AJAX) - supports multiple users.
      */
     public function addApprover(Request $request, $encryptedWorkflowId)
     {
@@ -312,90 +321,82 @@ class WorkflowsController extends Controller
             }
 
             $validated = $request->validate([
-                'approver_id' => 'required|exists:josya_users,id',
+                'approver_ids' => 'required|array|min:1',
+                'approver_ids.*' => 'exists:josya_users,id',
                 'approval_level' => 'required|integer|min:1|max:10',
                 'is_final' => 'nullable|in:0,1',
             ]);
 
-            $existingApprover = WorkflowApprover::where('workflow_id', $workflowId)
-                ->where('approver_id', $validated['approver_id'])
-                ->first();
-
-            if ($existingApprover) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This user is already an approver at Level ' . $existingApprover->approval_level . '. Same approver cannot be in multiple levels.',
-                ], 422);
-            }
-
             $requestedLevel = (int) $validated['approval_level'];
+            $levelLabel = $this->getLevelLabel($requestedLevel);
+            
+            // Only Level 3 (Approver) can be final, and it must always be final
+            $isFinal = ($requestedLevel === 3) ? 1 : 0;
+            
+            $addedCount = 0;
+            $skippedUsers = [];
 
-            $levelExists = WorkflowApprover::where('workflow_id', $workflowId)
-                ->where('approval_level', $requestedLevel)
-                ->where('is_active', 1)
-                ->exists();
+            foreach ($validated['approver_ids'] as $approverId) {
+                $existingApprover = WorkflowApprover::where('workflow_id', $workflowId)
+                    ->where('approver_id', $approverId)
+                    ->first();
 
-            if ($levelExists) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Level ' . $requestedLevel . ' already has an approver. Only one approver per level is allowed.',
-                ], 422);
-            }
-
-            if ($requestedLevel > 1) {
-                $previousLevel = $requestedLevel - 1;
-                $previousLevelExists = WorkflowApprover::where('workflow_id', $workflowId)
-                    ->where('approval_level', $previousLevel)
-                    ->where('is_active', 1)
-                    ->exists();
-
-                if (!$previousLevelExists) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Cannot add Level ' . $requestedLevel . ' approver. Please add Level ' . $previousLevel . ' approver first.',
-                    ], 422);
+                if ($existingApprover) {
+                    $user = User::find($approverId);
+                    $existingLabel = $this->getLevelLabel($existingApprover->approval_level);
+                    $skippedUsers[] = ($user->name ?? 'Unknown') . ' (already ' . $existingLabel . ')';
+                    continue;
                 }
+
+                // If adding Approver (level 3), clear any existing final flags
+                if ($isFinal == 1 && $addedCount === 0) {
+                    WorkflowApprover::where('workflow_id', $workflowId)
+                        ->where('is_final', 1)
+                        ->update(['is_final' => 0]);
+                }
+
+                WorkflowApprover::create([
+                    'workflow_id' => $workflowId,
+                    'approver_id' => $approverId,
+                    'approval_level' => $requestedLevel,
+                    'is_final' => $isFinal,
+                    'is_active' => 1,
+                    'added_by' => Auth::id(),
+                    'added_on' => now(),
+                ]);
+
+                $user = User::find($approverId);
+                WorkflowApproverChangeLog::logChange(
+                    $workflowId,
+                    $approverId,
+                    'APPROVER_ADDED',
+                    'Added approver "' . ($user->name ?? 'Unknown') . '" as ' . $levelLabel,
+                    null,
+                    $requestedLevel,
+                    null,
+                    $isFinal
+                );
+
+                $addedCount++;
             }
-
-            $isFinal = $validated['is_final'] ?? 0;
-
-            if ($isFinal == 1) {
-                WorkflowApprover::where('workflow_id', $workflowId)
-                    ->where('is_final', 1)
-                    ->update(['is_final' => 0]);
-            }
-
-            $approver = WorkflowApprover::create([
-                'workflow_id' => $workflowId,
-                'approver_id' => $validated['approver_id'],
-                'approval_level' => $validated['approval_level'],
-                'is_final' => $isFinal,
-                'is_active' => 1,
-                'added_by' => Auth::id(),
-                'added_on' => now(),
-            ]);
-
-            $user = User::find($validated['approver_id']);
-            WorkflowApproverChangeLog::logChange(
-                $workflowId,
-                $validated['approver_id'],
-                'APPROVER_ADDED',
-                'Added approver "' . ($user->name ?? 'Unknown') . '" at level ' . $validated['approval_level'],
-                null,
-                $validated['approval_level'],
-                null,
-                $isFinal
-            );
 
             DB::commit();
 
+            if ($addedCount === 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No approvers added. ' . implode(', ', $skippedUsers),
+                ], 422);
+            }
+
+            $message = $addedCount . ' approver(s) added as ' . $levelLabel;
+            if (count($skippedUsers) > 0) {
+                $message .= '. Skipped: ' . implode(', ', $skippedUsers);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Approver added successfully',
-                'data' => [
-                    'id' => $approver->id,
-                    'encrypted_id' => Crypt::encrypt($approver->id),
-                ],
+                'message' => $message,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
@@ -446,51 +447,6 @@ class WorkflowsController extends Controller
             $isFinal = $validated['is_final'] ?? 0;
             $isActive = (int) ($validated['is_active'] ?? $approver->is_active);
 
-            if ($isActive == 1 && $oldIsActive == 0) {
-                $levelHasActive = WorkflowApprover::where('workflow_id', $approver->workflow_id)
-                    ->where('approval_level', $newLevel)
-                    ->where('is_active', 1)
-                    ->where('id', '!=', $id)
-                    ->exists();
-
-                if ($levelHasActive) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Cannot reactivate. Level ' . $newLevel . ' already has an active approver.',
-                    ], 422);
-                }
-            }
-
-            if ($newLevel != $oldLevel) {
-                $levelExists = WorkflowApprover::where('workflow_id', $approver->workflow_id)
-                    ->where('approval_level', $newLevel)
-                    ->where('is_active', 1)
-                    ->where('id', '!=', $id)
-                    ->exists();
-
-                if ($levelExists) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Level ' . $newLevel . ' already has an approver. Only one approver per level is allowed.',
-                    ], 422);
-                }
-
-                if ($newLevel > 1) {
-                    $previousLevel = $newLevel - 1;
-                    $previousLevelExists = WorkflowApprover::where('workflow_id', $approver->workflow_id)
-                        ->where('approval_level', $previousLevel)
-                        ->where('is_active', 1)
-                        ->exists();
-
-                    if (!$previousLevelExists && $oldLevel != $previousLevel) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Cannot change to Level ' . $newLevel . '. Level ' . $previousLevel . ' must have an active approver.',
-                        ], 422);
-                    }
-                }
-            }
-
             if ($isFinal == 1 && $oldIsFinal != 1) {
                 WorkflowApprover::where('workflow_id', $approver->workflow_id)
                     ->where('is_final', 1)
@@ -506,7 +462,9 @@ class WorkflowsController extends Controller
 
             $changes = [];
             if ($oldLevel != $validated['approval_level']) {
-                $changes[] = "Level changed from $oldLevel to {$validated['approval_level']}";
+                $oldLabel = $this->getLevelLabel($oldLevel);
+                $newLabel = $this->getLevelLabel($newLevel);
+                $changes[] = "Role changed from $oldLabel to $newLabel";
             }
             if ($oldIsFinal != $isFinal) {
                 $changes[] = 'Is Final changed from ' . ($oldIsFinal ? 'Yes' : 'No') . ' to ' . ($isFinal ? 'Yes' : 'No');
@@ -573,16 +531,23 @@ class WorkflowsController extends Controller
             $approverId = $approver->approver_id;
             $approverName = $approver->approver->name ?? 'Unknown';
             $level = $approver->approval_level;
+            $levelLabel = $this->getLevelLabel($level);
+
+            $otherApproversAtLevel = WorkflowApprover::where('workflow_id', $workflowId)
+                ->where('approval_level', $level)
+                ->where('is_active', 1)
+                ->where('id', '!=', $approver->id)
+                ->count();
 
             $higherLevelExists = WorkflowApprover::where('workflow_id', $workflowId)
                 ->where('approval_level', '>', $level)
                 ->where('is_active', 1)
                 ->exists();
 
-            if ($higherLevelExists) {
+            if ($otherApproversAtLevel === 0 && $higherLevelExists) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot remove Level ' . $level . ' approver. Please remove higher level approvers first.',
+                    'message' => 'Cannot remove the last ' . $levelLabel . '. Please remove higher role approvers first.',
                 ], 422);
             }
 
@@ -592,7 +557,7 @@ class WorkflowsController extends Controller
                 $workflowId,
                 $approverId,
                 'APPROVER_REMOVED',
-                'Removed approver "' . $approverName . '" from level ' . $level,
+                'Removed approver "' . $approverName . '" from ' . $levelLabel,
                 $level,
                 null
             );

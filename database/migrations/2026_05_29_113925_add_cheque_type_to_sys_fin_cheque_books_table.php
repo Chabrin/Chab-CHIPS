@@ -12,8 +12,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('sys_fin_cheque_books', function (Blueprint $table) {
-            $table->string('cheque_type')->nullable()->after('notes')->comment('Type of cheque book: open or closed');
-            $table->string('reference_number')->unique();
+    
+            if (!Schema::hasColumn('sys_fin_cheque_books', 'cheque_type')) {
+                $table->string('cheque_type')
+                    ->nullable()
+                    ->after('notes')
+                    ->comment('Type of cheque book: open or closed');
+            }
+    
+            if (!Schema::hasColumn('sys_fin_cheque_books', 'reference_number')) {
+                $table->string('reference_number')->unique();
+            }
         });
     }
 

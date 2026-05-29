@@ -2,17 +2,34 @@
 
 @section('styles')
 <style>
-.level-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+.role-label {
     font-weight: 600;
     font-size: 0.85rem;
-    background: #e9ecef;
-    color: #495057;
+}
+.approvers-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.approver-name-tag {
+    display: inline-flex;
+    align-items: center;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.approver-name-tag .remove-single {
+    margin-left: 6px;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+.approver-name-tag .remove-single:hover {
+    color: #a71d2a;
 }
 </style>
 @endsection
@@ -39,8 +56,8 @@
         </div>
 
         <div class="row">
-            <!-- Approvers Section -->
-            <div class="col-lg-8">
+            <!-- Approvers Section - Full Width -->
+            <div class="col-12">
                 <div class="card mb-3">
                     <div class="card-header card-no-border d-flex align-items-center justify-content-between py-2">
                         <h6 class="mb-0">
@@ -50,72 +67,24 @@
                         </h6>
                         @permission('create_approvers')
                         <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#approverModal" id="addApproverBtn">
-                            <span class="material-symbols-outlined" style="font-size:16px;">person_add</span> Add Approver
+                            <span class="material-symbols-outlined" style="font-size:16px;">person_add</span> Add Approvers
                         </button>
                         @endpermission
                     </div>
                     <div class="card-body pt-0">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover" id="approversTable" style="font-size:0.85rem;">
-                                <thead>
-                                    <tr>
-                                        <th style="width:60px;">Level</th>
-                                        <th>Approver</th>
-                                        <th>Email</th>
-                                        <th style="width:80px;">Final</th>
-                                        <th style="width:80px;">Status</th>
-                                        <th style="width:100px;">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="approversTableBody">
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">Loading...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- Info Sidebar -->
-            <div class="col-lg-4">
-                <div class="card mb-3">
-                    <div class="card-header card-no-border py-2">
-                        <h6 class="mb-0">Workflow Info</h6>
-                    </div>
-                    <div class="card-body pt-0">
-                        <div class="row g-2" style="font-size:0.85rem;">
-                            <div class="col-5 text-muted">Name:</div>
-                            <div class="col-7 fw-semibold">{{ $workflow->workflow_name }}</div>
-                            <div class="col-5 text-muted">Status:</div>
-                            <div class="col-7">
-                                @if($workflow->status == 1)
-                                <span class="text-success">Active</span>
-                                @else
-                                <span class="text-danger">Inactive</span>
-                                @endif
-                            </div>
-                            <div class="col-5 text-muted">Created By:</div>
-                            <div class="col-7">{{ $workflow->addedBy->name ?? '-' }}</div>
-                            <div class="col-5 text-muted">Created On:</div>
-                            <div class="col-7">{{ $workflow->added_on ? $workflow->added_on->format('d-m-Y H:i') : '-' }}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header card-no-border py-2">
-                        <h6 class="mb-0">Approval Levels Guide</h6>
-                    </div>
-                    <div class="card-body pt-0">
-                        <div style="font-size:0.8rem;">
-                            <p class="mb-2"><strong>Level 1</strong> - First approval (e.g., Supervisor)</p>
-                            <p class="mb-2"><strong>Level 2</strong> - Second approval (e.g., Manager)</p>
-                            <p class="mb-2"><strong>Level 3</strong> - Third approval (e.g., Director)</p>
-                            <p class="mb-0"><strong>Final</strong> - Marks the last approver in the chain</p>
-                        </div>
+                        <table class="table table-sm" id="approversTable" style="font-size:0.85rem;">
+                            <thead>
+                                <tr>
+                                    <th style="width:150px;">Role</th>
+                                    <th>Approvers</th>
+                                </tr>
+                            </thead>
+                            <tbody id="approversTableBody">
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -130,7 +99,7 @@
             <div class="modal-header">
                 <h5 class="modal-title">
                     <span class="material-symbols-outlined" style="font-size:20px;vertical-align:middle;">person_add</span>
-                    <span id="approverModalTitle">Add Approver</span>
+                    <span id="approverModalTitle">Add Approvers</span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -138,24 +107,18 @@
                 <form id="approverForm">
                     <input type="hidden" id="approverId" value="">
                     <div class="mb-3" id="approverSelectWrap">
-                        <label for="approverSelect" class="form-label">Select User <span class="text-danger">*</span></label>
-                        <select id="approverSelect" style="width:100%;"></select>
+                        <label for="approverSelect" class="form-label">Select Users <span class="text-danger">*</span></label>
+                        <select id="approverSelect" style="width:100%;" multiple="multiple"></select>
+                        <small class="text-muted">You can select multiple users for the same role</small>
                     </div>
                     <div class="mb-3">
-                        <label for="approvalLevel" class="form-label">Approval Level <span class="text-danger">*</span></label>
+                        <label for="approvalLevel" class="form-label">Approval Role <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" id="approvalLevel">
-                            <option value="1">Level 1</option>
-                            <option value="2">Level 2</option>
-                            <option value="3">Level 3</option>
-                            <option value="4">Level 4</option>
-                            <option value="5">Level 5</option>
+                            <option value="1">Checker</option>
+                            <option value="2">Verifier</option>
+                            <option value="3">Approver (Final)</option>
                         </select>
-                    </div>
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="isFinal" value="1">
-                            <label class="form-check-label" for="isFinal">This is the final approver</label>
-                        </div>
+                        <small class="text-muted">Only the Approver role is marked as final</small>
                     </div>
                     <div class="mb-3" id="isActiveWrap" style="display:none;">
                         <label class="form-label">Status</label>
@@ -208,7 +171,13 @@
 $(document).ready(function() {
     var workflowEncryptedId = '{{ Crypt::encrypt($workflow->id) }}';
 
-    // Initialize Select2 for user search
+    // Level to role name mapping
+    function getLevelLabel(level) {
+        var labels = { 1: 'Checker', 2: 'Verifier', 3: 'Approver' };
+        return labels[level] || 'Level ' + level;
+    }
+
+    // Initialize Select2 for user search (multiple selection) - names only
     $('#approverSelect').select2({
         dropdownParent: $('#approverModal'),
         ajax: {
@@ -222,15 +191,16 @@ $(document).ready(function() {
                 if (!data.success) return { results: [] };
                 return {
                     results: data.data.map(function(u) {
-                        return { id: u.id, text: u.text, name: u.name, email: u.email };
+                        return { id: u.id, text: u.name };
                     })
                 };
             }
         },
         minimumInputLength: 2,
-        placeholder: 'Search by name or email...',
+        placeholder: 'Search by name...',
         allowClear: true,
-        width: '100%'
+        width: '100%',
+        multiple: true
     });
 
     // Load approvers
@@ -246,45 +216,71 @@ $(document).ready(function() {
                 }
             },
             error: function() {
-                $('#approversTableBody').html('<tr><td colspan="6" class="text-center text-danger">Failed to load approvers</td></tr>');
+                $('#approversTableBody').html('<tr><td colspan="2" class="text-center text-danger">Failed to load approvers</td></tr>');
             }
         });
     }
 
-    // Render approvers table
+    // Render approvers table - grouped by level
     function renderApproversTable(data) {
         if (data.length === 0) {
-            $('#approversTableBody').html('<tr><td colspan="6" class="text-center text-muted py-4">No approvers added yet. Click "Add Approver" to add one.</td></tr>');
+            $('#approversTableBody').html('<tr><td colspan="2" class="text-center text-muted py-4">No approvers added yet. Click "Add Approvers" to add one.</td></tr>');
             return;
         }
 
-        var html = '';
+        // Group by level
+        var grouped = {};
         data.forEach(function(item) {
-            var statusBadge = item.is_active == 1
-                ? '<span class="badge badge-light-success">Active</span>'
-                : '<span class="badge badge-light-secondary">Inactive</span>';
-            var finalLabel = item.is_final == 1 ? 'Yes' : '-';
+            var level = item.approval_level;
+            if (!grouped[level]) {
+                grouped[level] = { approvers: [] };
+            }
+            grouped[level].approvers.push(item);
+        });
 
-            html += '<tr' + (item.is_active == 0 ? ' class="text-muted"' : '') + '>';
-            html += '<td><span class="level-badge">' + item.approval_level + '</span></td>';
-            html += '<td><strong>' + item.approver_name + '</strong></td>';
-            html += '<td><small>' + item.approver_email + '</small></td>';
-            html += '<td>' + finalLabel + '</td>';
-            html += '<td>' + statusBadge + '</td>';
-            html += '<td>';
-            html += '<div class="d-flex gap-1">';
-            @permission('update_approvers')
-            html += '<a href="#" class="text-primary btn-edit-approver" title="Edit" data-id="' + item.encrypted_id + '" data-level="' + item.approval_level + '" data-final="' + item.is_final + '" data-active="' + item.is_active + '" data-name="' + item.approver_name + '"><span class="material-symbols-outlined" style="font-size:18px;">edit</span></a>';
-            @endpermission
-            @permission('delete_approvers')
-            html += '<a href="#" class="text-danger btn-remove-approver" title="Remove" data-id="' + item.encrypted_id + '" data-name="' + item.approver_name + '"><span class="material-symbols-outlined" style="font-size:18px;">person_remove</span></a>';
-            @endpermission
-            html += '</div>';
-            html += '</td>';
+        // Sort levels and render
+        var levels = Object.keys(grouped).sort(function(a, b) { return a - b; });
+        var html = '';
+
+        levels.forEach(function(level) {
+            var group = grouped[level];
+            var levelLabel = getLevelLabel(parseInt(level));
+            // Add (Final) indicator for Approver role
+            if (parseInt(level) === 3) {
+                levelLabel += ' <small class="text-muted">(Final)</small>';
+            }
+
+            // Build approver name tags
+            var nameTags = '<div class="approvers-cell">';
+            group.approvers.forEach(function(item) {
+                var tagStyle = item.is_active == 0 ? ' style="opacity:0.5;text-decoration:line-through;"' : '';
+                nameTags += '<span class="approver-name-tag"' + tagStyle + '>' + item.approver_name;
+                @permission('delete_approvers')
+                nameTags += '<span class="material-symbols-outlined remove-single" title="Remove" data-id="' + item.encrypted_id + '" data-name="' + item.approver_name + '">close</span>';
+                @endpermission
+                nameTags += '</span>';
+            });
+            nameTags += '</div>';
+
+            html += '<tr>';
+            html += '<td><span class="role-label">' + levelLabel + '</span></td>';
+            html += '<td>' + nameTags + '</td>';
             html += '</tr>';
         });
+
         $('#approversTableBody').html(html);
     }
+
+    // Handle remove single approver (via X button on name tag)
+    $(document).on('click', '.remove-single', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var id = $(this).data('id');
+        var name = $(this).data('name');
+        $('#removeApproverId').val(id);
+        $('#removeApproverName').text(name);
+        $('#removeApproverModal').modal('show');
+    });
 
     loadApprovers();
 
@@ -293,32 +289,11 @@ $(document).ready(function() {
         $('#approverId').val('');
         $('#approverForm')[0].reset();
         $('#approverSelect').val(null).trigger('change');
-        $('#approverModalTitle').text('Add Approver');
+        $('#approverModalTitle').text('Add Approvers');
         $('#saveApproverBtnText').text('Add');
         $('#approverSelectWrap').show();
         $('#isActiveWrap').hide();
         $('#approvalLevel').val('1');
-        $('#isFinal').prop('checked', false);
-    });
-
-    // Edit Approver Button
-    $(document).on('click', '.btn-edit-approver', function(e) {
-        e.preventDefault();
-        var id = $(this).data('id');
-        var level = $(this).data('level');
-        var isFinal = $(this).data('final');
-        var isActive = $(this).data('active');
-        var name = $(this).data('name');
-
-        $('#approverId').val(id);
-        $('#approvalLevel').val(level);
-        $('#isFinal').prop('checked', isFinal == 1);
-        $('#isActive').val(isActive);
-        $('#approverModalTitle').text('Edit Approver: ' + name);
-        $('#saveApproverBtnText').text('Update');
-        $('#approverSelectWrap').hide();
-        $('#isActiveWrap').show();
-        $('#approverModal').modal('show');
     });
 
     // Save Approver
@@ -328,17 +303,16 @@ $(document).ready(function() {
 
         var formData = {
             approval_level: $('#approvalLevel').val(),
-            is_final: $('#isFinal').is(':checked') ? 1 : 0,
             _token: '{{ csrf_token() }}'
         };
 
         if (!isEdit) {
-            var approverData = $('#approverSelect').select2('data')[0];
-            if (!approverData) {
-                toastr.error('Please select an approver');
+            var selectedUsers = $('#approverSelect').select2('data');
+            if (!selectedUsers || selectedUsers.length === 0) {
+                toastr.error('Please select at least one user');
                 return;
             }
-            formData.approver_id = approverData.id;
+            formData.approver_ids = selectedUsers.map(function(u) { return u.id; });
         } else {
             formData.is_active = $('#isActive').val();
         }
@@ -382,16 +356,6 @@ $(document).ready(function() {
                 $('#saveApproverBtnText').text(isEdit ? 'Update' : 'Add');
             }
         });
-    });
-
-    // Remove Approver Button
-    $(document).on('click', '.btn-remove-approver', function(e) {
-        e.preventDefault();
-        var id = $(this).data('id');
-        var name = $(this).data('name');
-        $('#removeApproverId').val(id);
-        $('#removeApproverName').text(name);
-        $('#removeApproverModal').modal('show');
     });
 
     // Confirm Remove Approver
