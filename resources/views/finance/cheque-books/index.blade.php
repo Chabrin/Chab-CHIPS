@@ -73,9 +73,19 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Book Reference</label>
+                        <label class="form-label">Book Reference <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="reference_number" id="reference_number"
-                            placeholder="Optional label for this physical book">
+                            placeholder="e.g. KB001" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Cheque Type <span class="text-danger">*</span></label>
+                        <select class="form-control" name="cheque_type" id="cheque_type" required>
+                            <option value="">— Select Cheque Type —</option>
+                            <option value="open">Open</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                        <small class="text-muted">Only active company bank accounts are listed.</small>
                     </div>
 
                     <div class="mb-3">

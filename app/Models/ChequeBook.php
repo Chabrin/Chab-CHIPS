@@ -26,6 +26,7 @@ class ChequeBook extends Model
         'current_status_id',
         'created_by_id',
         'notes',
+        'cheque_type',
     ];
 
     protected $casts = [
