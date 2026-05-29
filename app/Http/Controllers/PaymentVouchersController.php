@@ -14,6 +14,8 @@ use App\Models\PaymentVoucherLine;
 use App\Models\ChartAccount;
 use App\Models\InvoiceableItem;
 use App\Models\CompanyBankAccount;
+use App\Models\ReturnSummary;
+use App\Models\Client;
 use App\Services\ApprovalService;
 
 class PaymentVouchersController extends Controller
@@ -438,6 +440,65 @@ class PaymentVouchersController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error fetching voucher lines: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to fetch voucher lines'], 500);
+        }
+    }
+
+    /**
+     * Get approved unpaid returns for returns vouchers tab (AJAX).
+     */
+    public function getApprovedReturns(Request $request)
+    {
+        try {
+            $year = $request->input('year', date('Y'));
+            $month = $request->input('month', date('m'));
+
+            $returns = ReturnSummary::select([
+                    'cb_returns_summary.id',
+                    'cb_returns_summary.return_code',
+                    'cb_returns_summary.landlord_code',
+                    'cb_returns_summary.property_code',
+                    'cb_returns_summary.year',
+                    'cb_returns_summary.month',
+                    'cb_returns_summary.net_balance',
+                    'cb_returns_summary.return_description',
+                    'cb_returns_summary.approved_date',
+                    'sys_pm_clients.names as landlord_name',
+                    'sys_pm_clients.reference_number',
+                ])
+                ->leftJoin('sys_pm_clients', 'cb_returns_summary.landlord_code', '=', 'sys_pm_clients.reference_number')
+                ->where('cb_returns_summary.approved_status', 1)
+                ->where('cb_returns_summary.paid_status', 0)
+                ->where('cb_returns_summary.year', $year)
+                ->where('cb_returns_summary.month', $month)
+                ->orderBy('cb_returns_summary.landlord_code')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $returns->map(function ($r) {
+                    return [
+                        'id' => $r->id,
+                        'encrypted_id' => encrypt($r->id),
+                        'return_code' => $r->return_code,
+                        'landlord_code' => $r->landlord_code,
+                        'landlord_name' => $r->landlord_name ?? '-',
+                        'property_code' => $r->property_code ?? '-',
+                        'net_balance' => number_format($r->net_balance ?? 0, 2),
+                        'net_balance_raw' => $r->net_balance ?? 0,
+                        'return_description' => $r->return_description ?? '-',
+                        'period' => $r->year . '/' . str_pad($r->month, 2, '0', STR_PAD_LEFT),
+                        'approved_date' => $r->approved_date ? $r->approved_date->format('d M Y') : '-',
+                    ];
+                }),
+                'summary' => [
+                    'total_count' => $returns->count(),
+                    'total_amount' => number_format($returns->sum('net_balance'), 2),
+                ],
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching approved returns: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch returns'], 500);
         }
     }
 }

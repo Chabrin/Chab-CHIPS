@@ -674,6 +674,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/payment/vouchers/{id}/lines', [App\Http\Controllers\PaymentVouchersController::class, 'getVoucherLines'])->name('ajax.payment.vouchers.lines');
     Route::post('/ajax/payment/vouchers/{id}/lines/add', [App\Http\Controllers\PaymentVouchersController::class, 'addLine'])->name('ajax.payment.vouchers.lines.add');
     Route::delete('/ajax/payment/vouchers/lines/{lineId}/remove', [App\Http\Controllers\PaymentVouchersController::class, 'removeLine'])->name('ajax.payment.vouchers.lines.remove');
+    Route::get('/ajax/payment/vouchers/approved-returns', [App\Http\Controllers\PaymentVouchersController::class, 'getApprovedReturns'])->name('ajax.payment.vouchers.approved-returns');
 
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
