@@ -31,6 +31,40 @@
 #landlordBankInfo .fa {
     margin-right: 4px;
 }
+
+/* Voucher Tabs Styling */
+.voucher-tabs {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 1rem;
+}
+.voucher-tabs .nav-link {
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #6c757d;
+    background: transparent;
+    transition: all 0.2s ease;
+}
+.voucher-tabs .nav-link:hover {
+    color: #3598db;
+    border-bottom-color: #c8e0f9;
+}
+.voucher-tabs .nav-link.active {
+    color: #3598db;
+    border-bottom-color: #3598db;
+    background: transparent;
+}
+.voucher-tabs .nav-link .material-symbols-outlined {
+    font-size: 18px;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+.tab-content > .tab-pane {
+    padding-top: 0.5rem;
+}
 </style>
 @endsection
 
@@ -48,9 +82,39 @@
     </div>
 
     {{-- ═══════════════════════════════════════════════════
-         VOUCHER DETAILS CARD
+         VOUCHER TYPE TABS
     ════════════════════════════════════════════════════ --}}
-    <div class="card mb-3">
+    <ul class="nav nav-tabs voucher-tabs" id="voucherTypeTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="client-tab" data-bs-toggle="tab" data-bs-target="#client-vouchers"
+                    type="button" role="tab" aria-controls="client-vouchers" aria-selected="true">
+                <span class="material-symbols-outlined">person</span>Client Vouchers
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="returns-tab" data-bs-toggle="tab" data-bs-target="#returns-vouchers"
+                    type="button" role="tab" aria-controls="returns-vouchers" aria-selected="false">
+                <span class="material-symbols-outlined">assignment_return</span>Returns Vouchers
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="internal-tab" data-bs-toggle="tab" data-bs-target="#internal-vouchers"
+                    type="button" role="tab" aria-controls="internal-vouchers" aria-selected="false">
+                <span class="material-symbols-outlined">corporate_fare</span>Internal Vouchers
+            </button>
+        </li>
+    </ul>
+
+    {{-- Tab Content --}}
+    <div class="tab-content" id="voucherTypeTabsContent">
+
+        {{-- ═══════════════════════════════════════════════════
+             TAB 1: CLIENT VOUCHERS
+        ════════════════════════════════════════════════════ --}}
+        <div class="tab-pane fade show active" id="client-vouchers" role="tabpanel" aria-labelledby="client-tab">
+
+            {{-- VOUCHER DETAILS CARD --}}
+            <div class="card mb-3">
         <div class="card-header card-no-border py-2">
             <h6 class="mb-0">Voucher Details</h6>
         </div>
@@ -307,6 +371,40 @@
             </div>
         </div>
     </div>
+
+        </div>
+        {{-- END TAB 1: CLIENT VOUCHERS --}}
+
+        {{-- ═══════════════════════════════════════════════════
+             TAB 2: RETURNS VOUCHERS
+        ════════════════════════════════════════════════════ --}}
+        <div class="tab-pane fade" id="returns-vouchers" role="tabpanel" aria-labelledby="returns-tab">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <span class="material-symbols-outlined text-muted" style="font-size:48px;">assignment_return</span>
+                    <h6 class="mt-3 text-muted">Returns Vouchers</h6>
+                    <p class="text-muted mb-0" style="font-size:0.85rem;">Content coming soon...</p>
+                </div>
+            </div>
+        </div>
+        {{-- END TAB 2: RETURNS VOUCHERS --}}
+
+        {{-- ═══════════════════════════════════════════════════
+             TAB 3: INTERNAL VOUCHERS
+        ════════════════════════════════════════════════════ --}}
+        <div class="tab-pane fade" id="internal-vouchers" role="tabpanel" aria-labelledby="internal-tab">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <span class="material-symbols-outlined text-muted" style="font-size:48px;">corporate_fare</span>
+                    <h6 class="mt-3 text-muted">Internal Vouchers</h6>
+                    <p class="text-muted mb-0" style="font-size:0.85rem;">Content coming soon...</p>
+                </div>
+            </div>
+        </div>
+        {{-- END TAB 3: INTERNAL VOUCHERS --}}
+
+    </div>
+    {{-- END Tab Content --}}
 
 </div>
 </div>
