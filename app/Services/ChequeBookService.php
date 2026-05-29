@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ChequeBook;
 use App\Models\ChequeLeaf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -98,8 +99,9 @@ class ChequeBookService
      */
     public function releaseCheque(int $leafId, string $lockToken): void
     {
+        Log::info('Leaf ID: ' . $leafId . ' | Lock Token: ' . $lockToken);
         $affected = DB::table('sys_fin_cheque_books_261_repeat')
-            ->where('id', $leafId)
+            ->where('cheque_number', $leafId)
             ->where('lock_token', $lockToken)
             ->where('current_status_id', ChequeLeaf::STATUS_LOCKED)
             ->update([
