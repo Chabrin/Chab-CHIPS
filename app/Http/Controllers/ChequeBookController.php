@@ -180,12 +180,38 @@ class ChequeBookController extends Controller
     /**
      * Find and lock the next available cheque leaf for a given bank account (called from voucher creation).
      */
-    public function lockNextAvailable(Request $request)
+    public function getChequeBooks(Request $request)
     {
         try {
             $request->validate(['bank_account_id' => 'required|integer']);
 
-            $leaf = ChequeLeaf::where('bank_account_id', $request->bank_account_id)
+            $books = ChequeBook::where('bank_account_id', $request->bank_account_id)
+                ->where('current_status_id', 1)
+                ->where('cheque_type', 'closed')
+                ->whereHas('leaves', function ($q) {
+                    $q->where('current_status_id', ChequeLeaf::STATUS_AVAILABLE);
+                })
+                ->withCount(['leaves as available_leaves_count' => function ($q) {
+                    $q->where('current_status_id', ChequeLeaf::STATUS_AVAILABLE);
+                }])
+                ->get();
+
+            return response()->json(['success' => true, 'books' => $books]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            return response()->json(['success' => false, 'error' => 'Failed to fetch cheque books.'], 500);
+        }
+    }
+
+    public function lockNextAvailable(Request $request)
+    {
+        try {
+            $request->validate(['cheque_book_id' => 'required|integer']);
+
+
+            $leaf = ChequeLeaf::where('parent_id', $request->cheque_book_id)
                 ->where('current_status_id', ChequeLeaf::STATUS_AVAILABLE)
                 ->orderBy('cheque_number')
                 ->first();
@@ -205,6 +231,7 @@ class ChequeBookController extends Controller
                 'cheque_number'  => $locked->cheque_number,
                 'lock_token'     => $locked->lock_token,
             ]);
+           
         } catch (\RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {

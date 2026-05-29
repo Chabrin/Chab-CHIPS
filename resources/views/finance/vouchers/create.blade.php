@@ -195,13 +195,13 @@
                 <div class="entry-section-label">Voucher Info</div>
                 <div class="row g-2">
 
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label">Date <span class="text-danger">*</span></label>
                         <input type="date" class="form-control form-control-sm" id="voucherDate"
                                value="{{ date('Y-m-d') }}">
                     </div>
 
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label">Pay Mode</label>
                         <select class="form-select form-select-sm" id="payMode">
                             <option value="">-- Select --</option>
@@ -212,18 +212,7 @@
                         </select>
                     </div>
 
-                    <div class="col-md-2">
-                        <label class="form-label">
-                            Cheque No.
-                            <span id="chequeLoadingSpinner" class="spinner-border spinner-border-sm text-primary ms-1" style="display:none; width:10px; height:10px;"></span>
-                        </label>
-                        <input type="text" class="form-control form-control-sm" id="voucherChequeNo"
-                               placeholder="Auto from book" readonly
-                               style="background-color:#eef3f8; color:#1a2e44; font-weight:600; letter-spacing:0.5px;">
-                        <div id="chequeNoMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
-                    </div>
-
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label">Post to Year <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" id="postYear">
                             @foreach($years as $yr)
@@ -232,13 +221,55 @@
                         </select>
                     </div>
 
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label class="form-label">Post to Month <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" id="postMonth">
                             @foreach([1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'] as $num => $name)
                             <option value="{{ $num }}" {{ $num == $currentMonth ? 'selected' : '' }}>{{ $name }}</option>
                             @endforeach
                         </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Source Account</label>
+                        <select class="form-select form-select-sm" id="sourceAccount">
+                            <option value="">-- Select Company Bank Account --</option>
+                            @foreach($bankAccounts as $acc)
+                            <option value="{{ $acc->id }}"
+                                    data-account-number="{{ $acc->account_number }}"
+                                    data-account-name="{{ $acc->account_name }}"
+                                    data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
+                                {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div id="sourceAccountInfo" style="display:none;">
+                            <div class="account-info-pill">
+                                <span class="material-symbols-outlined">account_balance</span>
+                                <span id="sourceAccNumber"></span>
+                                <span class="text-muted">|</span>
+                                <span id="sourceAccBank"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Cheque Books</label>
+                        <select class="form-select form-select-sm" id="cheque_books">
+                            <option value="">-- Select cheque book --</option>
+                            
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">
+                            Cheque No.
+                            <span id="chequeLoadingSpinner" class="spinner-border spinner-border-sm text-primary ms-1" style="display:none; width:10px; height:10px;"></span>
+                        </label>
+                        <input type="text" class="form-control form-control-sm" id="voucherChequeNo"
+                               placeholder="Auto from book" readonly
+                               style="background-color:#eef3f8; color:#1a2e44; font-weight:600; letter-spacing:0.5px;">
+                        <div id="chequeNoMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
                     </div>
 
                 </div>
@@ -276,28 +307,7 @@
                 {{-- Row 2: Source Account + Amount + Add Entry --}}
                 <div class="row g-2 align-items-start">
 
-                    <div class="col-md-4">
-                        <label class="form-label">Source Account</label>
-                        <select class="form-select form-select-sm" id="sourceAccount">
-                            <option value="">-- Select Company Bank Account --</option>
-                            @foreach($bankAccounts as $acc)
-                            <option value="{{ $acc->id }}"
-                                    data-account-number="{{ $acc->account_number }}"
-                                    data-account-name="{{ $acc->account_name }}"
-                                    data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
-                                {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
-                            </option>
-                            @endforeach
-                        </select>
-                        <div id="sourceAccountInfo" style="display:none;">
-                            <div class="account-info-pill">
-                                <span class="material-symbols-outlined">account_balance</span>
-                                <span id="sourceAccNumber"></span>
-                                <span class="text-muted">|</span>
-                                <span id="sourceAccBank"></span>
-                            </div>
-                        </div>
-                    </div>
+                    
 
                     <div class="col-md-2">
                         <label class="form-label">Amount <span class="text-danger">*</span></label>
@@ -561,6 +571,21 @@
 <script>
 $(document).ready(function () {
 
+    // Grab current values
+    const leaf_id = $('#voucherChequeNo').val();
+    const leaf_token_id = $('#voucherChequeNo').data('leaf-token-id');
+
+    // Release lock when page is about to unload (reload, close, navigate away)
+    $(window).on('beforeunload', function () {
+        const leaf_id = $('#voucherChequeNo').val();
+        const leaf_token_id = $('#voucherChequeNo').data('leaf-token-id');
+
+        if (leaf_id) {
+            releaseVoucherChequeLock(leaf_id, leaf_token_id);
+        }
+    });
+
+
     // ─── State ────────────────────────────────────────────────────────
     let pendingEntries = [];
     let uidCounter     = 0;
@@ -762,12 +787,17 @@ $(document).ready(function () {
     $('#sourceAccount').on('change', function () {
         const bankAccountId = $(this).val();
         const opt           = $(this).find(':selected');
+        const leaf_id = $('#voucherChequeNo').val();
+        const leaf_token_id = $('#voucherChequeNo').data('leaf-token-id');
 
         // Release any existing voucher-level lock before doing anything else
-        releaseVoucherChequeLock();
+        if(leaf_id){
+            releaseVoucherChequeLock(leaf_id, leaf_token_id);
+        }
 
         $('#chequeNoMsg').text('');
         $('#voucherChequeNo').val('');
+        $('#cheque_books').empty().append('<option value="">-- Select cheque book --</option>');
 
         if (!bankAccountId) {
             $('#sourceAccountInfo').hide();
@@ -787,18 +817,28 @@ $(document).ready(function () {
         $('#sourceAccount').prop('disabled', true);
 
         $.ajax({
-            url: '{{ route("ajax.voucher-cheque.lock") }}',
+            url: '{{ route("ajax.voucher-cheque.book") }}',
             method: 'POST',
             data: { bank_account_id: bankAccountId, _token: '{{ csrf_token() }}' },
             success: function (r) {
                 $('#chequeLoadingSpinner').hide();
                 $('#sourceAccount').prop('disabled', false);
 
-                voucherCheque.leaf_id       = r.leaf_id;
-                voucherCheque.lock_token    = r.lock_token;
-                voucherCheque.cheque_number = r.cheque_number;
+                // Clear existing options except the placeholder
+                $('#cheque_books').empty().append('<option value="">-- Select cheque book --</option>');
 
-                $('#voucherChequeNo').val(r.cheque_number);
+                if (r.success && r.books && r.books.length > 0) {
+                    r.books.forEach(function (book) {
+                        $('#cheque_books').append(
+                            `<option value="${book.id}">
+                                Cheque #${book.first_cheque_number} (${book.leafs} leaves)
+                            </option>`
+                        );
+                    });
+                } else {
+                    // No books available
+                    $('#cheque_books').append('<option value="">No cheque books available</option>');
+                }
             },
             error: function (xhr) {
                 $('#chequeLoadingSpinner').hide();
@@ -813,18 +853,66 @@ $(document).ready(function () {
                 $('#sourceAccountInfo').hide();
             },
         });
+
+    });
+
+    // When user selects a cheque book
+    $('#cheque_books').on('change', function () {
+        const bookId = $(this).val();
+        if (!bookId) {
+            $('#voucherChequeNo').val('');
+            $('#chequeNoMsg').text('Please select a cheque book.');
+            return;
+        }
+
+        // Show spinner
+        $('#chequeLoadingSpinner').show();
+        $('#voucherChequeNo').val('');
+        $('#chequeNoMsg').text('');
+
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.lock") }}',
+            method: 'POST',
+            data: {
+                cheque_book_id: bookId,
+                _token: '{{ csrf_token() }}'
+            },
+            success: function (r) {
+                $('#chequeLoadingSpinner').hide();
+
+                if (r.success && r.cheque_number) {
+                    // Insert returned cheque number into input
+                    $('#voucherChequeNo').val(r.cheque_number);
+                    $('#voucherChequeNo').data('leaf-token-id', r.lock_token); // Store leaf_id for later release
+                    $('#chequeNoMsg').text('');
+                } else {
+                    $('#chequeNoMsg').text('No cheque number available.');
+                }
+            },
+            error: function (xhr) {
+                $('#chequeLoadingSpinner').hide();
+
+                const msg = xhr.responseJSON?.message || 'Failed to lock cheque number';
+                $('#chequeNoMsg').text(msg);
+                toastr.error(msg);
+            }
+        });
     });
 
     // ─── Release the voucher-level cheque lock ───────────────────
-    function releaseVoucherChequeLock() {
-        if (!voucherCheque.leaf_id) return;
-        $.post('{{ route("ajax.voucher-cheque.release") }}', {
-            leaf_id:    voucherCheque.leaf_id,
-            lock_token: voucherCheque.lock_token,
-            _token:     '{{ csrf_token() }}',
-        });
+    function releaseVoucherChequeLock(leaf_id, lock_token) {
+        const data = new FormData();
+        data.append('leaf_id', leaf_id);
+        data.append('lock_token', lock_token);
+        data.append('_token', $('meta[name="csrf-token"]').attr('content'));
+
+        // Beacon ensures the request is sent even during unload
+        navigator.sendBeacon('{{ route("ajax.voucher-cheque.release") }}', data);
+
+        // Reset local state
         voucherCheque = { leaf_id: null, lock_token: null, cheque_number: null };
     }
+
 
     // ─── Validate voucher-level fields ────────────────────────────────
     function validateVoucherFields() {
