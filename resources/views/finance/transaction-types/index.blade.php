@@ -56,21 +56,31 @@
                 <form id="typeForm">
                     <input type="hidden" id="modal_id">
                     <div class="row g-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Type Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control form-control-sm" id="modal_type_name" maxlength="255" required>
                             <div class="invalid-feedback"></div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Item Code <span class="text-danger">*</span></label>
                             <input type="text" class="form-control form-control-sm" id="modal_item_code" maxlength="50" required>
                             <div class="invalid-feedback"></div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
+                            <label for="default_amount" class="form-label">Default Amount</label>
+                            <input type="number" class="form-control" id="default_amount" name="default_amount" step="0.01" min="0" value="0.00">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="category_id" class="form-label">Category</label>
+                            <select class="form-control" id="category_id" name="category_id">
+                                <option value="">— Select Category —</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Debit Account</label>
                             <select id="modal_debit_account_id" class="form-select form-select-sm w-100"></select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Credit Account</label>
                             <select id="modal_credit_account_id" class="form-select form-select-sm w-100"></select>
                         </div>
@@ -81,22 +91,7 @@
                                 <option value="1">Inactive</option>
                             </select>
                         </div>
-                        <div class="col-12">
-                            <div class="d-flex flex-wrap gap-4">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="modal_is_commissionable">
-                                    <label class="form-check-label small" for="modal_is_commissionable">Commissionable</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="modal_is_recovery">
-                                    <label class="form-check-label small" for="modal_is_recovery">Recovery</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="modal_is_client_expense">
-                                    <label class="form-check-label small" for="modal_is_client_expense">Client Expense</label>
-                                </div>
-                            </div>
-                        </div>
+                        
                     </div>
                 </form>
             </div>
@@ -116,6 +111,26 @@
         </div>
     </div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete this transaction type?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 @endsection
 
@@ -155,19 +170,62 @@ $(document).ready(function () {
                     : '<span class="badge bg-light text-secondary" style="font-size:0.72rem;">Inactive</span>'
             },
             {
-                data: null, orderable: false, searchable: false, className: 'text-center',
+               data: null,
+                orderable: false,
+                searchable: false,
+                className: 'text-center',
                 render: (d, t, row) => {
-                    if (!row.can_edit) return '';
-                    return `<button class="btn btn-sm btn-light edit-btn py-0 px-1" data-id="${row.id}" title="Edit">
+                    let buttons = '';
+
+                    if (row.can_edit) {
+                        buttons += `
+                            <button class="btn btn-sm btn-light edit-btn py-0 px-1" data-id="${row.id}" title="Edit">
                                 <span class="material-symbols-outlined" style="font-size:17px;vertical-align:-4px;">edit_document</span>
-                            </button>`;
+                            </button>
+                        `;
+                    }
+
+                    if (row.can_delete) {
+                        buttons += `
+                            <button class="btn btn-sm btn-light delete-btn py-0 px-1" data-id="${row.id}" title="Delete">
+                                <span class="material-symbols-outlined" style="font-size:17px;vertical-align:-4px;">delete</span>
+                            </button>
+                        `;
+                    }
+
+                    return buttons || ''; // return empty string if no buttons
                 }
+
             },
         ],
         pageLength: 25,
         lengthMenu: [[25, 50, 100, -1], [25, 50, 100, 'All']],
         order: [[1, 'asc']],
     });
+
+    $('#category_id').select2({
+        allowClear: true,
+        width: '100%',
+        parent: $('#typeModal')
+    });
+
+    function loadOptions() {
+        $.get("{{ route('ajax.finance.taxes.options') }}", function(res) {
+            if (!res.success) {
+                toastr.error(res.error || 'Unable to load options');
+                return;
+            }
+
+            var category = $('#category_id');
+            category.find('option:gt(0)').remove();
+
+            (res.data.categories || []).forEach(function(item) {
+                category.append('<option value="' + item.id + '">' + item.category_name + '</option>');
+            });
+        }).fail(function() {
+            toastr.error('Failed to load categories');
+        });
+    }
 
     // ── Select2 helper ─────────────────────────────────────────────────────────
     function initAccountSelect(selector) {
@@ -191,6 +249,7 @@ $(document).ready(function () {
 
     initAccountSelect('#modal_debit_account_id');
     initAccountSelect('#modal_credit_account_id');
+    loadOptions();
 
     function setAccountOption(selector, id, code, name) {
         const $s = $(selector);
@@ -233,6 +292,9 @@ $(document).ready(function () {
             $('#modal_is_commissionable').prop('checked', d.is_commissionable == 1);
             $('#modal_is_recovery').prop('checked', d.is_recovery == 1);
             $('#modal_is_client_expense').prop('checked', d.is_client_expense == 1);
+            $('#default_amount').val(d.default_amount || '0.00');
+            // $('#category_id').val(d.category_id).trigger('change');
+            setAccountOption('#category_id', d.category_id, d.category_name, d.category_name);
             setAccountOption('#modal_debit_account_id',  d.debit_account_id,  d.debit_account_code,  d.debit_account_name);
             setAccountOption('#modal_credit_account_id', d.credit_account_id, d.credit_account_code, d.credit_account_name);
             $('#typeModal').modal('show');
@@ -314,6 +376,40 @@ $(document).ready(function () {
             $('#saveTypeBtn').prop('disabled', false);
         }
     });
+
+    // ── Delete ───────────────────────────────────────
+    let deleteId = null;
+
+    $(document).on('click', '.delete-btn', function () {
+        deleteId = $(this).data('id'); // store the id
+        $('#deleteModal').modal('show'); // open modal
+    });
+
+    $('#confirmDeleteBtn').on('click', function () {
+        if (!deleteId) return;
+
+        $.ajax({
+            url: `/finance/transaction-types/${deleteId}`,
+            type: 'DELETE',
+            data: {
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function (response) {
+                $('#deleteModal').modal('hide');
+                // Show a toast or alert
+                // alert(response.message || 'Deleted successfully');
+                // Reload DataTable
+                // $('#yourDataTableId').DataTable().ajax.reload();
+                table.ajax.reload(null, false);
+            },
+            error: function (xhr) {
+                $('#deleteModal').modal('hide');
+                alert(xhr.responseJSON?.message || 'Error deleting record');
+            }
+        });
+    });
+
+
 });
 </script>
 @endsection
