@@ -20,6 +20,7 @@ class ApprovalRequest extends Model
         'request_id',
         'workflow_id',
         'current_level',
+        'current_approver_id',
         'status',
         'initiated_by',
         'initiated_on',
@@ -30,6 +31,7 @@ class ApprovalRequest extends Model
         'workflow_id' => 'integer',
         'request_id' => 'integer',
         'current_level' => 'integer',
+        'current_approver_id' => 'integer',
         'initiated_by' => 'integer',
         'initiated_on' => 'datetime',
         'completed_on' => 'datetime',
@@ -49,6 +51,11 @@ class ApprovalRequest extends Model
     public function initiator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'initiated_by');
+    }
+
+    public function currentApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'current_approver_id');
     }
 
     public function logs(): HasMany
@@ -76,18 +83,18 @@ class ApprovalRequest extends Model
         return $query->whereIn('status', [self::STATUS_APPROVED, self::STATUS_REJECTED]);
     }
 
-    public function getCurrentApprover()
+    public function getCurrentApproverRecord()
     {
         return WorkflowApprover::where('workflow_id', $this->workflow_id)
             ->where('approval_level', $this->current_level)
+            ->where('approver_id', $this->current_approver_id)
             ->where('is_active', 1)
             ->first();
     }
 
     public function canUserApprove(int $userId): bool
     {
-        $currentApprover = $this->getCurrentApprover();
-        return $currentApprover && $currentApprover->approver_id === $userId;
+        return $this->current_approver_id === $userId;
     }
 
     public function isComplete(): bool

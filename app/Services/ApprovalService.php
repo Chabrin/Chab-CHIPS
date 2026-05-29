@@ -15,6 +15,44 @@ use App\Models\PaymentVoucherLine;
 class ApprovalService
 {
     /**
+     * Select the approver with the least pending workload at a given level.
+     * If multiple approvers have the same count, select randomly.
+     */
+    protected function selectApproverWithLeastLoad(int $workflowId, int $level): ?int
+    {
+        $approvers = WorkflowApprover::where('workflow_id', $workflowId)
+            ->where('approval_level', $level)
+            ->where('is_active', 1)
+            ->pluck('approver_id')
+            ->toArray();
+
+        if (empty($approvers)) {
+            return null;
+        }
+
+        if (count($approvers) === 1) {
+            return $approvers[0];
+        }
+
+        $pendingCounts = [];
+        foreach ($approvers as $approverId) {
+            $count = ApprovalRequest::where('current_approver_id', $approverId)
+                ->whereIn('status', [
+                    ApprovalRequest::STATUS_PENDING,
+                    ApprovalRequest::STATUS_IN_PROGRESS,
+                    ApprovalRequest::STATUS_CHANGES_REQUESTED
+                ])
+                ->count();
+            $pendingCounts[$approverId] = $count;
+        }
+
+        $minCount = min($pendingCounts);
+        $approversWithMinLoad = array_keys(array_filter($pendingCounts, fn($c) => $c === $minCount));
+
+        return $approversWithMinLoad[array_rand($approversWithMinLoad)];
+    }
+
+    /**
      * Initiate an approval request for a given item.
      */
     public function initiateApproval(string $requestType, int $requestId, string $workflowName, int $initiatedBy): ?ApprovalRequest
@@ -40,11 +78,14 @@ class ApprovalService
             }
 
             return DB::transaction(function () use ($requestType, $requestId, $workflow, $initiatedBy) {
+                $assignedApproverId = $this->selectApproverWithLeastLoad($workflow->id, 1);
+
                 $approvalRequest = ApprovalRequest::create([
                     'request_type' => $requestType,
                     'request_id' => $requestId,
                     'workflow_id' => $workflow->id,
                     'current_level' => 1,
+                    'current_approver_id' => $assignedApproverId,
                     'status' => ApprovalRequest::STATUS_PENDING,
                     'initiated_by' => $initiatedBy,
                     'initiated_on' => now(),
@@ -94,6 +135,7 @@ class ApprovalService
             if ($currentLevel >= $maxLevel) {
                 $request->update([
                     'status' => ApprovalRequest::STATUS_APPROVED,
+                    'current_approver_id' => null,
                     'completed_on' => now(),
                 ]);
 
@@ -106,8 +148,12 @@ class ApprovalService
                 ];
             }
 
+            $nextLevel = $currentLevel + 1;
+            $nextApproverId = $this->selectApproverWithLeastLoad($request->workflow_id, $nextLevel);
+
             $request->update([
-                'current_level' => $currentLevel + 1,
+                'current_level' => $nextLevel,
+                'current_approver_id' => $nextApproverId,
                 'status' => ApprovalRequest::STATUS_IN_PROGRESS,
             ]);
 
@@ -143,6 +189,7 @@ class ApprovalService
 
             $request->update([
                 'status' => ApprovalRequest::STATUS_REJECTED,
+                'current_approver_id' => null,
                 'completed_on' => now(),
             ]);
 
@@ -213,16 +260,13 @@ class ApprovalService
             return ['success' => false, 'message' => 'Can only return to the immediate previous level'];
         }
 
-        $targetApprover = WorkflowApprover::where('workflow_id', $request->workflow_id)
-            ->where('approval_level', $targetLevel)
-            ->where('is_active', 1)
-            ->first();
+        $targetApproverId = $this->selectApproverWithLeastLoad($request->workflow_id, $targetLevel);
 
-        if (!$targetApprover) {
+        if (!$targetApproverId) {
             return ['success' => false, 'message' => 'No active approver found at target level'];
         }
 
-        return DB::transaction(function () use ($request, $approverId, $targetLevel, $comment) {
+        return DB::transaction(function () use ($request, $approverId, $targetLevel, $targetApproverId, $comment) {
             ApprovalRequestLog::logAction(
                 $request->id,
                 $approverId,
@@ -234,6 +278,7 @@ class ApprovalService
 
             $request->update([
                 'current_level' => $targetLevel,
+                'current_approver_id' => $targetApproverId,
                 'status' => ApprovalRequest::STATUS_IN_PROGRESS,
             ]);
 
@@ -266,7 +311,10 @@ class ApprovalService
                 $comment
             );
 
+            $newApproverId = $this->selectApproverWithLeastLoad($request->workflow_id, $request->current_level);
+
             $request->update([
+                'current_approver_id' => $newApproverId,
                 'status' => ApprovalRequest::STATUS_IN_PROGRESS,
             ]);
 
@@ -334,27 +382,15 @@ class ApprovalService
     }
 
     /**
-     * Get all pending approval requests for a user.
+     * Get all pending approval requests assigned to a user.
      */
     public function getPendingForUser(int $userId): array
     {
-        $approverLevels = WorkflowApprover::where('approver_id', $userId)
-            ->where('is_active', 1)
-            ->get(['workflow_id', 'approval_level']);
-
-        if ($approverLevels->isEmpty()) {
-            return [];
-        }
-
         $requests = ApprovalRequest::pending()
+            ->where('current_approver_id', $userId)
             ->with(['workflow', 'initiator'])
-            ->get()
-            ->filter(function ($request) use ($approverLevels) {
-                return $approverLevels->contains(function ($level) use ($request) {
-                    return $level->workflow_id === $request->workflow_id
-                        && $level->approval_level === $request->current_level;
-                });
-            });
+            ->orderBy('initiated_on', 'desc')
+            ->get();
 
         return $requests->map(function ($request) {
             return [
@@ -373,7 +409,7 @@ class ApprovalService
     }
 
     /**
-     * Get historical approval requests for a user (not at their stage, already passed, or completed).
+     * Get historical approval requests for a user (requests they've acted on, or in their workflow but not assigned to them).
      */
     public function getHistoricalForUser(int $userId): array
     {
@@ -381,33 +417,27 @@ class ApprovalService
             ->where('is_active', 1)
             ->get(['workflow_id', 'approval_level']);
 
-        if ($approverLevels->isEmpty()) {
-            return [];
-        }
-
         $workflowIds = $approverLevels->pluck('workflow_id')->unique()->toArray();
 
-        $requests = ApprovalRequest::whereIn('workflow_id', $workflowIds)
+        $requestIdsUserActedOn = ApprovalRequestLog::where('approver_id', $userId)
+            ->pluck('approval_request_id')
+            ->unique()
+            ->toArray();
+
+        $requests = ApprovalRequest::where(function ($query) use ($workflowIds, $requestIdsUserActedOn, $userId) {
+                $query->whereIn('workflow_id', $workflowIds)
+                    ->where(function ($q) use ($userId) {
+                        $q->where('current_approver_id', '!=', $userId)
+                            ->orWhereNull('current_approver_id');
+                    });
+            })
+            ->orWhereIn('id', $requestIdsUserActedOn)
+            ->where('current_approver_id', '!=', $userId)
             ->with(['workflow', 'initiator'])
             ->orderBy('initiated_on', 'desc')
-            ->get()
-            ->filter(function ($request) use ($approverLevels, $userId) {
-                $userLevel = $approverLevels->first(function ($level) use ($request) {
-                    return $level->workflow_id === $request->workflow_id;
-                });
+            ->get();
 
-                if (!$userLevel) {
-                    return false;
-                }
-
-                if ($request->isComplete()) {
-                    return true;
-                }
-
-                return $request->current_level !== $userLevel->approval_level;
-            });
-
-        return $requests->map(function ($request) use ($approverLevels) {
+        return $requests->map(function ($request) use ($approverLevels, $userId) {
             $userLevel = $approverLevels->first(function ($level) use ($request) {
                 return $level->workflow_id === $request->workflow_id;
             });
