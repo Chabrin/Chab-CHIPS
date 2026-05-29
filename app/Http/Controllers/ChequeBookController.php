@@ -90,7 +90,12 @@ class ChequeBookController extends Controller
                 'leafs'               => 'required|integer|min:1|max:500',
                 'reference_number'    => 'nullable|string|max:100',
                 'notes'               => 'nullable|string|max:2000',
+                'cheque_type'         => 'required|string|in:open,closed',
             ]);
+
+            if(ChequeBook::where('reference_number', $validated['reference_number'])->exists()) {
+                return response()->json(['success' => false, 'errors' => ['reference_number' => ['The reference number must be unique.']]], 422);
+            }
 
             $book = DB::transaction(function () use ($validated) {
                 $book = new ChequeBook();
@@ -102,6 +107,7 @@ class ChequeBookController extends Controller
                 $book->current_status_id   = 1;
                 $book->created_by_id       = Auth::id();
                 $book->date_time           = now();
+                $book->cheque_type         = $validated['cheque_type'];
                 $book->save();
 
                 $this->service->generateLeaves($book);

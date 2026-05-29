@@ -23,24 +23,27 @@ class TransactionTypesController extends Controller
     {
         try {
             $can_edit_transaction_types = Auth::user()->isAbleTo('update_transaction_types');
+            $can_delete_transaction_types = Auth::user()->isAbleTo('delete_transaction_types');
             $transaction_types = TransactionType::with(['debitAccount', 'creditAccount', 'createdBy', 'category'])
                 ->orderBy('id', 'desc')
                 ->get();
 
             return response()->json([
                 'success' => true,
-                'data' => $transaction_types->map(function ($transaction_type) use ($can_edit_transaction_types) {
+                'data' => $transaction_types->map(function ($transaction_type) use ($can_edit_transaction_types, $can_delete_transaction_types) {
                     return [
                         'id' => $transaction_type->id,
                         'name' => $transaction_type->type_name,
                         'item_code' => $transaction_type->item_code,
                         'category_id' => $transaction_type->category_id,
+                        'category_name' => $transaction_type->category?->category_name,
                         'debit_account_code' => $transaction_type->debitAccount?->account_code,
                         'debit_account_name' => $transaction_type->debitAccount?->account_name,
                         'credit_account_code' => $transaction_type->creditAccount?->account_code,
                         'credit_account_name' => $transaction_type->creditAccount?->account_name,
                         'current_status_id' => $transaction_type->current_status_id,
                         'can_edit' => $can_edit_transaction_types,
+                        'can_delete' => $can_delete_transaction_types,
                     ];
                 })
             ]);
@@ -165,7 +168,7 @@ class TransactionTypesController extends Controller
     public function getOne($id)
     {
         try {
-            $t = TransactionType::with(['debitAccount', 'creditAccount'])->findOrFail($id);
+            $t = TransactionType::with(['debitAccount', 'creditAccount', 'category'])->findOrFail($id);
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -173,6 +176,8 @@ class TransactionTypesController extends Controller
                     'type_name'           => $t->type_name,
                     'item_code'           => $t->item_code,
                     'default_amount'      => $t->default_amount,
+                    'category_id'         => $t->category_id,
+                    'category_name'       => $t->category?->category_name,
                     'debit_account_id'    => $t->debit_account_id,
                     'debit_account_code'  => $t->debitAccount?->account_code,
                     'debit_account_name'  => $t->debitAccount?->account_name,
