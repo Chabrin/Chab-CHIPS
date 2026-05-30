@@ -8,6 +8,7 @@ use App\Http\Controllers\FinanceTaxSettingsController;
 use App\Http\Controllers\Finance\TransactionTypesController;
 use App\Http\Controllers\Finance\RecurrentClientRemittancesController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\LogsController;
 use App\Http\Controllers\FundsController;
 use App\Http\Controllers\RolesController;
@@ -861,6 +862,62 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     ###### PROPERTY MANAGEMENT SECTION END ########
 
     Route::get('/get/tenant/balance', [App\Http\Controllers\TenantsController::class, 'getTenantBalance'])->name('get.tenant.balance');
+
+
+
+    ###### Ticketing System ######
+
+        // ──────────────────────────────────────────────────────────────────
+        //  USER-FACING
+        // ──────────────────────────────────────────────────────────────────
+        Route::prefix('tickets')->name('tickets.')->group(function () {
+        
+            // My tickets list
+            Route::get('/',           [TicketController::class, 'myTickets'])->name('my');
+        
+            // Create new ticket
+            Route::get('/create',     [TicketController::class, 'create'])->name('create');
+            Route::post('/',          [TicketController::class, 'store'])->name('store');
+        
+            // View a single ticket (user)
+            Route::get('/{encryptedId}',         [TicketController::class, 'show'])->name('show');
+        
+            // User replies to their own ticket
+            Route::post('/{encryptedId}/reply',  [TicketController::class, 'reply'])->name('reply');
+        
+            // Mark admin replies as read (called via JS)
+            Route::post('/{encryptedId}/mark-read', [TicketController::class, 'markRead'])->name('mark-read');
+        
+            // Download attachment (shared — user & admin, controller handles auth check)
+            Route::get('/attachments/{encryptedId}/download', [TicketController::class, 'downloadAttachment'])
+                ->name('attachment.download');
+        
+        });
+        
+        // ──────────────────────────────────────────────────────────────────
+        //  ADMIN  (wrap with your admin middleware, e.g. role:admin)
+        // ──────────────────────────────────────────────────────────────────
+        Route::prefix('admin/tickets')->name('tickets.admin.')->middleware(['auth'])->group(function () {
+        
+            // Ticket list + stats
+            Route::get('/',                                  [TicketController::class, 'adminIndex'])->name('index');
+        
+            // CSV export
+            Route::get('/export',                            [TicketController::class, 'adminExport'])->name('export');
+        
+            // View & handle a single ticket
+            Route::get('/{encryptedId}',                     [TicketController::class, 'adminShow'])->name('show');
+        
+            // Admin reply (public or internal note)
+            Route::post('/{encryptedId}/reply',              [TicketController::class, 'adminReply'])->name('reply');
+        
+            // Quick status change (Mark Resolved / Close)
+            Route::patch('/{encryptedId}/status',            [TicketController::class, 'adminUpdateStatus'])->name('status');
+        
+            // Update assignment & priority
+            Route::patch('/{encryptedId}/assign',            [TicketController::class, 'adminAssign'])->name('assign');
+        
+        });
 });
 
 ##### END CHABRIN - ROUTES FILE #####
