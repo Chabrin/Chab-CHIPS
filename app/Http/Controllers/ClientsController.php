@@ -17,6 +17,7 @@ use App\Models\ReturnsMergeBatch;
 use App\Models\ReturnsMergeBatchItem;
 use App\Services\ErrorDispatcher;
 use App\Models\ClientOtherContact;
+use App\Models\PropertyBankDetail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -399,6 +400,20 @@ class ClientsController extends Controller
                 ->where('client_id', $clientId)
                 ->get()
                 ->map(function ($property) {
+                    $propertyBankDetail = PropertyBankDetail::with(['clientBankDetail.bank', 'clientBankDetail.branch'])
+                        ->where('property_id', $property->id)
+                        ->first();
+
+                    $bankName = '-';
+                    $accountNumber = '-';
+                    $propertyBankId = null;
+
+                    if ($propertyBankDetail && $propertyBankDetail->clientBankDetail) {
+                        $bankName = $propertyBankDetail->clientBankDetail->bank->bank_name ?? '-';
+                        $accountNumber = $propertyBankDetail->clientBankDetail->account_number ?? '-';
+                        $propertyBankId = $propertyBankDetail->id;
+                    }
+
                     return [
                         'id' => $property->id,
                         'encrypted_id' => Crypt::encrypt($property->id),
@@ -408,6 +423,10 @@ class ClientsController extends Controller
                         'zone' => $property->zone->zone_name ?? '-',
                         'zone_area' => $property->zoneArea->area_name ?? '-',
                         'field_officer' => $property->fieldOfficer ? strtoupper($property->fieldOfficer->full_names) : '-',
+                        'bank_name' => $bankName,
+                        'account_number' => $accountNumber,
+                        'property_bank_id' => $propertyBankId,
+                        'client_id' => $property->client_id,
                     ];
                 });
 
@@ -1784,5 +1803,123 @@ class ClientsController extends Controller
 
         // Save new next of kin
         $this->saveNextOfKin($request, $clientId);
+    }
+
+    /**
+     * Get available client bank details for a property
+     */
+    public function getAvailablePropertyBanks(Request $request)
+    {
+        try {
+            $propertyId = $request->property_id;
+            $clientId = $request->client_id;
+
+            $banks = ClientBankDetail::with(['bank', 'branch'])
+                ->where('client_id', $clientId)
+                ->get()
+                ->map(function ($bankDetail) {
+                    return [
+                        'id' => $bankDetail->id,
+                        'bank_name' => $bankDetail->bank->bank_name ?? '-',
+                        'branch_name' => $bankDetail->branch->branch_name ?? '-',
+                        'account_number' => $bankDetail->account_number ?? '-',
+                        'account_name' => $bankDetail->account_name ?? '-',
+                    ];
+                });
+
+            return response()->json(['success' => true, 'data' => $banks]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading available banks: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load available banks'], 500);
+        }
+    }
+
+    /**
+     * Assign a bank to a property
+     */
+    public function assignPropertyBank(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'property_id' => 'required|exists:sys_pm_properties,id',
+                'client_id' => 'required|exists:sys_pm_clients,id',
+                'client_bank_id' => 'required|exists:clients_bank_details,id',
+            ]);
+
+            DB::beginTransaction();
+
+            PropertyBankDetail::where('property_id', $validated['property_id'])->delete();
+
+            $propertyBank = PropertyBankDetail::create([
+                'property_id' => $validated['property_id'],
+                'client_id' => $validated['client_id'],
+                'client_bank_id' => $validated['client_bank_id'],
+                'added_by' => Auth::id(),
+                'added_on' => now(),
+            ]);
+
+            DB::commit();
+
+            $bankDetail = ClientBankDetail::with(['bank', 'branch'])
+                ->find($validated['client_bank_id']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bank details assigned successfully',
+                'data' => [
+                    'bank_name' => $bankDetail->bank->bank_name ?? '-',
+                    'account_number' => $bankDetail->account_number ?? '-',
+                    'property_bank_id' => $propertyBank->id,
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error assigning property bank: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to assign bank details'], 500);
+        }
+    }
+
+    /**
+     * Remove a bank from a property
+     */
+    public function removePropertyBank(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'property_bank_id' => 'required|exists:property_bank_details,id',
+            ]);
+
+            DB::beginTransaction();
+
+            PropertyBankDetail::where('id', $validated['property_bank_id'])->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bank details removed successfully'
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error removing property bank: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to remove bank details'], 500);
+        }
     }
 }

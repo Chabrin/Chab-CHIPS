@@ -422,6 +422,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/clients/{encryptedId}/properties', [App\Http\Controllers\ClientsController::class, 'getProperties'])->name('property.clients.properties');
     Route::get('/property/clients/{encryptedId}/related-properties', [App\Http\Controllers\ClientsController::class, 'getRelatedProperties'])->name('property.clients.related-properties');
     Route::get('/property/clients/{encryptedId}/properties-dropdown', [App\Http\Controllers\ClientsController::class, 'getClientProperties'])->name('property.clients.properties.dropdown');
+    Route::get('/ajax/property/banks/available', [App\Http\Controllers\ClientsController::class, 'getAvailablePropertyBanks'])->name('property.banks.available');
+    Route::post('/ajax/property/banks/assign', [App\Http\Controllers\ClientsController::class, 'assignPropertyBank'])->name('property.banks.assign');
+    Route::post('/ajax/property/banks/remove', [App\Http\Controllers\ClientsController::class, 'removePropertyBank'])->name('property.banks.remove');
     Route::get('/property/clients/{encryptedId}/leases', [App\Http\Controllers\ClientsController::class, 'getLeases'])->name('property.clients.leases');
     Route::get('/property/clients/{encryptedId}/recoveries', [App\Http\Controllers\ClientsController::class, 'getRecoveries'])->name('property.clients.recoveries');
     Route::get('/property/clients/{encryptedId}/inspections', [App\Http\Controllers\ClientsController::class, 'getInspections'])->name('property.clients.inspections');
