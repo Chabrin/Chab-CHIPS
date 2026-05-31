@@ -214,8 +214,8 @@
                                         <th>#</th>
                                         <th>Description</th>
                                         <th>Payee</th>
-                                        <th>Source Account No.</th>
-                                        <th>Source Bank / Account</th>
+                                        <th>Payee Account No.</th>
+                                        <th>Payee Bank / Account</th>
                                         <th class="text-end">Amount</th>
                                         <th>Approved</th>
                                     </tr>

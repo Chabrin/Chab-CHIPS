@@ -41,6 +41,7 @@ class ReturnSummary extends Model
         'approved_status',
         'approved_date',
         'paid_status',
+        'voucher_generated',
         'voucher_number',
         'remarks',
         'remarks_2',

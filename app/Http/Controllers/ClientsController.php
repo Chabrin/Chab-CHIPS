@@ -1922,4 +1922,39 @@ class ClientsController extends Controller
             return response()->json(['success' => false, 'message' => 'Failed to remove bank details'], 500);
         }
     }
+
+    /**
+     * Get property bank details (for returns vouchers)
+     */
+    public function getPropertyBankDetails(Request $request)
+    {
+        try {
+            $propertyId = $request->property_id;
+
+            $propertyBank = PropertyBankDetail::with(['clientBankDetail.bank', 'clientBankDetail.branch'])
+                ->where('property_id', $propertyId)
+                ->first();
+
+            if (!$propertyBank || !$propertyBank->clientBankDetail) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No bank details found for this property'
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'bank_name' => $propertyBank->clientBankDetail->bank->bank_name ?? '-',
+                    'branch_name' => $propertyBank->clientBankDetail->branch->branch_name ?? '-',
+                    'account_name' => $propertyBank->clientBankDetail->account_name ?? '-',
+                    'account_number' => $propertyBank->clientBankDetail->account_number ?? '-',
+                ]
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading property bank details: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load bank details'], 500);
+        }
+    }
 }

@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Services\ErrorDispatcher;
 use App\Models\PaymentVoucherHeader;
 use App\Models\PaymentVoucherLine;
@@ -16,6 +17,7 @@ use App\Models\InvoiceableItem;
 use App\Models\CompanyBankAccount;
 use App\Models\ReturnSummary;
 use App\Models\Client;
+use App\Models\ApprovalWorkflow;
 use App\Services\ApprovalService;
 
 class PaymentVouchersController extends Controller
@@ -462,12 +464,17 @@ class PaymentVouchersController extends Controller
                     'cb_returns_summary.net_balance',
                     'cb_returns_summary.return_description',
                     'cb_returns_summary.approved_date',
+                    'sys_pm_clients.id as landlord_id',
                     'sys_pm_clients.names as landlord_name',
                     'sys_pm_clients.reference_number',
+                    'sys_pm_properties.id as property_id',
+                    'sys_pm_properties.property_name',
                 ])
                 ->leftJoin('sys_pm_clients', 'cb_returns_summary.landlord_code', '=', 'sys_pm_clients.reference_number')
+                ->leftJoin('sys_pm_properties', 'cb_returns_summary.property_code', '=', 'sys_pm_properties.reference_number')
                 ->where('cb_returns_summary.approved_status', 1)
                 ->where('cb_returns_summary.paid_status', 0)
+                ->where('cb_returns_summary.voucher_generated', 0)
                 ->where('cb_returns_summary.year', $year)
                 ->where('cb_returns_summary.month', $month)
                 ->orderBy('cb_returns_summary.landlord_code')
@@ -480,9 +487,12 @@ class PaymentVouchersController extends Controller
                         'id' => $r->id,
                         'encrypted_id' => encrypt($r->id),
                         'return_code' => $r->return_code,
+                        'landlord_id' => $r->landlord_id,
                         'landlord_code' => $r->landlord_code,
                         'landlord_name' => $r->landlord_name ?? '-',
+                        'property_id' => $r->property_id,
                         'property_code' => $r->property_code ?? '-',
+                        'property_name' => $r->property_name ?? '-',
                         'net_balance' => number_format($r->net_balance ?? 0, 2),
                         'net_balance_raw' => $r->net_balance ?? 0,
                         'return_description' => $r->return_description ?? '-',
@@ -499,6 +509,155 @@ class PaymentVouchersController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error fetching approved returns: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to fetch returns'], 500);
+        }
+    }
+
+    /**
+     * Create return voucher with automatic line splitting if amount > 1M
+     */
+    public function createReturnVoucher(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'return_summary_id' => 'required|integer',
+                'landlord_id' => 'required|integer',
+                'property_id' => 'required|integer',
+                'vendor_name' => 'required|string',
+                'vendor_type' => 'required|string',
+                'bank_name' => 'required|string',
+                'account_name' => 'required|string',
+                'account_number' => 'required|string',
+                'source_account_id' => 'required|integer',
+                'cheque_number' => 'required|string',
+                'voucher_date' => 'required|date',
+                'post_year' => 'required|integer',
+                'post_month' => 'required|integer|min:1|max:12',
+                'net_balance' => 'required|numeric|min:0.01',
+            ]);
+
+            DB::beginTransaction();
+
+            // Get next voucher sequence
+            $maxSeq = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
+            $nextSeq = $maxSeq + 1;
+            $voucherNumber = 'PV' . $validated['post_year'] . str_pad($validated['post_month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
+            $entryCount = 0;
+            
+            // Create header
+            $header = PaymentVoucherHeader::create([
+                'voucher_sequence' => $nextSeq,
+                'voucher_number' => $voucherNumber,
+                'year' => $validated['post_year'],
+                'month' => $validated['post_month'],
+                'voucher_date' => $validated['voucher_date'],
+                'description' => 'RETURNS',
+                'vendor_id' => $validated['landlord_id'],
+                'vendor_name' => $validated['vendor_name'],
+                'vendor_type' => $validated['vendor_type'],
+                'debit_amount' => $validated['net_balance'],
+                'credit_amount' => 0,
+                'entry_count' => 0, // Will update after creating lines
+                'voucher_status' => 'Pending',
+                'is_deleted' => 0,
+                'prepared_by' => Auth::user()->name,
+                'is_printed' => 0,
+            ]);
+
+            // Split amount into lines if > 1M
+            $MAX_AMOUNT = 999000;
+            $netBalance = $validated['net_balance'];
+            $lineItems = [];
+            
+            if ($netBalance > 1000000) {
+                // Split into multiple line items
+                $remaining = $netBalance;
+                $lineNumber = 1;
+                
+                while ($remaining > 0) {
+                    $lineAmount = $remaining > $MAX_AMOUNT ? $MAX_AMOUNT : $remaining;
+                    $lineItems[] = [
+                        'line_number' => $lineNumber++,
+                        'amount' => $lineAmount,
+                    ];
+                    $remaining -= $lineAmount;
+                }
+            } else {
+                // Single line item
+                $lineItems[] = [
+                    'line_number' => 1,
+                    'amount' => $netBalance,
+                ];
+            }
+
+            // Get source account details
+            $sourceAccount = CompanyBankAccount::with('bank')->find($validated['source_account_id']);
+            
+            // Create line items
+            foreach ($lineItems as $line) {
+                PaymentVoucherLine::create([
+                    'voucher_number' => $voucherNumber,
+                    'entry_id' => $header->id,
+                    'entry_number' => $validated['return_summary_id'],
+                    'entry_year' => $validated['post_year'],
+                    'entry_month' => $validated['post_month'],
+                    'entry_description' => 'RETURN PAYMENT - ' . $validated['vendor_name'] . (count($lineItems) > 1 ? ' (Entry ' . $line['line_number'] . ' of ' . count($lineItems) . ')' : ''),
+                    'payee_name' => $validated['vendor_name'],
+                    'account_bank' => $validated['bank_name'],
+                    'account_name' => $validated['account_name'],
+                    'account_number' => $validated['account_number'],
+                    'cheque_number' => $validated['cheque_number'],
+                    'amount' => $line['amount'],
+                    'dr_cr' => 'D',
+                    'is_approved' => 'No',
+                    'cheque_type' => 'Cheque',
+                    'source_account' => $sourceAccount ? $sourceAccount->account_name : null,
+                    'source_bank' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
+                ]);
+                $entryCount++;
+            }
+
+            // Update header with entry count
+            $header->update(['entry_count' => $entryCount]);
+
+            // Flag return summary as voucher generated
+            ReturnSummary::where('id', $validated['return_summary_id'])
+                ->update(['voucher_generated' => 1]);
+
+            // Initiate approval workflow
+            $workflow = ApprovalWorkflow::where('workflow_name', 'voucher_approval')
+                ->where('status', 1)
+                ->first();
+
+            if ($workflow) {
+                app(ApprovalService::class)->initiateApproval(
+                    'voucher',
+                    $header->id,
+                    $workflow->id,
+                    Auth::id()
+                );
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Return voucher created successfully',
+                'voucher_number' => $voucherNumber,
+                'line_items_count' => $entryCount,
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating return voucher: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to create return voucher'], 500);
         }
     }
 }
