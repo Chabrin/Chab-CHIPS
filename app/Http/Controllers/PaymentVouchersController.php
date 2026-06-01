@@ -527,12 +527,16 @@ class PaymentVouchersController extends Controller
                 'bank_name' => 'required|string',
                 'account_name' => 'required|string',
                 'account_number' => 'required|string',
-                'source_account_id' => 'required|integer',
-                'cheque_number' => 'required|string',
+                'source_account_id' => 'nullable|integer',
+                'cheque_number' => 'nullable|string',
                 'voucher_date' => 'required|date',
                 'post_year' => 'required|integer',
                 'post_month' => 'required|integer|min:1|max:12',
                 'net_balance' => 'required|numeric|min:0.01',
+                'split_entries' => 'nullable|array',
+                'split_entries.*.amount' => 'required|numeric|min:0.01|max:999999',
+                'split_entries.*.source_account_id' => 'required|integer',
+                'split_entries.*.cheque_number' => 'required|string',
             ]);
 
             DB::beginTransaction();
@@ -563,34 +567,35 @@ class PaymentVouchersController extends Controller
                 'is_printed' => 0,
             ]);
 
-            // Split amount into lines if > 1M
-            $MAX_AMOUNT = 999000;
+            // Determine line items
             $netBalance = $validated['net_balance'];
             $lineItems = [];
             
-            if ($netBalance > 1000000) {
-                // Split into multiple line items
-                $remaining = $netBalance;
-                $lineNumber = 1;
-                
-                while ($remaining > 0) {
-                    $lineAmount = $remaining > $MAX_AMOUNT ? $MAX_AMOUNT : $remaining;
+            if (isset($validated['split_entries']) && is_array($validated['split_entries']) && count($validated['split_entries']) > 0) {
+                // Use provided split entries
+                foreach ($validated['split_entries'] as $idx => $split) {
+                    $sourceAccount = CompanyBankAccount::with('bank')->find($split['source_account_id']);
                     $lineItems[] = [
-                        'line_number' => $lineNumber++,
-                        'amount' => $lineAmount,
+                        'line_number' => $idx + 1,
+                        'amount' => $split['amount'],
+                        'source_account_id' => $split['source_account_id'],
+                        'source_account_name' => $sourceAccount ? $sourceAccount->account_name : null,
+                        'source_bank_name' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
+                        'cheque_number' => $split['cheque_number'],
                     ];
-                    $remaining -= $lineAmount;
                 }
             } else {
-                // Single line item
+                // Fallback to single entry (should not happen if amount > 1M due to frontend validation)
+                $sourceAccount = CompanyBankAccount::with('bank')->find($validated['source_account_id']);
                 $lineItems[] = [
                     'line_number' => 1,
                     'amount' => $netBalance,
+                    'source_account_id' => $validated['source_account_id'],
+                    'source_account_name' => $sourceAccount ? $sourceAccount->account_name : null,
+                    'source_bank_name' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
+                    'cheque_number' => $validated['cheque_number'],
                 ];
             }
-
-            // Get source account details
-            $sourceAccount = CompanyBankAccount::with('bank')->find($validated['source_account_id']);
             
             // Create line items
             foreach ($lineItems as $line) {
@@ -600,18 +605,18 @@ class PaymentVouchersController extends Controller
                     'entry_number' => $validated['return_summary_id'],
                     'entry_year' => $validated['post_year'],
                     'entry_month' => $validated['post_month'],
-                    'entry_description' => 'RETURN PAYMENT - ' . $validated['vendor_name'] . (count($lineItems) > 1 ? ' (Entry ' . $line['line_number'] . ' of ' . count($lineItems) . ')' : ''),
+                    'entry_description' => 'RETURNS PAYMENT' . (count($lineItems) > 1 ? ' (Entry ' . $line['line_number'] . ' of ' . count($lineItems) . ')' : ''),
                     'payee_name' => $validated['vendor_name'],
                     'account_bank' => $validated['bank_name'],
                     'account_name' => $validated['account_name'],
                     'account_number' => $validated['account_number'],
-                    'cheque_number' => $validated['cheque_number'],
+                    'cheque_number' => $line['cheque_number'],
                     'amount' => $line['amount'],
-                    'dr_cr' => 'D',
+                    'dr_cr' => 'DR',
                     'is_approved' => 'No',
                     'cheque_type' => 'Cheque',
-                    'source_account' => $sourceAccount ? $sourceAccount->account_name : null,
-                    'source_bank' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
+                    'source_account' => $line['source_account_name'],
+                    'source_bank' => $line['source_bank_name'],
                 ]);
                 $entryCount++;
             }

@@ -480,34 +480,35 @@
                                 </div>
                             </div>
 
-                            {{-- Source Account & Cheque --}}
-                            <div class="entry-section-label">Payment Details</div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Source Account <span class="text-danger">*</span></label>
-                                    <select class="form-select form-select-sm" id="returnSourceAccount">
-                                        <option value="">-- Select Source Account --</option>
-                                        @foreach($bankAccounts as $acc)
-                                        <option value="{{ $acc->id }}"
-                                                data-account-number="{{ $acc->account_number }}"
-                                                data-account-name="{{ $acc->account_name }}"
-                                                data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
-                                            {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
-                                        </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Cheque Book</label>
-                                    <select class="form-select form-select-sm" id="returnChequeBook">
-                                        <option value="">-- Select cheque book --</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Cheque No.</label>
-                                    <input type="text" class="form-control form-control-sm" id="returnChequeNo" readonly 
-                                           placeholder="Auto" style="background-color:#eef3f8; color:#1a2e44; font-weight:600;">
-                                    <div id="returnChequeMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                            {{-- Payment Details (for amounts <= 1M only) --}}
+                            <div id="returnSinglePaymentSection">
+                                <div class="entry-section-label">Payment Details</div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Source Account <span class="text-danger">*</span></label>
+                                        <select class="form-select form-select-sm" id="returnSourceAccount">
+                                            <option value="">-- Select Source Account --</option>
+                                            @foreach($bankAccounts as $acc)
+                                            <option value="{{ $acc->id }}"
+                                                    data-account-number="{{ $acc->account_number }}"
+                                                    data-account-name="{{ $acc->account_name }}"
+                                                    data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
+                                                {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
+                                            </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Cheque Book</label>
+                                        <select class="form-select form-select-sm" id="returnChequeBook">
+                                            <option value="">-- Select cheque book --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Cheque No.</label>
+                                        <input type="text" class="form-control form-control-sm" id="returnChequeNo" readonly placeholder="Auto">
+                                        <div id="returnChequeMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -543,8 +544,31 @@
                                 <input type="text" class="form-control form-control-sm fw-bold" id="returnNetBalance" readonly style="background-color:#f0f7ff; color:#1a5f9e;" placeholder="0.00">
                             </div>
 
-                            <div id="returnEntriesList" class="mb-3">
-                                {{-- Line items will be shown here if amount > 1M --}}
+                            <div id="returnSplitSection" style="display:none;">
+                                <div class="py-2 mb-3" style="font-size:0.82rem; border-left:3px solid #3598db; padding-left:0.75rem;">
+                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;color:#3598db;">info</span>
+                                    Amount exceeds 1M. Split into multiple entries (max 999,999 each).
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="entry-section-label mb-0">Split Entries</div>
+                                    <button type="button" class="btn btn-sm btn-primary" id="addReturnSplitBtn">
+                                        <span class="material-symbols-outlined" style="font-size:14px;">add</span>
+                                        Add Entry
+                                    </button>
+                                </div>
+
+                                <div id="returnSplitEntriesList" class="mb-3">
+                                    {{-- Split entries will be added here --}}
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center p-2" style="border-top:1px solid #dee2e6;">
+                                    <span style="font-size:0.85rem;">Total Split Amount:</span>
+                                    <span class="fw-bold" id="returnSplitTotal" style="font-size:0.9rem;">0.00</span>
+                                </div>
+                                <div id="returnSplitWarning" class="text-danger mt-1" style="font-size:0.75rem; display:none;">
+                                    Total must equal Net Balance
+                                </div>
                             </div>
 
                             <div class="d-flex justify-content-end gap-2">
@@ -582,6 +606,65 @@
     {{-- END Tab Content --}}
 
 </div>
+</div>
+
+{{-- ── Return Split Entry Modal ── --}}
+<div class="modal fade" id="returnSplitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title d-flex align-items-center gap-1">
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#3598db;">receipt_long</span>
+                    <span id="splitModalTitle">Add Split Entry</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="hidden" id="editSplitIndex" value="">
+                
+                <div class="mb-3">
+                    <label class="form-label">Amount <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0.01" max="999999" class="form-control form-control-sm" id="splitAmount" placeholder="Max 999,999">
+                    <small class="text-muted">Maximum amount per entry: 999,999</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Source Account <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm" id="splitSourceAccount">
+                        <option value="">-- Select Source Account --</option>
+                        @foreach($bankAccounts as $acc)
+                        <option value="{{ $acc->id }}"
+                                data-account-number="{{ $acc->account_number }}"
+                                data-account-name="{{ $acc->account_name }}"
+                                data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
+                            {{ $acc->account_name }}
+                        </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Cheque Book <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm" id="splitChequeBook">
+                        <option value="">-- Select cheque book --</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Cheque No.</label>
+                    <input type="text" class="form-control form-control-sm" id="splitChequeNo" readonly placeholder="Auto">
+                    <div id="splitChequeMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="saveSplitEntryBtn">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">save</span>
+                    Save Entry
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 {{-- ── Entry Detail Modal ── --}}
@@ -1390,40 +1473,255 @@ $(document).ready(function () {
         });
     }
 
-    // Display line items if amount exceeds 1M
+    // Split entries management
+    var returnSplitEntries = [];
+    var splitEntryIdCounter = 0;
+
+    // Display split section if amount exceeds 1M
     function displayReturnLineItems(netBalance) {
-        var MAX_AMOUNT = 999000; // 999,000
-        
         if (netBalance > 1000000) {
-            // Split into multiple line items
-            var lineItems = [];
-            var remaining = netBalance;
+            // Show split section, hide single payment section
+            $('#returnSplitSection').show();
+            $('#returnSinglePaymentSection').hide();
             
-            while (remaining > 0) {
-                var lineAmount = remaining > MAX_AMOUNT ? MAX_AMOUNT : remaining;
-                lineItems.push(lineAmount);
-                remaining -= lineAmount;
-            }
+            // Clear single payment fields
+            $('#returnSourceAccount').val('');
+            $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+            $('#returnChequeNo').val('');
+            $('#returnChequeMsg').text('');
             
-            var html = '<div class="alert alert-info py-2 mb-2" style="font-size:0.82rem;">';
-            html += '<span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">info</span> ';
-            html += 'Amount exceeds 1M. Split into ' + lineItems.length + ' entries (max 999,000 each):';
-            html += '</div>';
-            html += '<div class="table-responsive mb-2">';
-            html += '<table class="table table-sm table-bordered" style="font-size:0.82rem;">';
-            html += '<thead class="table-light"><tr><th>Entry #</th><th class="text-end">Amount</th></tr></thead><tbody>';
+            // Start with empty split entries - user must add manually
+            returnSplitEntries = [];
+            splitEntryIdCounter = 0;
             
-            lineItems.forEach(function(amt, idx) {
-                html += '<tr><td>Entry ' + (idx + 1) + '</td><td class="text-end">' + fmtNum(amt) + '</td></tr>';
-            });
-            
-            html += '</tbody></table></div>';
-            
-            $('#returnEntriesList').html(html).show();
+            renderReturnSplitEntries();
         } else {
-            $('#returnEntriesList').html('').hide();
+            // Show single payment section, hide split section
+            $('#returnSplitSection').hide();
+            $('#returnSinglePaymentSection').show();
+            returnSplitEntries = [];
         }
     }
+
+    // Render split entries table
+    function renderReturnSplitEntries() {
+        var html = '<div class="table-responsive">';
+        html += '<table class="table table-sm table-hover mb-0" style="font-size:0.82rem; border:none;">';
+        html += '<thead style="border-bottom:2px solid #dee2e6;"><tr>';
+        html += '<th style="border:none; width:50px;">#</th>';
+        html += '<th style="border:none;">Amount</th>';
+        html += '<th style="border:none;">Source Account</th>';
+        html += '<th style="border:none;">CHQ</th>';
+        html += '<th style="border:none; width:80px;">Actions</th>';
+        html += '</tr></thead><tbody>';
+        
+        if (returnSplitEntries.length === 0) {
+            html += '<tr><td colspan="5" class="text-center text-muted py-3" style="border:none;">No split entries. Click "Add Entry" to split the amount.</td></tr>';
+        } else {
+            returnSplitEntries.forEach(function(entry, idx) {
+                var isComplete = entry.amount && entry.source_account_id && entry.cheque_number;
+                var rowStyle = isComplete ? '' : 'border-left:3px solid #ffc107;';
+                
+                html += '<tr style="' + rowStyle + '">';
+                html += '<td style="border:none; padding-top:12px;">' + (idx + 1) + '</td>';
+                html += '<td style="border:none; padding-top:12px;">' + (entry.amount ? fmtNum(entry.amount) : '<span class="text-muted">-</span>') + '</td>';
+                html += '<td style="border:none; padding-top:12px;"><small>' + (entry.source_account_name || '<span class="text-muted">Not set</span>') + '</small></td>';
+                html += '<td style="border:none; padding-top:12px;"><code style="font-size:0.75rem;">' + (entry.cheque_number || '<span class="text-muted">-</span>') + '</code></td>';
+                html += '<td style="border:none;">';
+                html += '<button type="button" class="btn btn-sm btn-link text-primary p-0 me-2 edit-split-entry" data-index="' + idx + '" title="Edit">';
+                html += '<span class="material-symbols-outlined" style="font-size:16px;">edit</span></button>';
+                html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 delete-split-entry" data-index="' + idx + '" title="Delete">';
+                html += '<span class="material-symbols-outlined" style="font-size:16px;">delete</span></button>';
+                html += '</td></tr>';
+            });
+        }
+        
+        html += '</tbody></table></div>';
+        $('#returnSplitEntriesList').html(html);
+        
+        // Update total
+        var total = returnSplitEntries.reduce(function(sum, e) { return sum + (parseFloat(e.amount) || 0); }, 0);
+        $('#returnSplitTotal').text(fmtNum(total));
+        
+        // Check if total matches
+        var netBalance = parseFloat($('#returnNetBalance').val().replace(/,/g, '')) || 0;
+        if (Math.abs(total - netBalance) > 0.01) {
+            $('#returnSplitWarning').show();
+        } else {
+            $('#returnSplitWarning').hide();
+        }
+        
+        validateReturnVoucherForm();
+    }
+
+    // Add split entry button
+    $('#addReturnSplitBtn').on('click', function() {
+        $('#splitModalTitle').text('Add Split Entry');
+        $('#editSplitIndex').val('');
+        $('#splitAmount').val('');
+        $('#splitSourceAccount').val('');
+        $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#splitChequeNo').val('');
+        $('#splitChequeMsg').text('');
+        $('#returnSplitModal').modal('show');
+    });
+
+    // Edit split entry
+    $(document).on('click', '.edit-split-entry', function() {
+        var index = $(this).data('index');
+        var entry = returnSplitEntries[index];
+        
+        $('#splitModalTitle').text('Edit Split Entry');
+        $('#editSplitIndex').val(index);
+        $('#splitAmount').val(entry.amount);
+        $('#splitSourceAccount').val(entry.source_account_id);
+        
+        // Load cheque books for the account
+        if (entry.source_account_id) {
+            loadSplitChequeBooks(entry.source_account_id, entry.cheque_book_id);
+        }
+        
+        $('#splitChequeNo').val(entry.cheque_number);
+        $('#returnSplitModal').modal('show');
+    });
+
+    // Delete split entry
+    $(document).on('click', '.delete-split-entry', function() {
+        var index = $(this).data('index');
+        returnSplitEntries.splice(index, 1);
+        renderReturnSplitEntries();
+    });
+
+    // Split source account change
+    $('#splitSourceAccount').on('change', function() {
+        var accountId = $(this).val();
+        $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#splitChequeNo').val('');
+        $('#splitChequeMsg').text('');
+        
+        if (accountId) {
+            loadSplitChequeBooks(accountId);
+        }
+    });
+
+    // Load cheque books for split
+    function loadSplitChequeBooks(accountId, selectedBookId) {
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.book") }}',
+            method: 'POST',
+            data: { bank_account_id: accountId, _token: '{{ csrf_token() }}' },
+            success: function(r) {
+                $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+                if (r.success && r.books && r.books.length > 0) {
+                    r.books.forEach(function(book) {
+                        var selected = selectedBookId && book.id == selectedBookId ? 'selected' : '';
+                        $('#splitChequeBook').append(
+                            `<option value="${book.id}" ${selected}>Cheque #${book.first_cheque_number} (${book.leafs} leaves)</option>`
+                        );
+                    });
+                } else {
+                    $('#splitChequeBook').append('<option value="">No cheque books available</option>');
+                }
+            },
+            error: function(xhr) {
+                $('#splitChequeMsg').text('Failed to load cheque books');
+            }
+        });
+    }
+
+    // Split cheque book change
+    $('#splitChequeBook').on('change', function() {
+        var bookId = $(this).val();
+        $('#splitChequeNo').val('');
+        $('#splitChequeMsg').text('');
+        
+        if (!bookId) return;
+        
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.lock") }}',
+            method: 'POST',
+            data: { cheque_book_id: bookId, _token: '{{ csrf_token() }}' },
+            success: function(r) {
+                if (r.success && r.cheque_number) {
+                    $('#splitChequeNo').val(r.cheque_number);
+                    $('#splitChequeNo').data('leaf-token-id', r.lock_token);
+                } else {
+                    $('#splitChequeMsg').text('No cheque number available');
+                }
+            },
+            error: function(xhr) {
+                $('#splitChequeMsg').text('Failed to lock cheque number');
+            }
+        });
+    });
+
+    // Save split entry
+    $('#saveSplitEntryBtn').on('click', function() {
+        var amount = parseFloat($('#splitAmount').val());
+        var sourceAccountId = $('#splitSourceAccount').val();
+        var sourceAccountName = $('#splitSourceAccount option:selected').text();
+        var chequeBookId = $('#splitChequeBook').val();
+        var chequeNumber = $('#splitChequeNo').val();
+        var chequeLeafToken = $('#splitChequeNo').data('leaf-token-id');
+        
+        // Validate
+        if (!amount || amount <= 0) {
+            toastr.error('Please enter a valid amount');
+            return;
+        }
+        if (amount > 999999) {
+            toastr.error('Amount cannot exceed 999,999');
+            return;
+        }
+        if (!sourceAccountId) {
+            toastr.error('Please select a source account');
+            return;
+        }
+        if (!chequeNumber) {
+            toastr.error('Please select a cheque book to get cheque number');
+            return;
+        }
+        
+        var editIndex = $('#editSplitIndex').val();
+        
+        if (editIndex !== '') {
+            // Update existing
+            returnSplitEntries[parseInt(editIndex)] = {
+                id: returnSplitEntries[parseInt(editIndex)].id,
+                amount: amount,
+                source_account_id: sourceAccountId,
+                source_account_name: sourceAccountName,
+                cheque_book_id: chequeBookId,
+                cheque_number: chequeNumber,
+                cheque_leaf_token: chequeLeafToken
+            };
+        } else {
+            // Add new
+            returnSplitEntries.push({
+                id: ++splitEntryIdCounter,
+                amount: amount,
+                source_account_id: sourceAccountId,
+                source_account_name: sourceAccountName,
+                cheque_book_id: chequeBookId,
+                cheque_number: chequeNumber,
+                cheque_leaf_token: chequeLeafToken
+            });
+        }
+        
+        renderReturnSplitEntries();
+        $('#returnSplitModal').modal('hide');
+    });
+
+    // Clear modal on close
+    $('#returnSplitModal').on('hidden.bs.modal', function() {
+        $('#splitModalTitle').text('Add Split Entry');
+        $('#editSplitIndex').val('');
+        $('#splitAmount').val('');
+        $('#splitSourceAccount').val('');
+        $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#splitChequeNo').val('').data('leaf-token-id', '');
+        $('#splitChequeMsg').text('');
+    });
 
     // Source account selection - load cheque books
     $('#returnSourceAccount').on('change', function() {
@@ -1514,24 +1812,42 @@ $(document).ready(function () {
             isValid = false;
         }
         
-        // Check if source account is selected
-        if (!$('#returnSourceAccount').val()) {
-            isValid = false;
-        }
-        
-        // Check if cheque number is set
-        if (!$('#returnChequeNo').val()) {
-            isValid = false;
-        }
-        
         // Check if voucher date is set
         if (!$('#returnVoucherDate').val()) {
             isValid = false;
         }
         
         // Check if net balance is set
-        if (!$('#returnNetBalance').val()) {
+        var netBalance = parseFloat($('#returnNetBalance').val().replace(/,/g, '')) || 0;
+        if (!netBalance) {
             isValid = false;
+        }
+        
+        // Check split entries if amount > 1M
+        if (netBalance > 1000000) {
+            // Must have split entries
+            if (returnSplitEntries.length === 0) {
+                isValid = false;
+            } else {
+                // Check all entries are complete
+                var allComplete = returnSplitEntries.every(function(e) {
+                    return e.amount && e.source_account_id && e.cheque_number;
+                });
+                if (!allComplete) {
+                    isValid = false;
+                }
+                
+                // Check total matches
+                var total = returnSplitEntries.reduce(function(sum, e) { return sum + (parseFloat(e.amount) || 0); }, 0);
+                if (Math.abs(total - netBalance) > 0.01) {
+                    isValid = false;
+                }
+            }
+        } else {
+            // For amounts <= 1M, check single source account and cheque
+            if (!$('#returnSourceAccount').val() || !$('#returnChequeNo').val()) {
+                isValid = false;
+            }
         }
         
         $('#createReturnVoucherBtn').prop('disabled', !isValid);
@@ -1556,7 +1872,6 @@ $(document).ready(function () {
         $('#returnAccountName').val('');
         $('#returnAccountNumber').val('');
         $('#returnNetBalance').val('');
-        $('#returnEntriesList').html('').hide();
         $('#returnSourceAccount').val('');
         $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
         $('#returnChequeNo').val('');
@@ -1567,8 +1882,14 @@ $(document).ready(function () {
         $('#returnPostYear').val('{{ $currentYear }}');
         $('#returnPostMonth').val('{{ $currentMonth }}');
         
-        // Hide bank warning
+        // Hide bank warning and split section, show single payment section
         $('#returnBankWarning').hide();
+        $('#returnSplitSection').hide();
+        $('#returnSinglePaymentSection').show();
+        
+        // Reset split entries
+        returnSplitEntries = [];
+        splitEntryIdCounter = 0;
         
         // Disable create button
         $('#createReturnVoucherBtn').prop('disabled', true);
@@ -1587,16 +1908,7 @@ $(document).ready(function () {
             return;
         }
         
-        if (!$('#returnSourceAccount').val()) {
-            toastr.error('Please select a source account');
-            return;
-        }
-        
-        if (!$('#returnChequeNo').val()) {
-            toastr.error('Please select a cheque book to get cheque number');
-            return;
-        }
-        
+        var netBalance = parseFloat(currentReturnData.net_balance_raw) || 0;
         var voucherData = {
             return_summary_id: currentReturnData.id,
             landlord_id: currentReturnData.landlord_id,
@@ -1606,13 +1918,47 @@ $(document).ready(function () {
             bank_name: $('#returnBankName').val(),
             account_name: $('#returnAccountName').val(),
             account_number: $('#returnAccountNumber').val(),
-            source_account_id: $('#returnSourceAccount').val(),
-            cheque_number: $('#returnChequeNo').val(),
             voucher_date: $('#returnVoucherDate').val(),
             post_year: $('#returnPostYear').val(),
             post_month: $('#returnPostMonth').val(),
-            net_balance: parseFloat(currentReturnData.net_balance_raw) || 0
+            net_balance: netBalance
         };
+        
+        // Check if splitting is required
+        if (netBalance > 1000000) {
+            // Use split entries
+            if (returnSplitEntries.length === 0) {
+                toastr.error('Please add split entries for amounts exceeding 1M');
+                return;
+            }
+            
+            var total = returnSplitEntries.reduce(function(sum, e) { return sum + (parseFloat(e.amount) || 0); }, 0);
+            if (Math.abs(total - netBalance) > 0.01) {
+                toastr.error('Total split amount must equal net balance');
+                return;
+            }
+            
+            voucherData.split_entries = returnSplitEntries.map(function(e) {
+                return {
+                    amount: e.amount,
+                    source_account_id: e.source_account_id,
+                    cheque_number: e.cheque_number
+                };
+            });
+        } else {
+            // Single entry
+            if (!$('#returnSourceAccount').val()) {
+                toastr.error('Please select a source account');
+                return;
+            }
+            if (!$('#returnChequeNo').val()) {
+                toastr.error('Please select a cheque book to get cheque number');
+                return;
+            }
+            
+            voucherData.source_account_id = $('#returnSourceAccount').val();
+            voucherData.cheque_number = $('#returnChequeNo').val();
+        }
         
         $('#createReturnVoucherBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Creating...');
         
