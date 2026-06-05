@@ -23,7 +23,6 @@ class PaymentVoucherHeader extends Model
         'credit_amount',
         'entry_count',
         'voucher_status',
-        'cheque_number',
         'is_deleted',
         'prepared_by',
         'checked_status',

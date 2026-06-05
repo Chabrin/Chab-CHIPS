@@ -316,6 +316,8 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Zone</th>
                                                 <th>Zone Area</th>
                                                 <th>Field Officer</th>
+                                                <th>Bank Name</th>
+                                                <th>Account Number</th>
                                                 <th>Actions</th>
                                             </tr>
                                         </thead>
@@ -770,6 +772,41 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+<!-- Assign Property Bank Modal -->
+<div class="modal fade" id="assignPropertyBankModal" tabindex="-1" aria-labelledby="assignPropertyBankModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="assignPropertyBankModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">account_balance</span>
+                    Assign Bank to Property
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="assignPropertyBankForm">
+                    <input type="hidden" id="assignPropertyId" name="property_id" value="">
+                    <input type="hidden" id="assignClientId" name="client_id" value="">
+                    <div class="mb-3">
+                        <label for="clientBankSelect" class="form-label">Select Bank Account <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="clientBankSelect" name="client_bank_id" required>
+                            <option value="">Loading...</option>
+                        </select>
+                        <small class="text-muted">Only bank accounts set up for this client are available</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="savePropertyBankBtn">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">save</span>
+                    Assign
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Related Property Details Modal -->
 <div class="modal fade" id="relatedPropertyModal" tabindex="-1" aria-labelledby="relatedPropertyModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-md">
@@ -912,15 +949,23 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     data: 'field_officer'
                 },
                 {
+                    data: 'bank_name'
+                },
+                {
+                    data: 'account_number'
+                },
+                {
                     data: 'id',
                     orderable: false,
                     searchable: false,
                     render: function(id, type, row) {
                         let buttons = '<div class="d-flex flex-row gap-1">';
-                        // View button
                         buttons += `
                             <a href="/property/properties/${row.encrypted_id}/edit" title="Edit">
                                 <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                            </a>
+                            <a href="#" class="assign-bank-btn" data-property-id="${row.id}" data-client-id="${row.client_id}" title="Assign Bank">
+                                <span class="material-symbols-outlined" style="font-size:18px;">account_balance</span>
                             </a>
                         `;
 
@@ -2618,6 +2663,110 @@ COPY PERMISSIONS (paste when re-enabling checks):
             $('#bankDetailForm')[0].reset();
             $('#bankDetailId').val('');
             $('#branchSelect').html('<option value="">Select Branch (Optional)</option>');
+        });
+
+        // Property Bank Assignment - Assign bank button click handler (event delegation)
+        $(document).on('click', '.assign-bank-btn', function(e) {
+            e.preventDefault();
+            var propertyId = $(this).data('property-id');
+            var clientId = $(this).data('client-id');
+            
+            $('#assignPropertyId').val(propertyId);
+            $('#assignClientId').val(clientId);
+            $('#clientBankSelect').html('<option value="">Loading...</option>');
+            
+            $.ajax({
+                url: "{{ route('property.banks.available') }}",
+                type: 'GET',
+                data: {
+                    property_id: propertyId,
+                    client_id: clientId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.data) {
+                        var options = '<option value="">Select Bank Account</option>';
+                        response.data.forEach(function(bank) {
+                            options += `<option value="${bank.id}">
+                                ${bank.bank_name} - ${bank.account_number} (${bank.account_name})
+                            </option>`;
+                        });
+                        $('#clientBankSelect').html(options);
+                        
+                        if (response.data.length === 0) {
+                            $('#clientBankSelect').html('<option value="">No bank accounts available</option>');
+                            toastr.info('No bank accounts set up for this client. Please add bank details first.');
+                        }
+                    } else {
+                        $('#clientBankSelect').html('<option value="">Error loading banks</option>');
+                        toastr.error('Failed to load available banks');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading banks:', error);
+                    $('#clientBankSelect').html('<option value="">Error loading banks</option>');
+                    toastr.error('Failed to load available banks');
+                }
+            });
+            
+            $('#assignPropertyBankModal').modal('show');
+        });
+
+        // Save property bank button click handler
+        $('#savePropertyBankBtn').on('click', function() {
+            var propertyId = $('#assignPropertyId').val();
+            var clientId = $('#assignClientId').val();
+            var clientBankId = $('#clientBankSelect').val();
+
+            if (!clientBankId) {
+                toastr.error('Please select a bank account');
+                return;
+            }
+
+            $('#savePropertyBankBtn').prop('disabled', true);
+
+            $.ajax({
+                url: "{{ route('property.banks.assign') }}",
+                type: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    property_id: propertyId,
+                    client_id: clientId,
+                    client_bank_id: clientBankId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        toastr.success(response.message || 'Bank assigned successfully');
+                        $('#assignPropertyBankModal').modal('hide');
+                        loadProperties();
+                    } else {
+                        toastr.error(response.message || 'Failed to assign bank');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error assigning bank:', error);
+                    var errorMsg = 'Failed to assign bank';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                    }
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        errorMsg = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+                    }
+                    toastr.error(errorMsg);
+                },
+                complete: function() {
+                    $('#savePropertyBankBtn').prop('disabled', false);
+                }
+            });
+        });
+
+        // Reset assign property bank modal on close
+        $('#assignPropertyBankModal').on('hidden.bs.modal', function() {
+            $('#assignPropertyBankForm')[0].reset();
+            $('#assignPropertyId').val('');
+            $('#assignClientId').val('');
+            $('#clientBankSelect').html('<option value="">Select Bank Account</option>');
         });
     });
 </script>

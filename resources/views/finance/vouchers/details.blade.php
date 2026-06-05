@@ -214,8 +214,9 @@
                                         <th>#</th>
                                         <th>Description</th>
                                         <th>Payee</th>
-                                        <th>Source Account No.</th>
-                                        <th>Source Bank / Account</th>
+                                        <th>Payee Account No.</th>
+                                        <th>Payee Bank / Account</th>
+                                        <th>CHQ</th>
                                         <th class="text-end">Amount</th>
                                         <th>Approved</th>
                                     </tr>
@@ -277,6 +278,14 @@
                     render: function(d) {
                         return d && d !== '-'
                             ? '<small>' + d + '</small>'
+                            : '<span class="text-muted">—</span>';
+                    }
+                },
+                {
+                    data: 'cheque_number',
+                    render: function(d) {
+                        return d && d !== '-'
+                            ? '<code style="font-size:0.78rem;">' + d + '</code>'
                             : '<span class="text-muted">—</span>';
                     }
                 },

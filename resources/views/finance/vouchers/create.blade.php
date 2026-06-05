@@ -253,25 +253,6 @@
                         </div>
                     </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label">Cheque Books</label>
-                        <select class="form-select form-select-sm" id="cheque_books">
-                            <option value="">-- Select cheque book --</option>
-                            
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">
-                            Cheque No.
-                            <span id="chequeLoadingSpinner" class="spinner-border spinner-border-sm text-primary ms-1" style="display:none; width:10px; height:10px;"></span>
-                        </label>
-                        <input type="text" class="form-control form-control-sm" id="voucherChequeNo"
-                               placeholder="Auto from book" readonly
-                               style="background-color:#eef3f8; color:#1a2e44; font-weight:600; letter-spacing:0.5px;">
-                        <div id="chequeNoMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
-                    </div>
-
                 </div>
             </div>
 
@@ -304,10 +285,23 @@
 
                 </div>
 
-                {{-- Row 2: Source Account + Amount + Add Entry --}}
-                <div class="row g-2 align-items-start">
+                {{-- Row 2: Cheque Details + Amount + Add Entry --}}
+                <div class="row g-2 mb-2">
 
-                    
+                    <div class="col-md-3">
+                        <label class="form-label">Cheque Book</label>
+                        <select class="form-select form-select-sm" id="cheque_books">
+                            <option value="">-- Select cheque book --</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Cheque No.</label>
+                        <input type="text" class="form-control form-control-sm" id="entryChequeNo"
+                               placeholder="Auto" readonly
+                               style="background-color:#eef3f8; color:#1a2e44; font-weight:600;">
+                        <div id="entryChequeMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                    </div>
 
                     <div class="col-md-2">
                         <label class="form-label">Amount <span class="text-danger">*</span></label>
@@ -352,13 +346,14 @@
                             <th>Entry Type</th>
                             <th>Description</th>
                             <th>Source Account</th>
+                            <th>Cheque No.</th>
                             <th class="text-end">Amount</th>
                             <th style="width:70px;"></th>
                         </tr>
                     </thead>
                     <tbody id="entriesTableBody">
                         <tr id="noEntriesRow">
-                            <td colspan="6" class="text-center text-muted py-4" style="font-size:0.82rem;">
+                            <td colspan="7" class="text-center text-muted py-4" style="font-size:0.82rem;">
                                 No entries added yet — fill the form above and click Add Entry
                             </td>
                         </tr>
@@ -422,46 +417,169 @@
                                 <table class="display" id="returnsTable" style="width:100%; font-size:0.82rem;">
                                     <thead>
                                         <tr>
-                                            <th style="width:30px;"></th>
                                             <th>Landlord</th>
                                             <th>Reference</th>
+                                            <th>Property</th>
                                             <th class="text-end">Net Balance</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
                                 </table>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
-                                <div>
-                                    <small class="text-muted">Selected: <strong id="selectedReturnsCount">0</strong> items</small>
-                                    <span class="ms-3 text-muted">|</span>
-                                    <small class="ms-3 text-muted">Total: <strong id="selectedReturnsTotal">0.00</strong></small>
-                                </div>
-                                <button type="button" class="btn btn-success btn-sm" id="createReturnsVoucherBtn" disabled>
-                                    <span class="material-symbols-outlined" style="font-size:16px;">arrow_forward</span>
-                                    Create Voucher
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Right Column: Voucher Preview / Creation --}}
+                {{-- Right Column: Voucher Form --}}
                 <div class="col-lg-6">
                     <div class="card">
                         <div class="card-header card-no-border py-2">
                             <h6 class="mb-0">
                                 <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">receipt_long</span>
-                                Voucher Preview
+                                Returns Voucher Details
                             </h6>
                         </div>
-                        <div class="card-body pt-0">
-                            <div id="returnsVoucherPreview" class="text-center py-5 text-muted">
-                                <span class="material-symbols-outlined" style="font-size:48px;">info</span>
-                                <p class="mt-2 mb-0" style="font-size:0.85rem;">Select returns from the left to preview voucher</p>
+                        <div class="card-body">
+                            <input type="hidden" id="returnLandlordId">
+                            <input type="hidden" id="returnPropertyId">
+                            <input type="hidden" id="returnSummaryId">
+
+                            {{-- Landlord Info --}}
+                            <div class="entry-section-label">Payee Details</div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Landlord</label>
+                                    <input type="text" class="form-control form-control-sm" id="returnLandlordName" readonly style="background-color:#f8f9fa;" placeholder="Select return">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Reference</label>
+                                    <input type="text" class="form-control form-control-sm" id="returnReference" readonly style="background-color:#f8f9fa;" placeholder="Select return">
+                                </div>
                             </div>
-                            <div id="returnsVoucherForm" style="display:none;">
-                                {{-- Voucher form will be populated here --}}
+
+                            {{-- Bank Details (Read-only) --}}
+                            <div class="entry-section-label">
+                                Bank Details (Landlord)
+                                <span id="returnBankWarning" class="text-danger ms-2" style="font-size:0.72rem; display:none;">
+                                    <span class="material-symbols-outlined" style="font-size:12px;vertical-align:middle;">warning</span>
+                                    Missing Bank details
+                                </span>
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Bank Name</label>
+                                    <input type="text" class="form-control form-control-sm" id="returnBankName" readonly style="background-color:#f8f9fa;" placeholder="-">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Account Name</label>
+                                    <input type="text" class="form-control form-control-sm" id="returnAccountName" readonly style="background-color:#f8f9fa;" placeholder="-">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Account Number</label>
+                                    <input type="text" class="form-control form-control-sm" id="returnAccountNumber" readonly style="background-color:#f8f9fa;" placeholder="-">
+                                </div>
+                            </div>
+
+                            {{-- Payment Details (for amounts <= 1M only) --}}
+                            <div id="returnSinglePaymentSection">
+                                <div class="entry-section-label">Payment Details</div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Source Account <span class="text-danger">*</span></label>
+                                        <select class="form-select form-select-sm" id="returnSourceAccount">
+                                            <option value="">-- Select Source Account --</option>
+                                            @foreach($bankAccounts as $acc)
+                                            <option value="{{ $acc->id }}"
+                                                    data-account-number="{{ $acc->account_number }}"
+                                                    data-account-name="{{ $acc->account_name }}"
+                                                    data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
+                                                {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
+                                            </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Cheque Book</label>
+                                        <select class="form-select form-select-sm" id="returnChequeBook">
+                                            <option value="">-- Select cheque book --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Cheque No.</label>
+                                        <input type="text" class="form-control form-control-sm" id="returnChequeNo" readonly placeholder="Auto">
+                                        <div id="returnChequeMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Voucher Info --}}
+                            <div class="entry-section-label">Voucher Info</div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Voucher Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control form-control-sm" id="returnVoucherDate" value="{{ date('Y-m-d') }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Post to Year <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm" id="returnPostYear">
+                                        @foreach($years as $yr)
+                                        <option value="{{ $yr }}" {{ $yr == $currentYear ? 'selected' : '' }}>{{ $yr }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Post to Month <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm" id="returnPostMonth">
+                                        @foreach([1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'] as $num => $name)
+                                        <option value="{{ $num }}" {{ $num == $currentMonth ? 'selected' : '' }}>{{ $name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            {{-- Return Amount & Entries --}}
+                            <div class="entry-section-label">Return Amount</div>
+                            <div class="mb-3">
+                                <label class="form-label">Net Balance</label>
+                                <input type="text" class="form-control form-control-sm fw-bold" id="returnNetBalance" readonly style="background-color:#f0f7ff; color:#1a5f9e;" placeholder="0.00">
+                            </div>
+
+                            <div id="returnSplitSection" style="display:none;">
+                                <div class="py-2 mb-3" style="font-size:0.82rem; border-left:3px solid #3598db; padding-left:0.75rem;">
+                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;color:#3598db;">info</span>
+                                    Amount exceeds 1M. Split into multiple entries (max 999,999 each).
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="entry-section-label mb-0">Split Entries</div>
+                                    <button type="button" class="btn btn-sm btn-primary" id="addReturnSplitBtn">
+                                        <span class="material-symbols-outlined" style="font-size:14px;">add</span>
+                                        Add Entry
+                                    </button>
+                                </div>
+
+                                <div id="returnSplitEntriesList" class="mb-3">
+                                    {{-- Split entries will be added here --}}
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center p-2" style="border-top:1px solid #dee2e6;">
+                                    <span style="font-size:0.85rem;">Total Split Amount:</span>
+                                    <span class="fw-bold" id="returnSplitTotal" style="font-size:0.9rem;">0.00</span>
+                                </div>
+                                <div id="returnSplitWarning" class="text-danger mt-1" style="font-size:0.75rem; display:none;">
+                                    Total must equal Net Balance
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-secondary btn-sm" id="cancelReturnVoucherBtn">
+                                    <span class="material-symbols-outlined" style="font-size:16px;">close</span>
+                                    Cancel
+                                </button>
+                                <button type="button" class="btn btn-success btn-sm" id="createReturnVoucherBtn" disabled>
+                                    <span class="material-symbols-outlined" style="font-size:16px;">task_alt</span>
+                                    Create Voucher
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -488,6 +606,65 @@
     {{-- END Tab Content --}}
 
 </div>
+</div>
+
+{{-- ── Return Split Entry Modal ── --}}
+<div class="modal fade" id="returnSplitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title d-flex align-items-center gap-1">
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#3598db;">receipt_long</span>
+                    <span id="splitModalTitle">Add Split Entry</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="hidden" id="editSplitIndex" value="">
+                
+                <div class="mb-3">
+                    <label class="form-label">Amount <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0.01" max="999999" class="form-control form-control-sm" id="splitAmount" placeholder="Max 999,999">
+                    <small class="text-muted">Maximum amount per entry: 999,999</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Source Account <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm" id="splitSourceAccount">
+                        <option value="">-- Select Source Account --</option>
+                        @foreach($bankAccounts as $acc)
+                        <option value="{{ $acc->id }}"
+                                data-account-number="{{ $acc->account_number }}"
+                                data-account-name="{{ $acc->account_name }}"
+                                data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
+                            {{ $acc->account_name }}
+                        </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Cheque Book <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm" id="splitChequeBook">
+                        <option value="">-- Select cheque book --</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Cheque No.</label>
+                    <input type="text" class="form-control form-control-sm" id="splitChequeNo" readonly placeholder="Auto">
+                    <div id="splitChequeMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="saveSplitEntryBtn">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">save</span>
+                    Save Entry
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 {{-- ── Entry Detail Modal ── --}}
@@ -1160,7 +1337,7 @@ $(document).ready(function () {
     // ═══════════════════════════════════════════════════════════════════
 
     var returnsTable = null;
-    var selectedReturns = [];
+    var currentReturnData = null;
 
     // Initialize Returns DataTable
     function initReturnsTable() {
@@ -1172,15 +1349,13 @@ $(document).ready(function () {
             data: [],
             columns: [
                 {
-                    data: null,
-                    orderable: false,
-                    className: 'text-center',
-                    render: function(d, t, r) {
-                        return '<input type="checkbox" class="form-check-input return-checkbox" data-id="' + r.id + '" data-amount="' + r.net_balance_raw + '" data-landlord="' + escHtml(r.landlord_name) + '" data-code="' + r.landlord_code + '">';
+                    data: 'landlord_name',
+                    render: function(data, type, row) {
+                        return '<a href="#" class="return-landlord-link" data-return=\'' + JSON.stringify(row) + '\' style="text-decoration:underline; color:#3598db; cursor:pointer;">' + escHtml(data) + '</a>';
                     }
                 },
-                { data: 'landlord_name' },
                 { data: 'landlord_code' },
+                { data: 'property_name' },
                 {
                     data: 'net_balance',
                     className: 'text-end'
@@ -1191,7 +1366,7 @@ $(document).ready(function () {
             info: true,
             searching: true,
             ordering: true,
-            order: [[1, 'asc']],
+            order: [[0, 'asc']],
             language: {
                 emptyTable: 'No approved returns found for selected period',
                 zeroRecords: 'No matching records found'
@@ -1222,9 +1397,6 @@ $(document).ready(function () {
                     returnsTable.draw();
 
                     $('#returnsCount').text(response.summary.total_count);
-
-                    selectedReturns = [];
-                    updateSelectedReturnsInfo();
                 } else {
                     toastr.error(response.message || 'Failed to load returns');
                 }
@@ -1238,65 +1410,586 @@ $(document).ready(function () {
         });
     }
 
-    // Handle checkbox selection
-    $(document).on('change', '.return-checkbox', function() {
-        var id = $(this).data('id');
-        var amount = parseFloat($(this).data('amount')) || 0;
-        var landlord = $(this).data('landlord');
-        var code = $(this).data('code');
-
-        if ($(this).is(':checked')) {
-            selectedReturns.push({ id: id, amount: amount, landlord: landlord, code: code });
-        } else {
-            selectedReturns = selectedReturns.filter(function(r) { return r.id !== id; });
-        }
-
-        updateSelectedReturnsInfo();
+    // Handle landlord click to populate voucher form
+    $(document).on('click', '.return-landlord-link', function(e) {
+        e.preventDefault();
+        var returnData = $(this).data('return');
+        
+        currentReturnData = returnData;
+        
+        // Populate landlord info
+        $('#returnLandlordId').val(returnData.landlord_id);
+        $('#returnPropertyId').val(returnData.property_id);
+        $('#returnSummaryId').val(returnData.id);
+        $('#returnLandlordName').val(returnData.landlord_name);
+        $('#returnReference').val(returnData.landlord_code);
+        
+        // Format and display net balance
+        var netBalance = parseFloat(returnData.net_balance_raw) || 0;
+        $('#returnNetBalance').val(fmtNum(netBalance));
+        
+        // Load property bank details
+        loadPropertyBankDetails(returnData.property_id, netBalance);
     });
 
-    // Update selected returns info
-    function updateSelectedReturnsInfo() {
-        var count = selectedReturns.length;
-        var total = selectedReturns.reduce(function(sum, r) { return sum + r.amount; }, 0);
+    // Load property bank details
+    function loadPropertyBankDetails(propertyId, netBalance) {
+        $.ajax({
+            url: '{{ route("ajax.property.bank-details") }}',
+            type: 'GET',
+            data: { property_id: propertyId },
+            success: function(response) {
+                if (response.success && response.data) {
+                    // Populate bank details
+                    $('#returnBankName').val(response.data.bank_name);
+                    $('#returnAccountName').val(response.data.account_name);
+                    $('#returnAccountNumber').val(response.data.account_number);
+                    
+                    // Hide warning
+                    $('#returnBankWarning').hide();
+                } else {
+                    // Clear bank details and show warning
+                    $('#returnBankName').val('');
+                    $('#returnAccountName').val('');
+                    $('#returnAccountNumber').val('');
+                    $('#returnBankWarning').show();
+                }
+                
+                // Show line items if amount > 1M
+                displayReturnLineItems(netBalance);
+                
+                // Validate form
+                validateReturnVoucherForm();
+            },
+            error: function(xhr) {
+                // Clear bank details and show warning
+                $('#returnBankName').val('');
+                $('#returnAccountName').val('');
+                $('#returnAccountNumber').val('');
+                $('#returnBankWarning').show();
+                toastr.error('Failed to load bank details');
+                validateReturnVoucherForm();
+            }
+        });
+    }
 
-        $('#selectedReturnsCount').text(count);
-        $('#selectedReturnsTotal').text(fmtNum(total));
-        $('#createReturnsVoucherBtn').prop('disabled', count === 0);
+    // Split entries management
+    var returnSplitEntries = [];
+    var splitEntryIdCounter = 0;
 
-        if (count > 0) {
-            showReturnsVoucherPreview();
+    // Display split section if amount exceeds 1M
+    function displayReturnLineItems(netBalance) {
+        if (netBalance > 1000000) {
+            // Show split section, hide single payment section
+            $('#returnSplitSection').show();
+            $('#returnSinglePaymentSection').hide();
+            
+            // Clear single payment fields
+            $('#returnSourceAccount').val('');
+            $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+            $('#returnChequeNo').val('');
+            $('#returnChequeMsg').text('');
+            
+            // Start with empty split entries - user must add manually
+            returnSplitEntries = [];
+            splitEntryIdCounter = 0;
+            
+            renderReturnSplitEntries();
         } else {
-            hideReturnsVoucherPreview();
+            // Show single payment section, hide split section
+            $('#returnSplitSection').hide();
+            $('#returnSinglePaymentSection').show();
+            returnSplitEntries = [];
         }
     }
 
-    // Show voucher preview
-    function showReturnsVoucherPreview() {
-        var html = '<div class="mb-3">';
-        html += '<div class="entry-section-label">Selected Returns</div>';
-        html += '<div class="table-responsive"><table class="table table-sm" style="font-size:0.8rem;">';
-        html += '<thead><tr><th>Landlord</th><th>Reference</th><th class="text-end">Amount</th></tr></thead><tbody>';
+    // Render split entries table
+    function renderReturnSplitEntries() {
+        var html = '<div class="table-responsive">';
+        html += '<table class="table table-sm table-hover mb-0" style="font-size:0.82rem; border:none;">';
+        html += '<thead style="border-bottom:2px solid #dee2e6;"><tr>';
+        html += '<th style="border:none; width:50px;">#</th>';
+        html += '<th style="border:none;">Amount</th>';
+        html += '<th style="border:none;">Source Account</th>';
+        html += '<th style="border:none;">CHQ</th>';
+        html += '<th style="border:none; width:80px;">Actions</th>';
+        html += '</tr></thead><tbody>';
+        
+        if (returnSplitEntries.length === 0) {
+            html += '<tr><td colspan="5" class="text-center text-muted py-3" style="border:none;">No split entries. Click "Add Entry" to split the amount.</td></tr>';
+        } else {
+            returnSplitEntries.forEach(function(entry, idx) {
+                var isComplete = entry.amount && entry.source_account_id && entry.cheque_number;
+                var rowStyle = isComplete ? '' : 'border-left:3px solid #ffc107;';
+                
+                html += '<tr style="' + rowStyle + '">';
+                html += '<td style="border:none; padding-top:12px;">' + (idx + 1) + '</td>';
+                html += '<td style="border:none; padding-top:12px;">' + (entry.amount ? fmtNum(entry.amount) : '<span class="text-muted">-</span>') + '</td>';
+                html += '<td style="border:none; padding-top:12px;"><small>' + (entry.source_account_name || '<span class="text-muted">Not set</span>') + '</small></td>';
+                html += '<td style="border:none; padding-top:12px;"><code style="font-size:0.75rem;">' + (entry.cheque_number || '<span class="text-muted">-</span>') + '</code></td>';
+                html += '<td style="border:none;">';
+                html += '<button type="button" class="btn btn-sm btn-link text-primary p-0 me-2 edit-split-entry" data-index="' + idx + '" title="Edit">';
+                html += '<span class="material-symbols-outlined" style="font-size:16px;">edit</span></button>';
+                html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 delete-split-entry" data-index="' + idx + '" title="Delete">';
+                html += '<span class="material-symbols-outlined" style="font-size:16px;">delete</span></button>';
+                html += '</td></tr>';
+            });
+        }
+        
+        html += '</tbody></table></div>';
+        $('#returnSplitEntriesList').html(html);
+        
+        // Update total
+        var total = returnSplitEntries.reduce(function(sum, e) { return sum + (parseFloat(e.amount) || 0); }, 0);
+        $('#returnSplitTotal').text(fmtNum(total));
+        
+        // Check if total matches
+        var netBalance = parseFloat($('#returnNetBalance').val().replace(/,/g, '')) || 0;
+        if (Math.abs(total - netBalance) > 0.01) {
+            $('#returnSplitWarning').show();
+        } else {
+            $('#returnSplitWarning').hide();
+        }
+        
+        validateReturnVoucherForm();
+    }
 
-        selectedReturns.forEach(function(r) {
-            html += '<tr><td>' + escHtml(r.landlord) + '</td>';
-            html += '<td>' + r.code + '</td>';
-            html += '<td class="text-end">' + fmtNum(r.amount) + '</td></tr>';
+    // Add split entry button
+    $('#addReturnSplitBtn').on('click', function() {
+        $('#splitModalTitle').text('Add Split Entry');
+        $('#editSplitIndex').val('');
+        $('#splitAmount').val('');
+        $('#splitSourceAccount').val('');
+        $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#splitChequeNo').val('');
+        $('#splitChequeMsg').text('');
+        $('#returnSplitModal').modal('show');
+    });
+
+    // Edit split entry
+    $(document).on('click', '.edit-split-entry', function() {
+        var index = $(this).data('index');
+        var entry = returnSplitEntries[index];
+        
+        $('#splitModalTitle').text('Edit Split Entry');
+        $('#editSplitIndex').val(index);
+        $('#splitAmount').val(entry.amount);
+        $('#splitSourceAccount').val(entry.source_account_id);
+        
+        // Load cheque books for the account
+        if (entry.source_account_id) {
+            loadSplitChequeBooks(entry.source_account_id, entry.cheque_book_id);
+        }
+        
+        $('#splitChequeNo').val(entry.cheque_number);
+        $('#returnSplitModal').modal('show');
+    });
+
+    // Delete split entry
+    $(document).on('click', '.delete-split-entry', function() {
+        var index = $(this).data('index');
+        returnSplitEntries.splice(index, 1);
+        renderReturnSplitEntries();
+    });
+
+    // Split source account change
+    $('#splitSourceAccount').on('change', function() {
+        var accountId = $(this).val();
+        $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#splitChequeNo').val('');
+        $('#splitChequeMsg').text('');
+        
+        if (accountId) {
+            loadSplitChequeBooks(accountId);
+        }
+    });
+
+    // Load cheque books for split
+    function loadSplitChequeBooks(accountId, selectedBookId) {
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.book") }}',
+            method: 'POST',
+            data: { bank_account_id: accountId, _token: '{{ csrf_token() }}' },
+            success: function(r) {
+                $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+                if (r.success && r.books && r.books.length > 0) {
+                    r.books.forEach(function(book) {
+                        var selected = selectedBookId && book.id == selectedBookId ? 'selected' : '';
+                        $('#splitChequeBook').append(
+                            `<option value="${book.id}" ${selected}>Cheque #${book.first_cheque_number} (${book.leafs} leaves)</option>`
+                        );
+                    });
+                } else {
+                    $('#splitChequeBook').append('<option value="">No cheque books available</option>');
+                }
+            },
+            error: function(xhr) {
+                $('#splitChequeMsg').text('Failed to load cheque books');
+            }
         });
-
-        var total = selectedReturns.reduce(function(sum, r) { return sum + r.amount; }, 0);
-        html += '</tbody><tfoot><tr class="table-light"><td colspan="2">Total</td>';
-        html += '<td class="text-end">' + fmtNum(total) + '</td></tr></tfoot></table></div>';
-        html += '</div>';
-
-        $('#returnsVoucherPreview').hide();
-        $('#returnsVoucherForm').html(html).show();
     }
 
-    // Hide voucher preview
-    function hideReturnsVoucherPreview() {
-        $('#returnsVoucherForm').hide().html('');
-        $('#returnsVoucherPreview').show();
+    // Split cheque book change
+    $('#splitChequeBook').on('change', function() {
+        var bookId = $(this).val();
+        $('#splitChequeNo').val('');
+        $('#splitChequeMsg').text('');
+        
+        if (!bookId) return;
+        
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.lock") }}',
+            method: 'POST',
+            data: { cheque_book_id: bookId, _token: '{{ csrf_token() }}' },
+            success: function(r) {
+                if (r.success && r.cheque_number) {
+                    $('#splitChequeNo').val(r.cheque_number);
+                    $('#splitChequeNo').data('leaf-token-id', r.lock_token);
+                } else {
+                    $('#splitChequeMsg').text('No cheque number available');
+                }
+            },
+            error: function(xhr) {
+                $('#splitChequeMsg').text('Failed to lock cheque number');
+            }
+        });
+    });
+
+    // Save split entry
+    $('#saveSplitEntryBtn').on('click', function() {
+        var amount = parseFloat($('#splitAmount').val());
+        var sourceAccountId = $('#splitSourceAccount').val();
+        var sourceAccountName = $('#splitSourceAccount option:selected').text();
+        var chequeBookId = $('#splitChequeBook').val();
+        var chequeNumber = $('#splitChequeNo').val();
+        var chequeLeafToken = $('#splitChequeNo').data('leaf-token-id');
+        
+        // Validate
+        if (!amount || amount <= 0) {
+            toastr.error('Please enter a valid amount');
+            return;
+        }
+        if (amount > 999999) {
+            toastr.error('Amount cannot exceed 999,999');
+            return;
+        }
+        if (!sourceAccountId) {
+            toastr.error('Please select a source account');
+            return;
+        }
+        if (!chequeNumber) {
+            toastr.error('Please select a cheque book to get cheque number');
+            return;
+        }
+        
+        var editIndex = $('#editSplitIndex').val();
+        
+        if (editIndex !== '') {
+            // Update existing
+            returnSplitEntries[parseInt(editIndex)] = {
+                id: returnSplitEntries[parseInt(editIndex)].id,
+                amount: amount,
+                source_account_id: sourceAccountId,
+                source_account_name: sourceAccountName,
+                cheque_book_id: chequeBookId,
+                cheque_number: chequeNumber,
+                cheque_leaf_token: chequeLeafToken
+            };
+        } else {
+            // Add new
+            returnSplitEntries.push({
+                id: ++splitEntryIdCounter,
+                amount: amount,
+                source_account_id: sourceAccountId,
+                source_account_name: sourceAccountName,
+                cheque_book_id: chequeBookId,
+                cheque_number: chequeNumber,
+                cheque_leaf_token: chequeLeafToken
+            });
+        }
+        
+        renderReturnSplitEntries();
+        $('#returnSplitModal').modal('hide');
+    });
+
+    // Clear modal on close
+    $('#returnSplitModal').on('hidden.bs.modal', function() {
+        $('#splitModalTitle').text('Add Split Entry');
+        $('#editSplitIndex').val('');
+        $('#splitAmount').val('');
+        $('#splitSourceAccount').val('');
+        $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#splitChequeNo').val('').data('leaf-token-id', '');
+        $('#splitChequeMsg').text('');
+    });
+
+    // Source account selection - load cheque books
+    $('#returnSourceAccount').on('change', function() {
+        var bankAccountId = $(this).val();
+        
+        // Clear cheque fields
+        $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#returnChequeNo').val('');
+        $('#returnChequeMsg').text('');
+        
+        if (!bankAccountId) {
+            validateReturnVoucherForm();
+            return;
+        }
+        
+        // Fetch cheque books for this account
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.book") }}',
+            method: 'POST',
+            data: { bank_account_id: bankAccountId, _token: '{{ csrf_token() }}' },
+            success: function(r) {
+                if (r.success && r.books && r.books.length > 0) {
+                    r.books.forEach(function(book) {
+                        $('#returnChequeBook').append(
+                            `<option value="${book.id}">Cheque #${book.first_cheque_number} (${book.leafs} leaves)</option>`
+                        );
+                    });
+                } else {
+                    $('#returnChequeBook').append('<option value="">No cheque books available</option>');
+                }
+                validateReturnVoucherForm();
+            },
+            error: function(xhr) {
+                var msg = xhr.responseJSON?.message || 'No available cheques';
+                $('#returnChequeMsg').text(msg);
+                toastr.warning(msg);
+                validateReturnVoucherForm();
+            }
+        });
+    });
+
+    // Cheque book selection - lock cheque number
+    $('#returnChequeBook').on('change', function() {
+        var bookId = $(this).val();
+        
+        $('#returnChequeNo').val('');
+        $('#returnChequeMsg').text('');
+        
+        if (!bookId) {
+            validateReturnVoucherForm();
+            return;
+        }
+        
+        $.ajax({
+            url: '{{ route("ajax.voucher-cheque.lock") }}',
+            method: 'POST',
+            data: { cheque_book_id: bookId, _token: '{{ csrf_token() }}' },
+            success: function(r) {
+                if (r.success && r.cheque_number) {
+                    $('#returnChequeNo').val(r.cheque_number);
+                    $('#returnChequeNo').data('leaf-token-id', r.lock_token);
+                    $('#returnChequeMsg').text('');
+                } else {
+                    $('#returnChequeMsg').text('No cheque number available.');
+                }
+                validateReturnVoucherForm();
+            },
+            error: function(xhr) {
+                var msg = xhr.responseJSON?.message || 'Failed to lock cheque number';
+                $('#returnChequeMsg').text(msg);
+                toastr.error(msg);
+                validateReturnVoucherForm();
+            }
+        });
+    });
+
+    // Validate return voucher form
+    function validateReturnVoucherForm() {
+        var isValid = true;
+        
+        // Check if return is selected
+        if (!$('#returnSummaryId').val()) {
+            isValid = false;
+        }
+        
+        // Check if landlord bank details exist
+        if (!$('#returnBankName').val()) {
+            isValid = false;
+        }
+        
+        // Check if voucher date is set
+        if (!$('#returnVoucherDate').val()) {
+            isValid = false;
+        }
+        
+        // Check if net balance is set
+        var netBalance = parseFloat($('#returnNetBalance').val().replace(/,/g, '')) || 0;
+        if (!netBalance) {
+            isValid = false;
+        }
+        
+        // Check split entries if amount > 1M
+        if (netBalance > 1000000) {
+            // Must have split entries
+            if (returnSplitEntries.length === 0) {
+                isValid = false;
+            } else {
+                // Check all entries are complete
+                var allComplete = returnSplitEntries.every(function(e) {
+                    return e.amount && e.source_account_id && e.cheque_number;
+                });
+                if (!allComplete) {
+                    isValid = false;
+                }
+                
+                // Check total matches
+                var total = returnSplitEntries.reduce(function(sum, e) { return sum + (parseFloat(e.amount) || 0); }, 0);
+                if (Math.abs(total - netBalance) > 0.01) {
+                    isValid = false;
+                }
+            }
+        } else {
+            // For amounts <= 1M, check single source account and cheque
+            if (!$('#returnSourceAccount').val() || !$('#returnChequeNo').val()) {
+                isValid = false;
+            }
+        }
+        
+        $('#createReturnVoucherBtn').prop('disabled', !isValid);
     }
+
+    // Trigger validation on field changes
+    $('#returnVoucherDate, #returnPostYear, #returnPostMonth').on('change', function() {
+        validateReturnVoucherForm();
+    });
+
+    // Cancel/Clear return voucher form
+    $('#cancelReturnVoucherBtn').on('click', function() {
+        currentReturnData = null;
+        
+        // Clear form fields
+        $('#returnLandlordId').val('');
+        $('#returnPropertyId').val('');
+        $('#returnSummaryId').val('');
+        $('#returnLandlordName').val('');
+        $('#returnReference').val('');
+        $('#returnBankName').val('');
+        $('#returnAccountName').val('');
+        $('#returnAccountNumber').val('');
+        $('#returnNetBalance').val('');
+        $('#returnSourceAccount').val('');
+        $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+        $('#returnChequeNo').val('');
+        $('#returnChequeMsg').text('');
+        
+        // Reset to defaults
+        $('#returnVoucherDate').val('{{ date("Y-m-d") }}');
+        $('#returnPostYear').val('{{ $currentYear }}');
+        $('#returnPostMonth').val('{{ $currentMonth }}');
+        
+        // Hide bank warning and split section, show single payment section
+        $('#returnBankWarning').hide();
+        $('#returnSplitSection').hide();
+        $('#returnSinglePaymentSection').show();
+        
+        // Reset split entries
+        returnSplitEntries = [];
+        splitEntryIdCounter = 0;
+        
+        // Disable create button
+        $('#createReturnVoucherBtn').prop('disabled', true);
+    });
+
+    // Create return voucher
+    $('#createReturnVoucherBtn').on('click', function() {
+        if (!currentReturnData) {
+            toastr.error('No return selected');
+            return;
+        }
+        
+        // Validate all required fields
+        if (!$('#returnBankName').val()) {
+            toastr.error('Landlord bank details are missing. Please assign bank details to this property first.');
+            return;
+        }
+        
+        var netBalance = parseFloat(currentReturnData.net_balance_raw) || 0;
+        var voucherData = {
+            return_summary_id: currentReturnData.id,
+            landlord_id: currentReturnData.landlord_id,
+            property_id: currentReturnData.property_id,
+            vendor_name: $('#returnLandlordName').val(),
+            vendor_type: 'Landlord',
+            bank_name: $('#returnBankName').val(),
+            account_name: $('#returnAccountName').val(),
+            account_number: $('#returnAccountNumber').val(),
+            voucher_date: $('#returnVoucherDate').val(),
+            post_year: $('#returnPostYear').val(),
+            post_month: $('#returnPostMonth').val(),
+            net_balance: netBalance
+        };
+        
+        // Check if splitting is required
+        if (netBalance > 1000000) {
+            // Use split entries
+            if (returnSplitEntries.length === 0) {
+                toastr.error('Please add split entries for amounts exceeding 1M');
+                return;
+            }
+            
+            var total = returnSplitEntries.reduce(function(sum, e) { return sum + (parseFloat(e.amount) || 0); }, 0);
+            if (Math.abs(total - netBalance) > 0.01) {
+                toastr.error('Total split amount must equal net balance');
+                return;
+            }
+            
+            voucherData.split_entries = returnSplitEntries.map(function(e) {
+                return {
+                    amount: e.amount,
+                    source_account_id: e.source_account_id,
+                    cheque_number: e.cheque_number
+                };
+            });
+        } else {
+            // Single entry
+            if (!$('#returnSourceAccount').val()) {
+                toastr.error('Please select a source account');
+                return;
+            }
+            if (!$('#returnChequeNo').val()) {
+                toastr.error('Please select a cheque book to get cheque number');
+                return;
+            }
+            
+            voucherData.source_account_id = $('#returnSourceAccount').val();
+            voucherData.cheque_number = $('#returnChequeNo').val();
+        }
+        
+        $('#createReturnVoucherBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Creating...');
+        
+        $.ajax({
+            url: '{{ route("payment.vouchers.create.return") }}',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                _token: '{{ csrf_token() }}',
+                ...voucherData
+            }),
+            success: function(r) {
+                if (r.success) {
+                    toastr.success('Return voucher created successfully!');
+                    setTimeout(function() {
+                        window.location.href = '{{ route("payment.vouchers.index") }}';
+                    }, 1500);
+                } else {
+                    toastr.error(r.message || 'Failed to create voucher');
+                    validateReturnVoucherForm();
+                    $('#createReturnVoucherBtn').html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
+                }
+            },
+            error: function(xhr) {
+                var msg = xhr.responseJSON?.message || 'Failed to create return voucher';
+                toastr.error(msg);
+                validateReturnVoucherForm();
+                $('#createReturnVoucherBtn').html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
+            }
+        });
+    });
 
     // Load returns when tab is shown
     $('#returns-tab').on('shown.bs.tab', function() {

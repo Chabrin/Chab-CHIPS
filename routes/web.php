@@ -423,6 +423,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/clients/{encryptedId}/properties', [App\Http\Controllers\ClientsController::class, 'getProperties'])->name('property.clients.properties');
     Route::get('/property/clients/{encryptedId}/related-properties', [App\Http\Controllers\ClientsController::class, 'getRelatedProperties'])->name('property.clients.related-properties');
     Route::get('/property/clients/{encryptedId}/properties-dropdown', [App\Http\Controllers\ClientsController::class, 'getClientProperties'])->name('property.clients.properties.dropdown');
+    Route::get('/ajax/property/banks/available', [App\Http\Controllers\ClientsController::class, 'getAvailablePropertyBanks'])->name('property.banks.available');
+    Route::post('/ajax/property/banks/assign', [App\Http\Controllers\ClientsController::class, 'assignPropertyBank'])->name('property.banks.assign');
+    Route::post('/ajax/property/banks/remove', [App\Http\Controllers\ClientsController::class, 'removePropertyBank'])->name('property.banks.remove');
+    Route::get('/ajax/property/bank-details', [App\Http\Controllers\ClientsController::class, 'getPropertyBankDetails'])->name('ajax.property.bank-details');
     Route::get('/property/clients/{encryptedId}/leases', [App\Http\Controllers\ClientsController::class, 'getLeases'])->name('property.clients.leases');
     Route::get('/property/clients/{encryptedId}/recoveries', [App\Http\Controllers\ClientsController::class, 'getRecoveries'])->name('property.clients.recoveries');
     Route::get('/property/clients/{encryptedId}/inspections', [App\Http\Controllers\ClientsController::class, 'getInspections'])->name('property.clients.inspections');
@@ -676,6 +680,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/payment/vouchers/{id}/lines/add', [App\Http\Controllers\PaymentVouchersController::class, 'addLine'])->name('ajax.payment.vouchers.lines.add');
     Route::delete('/ajax/payment/vouchers/lines/{lineId}/remove', [App\Http\Controllers\PaymentVouchersController::class, 'removeLine'])->name('ajax.payment.vouchers.lines.remove');
     Route::get('/ajax/payment/vouchers/approved-returns', [App\Http\Controllers\PaymentVouchersController::class, 'getApprovedReturns'])->name('ajax.payment.vouchers.approved-returns');
+    Route::post('/payment/vouchers/create-return', [App\Http\Controllers\PaymentVouchersController::class, 'createReturnVoucher'])->name('payment.vouchers.create.return');
 
     Route::get('/ajax/invoices/property/{propertyId}/units', [App\Http\Controllers\InvoicingController::class, 'getUnitsByProperty'])->name('ajax.invoices.property.units');
 
