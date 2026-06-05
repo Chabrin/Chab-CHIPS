@@ -1105,6 +1105,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Self Service
     Route::get('/self-service/my-payslip', [SelfServiceController::class, 'myPayslip'])->name('self-service.my-payslip');
     Route::get('/self-service/my-leave',   [SelfServiceController::class, 'myLeave'])->name('self-service.my-leave');
+    Route::get('/self-service/my-disciplinary-cases', [SelfServiceController::class, 'showSelf'])->name('self-service.my-disciplinary-cases');
 
     // Cheque Books
     Route::get('/finance/cheque-books', [ChequeBookController::class, 'index'])->name('cheque-books.index');
