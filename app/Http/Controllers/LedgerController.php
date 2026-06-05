@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use App\Exports\GlTransactionsExport;
+use App\Exports\LedgerAccountsExport;
 use App\Services\ErrorDispatcher;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Facades\Excel;
@@ -408,6 +409,38 @@ class LedgerController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading GL accounts: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load accounts'], 500);
+        }
+    }
+
+    public function exportAccounts()
+    {
+        try {
+            $accounts = ChartAccount::with([
+                'category:id,category_name',
+                'glGroup:id,group_name',
+                'glClass:id,name',
+            ])
+            ->orderBy('account_code')
+            ->get()
+            ->map(function ($a) {
+                return [
+                    'account_code'     => $a->account_code ?? '-',
+                    'account_name'     => $a->account_name ?? '-',
+                    'class_name'       => $a->glClass->name ?? '-',
+                    'group_name'       => $a->glGroup->group_name ?? '-',
+                    'category_name'    => $a->category->category_name ?? '-',
+                    'normally'         => $a->normally ?? '-',
+                    'status'           => $a->current_status_id == 1 ? 'Active' : 'Inactive',
+                ];
+            })
+            ->toArray();
+
+            $filename = 'Ledger_Accounts_' . date('Y-m-d_His') . '.xlsx';
+            return Excel::download(new LedgerAccountsExport($accounts), $filename);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error exporting GL accounts: ' . $e->getMessage());
+            return back()->with('error', 'Failed to export accounts');
         }
     }
 

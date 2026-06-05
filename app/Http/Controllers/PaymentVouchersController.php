@@ -629,17 +629,16 @@ class PaymentVouchersController extends Controller
                 ->update(['voucher_generated' => 1]);
 
             // Initiate approval workflow
-            $workflow = ApprovalWorkflow::where('workflow_name', 'voucher_approval')
-                ->where('status', 1)
-                ->first();
-
-            if ($workflow) {
-                app(ApprovalService::class)->initiateApproval(
+            try {
+                $approvalService = app(ApprovalService::class);
+                $approvalService->initiateApproval(
                     'voucher',
                     $header->id,
-                    $workflow->id,
+                    'voucher_approval',
                     Auth::id()
                 );
+            } catch (Exception $e) {
+                Log::warning('Could not initiate approval workflow for return voucher: ' . $e->getMessage());
             }
 
             DB::commit();

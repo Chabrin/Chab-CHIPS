@@ -1166,6 +1166,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::delete('/finance/transaction-types/{id}', [TransactionTypesController::class, 'destroy'])->name('finance.transaction-types.destroy');
     Route::get('/ajax/finance/transaction-types/data', [TransactionTypesController::class, 'getData'])->name('ajax.finance.transaction-types.data');
     Route::get('/ajax/finance/transaction-types/{id}', [TransactionTypesController::class, 'getOne'])->name('ajax.finance.transaction-types.get-one');
+    Route::get('/finance/transaction-types/export', [TransactionTypesController::class, 'exportToExcel'])->name('finance.transaction-types.export');
 
     // Recurrent Client Remittances - AJAX endpoints
     Route::prefix('ajax/finance/recurrent-client-remittances')->name('ajax.finance.recurrent-client-remittances.')->group(function () {
@@ -1334,6 +1335,7 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/ledger/accountgroups',       [App\Http\Controllers\LedgerController::class, 'getGroups'])->name('ledger.groups.data');
     Route::get('/ajax/ledger/account/categories',  [App\Http\Controllers\LedgerController::class, 'getCategories'])->name('ledger.categories.data');
     Route::get('/ajax/ledger/accounts',            [App\Http\Controllers\LedgerController::class, 'getAccounts'])->name('ledger.accounts.data');
+    Route::get('/ledger/accounts/export',          [App\Http\Controllers\LedgerController::class, 'exportAccounts'])->name('ledger.accounts.export');
     // Dropdown helpers
     Route::get('/ajax/ledger/classes/dropdown',     [App\Http\Controllers\LedgerController::class, 'getClassesDropdown'])->name('ledger.classes.dropdown');
     Route::get('/ajax/ledger/groups/dropdown',      [App\Http\Controllers\LedgerController::class, 'getGroupsDropdown'])->name('ledger.groups.dropdown');

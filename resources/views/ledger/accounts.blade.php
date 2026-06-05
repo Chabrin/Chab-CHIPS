@@ -96,11 +96,18 @@
                             </a>
                             @endif
                         </nav>
-                        @permission('create_gl_accounts')
-                        <button type="button" id="addAccountBtn" class="btn btn-primary btn-sm">
-                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">add</span> Add Account
-                        </button>
-                        @endpermission
+                        <div class="d-flex gap-2">
+                            @if($canReadAccounts)
+                            <a href="{{ route('ledger.accounts.export') }}" class="btn btn-success btn-sm" id="exportAccountsBtn">
+                                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">download</span> Export Excel
+                            </a>
+                            @endif
+                            @permission('create_gl_accounts')
+                            <button type="button" id="addAccountBtn" class="btn btn-primary btn-sm">
+                                <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">add</span> Add Account
+                            </button>
+                            @endpermission
+                        </div>
                     </div>
 
                     <div class="card-body">
@@ -289,10 +296,13 @@
 <script>
 $(document).ready(function () {
 
-    // ── Toggle Add button visibility per active tab ──────────────────────────
+    // ── Toggle Add/Export button visibility per active tab ──────────────────────────
     const $addBtn = $('#addAccountBtn');
+    const $exportBtn = $('#exportAccountsBtn');
     $('#ledgerTabs a[data-bs-toggle="tab"]').on('shown.bs.tab', function () {
-        $addBtn.toggle($(this).attr('href') === '#tab-accounts');
+        const isAccountsTab = $(this).attr('href') === '#tab-accounts';
+        $addBtn.toggle(isAccountsTab);
+        $exportBtn.toggle(isAccountsTab);
     });
 
     // ── ACCOUNTS TABLE ───────────────────────────────────────────────────────
