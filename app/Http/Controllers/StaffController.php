@@ -225,6 +225,8 @@ class StaffController extends Controller
         }
     }
 
+   
+
     /**
      * Show the form for creating new staff
      */
