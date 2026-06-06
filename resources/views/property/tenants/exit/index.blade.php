@@ -32,12 +32,12 @@
                             Search by Tenant
                         </button>
                     </li>
-                    <li class="nav-item">
+                    {{-- <li class="nav-item">
                         <button class="nav-link" id="tab-property" onclick="switchSearchTab('property')">
                             <span class="material-symbols-outlined align-middle" style="font-size:16px;">location_city</span>
                             Search by Property → Unit
                         </button>
-                    </li>
+                    </li> --}}
                 </ul>
 
                 {{-- Tenant search --}}
