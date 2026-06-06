@@ -124,7 +124,7 @@
                                             <div>
                                                 <span class="timeline-approver">{{ $item['approver_name'] }}</span>
                                                 @if($item['level'] > 0)
-                                                <span class="text-muted" style="font-size:0.78rem;">(Level {{ $item['level'] }})</span>
+                                                <span class="text-muted" style="font-size:0.78rem;">({{ $item['level_name'] ?? 'Level ' . $item['level'] }})</span>
                                                 @endif
                                             </div>
                                             <span class="timeline-date">{{ $item['action_on'] }}</span>
@@ -162,8 +162,8 @@
 
                                 <div class="row g-3">
                                     <div class="col-6">
-                                        <div class="info-label">Progress</div>
-                                        <div class="info-value">Level {{ $details['current_level'] }} of {{ $details['max_level'] }}</div>
+                                        <div class="info-label">Current Stage</div>
+                                        <div class="info-value">{{ $details['current_level_name'] ?? 'Level ' . $details['current_level'] }}</div>
                                     </div>
                                     <div class="col-6">
                                         <div class="info-label">Initiated By</div>
@@ -225,7 +225,7 @@
                                     </button>
                                     @if($details['current_level'] > 1)
                                     <button type="button" class="btn btn-primary btn-sm" id="btnReturn">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">undo</span> Return to Level {{ $details['current_level'] - 1 }}
+                                        <span class="material-symbols-outlined" style="font-size:16px;">undo</span> Return to Previous Stage
                                     </button>
                                     @endif
                                 </div>
@@ -380,7 +380,7 @@ $(document).ready(function() {
     });
 
     $('#btnReturn').on('click', function() {
-        openActionModal('return', 'Return to Level {{ $details['current_level'] - 1 }}', 'Add a comment (optional)', false);
+        openActionModal('return', 'Return to Previous Stage', 'Add a comment (optional)', false);
     });
 
     $('#btnResubmit').on('click', function() {

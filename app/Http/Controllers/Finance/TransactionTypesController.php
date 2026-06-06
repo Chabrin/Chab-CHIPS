@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use App\Exports\TransactionTypesExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class TransactionTypesController extends Controller
 {
@@ -51,6 +53,38 @@ class TransactionTypesController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error fetching finance transaction types data: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load transaction types'], 500);
+        }
+    }
+
+    /**
+     * Export transaction types to Excel.
+     */
+    public function exportToExcel()
+    {
+        try {
+            $transaction_types = TransactionType::with(['debitAccount', 'creditAccount', 'category'])
+                ->orderBy('id', 'desc')
+                ->get()
+                ->map(function ($transaction_type) {
+                    return [
+                        'item_code' => $transaction_type->item_code,
+                        'name' => $transaction_type->type_name,
+                        'category_name' => $transaction_type->category?->category_name,
+                        'debit_account_code' => $transaction_type->debitAccount?->account_code,
+                        'debit_account_name' => $transaction_type->debitAccount?->account_name,
+                        'credit_account_code' => $transaction_type->creditAccount?->account_code,
+                        'credit_account_name' => $transaction_type->creditAccount?->account_name,
+                        'current_status_id' => $transaction_type->current_status_id,
+                    ];
+                })
+                ->toArray();
+
+            $filename = 'Transaction_Types_' . date('Y-m-d_His') . '.xlsx';
+            return Excel::download(new TransactionTypesExport($transaction_types), $filename);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error exporting transaction types: ' . $e->getMessage());
+            return back()->with('error', 'Failed to export transaction types');
         }
     }
 

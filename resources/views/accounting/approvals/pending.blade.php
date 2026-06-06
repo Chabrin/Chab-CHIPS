@@ -47,7 +47,7 @@
                                             <tr>
                                                 <th>#</th>
                                                 <th>Type</th>
-                                                <th>Level</th>
+                                                <th>Stage</th>
                                                 <th>Status</th>
                                                 <th>Initiated By</th>
                                                 <th>Date</th>
@@ -67,8 +67,8 @@
                                             <tr>
                                                 <th>#</th>
                                                 <th>Type</th>
-                                                <th>Level</th>
-                                                <th>Stage</th>
+                                                <th>Current Stage</th>
+                                                <th>Status</th>
                                                 <th>Initiated By</th>
                                                 <th>Date</th>
                                                 <th>Actions</th>
@@ -102,9 +102,9 @@ $(document).ready(function() {
                 }
             },
             { 
-                data: 'current_level',
+                data: 'current_level_name',
                 className: 'text-center',
-                render: (d) => 'Level ' + d
+                render: (d) => d || '-'
             },
             { 
                 data: 'status',
@@ -145,9 +145,9 @@ $(document).ready(function() {
                 }
             },
             { 
-                data: 'current_level',
+                data: 'current_level_name',
                 className: 'text-center',
-                render: (d) => 'Level ' + d
+                render: (d) => d || '-'
             },
             { 
                 data: 'stage',

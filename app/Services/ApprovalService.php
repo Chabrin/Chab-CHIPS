@@ -338,11 +338,13 @@ class ApprovalService
                 'approver_name' => $log->approver?->name ?? 'System',
                 'approver_email' => $log->approver?->email ?? null,
                 'level' => $log->approval_level,
+                'level_name' => self::getLevelName($log->approval_level),
                 'action' => $log->action,
                 'action_label' => $log->getActionLabel(),
                 'action_badge_class' => $log->getActionBadgeClass(),
                 'comment' => $log->comment,
                 'returned_to_level' => $log->returned_to_level,
+                'returned_to_level_name' => $log->returned_to_level ? self::getLevelName($log->returned_to_level) : null,
                 'action_on' => $log->action_on?->format('d M Y, h:i A'),
                 'action_on_relative' => $log->action_on?->diffForHumans(),
             ];
@@ -355,6 +357,7 @@ class ApprovalService
     public function getRequestDetails(ApprovalRequest $request): array
     {
         $currentApprover = $request->getCurrentApprover();
+        $currentApproverRecord = $request->getCurrentApproverRecord();
         $workflow = $request->workflow;
 
         return [
@@ -363,6 +366,7 @@ class ApprovalService
             'request_id' => $request->request_id,
             'workflow_name' => $workflow?->workflow_name,
             'current_level' => $request->current_level,
+            'current_level_name' => $request->current_level ? self::getLevelName($request->current_level) : null,
             'max_level' => $request->getMaxLevel(),
             'status' => $request->status,
             'status_label' => ucwords(str_replace('_', ' ', $request->status)),
@@ -370,15 +374,33 @@ class ApprovalService
             'initiated_on' => $request->initiated_on?->format('d M Y, h:i A'),
             'completed_on' => $request->completed_on?->format('d M Y, h:i A'),
             'current_approver' => $currentApprover ? [
-                'id' => $currentApprover->approver_id,
-                'name' => $currentApprover->approver?->name,
-                'email' => $currentApprover->approver?->email,
-                'level' => $currentApprover->approval_level,
-                'is_final' => (bool) $currentApprover->is_final,
+                'id' => $currentApprover->id,
+                'name' => $currentApprover->name,
+                'email' => $currentApprover->email,
+                'level' => $request->current_level,
+                'level_name' => $request->current_level ? self::getLevelName($request->current_level) : null,
+                'is_final' => $currentApproverRecord ? (bool) $currentApproverRecord->is_final : false,
             ] : null,
             'is_complete' => $request->isComplete(),
             'timeline' => $this->getTimeline($request),
         ];
+    }
+
+    /**
+     * Convert approval level number to stage name.
+     */
+    public static function getLevelName(?int $level): ?string
+    {
+        if ($level === null) {
+            return null;
+        }
+        
+        return match($level) {
+            1 => 'Checking Stage',
+            2 => 'Verification Stage',
+            3 => 'Approval Stage',
+            default => "Level $level",
+        };
     }
 
     /**
@@ -401,6 +423,7 @@ class ApprovalService
                 'encrypted_request_id' => encrypt($request->request_id),
                 'workflow_name' => $request->workflow?->workflow_name,
                 'current_level' => $request->current_level,
+                'current_level_name' => self::getLevelName($request->current_level),
                 'status' => $request->status,
                 'initiated_by' => $request->initiator?->name,
                 'initiated_on' => $request->initiated_on?->format('d M Y'),
@@ -459,6 +482,7 @@ class ApprovalService
                 'encrypted_request_id' => encrypt($request->request_id),
                 'workflow_name' => $request->workflow?->workflow_name,
                 'current_level' => $request->current_level,
+                'current_level_name' => self::getLevelName($request->current_level),
                 'stage' => $stage,
                 'status' => $request->status,
                 'initiated_by' => $request->initiator?->name,

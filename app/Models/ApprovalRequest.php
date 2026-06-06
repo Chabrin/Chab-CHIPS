@@ -92,6 +92,11 @@ class ApprovalRequest extends Model
             ->first();
     }
 
+    public function getCurrentApprover(): ?User
+    {
+        return $this->currentApprover;
+    }
+
     public function canUserApprove(int $userId): bool
     {
         return $this->current_approver_id === $userId;

@@ -13,7 +13,13 @@
         <div class="card">
             <div class="card-header card-no-border d-flex align-items-center py-2">
                 <h5 class="mb-0">Transaction Types</h5>
-                <div class="ms-auto">
+                <div class="ms-auto d-flex gap-2">
+                    @permission('read_transaction_types')
+                    <a href="{{ route('finance.transaction-types.export') }}" class="btn btn-success btn-sm d-flex align-items-center gap-1">
+                        <span class="material-symbols-outlined" style="font-size:17px;">download</span>
+                        <span>Export Excel</span>
+                    </a>
+                    @endpermission
                     @permission('create_transaction_types')
                     <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" id="addTypeBtn">
                         <span class="material-symbols-outlined" style="font-size:17px;">add</span>
