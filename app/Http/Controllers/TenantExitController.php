@@ -264,14 +264,6 @@ class TenantExitController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->first();
 
-            Log:info('Full response data:', [
-                'tenant' => $tenant->toArray(),
-                'lease_history' => $leaseHistory,
-                'statement_entries_count' => count($statementEntries),
-                'deposits_count' => count($deposits),
-                'exit_record' => $exitRecord ? $exitRecord->toArray() : null,
-            ]);
-
             return response()->json([
                 'success' => true,
                 'tenant'  => [
@@ -630,6 +622,63 @@ class TenantExitController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('TenantExit: finaliseExit — ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to finalise exit'], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  AJAX — TENANT BY UNIT (Property → Unit search path)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Resolve the active tenant occupying a given unit.
+     * Called by the Property → Unit search path after a unit is selected.
+     * Returns the tenant's encrypted ID so the frontend can call loadTenantProfile()
+     * exactly as the direct tenant-search path does.
+     *
+     * GET /tenant-exit/tenant-by-unit/{unitId}
+     */
+    public function getTenantByUnit(int $unitId)
+    {
+        try {
+            $tenant = Client::tenants()
+                ->where('unit_id', $unitId)
+                ->select(
+                    'id', 'names', 'mobile_number', 'email_address',
+                    'national_id', 'reference_number', 'property_id', 'unit_id'
+                )
+                ->with([
+                    'unit:id,unit_name,unit_code',
+                    'property:id,property_name',
+                ])
+                ->first();
+
+            if (!$tenant) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active tenant found for this unit.',
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'tenant'  => [
+                    'id'               => $tenant->id,
+                    'encrypted_id'     => Crypt::encrypt($tenant->id),
+                    'names'            => $tenant->names,
+                    'reference_number' => $tenant->reference_number,
+                    'mobile_number'    => $tenant->mobile_number,
+                    'email_address'    => $tenant->email_address,
+                    'national_id'      => $tenant->national_id ?? '-',
+                    'property_name'    => $tenant->property->property_name ?? '-',
+                    'unit_name'        => $tenant->unit->unit_name ?? $tenant->unit->unit_code ?? '-',
+                    'unit_id'          => $tenant->unit_id,
+                    'property_id'      => $tenant->property_id,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: getTenantByUnit — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to resolve tenant for unit'], 500);
         }
     }
 

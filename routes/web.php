@@ -829,60 +829,28 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::delete('/property/inspection/{id}', [InspectionsController::class, 'destroy'])->name('property.inspection.destroy');
 
     // Tenant Exit
-        // ─────────────────────────────────────────────
-        // PAGE
-        // ─────────────────────────────────────────────
-        Route::get('/property/tenant-exits', [TenantExitController::class, 'index'])
-            ->name('property.tenant_exits.index');
+    Route::prefix('tenant-exit')->name('tenant.exit.')->group(function () {
 
+        // Page
+        Route::get('/',                     [TenantExitController::class, 'index'])->name('index');
 
-        // ─────────────────────────────────────────────
-        // SEARCH
-        // ─────────────────────────────────────────────
-        Route::get('/tenant-exit/search/tenants', [TenantExitController::class, 'searchTenants'])
-            ->name('tenant.exit.search.tenants');
+        // Search helpers
+        Route::get('/search/tenants',       [TenantExitController::class, 'searchTenants'])->name('search.tenants');
+        Route::get('/search/properties',    [TenantExitController::class, 'searchProperties'])->name('search.properties');
+        Route::get('/occupied-units/{propertyId}', [TenantExitController::class, 'getOccupiedUnits']);
 
-        Route::get('/tenant-exit/search/properties', [TenantExitController::class, 'searchProperties'])
-            ->name('tenant.exit.search.properties');
+        // ✅ Resolve the tenant occupying a unit (Property → Unit path)
+        Route::get('/tenant-by-unit/{unitId}',     [TenantExitController::class, 'getTenantByUnit']);
 
-
-        // ─────────────────────────────────────────────
-        // PROPERTY → UNITS → TENANT FLOW
-        // ─────────────────────────────────────────────
-        Route::get('/tenant-exit/occupied-units/{propertyId}', [TenantExitController::class, 'getOccupiedUnits']);
-
-        Route::get('/tenant-exit/tenant-by-unit', function () {
-            // ⚠️ You don’t currently have this method in controller
-            // Implement if needed
-        });
-
-
-        // ─────────────────────────────────────────────
-        // TENANT PROFILE
-        // ─────────────────────────────────────────────
-        Route::get('/tenant-exit/profile', [TenantExitController::class, 'getTenantExitProfile'])
-            ->name('tenant.exit.profile');
-
-
-        // ─────────────────────────────────────────────
-        // EXIT FLOW
-        // ─────────────────────────────────────────────
-        Route::post('/tenant-exit/initiate', [TenantExitController::class, 'initiateExit'])
-            ->name('tenant.exit.initiate');
-
-        Route::post('/tenant-exit/inspection/save', [TenantExitController::class, 'saveInspection'])
-            ->name('tenant.exit.inspection.save');
-
-        Route::post('/tenant-exit/communication/send', [TenantExitController::class, 'sendCommunication'])
-            ->name('tenant.exit.communication.send');
-
-        Route::get('/tenant-exit/communications/{exitId}', [TenantExitController::class, 'getCommunications']);
-
-        Route::get('/tenant-exit/templates', [TenantExitController::class, 'getTemplates'])
-            ->name('tenant.exit.templates');
-
-        Route::post('/tenant-exit/finalise', [TenantExitController::class, 'finaliseExit'])
-            ->name('tenant.exit.finalise');
+        // Profile & workflow
+        Route::get('/profile',              [TenantExitController::class, 'getTenantExitProfile'])->name('profile');
+        Route::post('/initiate',            [TenantExitController::class, 'initiateExit'])->name('initiate');
+        Route::post('/inspection/save',     [TenantExitController::class, 'saveInspection'])->name('inspection.save');
+        Route::post('/communication/send',  [TenantExitController::class, 'sendCommunication'])->name('communication.send');
+        Route::get('/communications/{exitId}',     [TenantExitController::class, 'getCommunications']);
+        Route::post('/finalise',            [TenantExitController::class, 'finaliseExit'])->name('finalise');
+        Route::get('/templates',            [TenantExitController::class, 'getTemplates'])->name('templates');
+    });
 
     // Recovery
     Route::get('/property/recoveries', [RecoveryController::class, 'index'])->name('property.recoveries.index');
