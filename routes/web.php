@@ -57,6 +57,7 @@ use App\Http\Controllers\CompanyBankAccountController;
 use App\Http\Controllers\ChequeBookController;
 use App\Http\Controllers\SelfServiceController;
 use App\Http\Controllers\PaymentsAllocationController;
+use App\Http\Controllers\TenantExitController;
 
 
 
@@ -827,6 +828,61 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/property/inspections/list', [InspectionsController::class, 'list'])->name('ajax.property.inspection.list');
     Route::delete('/property/inspection/{id}', [InspectionsController::class, 'destroy'])->name('property.inspection.destroy');
 
+    // Tenant Exit
+        // ─────────────────────────────────────────────
+        // PAGE
+        // ─────────────────────────────────────────────
+        Route::get('/property/tenant-exits', [TenantExitController::class, 'index'])
+            ->name('property.tenant_exits.index');
+
+
+        // ─────────────────────────────────────────────
+        // SEARCH
+        // ─────────────────────────────────────────────
+        Route::get('/tenant-exit/search/tenants', [TenantExitController::class, 'searchTenants'])
+            ->name('tenant.exit.search.tenants');
+
+        Route::get('/tenant-exit/search/properties', [TenantExitController::class, 'searchProperties'])
+            ->name('tenant.exit.search.properties');
+
+
+        // ─────────────────────────────────────────────
+        // PROPERTY → UNITS → TENANT FLOW
+        // ─────────────────────────────────────────────
+        Route::get('/tenant-exit/occupied-units/{propertyId}', [TenantExitController::class, 'getOccupiedUnits']);
+
+        Route::get('/tenant-exit/tenant-by-unit', function () {
+            // ⚠️ You don’t currently have this method in controller
+            // Implement if needed
+        });
+
+
+        // ─────────────────────────────────────────────
+        // TENANT PROFILE
+        // ─────────────────────────────────────────────
+        Route::get('/tenant-exit/profile', [TenantExitController::class, 'getTenantExitProfile'])
+            ->name('tenant.exit.profile');
+
+
+        // ─────────────────────────────────────────────
+        // EXIT FLOW
+        // ─────────────────────────────────────────────
+        Route::post('/tenant-exit/initiate', [TenantExitController::class, 'initiateExit'])
+            ->name('tenant.exit.initiate');
+
+        Route::post('/tenant-exit/inspection/save', [TenantExitController::class, 'saveInspection'])
+            ->name('tenant.exit.inspection.save');
+
+        Route::post('/tenant-exit/communication/send', [TenantExitController::class, 'sendCommunication'])
+            ->name('tenant.exit.communication.send');
+
+        Route::get('/tenant-exit/communications/{exitId}', [TenantExitController::class, 'getCommunications']);
+
+        Route::get('/tenant-exit/templates', [TenantExitController::class, 'getTemplates'])
+            ->name('tenant.exit.templates');
+
+        Route::post('/tenant-exit/finalise', [TenantExitController::class, 'finaliseExit'])
+            ->name('tenant.exit.finalise');
 
     // Recovery
     Route::get('/property/recoveries', [RecoveryController::class, 'index'])->name('property.recoveries.index');
