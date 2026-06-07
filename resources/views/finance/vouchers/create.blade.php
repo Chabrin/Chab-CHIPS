@@ -1268,6 +1268,12 @@ $(document).ready(function () {
 
         setCreateBusy(true);
 
+        // Determine voucher_type based on active tab
+        let voucherType = 'general_voucher';  // default for Client Vouchers tab
+        if ($('#internal-tab').hasClass('active')) {
+            voucherType = 'internal_voucher';
+        }
+
         $.ajax({
             url: '{{ route("payment.vouchers.create.full") }}',
             method: 'POST',
@@ -1283,6 +1289,7 @@ $(document).ready(function () {
                 year:               $('#postYear').val(),
                 month:              $('#postMonth').val(),
                 cheque_number:      voucherCheque.cheque_number,
+                voucher_type:       voucherType,
                 lines: pendingEntries.map(function (e) {
                     return {
                         entry_number:      e.entry_number,

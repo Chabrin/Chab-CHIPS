@@ -124,12 +124,13 @@ trait GlPostingTrait
     {
         return match ($config['type'] ?? '') {
             'invoice_payment' => $this->glLinesInvoicePayment($config, $setup),
+            'client_return'   => $this->glLinesClientReturn($config, $setup),
+            'generic'         => $this->glLinesGeneric($config, $setup),
             // Future entries — uncomment and implement as needed:
             // 'invoice_raised'        => $this->glLinesInvoiceRaised($config, $setup),
-            // 'client_return'         => $this->glLinesClientReturn($config, $setup),
             // 'payment_voucher'       => $this->glLinesPaymentVoucher($config, $setup),
             // 'landlord_remittance'   => $this->glLinesLandlordRemittance($config, $setup),
-            default => [],
+            default => $this->glLinesGeneric($config, $setup),  // Fallback to generic
         };
     }
 
@@ -213,8 +214,189 @@ trait GlPostingTrait
     }
 
     // ────────────────────────────────────────────────────────────────────────────
+    // GENERIC TRANSACTION
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Generic GL lines for any transaction type.
+     * Works for any simple DR/CR transaction where accounts are configured in transaction_type.
+     *
+     * This is the fallback for all transaction types that don't have a custom implementation.
+     *
+     * Config keys consumed:
+     *   amount               float       Transaction amount
+     *   transaction_type     object      TransactionType model with debit_account_id & credit_account_id
+     *   OR
+     *   debit_account_id     int         Explicit debit account ID
+     *   credit_account_id    int         Explicit credit account ID
+     *   narration            string      Description
+     */
+    protected function glLinesGeneric(array $config, GlAccountSetup $setup): array
+    {
+        $amount = (float) ($config['amount'] ?? 0);
+        if ($amount <= 0) {
+            return [];
+        }
+
+        // Try to get accounts from explicit config first, then from transaction_type
+        $debitAccId  = $config['debit_account_id'] ?? null;
+        $creditAccId = $config['credit_account_id'] ?? null;
+
+        // If not explicitly provided, try to get from transaction_type model
+        if ((!$debitAccId || !$creditAccId) && isset($config['transaction_type'])) {
+            $transType = $config['transaction_type'];
+            $debitAccId  = $debitAccId ?? $transType->debit_account_id;
+            $creditAccId = $creditAccId ?? $transType->credit_account_id;
+        }
+
+        if (!$debitAccId || !$creditAccId) {
+            Log::warning('GlPostingTrait: generic transaction missing account IDs', [
+                'type'              => $config['type'] ?? 'unknown',
+                'debit_account_id'  => $debitAccId,
+                'credit_account_id' => $creditAccId,
+            ]);
+            return [];
+        }
+
+        $narration = $config['narration'] ?? 'GL transaction';
+
+        return [
+            [
+                'account_id' => $debitAccId,
+                'type'       => 'Debit',
+                'amount'     => $amount,
+                'narration'  => $narration,
+            ],
+            [
+                'account_id' => $creditAccId,
+                'type'       => 'Credit',
+                'amount'     => $amount,
+                'narration'  => $narration,
+            ],
+        ];
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // CLIENT RETURN
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GL lines for a client return (payment to landlord).
+     *
+     * Transaction type 2009:
+     *   DR  1022  (Landlord account - debit)
+     *   CR  1019  (Return account - credit)
+     *
+     * Config keys consumed:
+     *   amount               float       Return amount
+     *   transaction_type     object      TransactionType model with debit_account_id & credit_account_id
+     *   OR
+     *   debit_account_id     int         Explicit debit account ID (overrides transaction_type)
+     *   credit_account_id    int         Explicit credit account ID (overrides transaction_type)
+     *   narration            string      Description
+     */
+    protected function glLinesClientReturn(array $config, GlAccountSetup $setup): array
+    {
+        $amount = (float) ($config['amount'] ?? 0);
+        if ($amount <= 0) {
+            return [];
+        }
+
+        // Try to get accounts from explicit config first, then from transaction_type
+        $debitAccId  = $config['debit_account_id'] ?? null;
+        $creditAccId = $config['credit_account_id'] ?? null;
+
+        // If not explicitly provided, try to get from transaction_type model
+        if ((!$debitAccId || !$creditAccId) && isset($config['transaction_type'])) {
+            $transType = $config['transaction_type'];
+            $debitAccId  = $debitAccId ?? $transType->debit_account_id;
+            $creditAccId = $creditAccId ?? $transType->credit_account_id;
+        }
+
+        if (!$debitAccId || !$creditAccId) {
+            Log::warning('GlPostingTrait: client_return missing account IDs', [
+                'debit_account_id'  => $debitAccId,
+                'credit_account_id' => $creditAccId,
+            ]);
+            return [];
+        }
+
+        $narration = $config['narration'] ?? 'Client return payment';
+
+        return [
+            [
+                'account_id' => $debitAccId,
+                'type'       => 'Debit',
+                'amount'     => $amount,
+                'narration'  => $narration,
+            ],
+            [
+                'account_id' => $creditAccId,
+                'type'       => 'Credit',
+                'amount'     => $amount,
+                'narration'  => $narration,
+            ],
+        ];
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
     // SHARED HELPERS
     // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Post a GL entry by transaction type item code.
+     * This is a convenience method that looks up the transaction type and posts using it.
+     *
+     * Example usage:
+     *   $this->postGlByTransactionType('2009', [
+     *       'amount'    => $return->net_balance,
+     *       'reference' => $return->return_code,
+     *       'narration' => "RETURNS - {$landlordName}",
+     *       'date'      => now()->toDateString(),
+     *   ]);
+     *
+     * @param string $itemCode  Transaction type item_code (e.g., '2009' for client returns)
+     * @param array  $config    Configuration array (amount, reference, narration, date, etc.)
+     * @return int|null         sys_gl_transactions.id or null if failed
+     */
+    public function postGlByTransactionType(string $itemCode, array $config): ?int
+    {
+        $transactionType = \App\Models\TransactionType::where('item_code', $itemCode)
+            ->with(['debitAccount', 'creditAccount'])
+            ->first();
+
+        if (!$transactionType) {
+            Log::warning("GlPostingTrait: Transaction type not found", [
+                'item_code' => $itemCode,
+            ]);
+            return null;
+        }
+
+        if (!$transactionType->debit_account_id || !$transactionType->credit_account_id) {
+            Log::warning("GlPostingTrait: Transaction type missing GL account configuration", [
+                'item_code'         => $itemCode,
+                'debit_account_id'  => $transactionType->debit_account_id,
+                'credit_account_id' => $transactionType->credit_account_id,
+            ]);
+            return null;
+        }
+
+        // Determine transaction type based on item_code
+        $type = match ($itemCode) {
+            '2009' => 'client_return',
+            // Add more mappings as needed
+            default => 'generic',
+        };
+
+        // Merge transaction type info into config
+        $config = array_merge($config, [
+            'type'             => $type,
+            'trans_type_id'    => $transactionType->id,
+            'transaction_type' => $transactionType,
+        ]);
+
+        return $this->postGlEntry($config);
+    }
 
     /**
      * Resolve the GL bank account ID from a payment method string.
