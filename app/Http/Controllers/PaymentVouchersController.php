@@ -141,6 +141,7 @@ class PaymentVouchersController extends Controller
                 'year'                      => ['required', 'integer', 'min:2000', 'max:2099'],
                 'month'                     => ['required', 'integer', 'min:1', 'max:12'],
                 'cheque_number'             => ['nullable', 'string', 'max:50'],
+                'voucher_type'              => ['nullable', 'string', Rule::in(['general_voucher', 'internal_voucher'])],
                 'lines'                     => ['required', 'array', 'min:1'],
                 'lines.*.entry_description' => ['required', 'string', 'max:500'],
                 'lines.*.entry_number'      => ['nullable', 'string', 'max:100'],
@@ -177,6 +178,8 @@ class PaymentVouchersController extends Controller
                 'is_printed'       => 0,
             ]);
 
+            $voucherType = $validated['voucher_type'] ?? 'general_voucher';
+            
             foreach ($validated['lines'] as $line) {
                 PaymentVoucherLine::create([
                     'entry_id'          => $header->id,
@@ -186,6 +189,7 @@ class PaymentVouchersController extends Controller
                     'entry_month'       => $validated['month'],
                     'account_number'    => $line['account_number'] ?? null,
                     'account_bank'      => $line['account_bank'] ?? null,
+                    'voucher_type'      => $voucherType,
                     'entry_description' => $line['entry_description'],
                     'payee_name'        => $validated['vendor_name'],
                     'amount'            => $line['amount'],
@@ -605,6 +609,7 @@ class PaymentVouchersController extends Controller
                     'entry_number' => $validated['return_summary_id'],
                     'entry_year' => $validated['post_year'],
                     'entry_month' => $validated['post_month'],
+                    'voucher_type' => 'client_returns',
                     'entry_description' => 'RETURNS PAYMENT' . (count($lineItems) > 1 ? ' (Entry ' . $line['line_number'] . ' of ' . count($lineItems) . ')' : ''),
                     'payee_name' => $validated['vendor_name'],
                     'account_bank' => $validated['bank_name'],

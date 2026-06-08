@@ -17,6 +17,7 @@ class PaymentVoucherLine extends Model
         'account_bank',
         'cheque_number',
         'cheque_type',
+        'voucher_type',
         'property_code',
         'dr_cr',
         'entry_id',
