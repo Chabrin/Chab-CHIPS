@@ -834,6 +834,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         // Page
         Route::get('/',                     [TenantExitController::class, 'index'])->name('index');
 
+        // Exited tenants list page
+        Route::get('/exited',              [TenantExitController::class, 'exitedTenantsIndex'])->name('exited');
+
+        Route::get('/search/exited-tenants/search/properties', [TenantExitController::class, 'searchProperties'])->name('search.properties');
+        Route::get('/search/exited-tenants/search/landlords', [TenantExitController::class, 'searchLandlords'])->name('search.landlords'); 
+        
+        // Offcanvas detail (AJAX)
+        Route::get('/exited-detail/{exitId}', [TenantExitController::class, 'getExitedTenantDetail']);
+
         // Search helpers
         Route::get('/search/tenants',       [TenantExitController::class, 'searchTenants'])->name('search.tenants');
         Route::get('/search/properties',    [TenantExitController::class, 'searchProperties'])->name('search.properties');
