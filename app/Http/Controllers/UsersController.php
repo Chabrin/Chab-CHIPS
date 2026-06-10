@@ -150,6 +150,8 @@ class UsersController extends Controller
                     'user_id' => $user->id,
                     'staff_id' => $validated['staff_id'],
                 ]);
+                $user->staff_id = $validated['staff_id'];
+                $user->save();
             }
 
             return response()->json(['success' => true, 'message' => 'User created successfully']);
@@ -198,9 +200,12 @@ class UsersController extends Controller
                     ['user_id' => $id],
                     ['staff_id' => $validated['staff_id']]
                 );
+                $user->staff_id = $validated['staff_id'];
             } else {
                 UserStaffLink::where('user_id', $id)->delete();
+                $user->staff_id = null;
             }
+            $user->save();
 
             return response()->json(['success' => true, 'message' => 'User updated successfully']);
         } catch (\Illuminate\Validation\ValidationException $e) {

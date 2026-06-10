@@ -52,6 +52,8 @@ class User extends Authenticatable implements LaratrustUser
         'requireReset',
         'reset_token',
         'reset_token_expires_at',
+        'staff_id',
+        'is_field_officer',
     ];
 
     /**

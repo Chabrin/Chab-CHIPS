@@ -1979,21 +1979,54 @@ $(document).ready(function () {
             }),
             success: function(r) {
                 if (r.success) {
-                    toastr.success('Return voucher created successfully!');
-                    setTimeout(function() {
-                        window.location.href = '{{ route("payment.vouchers.index") }}';
-                    }, 1500);
+                    toastr.success('Return voucher ' + (r.voucher_number || '') + ' created successfully!');
+                    
+                    // Reload the returns table to reflect the generated voucher
+                    loadReturnsData();
+                    
+                    // Scroll to top of the tab content for better visibility
+                    $('#returns-vouchers').animate({ scrollTop: 0 }, 300);
+                    
+                    // Reset the form (same logic as cancel button)
+                    currentReturnData = null;
+                    $('#returnLandlordId').val('');
+                    $('#returnPropertyId').val('');
+                    $('#returnSummaryId').val('');
+                    $('#returnLandlordName').val('');
+                    $('#returnReference').val('');
+                    $('#returnBankName').val('');
+                    $('#returnAccountName').val('');
+                    $('#returnAccountNumber').val('');
+                    $('#returnNetBalance').val('');
+                    $('#returnSourceAccount').val('');
+                    $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
+                    $('#returnChequeNo').val('');
+                    $('#returnChequeMsg').text('');
+                    $('#returnVoucherDate').val('{{ date("Y-m-d") }}');
+                    $('#returnPostYear').val('{{ $currentYear }}');
+                    $('#returnPostMonth').val('{{ $currentMonth }}');
+                    $('#returnBankWarning').hide();
+                    $('#returnSplitSection').hide();
+                    $('#returnSinglePaymentSection').show();
+                    returnSplitEntries = [];
+                    splitEntryIdCounter = 0;
+                    $('#createReturnVoucherBtn').prop('disabled', true).html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
                 } else {
                     toastr.error(r.message || 'Failed to create voucher');
                     validateReturnVoucherForm();
-                    $('#createReturnVoucherBtn').html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
+                    $('#createReturnVoucherBtn').prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
                 }
             },
             error: function(xhr) {
                 var msg = xhr.responseJSON?.message || 'Failed to create return voucher';
-                toastr.error(msg);
+                if (xhr.status === 422 && xhr.responseJSON?.errors) {
+                    var firstErr = Object.values(xhr.responseJSON.errors)[0][0];
+                    toastr.error(firstErr);
+                } else {
+                    toastr.error(msg);
+                }
                 validateReturnVoucherForm();
-                $('#createReturnVoucherBtn').html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
+                $('#createReturnVoucherBtn').prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
             }
         });
     });
