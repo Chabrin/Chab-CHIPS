@@ -153,16 +153,16 @@
 
             </div>
 
-            {{-- ── Landlord Bank Selection (shown when landlord has multiple banks) ── --}}
-            <div class="row g-2 mb-3" id="landlordBankSelectWrap" style="display:none;">
+            {{-- ── Landlord Bank Selection (shown only when single-bank landlord needs header select) ── --}}
+            <div class="row g-2 mb-1" id="landlordBankSelectWrap" style="display:none;">
                 <div class="col-md-6">
                     <label class="form-label">Select Bank Account <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm" id="landlordBankSelect">
                         <option value="">-- Select Bank Account --</option>
                     </select>
-                    <div class="text-info mt-1" style="font-size:0.75rem;" id="landlordBankInfo"></div>
                 </div>
             </div>
+            <div id="landlordBankInfo" style="font-size:0.75rem; padding:2px 0; margin-bottom:6px;"></div>
 
             {{-- ── Payee Bank Details ── --}}
             <div class="row g-2 mb-3" id="payeeBankDetailsRow">
@@ -880,9 +880,8 @@ $(document).ready(function () {
     function fetchLandlordBankDetails(encryptedClientId) {
         clearLandlordBankFields();
         $('#landlordBankInfo').html('<span class="spinner-border spinner-border-sm me-1"></span> Loading bank details...');
-        $('#landlordBankSelectWrap').show();
+        $('#landlordBankSelectWrap').hide();
         $('#noBankSetupWarning').hide();
-        $('#payeeBankDetailsRow').show();
 
         $.ajax({
             url: '/ajax/clients/' + encryptedClientId + '/bank-details',
@@ -892,30 +891,28 @@ $(document).ready(function () {
                 if (response.success && response.data && response.data.length > 0) {
                     landlordBankDetails = response.data;
                     $('#noBankSetupWarning').hide();
-                    $('#payeeBankDetailsRow').show();
-                    
+
                     if (response.data.length === 1) {
                         // Single bank — auto-populate header fields, no per-entry selection needed
                         const bank = response.data[0];
                         populateBankFields(bank);
                         $('#landlordBankSelectWrap').hide();
+                        $('#payeeBankDetailsRow').show();
                         $('#landlordBankInfo').html('<span class="text-success"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">check_circle</span> Bank details loaded</span>');
                         setTimeout(() => $('#landlordBankInfo').text(''), 3000);
                         // Hide per-entry bank row (single bank applies to all entries)
                         $('#entryPayeeBankRow').hide();
                         $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
                     } else {
-                        // Multiple banks — show header-level selection dropdown + per-entry bank selector
-                        let hdrOptions = '<option value="">-- Select Bank Account --</option>';
+                        // Multiple banks — bank is selected per entry; no header-level selection
                         let entryOptions = '<option value="">-- Select bank --</option>';
                         response.data.forEach(function(bank, index) {
                             const lbl = bank.bank_name + ' — ' + bank.account_number + ' (' + bank.account_name + ')';
-                            hdrOptions   += '<option value="' + index + '">' + lbl + '</option>';
                             entryOptions += '<option value="' + index + '" data-bank-name="' + escHtml(bank.bank_name) + '" data-account-name="' + escHtml(bank.account_name) + '" data-account-number="' + escHtml(bank.account_number) + '">' + lbl + '</option>';
                         });
-                        $('#landlordBankSelect').html(hdrOptions);
-                        $('#landlordBankSelectWrap').show();
-                        $('#landlordBankInfo').html('<span class="text-info"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">info</span> This landlord has ' + response.data.length + ' bank accounts. Please select one for the header, and one per entry below.</span>');
+                        $('#landlordBankSelectWrap').hide();
+                        $('#payeeBankDetailsRow').hide();
+                        $('#landlordBankInfo').html('<span class="text-info"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">info</span> This landlord has ' + response.data.length + ' bank accounts — select the target bank per entry below.</span>');
                         // Show per-entry bank row
                         $('#entryPayeeBank').html(entryOptions);
                         $('#entryPayeeBankRow').show();

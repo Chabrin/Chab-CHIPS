@@ -51,6 +51,9 @@ class PaymentVouchersController extends Controller
             $years        = range($currentYear, $currentYear - 4);
 
             $invoiceableItems = InvoiceableItem::orderBy('item_name')
+                ->where(function ($q) {
+                    $q->whereNull('feature')->orWhere('feature', '!=', 'returns');
+                })
                 ->get(['id', 'item_name', 'billing_code']);
 
             $bankAccounts = CompanyBankAccount::with('bank')
