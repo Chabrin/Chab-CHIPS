@@ -25,13 +25,6 @@
     margin-top: 4px;
 }
 .account-info-pill .material-symbols-outlined { font-size: 13px; }
-#landlordBankInfo {
-    padding: 4px 0;
-}
-#landlordBankInfo .fa {
-    margin-right: 4px;
-}
-
 /* Voucher Tabs Styling */
 .voucher-tabs {
     border-bottom: 2px solid #e9ecef;
@@ -153,19 +146,8 @@
 
             </div>
 
-            {{-- ── Landlord Bank Selection (shown only when single-bank landlord needs header select) ── --}}
-            <div class="row g-2 mb-1" id="landlordBankSelectWrap" style="display:none;">
-                <div class="col-md-6">
-                    <label class="form-label">Select Bank Account <span class="text-danger">*</span></label>
-                    <select class="form-select form-select-sm" id="landlordBankSelect">
-                        <option value="">-- Select Bank Account --</option>
-                    </select>
-                </div>
-            </div>
-            <div id="landlordBankInfo" style="font-size:0.75rem; padding:2px 0; margin-bottom:6px;"></div>
-
-            {{-- ── Payee Bank Details ── --}}
-            <div class="row g-2 mb-3" id="payeeBankDetailsRow">
+            {{-- ── Payee Bank Details (Other payee type only) ── --}}
+            <div class="row g-2 mb-3" id="payeeBankDetailsRow" style="display:none;">
                 <div class="col-md-3">
                     <label class="form-label">Payee Bank Name</label>
                     <input type="text" class="form-control form-control-sm" id="hdrBankName"
@@ -792,41 +774,14 @@ $(document).ready(function () {
         $('#otherPayeeWrap').toggle(v === 'Other');
         $('#finalVendorId').val('');
         $('#finalVendorName').val('');
-        
-        if (v === 'Landlord') {
-            // Make bank fields read-only for landlords
-            setPayeeBankFieldsReadOnly(true);
-            clearLandlordBankFields();
-        } else {
-            // Make bank fields editable for other payee types
-            setPayeeBankFieldsReadOnly(false);
-            $('#noBankSetupWarning').hide();
-            $('#payeeBankDetailsRow').show();
-        }
-        
+        // Bank details row: only visible for Other (manual entry); Landlord uses per-entry bank
+        $('#payeeBankDetailsRow').toggle(v === 'Other');
         if (v !== 'Landlord') {
             $('#landlordSearch').val(null).trigger('change');
             clearLandlordBankFields();
-            // Hide per-entry payee bank row for non-Landlord
-            $('#entryPayeeBankRow').hide();
-            $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
         }
         if (v !== 'Other') { $('#vendorNameInput').val(''); }
     });
-
-    // ─── Set Payee Bank Fields Read-Only ──────────────────────────────
-    function setPayeeBankFieldsReadOnly(readonly) {
-        if (readonly) {
-            $('#hdrBankName, #hdrAccountName, #hdrAccountNumber')
-                .prop('readonly', true)
-                .css('background-color', '#e9ecef')
-                .attr('placeholder', 'Auto-filled from landlord');
-        } else {
-            $('#hdrBankName').prop('readonly', false).css('background-color', '').attr('placeholder', 'e.g. KCB BANK');
-            $('#hdrAccountName').prop('readonly', false).css('background-color', '').attr('placeholder', 'e.g. JOHN DOE');
-            $('#hdrAccountNumber').prop('readonly', false).css('background-color', '').attr('placeholder', 'e.g. 1234567890');
-        }
-    }
 
     // ─── Landlord Select2 ─────────────────────────────────────────────
     $('#landlordSearch').select2({
@@ -879,10 +834,6 @@ $(document).ready(function () {
     // ─── Fetch Landlord Bank Details ──────────────────────────────────
     function fetchLandlordBankDetails(encryptedClientId) {
         clearLandlordBankFields();
-        $('#landlordBankInfo').html('<span class="spinner-border spinner-border-sm me-1"></span> Loading bank details...');
-        $('#landlordBankSelectWrap').hide();
-        $('#noBankSetupWarning').hide();
-
         $.ajax({
             url: '/ajax/clients/' + encryptedClientId + '/bank-details',
             type: 'GET',
@@ -890,82 +841,32 @@ $(document).ready(function () {
             success: function(response) {
                 if (response.success && response.data && response.data.length > 0) {
                     landlordBankDetails = response.data;
-                    $('#noBankSetupWarning').hide();
-
+                    let entryOptions = '<option value="">-- Select bank --</option>';
+                    response.data.forEach(function(bank, index) {
+                        const lbl = bank.bank_name + ' — ' + bank.account_number + ' (' + bank.account_name + ')';
+                        entryOptions += '<option value="' + index + '" data-bank-name="' + escHtml(bank.bank_name) + '" data-account-name="' + escHtml(bank.account_name) + '" data-account-number="' + escHtml(bank.account_number) + '">' + lbl + '</option>';
+                    });
+                    $('#entryPayeeBank').html(entryOptions);
                     if (response.data.length === 1) {
-                        // Single bank — auto-populate header fields, no per-entry selection needed
-                        const bank = response.data[0];
-                        populateBankFields(bank);
-                        $('#landlordBankSelectWrap').hide();
-                        $('#payeeBankDetailsRow').show();
-                        $('#landlordBankInfo').html('<span class="text-success"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">check_circle</span> Bank details loaded</span>');
-                        setTimeout(() => $('#landlordBankInfo').text(''), 3000);
-                        // Hide per-entry bank row (single bank applies to all entries)
-                        $('#entryPayeeBankRow').hide();
-                        $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
-                    } else {
-                        // Multiple banks — bank is selected per entry; no header-level selection
-                        let entryOptions = '<option value="">-- Select bank --</option>';
-                        response.data.forEach(function(bank, index) {
-                            const lbl = bank.bank_name + ' — ' + bank.account_number + ' (' + bank.account_name + ')';
-                            entryOptions += '<option value="' + index + '" data-bank-name="' + escHtml(bank.bank_name) + '" data-account-name="' + escHtml(bank.account_name) + '" data-account-number="' + escHtml(bank.account_number) + '">' + lbl + '</option>';
-                        });
-                        $('#landlordBankSelectWrap').hide();
-                        $('#payeeBankDetailsRow').hide();
-                        $('#landlordBankInfo').html('<span class="text-info"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">info</span> This landlord has ' + response.data.length + ' bank accounts — select the target bank per entry below.</span>');
-                        // Show per-entry bank row
-                        $('#entryPayeeBank').html(entryOptions);
-                        $('#entryPayeeBankRow').show();
+                        $('#entryPayeeBank').val('0');
                     }
+                    $('#entryPayeeBankRow').show();
+                    $('#noBankSetupWarning').hide();
                 } else {
-                    // No bank details - show warning and hide bank fields
                     landlordBankDetails = [];
-                    $('#landlordBankSelectWrap').hide();
-                    $('#landlordBankInfo').text('');
-                    $('#payeeBankDetailsRow').hide();
                     $('#noBankSetupWarning').show();
                 }
             },
             error: function(xhr) {
-                $('#landlordBankSelectWrap').hide();
-                $('#landlordBankInfo').html('<span class="text-danger"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">error</span> Failed to load bank details</span>');
-                console.error('Error fetching bank details:', xhr);
+                console.error('Error fetching landlord bank details:', xhr);
             }
         });
-    }
-
-    // ─── Handle Landlord Bank Selection ───────────────────────────────
-    $('#landlordBankSelect').on('change', function() {
-        const selectedIndex = $(this).val();
-        if (selectedIndex !== '' && landlordBankDetails[selectedIndex]) {
-            populateBankFields(landlordBankDetails[selectedIndex]);
-        } else {
-            // Clear fields if no selection
-            $('#hdrBankName').val('');
-            $('#hdrAccountName').val('');
-            $('#hdrAccountNumber').val('');
-        }
-    });
-
-    // ─── Populate Bank Fields ─────────────────────────────────────────
-    function populateBankFields(bank) {
-        $('#hdrBankName').val(bank.bank_name || '');
-        $('#hdrAccountName').val(bank.account_name || '');
-        $('#hdrAccountNumber').val(bank.account_number || '');
     }
 
     // ─── Clear Landlord Bank Fields ───────────────────────────────────
     function clearLandlordBankFields() {
         landlordBankDetails = [];
-        $('#landlordBankSelect').html('<option value="">-- Select Bank Account --</option>');
-        $('#landlordBankSelectWrap').hide();
-        $('#landlordBankInfo').text('');
-        $('#hdrBankName').val('');
-        $('#hdrAccountName').val('');
-        $('#hdrAccountNumber').val('');
         $('#noBankSetupWarning').hide();
-        $('#payeeBankDetailsRow').show();
-        // Reset per-entry bank row
         $('#entryPayeeBankRow').hide();
         $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
         resetCurrentEntryChequeLock();
@@ -1019,11 +920,9 @@ $(document).ready(function () {
                 const b = landlordBankDetails[idx];
                 return (b.bank_name || '') + '|' + (b.account_number || '');
             }
-            // Single bank — use header fields
-            const bn = $('#hdrBankName').val(), an = $('#hdrAccountNumber').val();
-            return bn || an ? bn + '|' + an : null;
+            return null;
         }
-        // Other payee — use header fields
+        // Other payee — manual header fields
         const bn = $('#hdrBankName').val(), an = $('#hdrAccountNumber').val();
         return bn || an ? bn + '|' + an : null;
     }
@@ -1036,27 +935,21 @@ $(document).ready(function () {
             if (idx !== '' && idx !== null && landlordBankDetails[idx]) {
                 const b = landlordBankDetails[idx];
                 return {
-                    payee_bank_key:      (b.bank_name || '') + '|' + (b.account_number || ''),
-                    payee_bank_label:    (b.bank_name || '') + ' — ' + (b.account_number || ''),
-                    payee_bank_name:     b.bank_name     || '',
-                    payee_account_name:  b.account_name  || '',
+                    payee_bank_key:       (b.bank_name || '') + '|' + (b.account_number || ''),
+                    payee_bank_label:     (b.bank_name || '') + ' — ' + (b.account_number || ''),
+                    payee_bank_name:      b.bank_name      || '',
+                    payee_account_name:   b.account_name   || '',
                     payee_account_number: b.account_number || '',
                 };
             }
-            // Single bank — from header
-            return {
-                payee_bank_key:      $('#hdrBankName').val() + '|' + $('#hdrAccountNumber').val(),
-                payee_bank_label:    $('#hdrBankName').val() + ' — ' + $('#hdrAccountNumber').val(),
-                payee_bank_name:     $('#hdrBankName').val(),
-                payee_account_name:  $('#hdrAccountName').val(),
-                payee_account_number: $('#hdrAccountNumber').val(),
-            };
+            return { payee_bank_key: null, payee_bank_label: null, payee_bank_name: '', payee_account_name: '', payee_account_number: '' };
         }
+        // Other payee — manual header fields
         return {
-            payee_bank_key:      $('#hdrBankName').val() + '|' + $('#hdrAccountNumber').val(),
-            payee_bank_label:    $('#hdrBankName').val() + ' — ' + $('#hdrAccountNumber').val(),
-            payee_bank_name:     $('#hdrBankName').val(),
-            payee_account_name:  $('#hdrAccountName').val(),
+            payee_bank_key:       $('#hdrBankName').val() + '|' + $('#hdrAccountNumber').val(),
+            payee_bank_label:     $('#hdrBankName').val() + ' — ' + $('#hdrAccountNumber').val(),
+            payee_bank_name:      $('#hdrBankName').val(),
+            payee_account_name:   $('#hdrAccountName').val(),
             payee_account_number: $('#hdrAccountNumber').val(),
         };
     }
@@ -1234,13 +1127,6 @@ $(document).ready(function () {
             ok = false;
         }
 
-        // For landlords, validate bank details are populated
-        if (vendorType === 'Landlord' && ok) {
-            if (!$('#hdrBankName').val() || !$('#hdrAccountName').val() || !$('#hdrAccountNumber').val()) {
-                toastr.error('Bank details are required for landlord payments. Please set up bank details for this landlord first.');
-                ok = false;
-            }
-        }
 
         return ok;
     }
