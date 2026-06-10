@@ -138,6 +138,39 @@ class TenantExitController extends Controller
     }
 
     /**
+     * Search landlords (Client records with type_id = 1) for the exited tenants filter.
+     *
+     * GET /tenant-exit/search/landlords?search=…
+     */
+    public function searchLandlords(Request $request)
+    {
+        try {
+            $search = trim($request->input('search', ''));
+
+            if (strlen($search) < 2) {
+                return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
+            }
+
+            $landlords = Client::where('type_id', 1)
+                ->select('id', 'names', 'reference_number', 'mobile_number')
+                ->where(function ($q) use ($search) {
+                    $q->where('names',            'ILIKE', "%{$search}%")
+                      ->orWhere('reference_number','ILIKE', "%{$search}%")
+                      ->orWhere('mobile_number',   'ILIKE', "%{$search}%");
+                })
+                ->orderBy('names')
+                ->limit(30)
+                ->get();
+
+            return response()->json(['success' => true, 'landlords' => $landlords]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: searchLandlords — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Search failed'], 500);
+        }
+    }
+
+    /**
      * Get occupied units for a property (for the property-first path).
      */
     public function getOccupiedUnits($propertyId)
@@ -729,5 +762,255 @@ class TenantExitController extends Controller
         ];
 
         return response()->json(['success' => true, 'templates' => $templates]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  EXITED TENANTS — LIST PAGE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Display a paginated, filterable list of all completed tenant exits.
+     *
+     * GET /tenant-exit/exited
+     */
+    public function exitedTenantsIndex(Request $request)
+    {
+        try {
+            // ── Build query ──────────────────────────────────────────────────
+            $query = TenantExit::query()
+                ->where('cb_tenant_exits.current_status_id', 2) // Completed only
+                ->join('sys_pm_clients as c',       'cb_tenant_exits.tenant_id',    '=', 'c.id')
+                ->join('sys_pm_properties as pr',   'cb_tenant_exits.property_id',  '=', 'pr.id')
+                ->join('sys_pm_units as u',        'cb_tenant_exits.unit_id',      '=', 'u.id')
+                ->leftJoin('sys_pm_clients as ll', 'pr.client_id',                 '=', 'll.id') // landlord = client record on the property (type_id=1)
+                ->leftJoin('josya_users as fu',    'cb_tenant_exits.finalised_by', '=', 'fu.id')
+                ->leftJoin('cb_tenant_exit_deposit_refunds as dr', function ($join) {
+                    $join->on('dr.exit_id', '=', 'cb_tenant_exits.id');
+                })
+                ->select([
+                    'cb_tenant_exits.id',
+                    'cb_tenant_exits.tenant_id',
+                    'cb_tenant_exits.exit_reason',
+                    'cb_tenant_exits.exit_notes',
+                    'cb_tenant_exits.vacate_notice_date',
+                    'cb_tenant_exits.intended_exit_date',
+                    'cb_tenant_exits.actual_exit_date',
+                    'cb_tenant_exits.finalised_at',
+                    'c.names as tenant_name',
+                    'c.reference_number as tenant_ref',
+                    'c.mobile_number as tenant_mobile',
+                    'c.email_address as tenant_email',
+                    'c.national_id as tenant_national_id',
+                    'pr.property_name',
+                    'pr.client_id as landlord_id',
+                    'll.names as landlord_name',
+                    DB::raw("COALESCE(u.unit_name, u.unit_code) as unit_name"),
+                    'fu.name as finalised_by_name',
+                    DB::raw('SUM(dr.refund_amount) as total_refunded'),
+                ])
+                ->groupBy(
+                    'cb_tenant_exits.id',
+                    'cb_tenant_exits.tenant_id',
+                    'cb_tenant_exits.exit_reason',
+                    'cb_tenant_exits.exit_notes',
+                    'cb_tenant_exits.vacate_notice_date',
+                    'cb_tenant_exits.intended_exit_date',
+                    'cb_tenant_exits.actual_exit_date',
+                    'cb_tenant_exits.finalised_at',
+                    'c.names',
+                    'c.reference_number',
+                    'c.mobile_number',
+                    'c.email_address',
+                    'c.national_id',
+                    'pr.property_name',
+                    'pr.client_id',
+                    'll.names',
+                    'u.unit_name',
+                    'u.unit_code',
+                    'fu.name'
+                );
+
+            // ── Filters ──────────────────────────────────────────────────────
+            if ($search = trim($request->input('search', ''))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('c.names',             'ILIKE', "%{$search}%")
+                      ->orWhere('c.reference_number', 'ILIKE', "%{$search}%")
+                      ->orWhere('c.mobile_number',    'ILIKE', "%{$search}%")
+                      ->orWhere('c.national_id',      'ILIKE', "%{$search}%");
+                });
+            }
+
+            if ($propertyId = $request->input('property_id')) {
+                $query->where('cb_tenant_exits.property_id', $propertyId);
+            }
+
+            if ($landlordId = $request->input('landlord_id')) {
+                $query->where('pr.client_id', $landlordId);
+            }
+
+            if ($reason = $request->input('exit_reason')) {
+                $query->where('cb_tenant_exits.exit_reason', $reason);
+            }
+
+            if ($dateFrom = $request->input('date_from')) {
+                $query->whereDate('cb_tenant_exits.actual_exit_date', '>=', $dateFrom);
+            }
+
+            if ($dateTo = $request->input('date_to')) {
+                $query->whereDate('cb_tenant_exits.actual_exit_date', '<=', $dateTo);
+            }
+
+            $exits = $query->orderBy('cb_tenant_exits.actual_exit_date', 'desc')
+                           ->paginate(25)
+                           ->withQueryString();
+
+            // ── Stats (unfiltered totals for the strip) ──────────────────────
+            $stats = [
+                'total'       => TenantExit::where('current_status_id', 2)->count(),
+                'this_month'  => TenantExit::where('current_status_id', 2)
+                                    ->whereMonth('actual_exit_date', now()->month)
+                                    ->whereYear('actual_exit_date',  now()->year)
+                                    ->count(),
+                'with_refund' => TenantExitDepositRefund::distinct('exit_id')->count('exit_id'),
+            ];
+
+            // ── Filter dropdowns ─────────────────────────────────────────────
+            // No full loads — both use typeahead. We only need the current filter
+            // labels so the inputs can be pre-filled on page load.
+
+            $activePropertyName = '';
+            if ($propertyId = $request->input('property_id')) {
+                $activePropertyName = Property::where('id', $propertyId)->value('property_name') ?? '';
+            }
+
+            $activeLandlordName = '';
+            if ($landlordId = $request->input('landlord_id')) {
+                $activeLandlordName = Client::where('id', $landlordId)->where('type_id', 1)->value('names') ?? '';
+            }
+
+            return view('property.tenants.exit.exited', compact(
+                'exits', 'stats', 'activePropertyName', 'activeLandlordName'
+            ));
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: exitedTenantsIndex — ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load exited tenants.');
+        }
+    }
+ 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  EXITED TENANTS — DETAIL (AJAX for offcanvas + inline statement)
+    // ─────────────────────────────────────────────────────────────────────────
+ 
+    /**
+     * Return full detail for a single exit record.
+     * Powers both the offcanvas detail panel and the inline accordion statement
+     * on the exited tenants page.
+     *
+     * GET /tenant-exit/exited-detail/{exitId}
+     */
+    public function getExitedTenantDetail(int $exitId)
+    {
+        try {
+            $exit = TenantExit::with([
+                'inspection',
+                'communications.sentBy:id,name',
+                'depositRefunds',
+            ])->findOrFail($exitId);
+ 
+            // Tenant info — read identity fields directly since tenant may be
+            // unlinked from unit/property after exit
+            $tenant = Client::select('id', 'names', 'reference_number', 'mobile_number',
+                                     'email_address', 'national_id')
+                            ->find($exit->tenant_id);
+ 
+            // Property & unit names from the exit record's stored IDs
+            $property = Property::select('property_name')->find($exit->property_id);
+            $unit     = Unit::selectRaw("COALESCE(unit_name, unit_code) as unit_name")->find($exit->unit_id);
+ 
+            // Finalised by user
+            $finalisedBy = \App\Models\User::select('name')->find($exit->finalised_by);
+ 
+            // Account statement — same logic as the index profile loader
+            $transactions = TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
+                ->where('current_status_id', 1)
+                ->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+ 
+            $statementEntries = [];
+            $balance = 0;
+            foreach ($transactions as $txn) {
+                $debit  = abs($txn->debit_amount  ?? 0);
+                $credit = abs($txn->credit_amount ?? 0);
+                $balance += $credit - $debit;
+ 
+                $statementEntries[] = [
+                    'date_formatted'   => $txn->date_time ? date('d-m-Y', strtotime($txn->date_time)) : '-',
+                    'reference'        => $txn->invoice_number ?? '-',
+                    'narration'        => $txn->narration ?? ($debit > 0 ? 'Invoice' : 'Payment'),
+                    'debit_formatted'  => $debit  > 0 ? number_format($debit,  2) : '-',
+                    'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '-',
+                    'balance'          => $balance,
+                    'balance_formatted'=> number_format($balance, 2),
+                ];
+            }
+ 
+            // Shape inspection
+            $insp = null;
+            if ($exit->inspection) {
+                $insp = $exit->inspection->toArray();
+                $insp['inspection_date'] = $exit->inspection->inspection_date
+                    ? $exit->inspection->inspection_date->format('d M Y') : '-';
+            }
+ 
+            // Shape deposit refunds
+            $refunds = $exit->depositRefunds->map(fn ($r) => [
+                'refund_amount'         => $r->refund_amount,
+                'refund_notes'          => $r->refund_notes,
+                'refunded_by_name'      => $r->refundedBy->name ?? '-',
+                'refunded_at_formatted' => $r->refunded_at ? $r->refunded_at->format('d M Y') : '-',
+            ])->toArray();
+ 
+            // Shape communications
+            $comms = $exit->communications->map(fn ($c) => [
+                'comm_type'    => $c->comm_type,
+                'subject'      => $c->subject,
+                'message_body' => $c->message_body,
+                'sent_by_name' => $c->sentBy->name ?? '-',
+                'sent_at'      => $c->sent_at,
+            ])->toArray();
+ 
+            return response()->json([
+                'success' => true,
+                'tenant'  => [
+                    'names'            => $tenant->names            ?? '-',
+                    'reference_number' => $tenant->reference_number ?? '-',
+                    'mobile_number'    => $tenant->mobile_number    ?? '-',
+                    'email_address'    => $tenant->email_address    ?? '-',
+                ],
+                'exit' => [
+                    'property_name'      => $property->property_name ?? '-',
+                    'unit_name'          => $unit->unit_name         ?? '-',
+                    'exit_reason'        => $exit->exit_reason,
+                    'exit_notes'         => $exit->exit_notes,
+                    'vacate_notice_date' => $exit->vacate_notice_date ? $exit->vacate_notice_date->format('d M Y') : '-',
+                    'intended_exit_date' => $exit->intended_exit_date ? $exit->intended_exit_date->format('d M Y') : '-',
+                    'actual_exit_date'   => $exit->actual_exit_date   ? $exit->actual_exit_date->format('d M Y')   : '-',
+                    'final_notes'        => $exit->final_notes,
+                    'finalised_by_name'  => $finalisedBy->name        ?? '-',
+                    'finalised_at'       => $exit->finalised_at        ? $exit->finalised_at->format('d M Y H:i')  : '-',
+                ],
+                'inspection'      => $insp,
+                'statement'       => $statementEntries,
+                'closing_balance' => $balance,
+                'refunds'         => $refunds,
+                'communications'  => $comms,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: getExitedTenantDetail — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load exit detail'], 500);
+        }
     }
 }

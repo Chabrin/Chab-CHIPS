@@ -18,6 +18,10 @@
             <div id="exitStatusBadge" class="d-none">
                 <span class="badge bg-warning text-dark fs-6 px-3 py-2" id="exitStatusText"></span>
             </div>
+            <a href="{{ route('tenant.exit.exited') }}" class="btn btn-sm btn-outline-primary">
+                <span class="material-symbols-outlined align-middle" style="font-size:16px;">exit_to_app</span>
+                View Exited Tenants
+            </a>
         </div>
 
         {{-- ═══════════════════════════════════════════════════════════════════ --}}
