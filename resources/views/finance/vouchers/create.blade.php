@@ -870,6 +870,7 @@ $(document).ready(function () {
         $('#entryPayeeBankRow').hide();
         $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
         resetCurrentEntryChequeLock();
+        $('#cheque_books').val('');
         updateReuseOptions();
     }
 
@@ -903,11 +904,12 @@ $(document).ready(function () {
         if (currentEntryCheque.leaf_id) {
             releaseChequeLeaf(currentEntryCheque.leaf_id, currentEntryCheque.lock_token);
         }
-        currentEntryCheque    = { leaf_id: null, lock_token: null, cheque_number: null };
-        currentEntryIsReuse   = false;
+        currentEntryCheque  = { leaf_id: null, lock_token: null, cheque_number: null };
+        currentEntryIsReuse = false;
         $('#entryChequeNo').val('');
         $('#entryChequeMsg').text('');
-        $('#cheque_books').val('');
+        // Note: does NOT reset #cheque_books — callers that need it cleared do so explicitly,
+        // so the #cheque_books change handler can call this without clearing its own selection.
     }
 
     // ─── Returns a "bank identity" key for the entry currently being composed ──
@@ -1038,7 +1040,7 @@ $(document).ready(function () {
     // ─── Per-entry payee bank: changing bank resets cheque selection ──────
     $('#entryPayeeBank').on('change', function () {
         resetCurrentEntryChequeLock();
-        // Rebuild reuse options (compatibility depends on payee bank)
+        $('#cheque_books').val('');
         updateReuseOptions();
     });
 
@@ -1203,7 +1205,7 @@ $(document).ready(function () {
         }
 
         const entryTypeOpt   = $('#entryType').find(':selected');
-        const billingCode    = entryTypeOpt.data('billing-code') || null;
+        const billingCode    = entryTypeOpt.attr('data-billing-code') || null;
         const entryTypeLabel = entryTypeOpt.val() ? entryTypeOpt.text().trim() : null;
 
         const sourceAccOpt   = $('#sourceAccount').find(':selected');
