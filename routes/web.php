@@ -669,6 +669,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
 
 
+    // Cheque Printing
+    Route::get('/cheque/printing', [App\Http\Controllers\ChequePrintingController::class, 'index'])->name('cheque.printing.index');
+    Route::get('/ajax/cheque/printing/data', [App\Http\Controllers\ChequePrintingController::class, 'getData'])->name('ajax.cheque.printing.data');
+    Route::get('/cheque/printing/{id}/details', [App\Http\Controllers\ChequePrintingController::class, 'show'])->name('cheque.printing.details');
+    Route::post('/cheque/printing/{id}/mark-printed', [App\Http\Controllers\ChequePrintingController::class, 'markPrinted'])->name('cheque.printing.mark.printed');
+    Route::post('/cheque/printing/{id}/submit-approval', [App\Http\Controllers\ChequePrintingController::class, 'submitToApproval'])->name('cheque.printing.submit.approval');
+
     // Payment Vouchers
     Route::get('/payment/vouchers', [App\Http\Controllers\PaymentVouchersController::class, 'index'])->name('payment.vouchers.index');
     Route::get('/ajax/payment/vouchers/data', [App\Http\Controllers\PaymentVouchersController::class, 'getVouchersData'])->name('ajax.payment.vouchers.data');

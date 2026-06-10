@@ -17,8 +17,6 @@ use App\Models\InvoiceableItem;
 use App\Models\CompanyBankAccount;
 use App\Models\ReturnSummary;
 use App\Models\Client;
-use App\Models\ApprovalWorkflow;
-use App\Services\ApprovalService;
 
 class PaymentVouchersController extends Controller
 {
@@ -176,7 +174,6 @@ class PaymentVouchersController extends Controller
                 'credit_amount'    => 0,
                 'entry_count'      => count($validated['lines']),
                 'voucher_status'   => 'Pending',
-                'cheque_number'    => $validated['cheque_number'] ?? null,
                 'is_deleted'       => 0,
                 'prepared_by'      => Auth::user()->name,
                 'is_printed'       => 0,
@@ -203,25 +200,11 @@ class PaymentVouchersController extends Controller
                 ]);
             }
 
-            $approvalRequest = null;
-            try {
-                $approvalService = app(ApprovalService::class);
-                $approvalRequest = $approvalService->initiateApproval(
-                    'voucher',
-                    $header->id,
-                    'voucher_approval',
-                    Auth::id()
-                );
-            } catch (Exception $e) {
-                Log::warning('Could not initiate approval workflow for voucher: ' . $e->getMessage());
-            }
-
             return response()->json([
                 'success'        => true,
-                'message'        => 'Voucher ' . $voucherNum . ' created successfully' . ($approvalRequest ? ' and submitted for approval' : ''),
+                'message'        => 'Voucher ' . $voucherNum . ' created successfully',
                 'voucher_number' => $voucherNum,
                 'encrypted_id'   => encrypt($header->id),
-                'approval_initiated' => $approvalRequest !== null,
             ]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
@@ -638,25 +621,13 @@ class PaymentVouchersController extends Controller
             ReturnSummary::where('id', $validated['return_summary_id'])
                 ->update(['voucher_generated' => 1]);
 
-            // Initiate approval workflow
-            try {
-                $approvalService = app(ApprovalService::class);
-                $approvalService->initiateApproval(
-                    'voucher',
-                    $header->id,
-                    'voucher_approval',
-                    Auth::id()
-                );
-            } catch (Exception $e) {
-                Log::warning('Could not initiate approval workflow for return voucher: ' . $e->getMessage());
-            }
-
             DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Return voucher created successfully',
                 'voucher_number' => $voucherNumber,
+                'encrypted_id'   => encrypt($header->id),
                 'line_items_count' => $entryCount,
             ]);
 

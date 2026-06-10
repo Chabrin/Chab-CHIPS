@@ -264,7 +264,7 @@
                 {{-- Row 2: Source Account + Cheque Details + Amount + Add Entry (all per-entry) --}}
                 <div class="row g-2 mb-2">
 
-                    <div class="col-md-3">
+                    <div class="col-lg-6">
                         <label class="form-label">Source Account</label>
                         <select class="form-select form-select-sm" id="sourceAccount">
                             <option value="">-- Select Account --</option>
@@ -1399,7 +1399,7 @@ $(document).ready(function () {
                 currentEntryIsReuse = false;
 
                 toastr.success(r.message);
-                const detailUrl = '{{ route("payment.vouchers.details", "PH") }}'.replace('PH', r.encrypted_id);
+                const detailUrl = '{{ route("cheque.printing.details", "PH") }}'.replace('PH', r.encrypted_id);
                 setTimeout(function () { window.location.href = detailUrl; }, 1200);
             },
             error: function (xhr) {
@@ -2078,37 +2078,8 @@ $(document).ready(function () {
             success: function(r) {
                 if (r.success) {
                     toastr.success('Return voucher ' + (r.voucher_number || '') + ' created successfully!');
-                    
-                    // Reload the returns table to reflect the generated voucher
-                    loadReturnsData();
-                    
-                    // Scroll to top of the tab content for better visibility
-                    $('#returns-vouchers').animate({ scrollTop: 0 }, 300);
-                    
-                    // Reset the form (same logic as cancel button)
-                    currentReturnData = null;
-                    $('#returnLandlordId').val('');
-                    $('#returnPropertyId').val('');
-                    $('#returnSummaryId').val('');
-                    $('#returnLandlordName').val('');
-                    $('#returnReference').val('');
-                    $('#returnBankName').val('');
-                    $('#returnAccountName').val('');
-                    $('#returnAccountNumber').val('');
-                    $('#returnNetBalance').val('');
-                    $('#returnSourceAccount').val('');
-                    $('#returnChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
-                    $('#returnChequeNo').val('');
-                    $('#returnChequeMsg').text('');
-                    $('#returnVoucherDate').val('{{ date("Y-m-d") }}');
-                    $('#returnPostYear').val('{{ $currentYear }}');
-                    $('#returnPostMonth').val('{{ $currentMonth }}');
-                    $('#returnBankWarning').hide();
-                    $('#returnSplitSection').hide();
-                    $('#returnSinglePaymentSection').show();
-                    returnSplitEntries = [];
-                    splitEntryIdCounter = 0;
-                    $('#createReturnVoucherBtn').prop('disabled', true).html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Create Voucher');
+                    const printUrl = '{{ route("cheque.printing.details", "PH") }}'.replace('PH', r.encrypted_id);
+                    setTimeout(function () { window.location.href = printUrl; }, 1200);
                 } else {
                     toastr.error(r.message || 'Failed to create voucher');
                     validateReturnVoucherForm();
