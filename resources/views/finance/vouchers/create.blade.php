@@ -230,29 +230,6 @@
                         </select>
                     </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label">Source Account</label>
-                        <select class="form-select form-select-sm" id="sourceAccount">
-                            <option value="">-- Select Company Bank Account --</option>
-                            @foreach($bankAccounts as $acc)
-                            <option value="{{ $acc->id }}"
-                                    data-account-number="{{ $acc->account_number }}"
-                                    data-account-name="{{ $acc->account_name }}"
-                                    data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
-                                {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
-                            </option>
-                            @endforeach
-                        </select>
-                        <div id="sourceAccountInfo" style="display:none;">
-                            <div class="account-info-pill">
-                                <span class="material-symbols-outlined">account_balance</span>
-                                <span id="sourceAccNumber"></span>
-                                <span class="text-muted">|</span>
-                                <span id="sourceAccBank"></span>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
@@ -285,8 +262,48 @@
 
                 </div>
 
-                {{-- Row 2: Cheque Details + Amount + Add Entry --}}
+                {{-- Row 1.5: Per-entry payee bank — shown only for Landlord with 2+ bank accounts --}}
+                <div class="row g-2 mb-2" id="entryPayeeBankRow" style="display:none;">
+                    <div class="col-md-5">
+                        <label class="form-label">Payee Bank for this entry <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="entryPayeeBank">
+                            <option value="">-- Select bank --</option>
+                        </select>
+                        <div id="entryPayeeBankMsg" class="text-danger mt-1" style="font-size:0.72rem;"></div>
+                    </div>
+                    <div class="col-md-7 d-flex align-items-end pb-1">
+                        <small class="text-muted" style="font-size:0.73rem;">
+                            <span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle;">info</span>
+                            Entries going to the same bank can share a cheque number
+                        </small>
+                    </div>
+                </div>
+
+                {{-- Row 2: Source Account + Cheque Details + Amount + Add Entry (all per-entry) --}}
                 <div class="row g-2 mb-2">
+
+                    <div class="col-md-3">
+                        <label class="form-label">Source Account</label>
+                        <select class="form-select form-select-sm" id="sourceAccount">
+                            <option value="">-- Select Account --</option>
+                            @foreach($bankAccounts as $acc)
+                            <option value="{{ $acc->id }}"
+                                    data-account-number="{{ $acc->account_number }}"
+                                    data-account-name="{{ $acc->account_name }}"
+                                    data-bank-name="{{ $acc->bank->bank_name ?? '' }}">
+                                {{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }}
+                            </option>
+                            @endforeach
+                        </select>
+                        <div id="sourceAccountInfo" style="display:none; margin-top:3px;">
+                            <div class="account-info-pill">
+                                <span class="material-symbols-outlined">account_balance</span>
+                                <span id="sourceAccNumber"></span>
+                                <span class="text-muted">|</span>
+                                <span id="sourceAccBank"></span>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="col-md-3">
                         <label class="form-label">Cheque Book</label>
@@ -728,6 +745,9 @@
                             <dt class="col-5 text-muted fw-normal">Source Account</dt>
                             <dd class="col-7 mb-0" id="det_account"></dd>
 
+                            <dt class="col-5 text-muted fw-normal">Cheque No.</dt>
+                            <dd class="col-7 mb-0" id="det_cheque_no"></dd>
+
                             <dt class="col-5 text-muted fw-normal">Amount</dt>
                             <dd class="col-7 mb-0 fw-bold text-dark" id="det_amount" style="font-size:0.9rem;"></dd>
                         </dl>
@@ -748,27 +768,22 @@
 <script>
 $(document).ready(function () {
 
-    // Grab current values
-    const leaf_id = $('#voucherChequeNo').val();
-    const leaf_token_id = $('#voucherChequeNo').data('leaf-token-id');
-
-    // Release lock when page is about to unload (reload, close, navigate away)
-    $(window).on('beforeunload', function () {
-        const leaf_id = $('#voucherChequeNo').val();
-        const leaf_token_id = $('#voucherChequeNo').data('leaf-token-id');
-
-        if (leaf_id) {
-            releaseVoucherChequeLock(leaf_id, leaf_token_id);
-        }
-    });
-
-
     // ─── State ────────────────────────────────────────────────────────
     let pendingEntries = [];
-    let uidCounter     = 0;
+    let uidCounter = 0;
 
-    // Tracks the cheque lock held at the voucher level
-    let voucherCheque = { leaf_id: null, lock_token: null, cheque_number: null };
+    // Cheque locks keyed by cheque_number with a ref_count:
+    //   lockedChequesMap[num] = { leaf_id, lock_token, cheque_number, ref_count }
+    // ref_count tracks how many entries share the same cheque.
+    // The lock is released only when ref_count reaches 0.
+    let lockedChequesMap = {};
+
+    // Holds the NEW cheque lock being set up for the entry currently being composed.
+    // leaf_id is null when the user has chosen "reuse" (no new lock needed).
+    let currentEntryCheque = { leaf_id: null, lock_token: null, cheque_number: null };
+
+    // True when the user has selected a reuse cheque for the current (not-yet-added) entry.
+    let currentEntryIsReuse = false;
 
     // ─── Payee Type toggle ────────────────────────────────────────────
     $('#vendorType').on('change', function () {
@@ -789,9 +804,12 @@ $(document).ready(function () {
             $('#payeeBankDetailsRow').show();
         }
         
-        if (v !== 'Landlord') { 
+        if (v !== 'Landlord') {
             $('#landlordSearch').val(null).trigger('change');
             clearLandlordBankFields();
+            // Hide per-entry payee bank row for non-Landlord
+            $('#entryPayeeBankRow').hide();
+            $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
         }
         if (v !== 'Other') { $('#vendorNameInput').val(''); }
     });
@@ -877,23 +895,30 @@ $(document).ready(function () {
                     $('#payeeBankDetailsRow').show();
                     
                     if (response.data.length === 1) {
-                        // Only one bank - auto-populate
+                        // Single bank — auto-populate header fields, no per-entry selection needed
                         const bank = response.data[0];
                         populateBankFields(bank);
                         $('#landlordBankSelectWrap').hide();
                         $('#landlordBankInfo').html('<span class="text-success"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">check_circle</span> Bank details loaded</span>');
                         setTimeout(() => $('#landlordBankInfo').text(''), 3000);
+                        // Hide per-entry bank row (single bank applies to all entries)
+                        $('#entryPayeeBankRow').hide();
+                        $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
                     } else {
-                        // Multiple banks - show selection dropdown
-                        let options = '<option value="">-- Select Bank Account --</option>';
+                        // Multiple banks — show header-level selection dropdown + per-entry bank selector
+                        let hdrOptions = '<option value="">-- Select Bank Account --</option>';
+                        let entryOptions = '<option value="">-- Select bank --</option>';
                         response.data.forEach(function(bank, index) {
-                            options += '<option value="' + index + '">' + 
-                                bank.bank_name + ' - ' + bank.account_number + ' (' + bank.account_name + ')' +
-                                '</option>';
+                            const lbl = bank.bank_name + ' — ' + bank.account_number + ' (' + bank.account_name + ')';
+                            hdrOptions   += '<option value="' + index + '">' + lbl + '</option>';
+                            entryOptions += '<option value="' + index + '" data-bank-name="' + escHtml(bank.bank_name) + '" data-account-name="' + escHtml(bank.account_name) + '" data-account-number="' + escHtml(bank.account_number) + '">' + lbl + '</option>';
                         });
-                        $('#landlordBankSelect').html(options);
+                        $('#landlordBankSelect').html(hdrOptions);
                         $('#landlordBankSelectWrap').show();
-                        $('#landlordBankInfo').html('<span class="text-info"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">info</span> This landlord has ' + response.data.length + ' bank accounts. Please select one.</span>');
+                        $('#landlordBankInfo').html('<span class="text-info"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">info</span> This landlord has ' + response.data.length + ' bank accounts. Please select one for the header, and one per entry below.</span>');
+                        // Show per-entry bank row
+                        $('#entryPayeeBank').html(entryOptions);
+                        $('#entryPayeeBankRow').show();
                     }
                 } else {
                     // No bank details - show warning and hide bank fields
@@ -943,6 +968,11 @@ $(document).ready(function () {
         $('#hdrAccountNumber').val('');
         $('#noBankSetupWarning').hide();
         $('#payeeBankDetailsRow').show();
+        // Reset per-entry bank row
+        $('#entryPayeeBankRow').hide();
+        $('#entryPayeeBank').html('<option value="">-- Select bank --</option>');
+        resetCurrentEntryChequeLock();
+        updateReuseOptions();
     }
 
     // ─── Other payee — force uppercase ───────────────────────────────
@@ -960,28 +990,129 @@ $(document).ready(function () {
         if (itemName) { $('#entryDesc').val(itemName.toUpperCase()); }
     });
 
-    // ─── Source Account: show info pill + auto-lock next cheque (voucher level) ──────
+    // ─── Release a single cheque leaf lock ───────────────────────────
+    function releaseChequeLeaf(leaf_id, lock_token) {
+        if (!leaf_id) return;
+        const data = new FormData();
+        data.append('leaf_id', leaf_id);
+        data.append('lock_token', lock_token);
+        data.append('_token', $('meta[name="csrf-token"]').attr('content'));
+        navigator.sendBeacon('{{ route("ajax.voucher-cheque.release") }}', data);
+    }
+
+    // ─── Reset the in-flight (not-yet-added) cheque lock ─────────────
+    function resetCurrentEntryChequeLock() {
+        if (currentEntryCheque.leaf_id) {
+            releaseChequeLeaf(currentEntryCheque.leaf_id, currentEntryCheque.lock_token);
+        }
+        currentEntryCheque    = { leaf_id: null, lock_token: null, cheque_number: null };
+        currentEntryIsReuse   = false;
+        $('#entryChequeNo').val('');
+        $('#entryChequeMsg').text('');
+        $('#cheque_books').val('');
+    }
+
+    // ─── Returns a "bank identity" key for the entry currently being composed ──
+    // Format: "BankName|AccountNumber" — used to determine cheque compatibility.
+    function getEntryPayeeBankKey() {
+        const vType = $('#vendorType').val();
+        if (vType === 'Landlord') {
+            const idx = $('#entryPayeeBank').val();
+            if (idx !== '' && idx !== null && landlordBankDetails[idx]) {
+                const b = landlordBankDetails[idx];
+                return (b.bank_name || '') + '|' + (b.account_number || '');
+            }
+            // Single bank — use header fields
+            const bn = $('#hdrBankName').val(), an = $('#hdrAccountNumber').val();
+            return bn || an ? bn + '|' + an : null;
+        }
+        // Other payee — use header fields
+        const bn = $('#hdrBankName').val(), an = $('#hdrAccountNumber').val();
+        return bn || an ? bn + '|' + an : null;
+    }
+
+    // ─── Returns payee bank data object for the entry currently being composed ──
+    function getCurrentEntryPayeeBankData() {
+        const vType = $('#vendorType').val();
+        if (vType === 'Landlord') {
+            const idx = $('#entryPayeeBank').val();
+            if (idx !== '' && idx !== null && landlordBankDetails[idx]) {
+                const b = landlordBankDetails[idx];
+                return {
+                    payee_bank_key:      (b.bank_name || '') + '|' + (b.account_number || ''),
+                    payee_bank_label:    (b.bank_name || '') + ' — ' + (b.account_number || ''),
+                    payee_bank_name:     b.bank_name     || '',
+                    payee_account_name:  b.account_name  || '',
+                    payee_account_number: b.account_number || '',
+                };
+            }
+            // Single bank — from header
+            return {
+                payee_bank_key:      $('#hdrBankName').val() + '|' + $('#hdrAccountNumber').val(),
+                payee_bank_label:    $('#hdrBankName').val() + ' — ' + $('#hdrAccountNumber').val(),
+                payee_bank_name:     $('#hdrBankName').val(),
+                payee_account_name:  $('#hdrAccountName').val(),
+                payee_account_number: $('#hdrAccountNumber').val(),
+            };
+        }
+        return {
+            payee_bank_key:      $('#hdrBankName').val() + '|' + $('#hdrAccountNumber').val(),
+            payee_bank_label:    $('#hdrBankName').val() + ' — ' + $('#hdrAccountNumber').val(),
+            payee_bank_name:     $('#hdrBankName').val(),
+            payee_account_name:  $('#hdrAccountName').val(),
+            payee_account_number: $('#hdrAccountNumber').val(),
+        };
+    }
+
+    // ─── Rebuild "Reuse Existing Cheque" optgroup in #cheque_books ────
+    // Shows unique cheques from pendingEntries where the source account and
+    // payee bank both match the current entry being composed.
+    function updateReuseOptions() {
+        $('#cheque_books optgroup[data-type="reuse"]').remove();
+
+        const sourceAccId       = $('#sourceAccount').val();
+        const currentBankKey    = getEntryPayeeBankKey();
+        if (!sourceAccId || !currentBankKey) return;
+
+        const seen       = new Set();
+        const compatible = [];
+        pendingEntries.forEach(function (e, idx) {
+            if (String(e.source_account_id) === String(sourceAccId)
+                && e.payee_bank_key === currentBankKey
+                && e.cheque_number
+                && !seen.has(e.cheque_number)) {
+                seen.add(e.cheque_number);
+                compatible.push({ entry: e, rowNum: idx + 1 });
+            }
+        });
+
+        if (!compatible.length) return;
+
+        const $grp = $('<optgroup label="↩ Reuse Existing Cheque" data-type="reuse">');
+        compatible.forEach(function (c) {
+            $grp.append(
+                '<option value="reuse:' + escHtml(c.entry.cheque_number) + '">'
+                + c.entry.cheque_number
+                + '  — shared with Entry #' + c.rowNum + ' (' + fmtNum(c.entry.amount) + ')'
+                + '</option>'
+            );
+        });
+        $('#cheque_books').append($grp);
+    }
+
+    // ─── Source Account: show info pill + load cheque books (per entry) ──
     $('#sourceAccount').on('change', function () {
         const bankAccountId = $(this).val();
         const opt           = $(this).find(':selected');
-        const leaf_id = $('#voucherChequeNo').val();
-        const leaf_token_id = $('#voucherChequeNo').data('leaf-token-id');
 
-        // Release any existing voucher-level lock before doing anything else
-        if(leaf_id){
-            releaseVoucherChequeLock(leaf_id, leaf_token_id);
-        }
-
-        $('#chequeNoMsg').text('');
-        $('#voucherChequeNo').val('');
-        $('#cheque_books').empty().append('<option value="">-- Select cheque book --</option>');
+        resetCurrentEntryChequeLock();
+        $('#cheque_books').empty().append('<option value="">-- Select --</option>');
 
         if (!bankAccountId) {
             $('#sourceAccountInfo').hide();
             return;
         }
 
-        // Show account info pill
         const accNum   = opt.data('account-number') || '';
         const accName  = opt.data('account-name')   || '';
         const bankName = opt.data('bank-name')       || '';
@@ -989,106 +1120,100 @@ $(document).ready(function () {
         $('#sourceAccBank').text(accName + (bankName ? ' — ' + bankName : ''));
         $('#sourceAccountInfo').show();
 
-        // Fetch and lock next available cheque for the voucher
-        $('#chequeLoadingSpinner').show();
-        $('#sourceAccount').prop('disabled', true);
-
         $.ajax({
             url: '{{ route("ajax.voucher-cheque.book") }}',
             method: 'POST',
             data: { bank_account_id: bankAccountId, _token: '{{ csrf_token() }}' },
             success: function (r) {
-                $('#chequeLoadingSpinner').hide();
-                $('#sourceAccount').prop('disabled', false);
-
-                // Clear existing options except the placeholder
-                $('#cheque_books').empty().append('<option value="">-- Select cheque book --</option>');
-
+                $('#cheque_books').empty().append('<option value="">-- Select --</option>');
                 if (r.success && r.books && r.books.length > 0) {
+                    const $grp = $('<optgroup label="New Cheque — From Book">');
                     r.books.forEach(function (book) {
-                        $('#cheque_books').append(
-                            `<option value="${book.id}">
-                                Cheque #${book.first_cheque_number} (${book.leafs} leaves)
-                            </option>`
-                        );
+                        $grp.append(`<option value="${book.id}">Cheque #${book.first_cheque_number} (${book.leafs} leaves)</option>`);
                     });
+                    $('#cheque_books').append($grp);
                 } else {
-                    // No books available
-                    $('#cheque_books').append('<option value="">No cheque books available</option>');
+                    $('#cheque_books').append('<option value="" disabled>No cheque books available</option>');
                 }
+                // Add "Reuse" options for compatible existing entries
+                updateReuseOptions();
             },
             error: function (xhr) {
-                $('#chequeLoadingSpinner').hide();
-                $('#sourceAccount').prop('disabled', false);
-
                 const msg = xhr.responseJSON?.message || 'No available cheques for this account';
-                $('#chequeNoMsg').text(msg);
-                toastr.warning(msg);
-
-                // Clear selection so user knows it failed
-                $('#sourceAccount').val('');
-                $('#sourceAccountInfo').hide();
+                $('#entryChequeMsg').text(msg);
             },
         });
-
     });
 
-    // When user selects a cheque book
+    // ─── Per-entry payee bank: changing bank resets cheque selection ──────
+    $('#entryPayeeBank').on('change', function () {
+        resetCurrentEntryChequeLock();
+        // Rebuild reuse options (compatibility depends on payee bank)
+        updateReuseOptions();
+    });
+
+    // ─── Cheque selection: handle "New from book" vs "Reuse existing" ────
     $('#cheque_books').on('change', function () {
-        const bookId = $(this).val();
-        if (!bookId) {
-            $('#voucherChequeNo').val('');
-            $('#chequeNoMsg').text('Please select a cheque book.');
+        const val = $(this).val();
+
+        // Release any existing in-flight lock (only if it was a new lock)
+        resetCurrentEntryChequeLock();
+
+        if (!val) return;
+
+        if (val.startsWith('reuse:')) {
+            // ── Reuse mode: no new lock, just reference the cheque number ──
+            const chequeNum = val.substring(6); // strip 'reuse:' prefix
+
+            // Validate: payee bank must match the entry we're reusing from
+            const bankKey = getEntryPayeeBankKey();
+            const source  = $('#sourceAccount').val();
+            const donor   = pendingEntries.find(function (e) {
+                return e.cheque_number === chequeNum
+                    && String(e.source_account_id) === String(source)
+                    && e.payee_bank_key === bankKey;
+            });
+            if (!donor) {
+                $('#entryChequeMsg').text('Cannot reuse this cheque — bank mismatch.');
+                $('#cheque_books').val('');
+                return;
+            }
+
+            $('#entryChequeNo').val(chequeNum);
+            currentEntryCheque  = { leaf_id: null, lock_token: null, cheque_number: chequeNum };
+            currentEntryIsReuse = true;
+            $('#entryChequeMsg').text('');
             return;
         }
 
-        // Show spinner
-        $('#chequeLoadingSpinner').show();
-        $('#voucherChequeNo').val('');
-        $('#chequeNoMsg').text('');
+        // ── New cheque: lock next available leaf from the selected book ──
+        const bookId = val; // integer book ID
 
         $.ajax({
             url: '{{ route("ajax.voucher-cheque.lock") }}',
             method: 'POST',
-            data: {
-                cheque_book_id: bookId,
-                _token: '{{ csrf_token() }}'
-            },
+            data: { cheque_book_id: bookId, _token: '{{ csrf_token() }}' },
             success: function (r) {
-                $('#chequeLoadingSpinner').hide();
-
                 if (r.success && r.cheque_number) {
-                    // Insert returned cheque number into input
-                    $('#voucherChequeNo').val(r.cheque_number);
-                    $('#voucherChequeNo').data('leaf-token-id', r.lock_token); // Store leaf_id for later release
-                    $('#chequeNoMsg').text('');
+                    $('#entryChequeNo').val(r.cheque_number);
+                    currentEntryCheque = {
+                        leaf_id:       r.leaf_id,
+                        lock_token:    r.lock_token,
+                        cheque_number: r.cheque_number,
+                    };
+                    currentEntryIsReuse = false;
+                    $('#entryChequeMsg').text('');
                 } else {
-                    $('#chequeNoMsg').text('No cheque number available.');
+                    $('#entryChequeMsg').text('No cheque number available.');
                 }
             },
             error: function (xhr) {
-                $('#chequeLoadingSpinner').hide();
-
                 const msg = xhr.responseJSON?.message || 'Failed to lock cheque number';
-                $('#chequeNoMsg').text(msg);
+                $('#entryChequeMsg').text(msg);
                 toastr.error(msg);
-            }
+            },
         });
     });
-
-    // ─── Release the voucher-level cheque lock ───────────────────
-    function releaseVoucherChequeLock(leaf_id, lock_token) {
-        const data = new FormData();
-        data.append('leaf_id', leaf_id);
-        data.append('lock_token', lock_token);
-        data.append('_token', $('meta[name="csrf-token"]').attr('content'));
-
-        // Beacon ensures the request is sent even during unload
-        navigator.sendBeacon('{{ route("ajax.voucher-cheque.release") }}', data);
-
-        // Reset local state
-        voucherCheque = { leaf_id: null, lock_token: null, cheque_number: null };
-    }
 
 
     // ─── Validate voucher-level fields ────────────────────────────────
@@ -1129,7 +1254,7 @@ $(document).ready(function () {
         tbody.empty();
 
         if (!pendingEntries.length) {
-            tbody.html('<tr id="noEntriesRow"><td colspan="6" class="text-center text-muted py-4" style="font-size:0.82rem;">No entries added yet — fill the form above and click Add Entry</td></tr>');
+            tbody.html('<tr id="noEntriesRow"><td colspan="7" class="text-center text-muted py-4" style="font-size:0.82rem;">No entries added yet — fill the form above and click Add Entry</td></tr>');
             $('#entriesCountBadge').text(0);
             $('#entriesTotalDisplay').hide();
             $('#createVoucherBtn').prop('disabled', true);
@@ -1139,14 +1264,27 @@ $(document).ready(function () {
         let total = 0;
         pendingEntries.forEach(function (e, i) {
             total += e.amount;
-            const entryTypeLbl = e.entry_type_label  ? '<small>' + escHtml(e.entry_type_label)  + '</small>' : '<small class="text-muted">—</small>';
-            const sourceAccLbl = e.source_account_label ? '<small>' + escHtml(e.source_account_label) + '</small>' : '<small class="text-muted">—</small>';
+            const entryTypeLbl = e.entry_type_label    ? '<small>' + escHtml(e.entry_type_label)    + '</small>' : '<small class="text-muted">—</small>';
+            // Payment info: show source account + payee bank on two lines
+            let paymentInfoHtml = '';
+            if (e.source_account_label) {
+                paymentInfoHtml += '<small class="text-muted">From: ' + escHtml(e.source_account_label) + '</small>';
+            }
+            if (e.payee_bank_label) {
+                paymentInfoHtml += (paymentInfoHtml ? '<br>' : '') + '<small>To: ' + escHtml(e.payee_bank_label) + '</small>';
+            }
+            const sourceAccLbl = paymentInfoHtml || '<small class="text-muted">—</small>';
+            const chequeLbl    = e.cheque_number
+                ? '<code style="font-size:0.78rem;">' + escHtml(e.cheque_number) + '</code>'
+                    + (e.is_reuse ? ' <small class="text-muted">(shared)</small>' : '')
+                : '<span class="text-muted">—</span>';
             tbody.append(
                 '<tr data-uid="' + e.uid + '">' +
                 '<td>' + (i + 1) + '</td>' +
                 '<td>' + entryTypeLbl + '</td>' +
                 '<td>' + escHtml(e.description) + '</td>' +
                 '<td>' + sourceAccLbl + '</td>' +
+                '<td>' + chequeLbl + '</td>' +
                 '<td class="text-end fw-bold">' + fmtNum(e.amount) + '</td>' +
                 '<td class="text-nowrap">' +
                 '<a href="#" class="view-entry-detail text-primary me-2" data-uid="' + e.uid + '" title="View details">' +
@@ -1172,46 +1310,111 @@ $(document).ready(function () {
         if (!desc)         { toastr.warning('Description is required'); $('#entryDesc').focus(); return; }
         if (!(amount > 0)) { toastr.warning('Enter a valid amount');    $('#entryAmount').focus(); return; }
 
+        // Validate per-entry payee bank for Landlord with multiple banks
+        if ($('#vendorType').val() === 'Landlord' && landlordBankDetails.length > 1) {
+            if ($('#entryPayeeBank').val() === '' || $('#entryPayeeBank').val() === null) {
+                toastr.warning('Select the payee bank for this entry');
+                $('#entryPayeeBank').focus();
+                return;
+            }
+        }
+
         const entryTypeOpt   = $('#entryType').find(':selected');
         const billingCode    = entryTypeOpt.data('billing-code') || null;
         const entryTypeLabel = entryTypeOpt.val() ? entryTypeOpt.text().trim() : null;
 
         const sourceAccOpt   = $('#sourceAccount').find(':selected');
-        const accountNumber  = sourceAccOpt.val() ? (sourceAccOpt.data('account-number') || null) : null;
-        const accountBank    = sourceAccOpt.val()
-            ? ((sourceAccOpt.data('account-name') || '') + (sourceAccOpt.data('bank-name') ? ' — ' + sourceAccOpt.data('bank-name') : ''))
-            : null;
-        const sourceAccLabel = sourceAccOpt.val()
+        const sourceAccId    = sourceAccOpt.val() || null;
+        const sourceAccLabel = sourceAccId
             ? (sourceAccOpt.data('account-number') + ' | ' + sourceAccOpt.data('account-name'))
             : null;
 
+        // Capture payee bank for this entry
+        const payeeBankData = getCurrentEntryPayeeBankData();
+
+        // Capture cheque info
+        const chequeNumber    = currentEntryCheque.cheque_number;
+        const chequeLeafId    = currentEntryCheque.leaf_id;
+        const chequeLockToken = currentEntryCheque.lock_token;
+        const isReuse         = currentEntryIsReuse;
+
         uidCounter++;
+        const uid = uidCounter;
+
         pendingEntries.push({
-            uid:                  uidCounter,
+            uid,
             description:          desc,
             entry_number:         billingCode,
             entry_type_label:     entryTypeLabel,
-            account_number:       accountNumber,
-            account_bank:         accountBank,
+            source_account_id:    sourceAccId,
             source_account_label: sourceAccLabel,
-            amount:               amount,
+            // Payee bank per line (used for account_number/account_bank on the line)
+            account_number:       payeeBankData.payee_account_number || null,
+            account_bank:         payeeBankData.payee_bank_name      || null,
+            payee_bank_key:       payeeBankData.payee_bank_key       || null,
+            payee_bank_label:     payeeBankData.payee_bank_label     || null,
+            cheque_number:        chequeNumber || null,
+            is_reuse:             isReuse,
+            amount,
         });
+
+        // ── Update lockedChequesMap (refcount per unique cheque) ──
+        if (chequeNumber) {
+            if (isReuse) {
+                // Increment refcount — another entry shares this cheque
+                if (lockedChequesMap[chequeNumber]) {
+                    lockedChequesMap[chequeNumber].ref_count++;
+                }
+                // (if not in map, the donor entry owns the lock — nothing to increment here)
+            } else {
+                // New lock — register in map with refcount 1
+                lockedChequesMap[chequeNumber] = {
+                    leaf_id:      chequeLeafId,
+                    lock_token:   chequeLockToken,
+                    cheque_number: chequeNumber,
+                    ref_count:    1,
+                };
+            }
+        }
+
+        // currentEntryCheque is now committed — clear in-flight state
+        currentEntryCheque  = { leaf_id: null, lock_token: null, cheque_number: null };
+        currentEntryIsReuse = false;
 
         refreshTable();
 
+        // Reset entry form for the next entry
         $('#entryDesc').val('').focus();
         $('#entryAmount').val('');
         $('#entryType').val('');
+        $('#entryPayeeBank').val('');
         $('#sourceAccount').val('');
         $('#sourceAccountInfo').hide();
+        $('#cheque_books').empty().append('<option value="">-- Select --</option>');
+        $('#entryChequeNo').val('');
+        $('#entryChequeMsg').text('');
+        // Refresh reuse options (new entries may now be available for reuse)
+        updateReuseOptions();
     });
 
     // ─── Delete entry ───────────────────────────────────────────────
     $('#entriesTableBody').on('click', '.delete-entry', function (e) {
         e.preventDefault();
-        const uid = parseInt($(this).data('uid'));
+        const uid   = parseInt($(this).data('uid'));
+        const entry = pendingEntries.find(function (x) { return x.uid === uid; });
+
+        if (entry && entry.cheque_number && lockedChequesMap[entry.cheque_number]) {
+            lockedChequesMap[entry.cheque_number].ref_count--;
+            if (lockedChequesMap[entry.cheque_number].ref_count <= 0) {
+                // Last reference — release the lock
+                releaseChequeLeaf(lockedChequesMap[entry.cheque_number].leaf_id, lockedChequesMap[entry.cheque_number].lock_token);
+                delete lockedChequesMap[entry.cheque_number];
+            }
+        }
+
         pendingEntries = pendingEntries.filter(function (x) { return x.uid !== uid; });
         refreshTable();
+        updateReuseOptions();
     });
 
     // ─── View entry detail modal ──────────────────────────────────────
@@ -1223,12 +1426,12 @@ $(document).ready(function () {
 
         const rowNum = pendingEntries.indexOf(entry) + 1;
 
-        // ── Payee info (from header form fields) ──
+        // ── Payee info — use per-entry bank if set, fall back to header ──
         const payeeType     = $('#vendorType').find(':selected').text().trim();
         const payeeName     = $('#finalVendorName').val() || '—';
-        const payeeBankName = $('#hdrBankName').val()     || '—';
-        const payeeAccName  = $('#hdrAccountName').val()  || '—';
-        const payeeAccNum   = $('#hdrAccountNumber').val() || '—';
+        const payeeBankName = entry.account_bank || $('#hdrBankName').val()     || '—';
+        const payeeAccName  = entry.payee_bank_label  || $('#hdrAccountName').val()  || '—';
+        const payeeAccNum   = entry.account_number    || $('#hdrAccountNumber').val() || '—';
 
         $('#det_num_badge').text('Entry #' + rowNum);
         $('#det_payee_type').text(payeeType    || '—');
@@ -1243,6 +1446,9 @@ $(document).ready(function () {
         $('#det_desc').text(entry.description      || '—');
         $('#det_account').html(entry.source_account_label
             ? '<span class="badge badge-light-primary">' + escHtml(entry.source_account_label) + '</span>'
+            : '<span class="text-muted">—</span>');
+        $('#det_cheque_no').html(entry.cheque_number
+            ? '<code>' + escHtml(entry.cheque_number) + '</code>'
             : '<span class="text-muted">—</span>');
         $('#det_amount').text('KES ' + fmtNum(entry.amount));
 
@@ -1279,29 +1485,34 @@ $(document).ready(function () {
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({
-                vendor_type:        $('#vendorType').val(),
-                vendor_id:          $('#finalVendorId').val(),
-                vendor_name:        $('#finalVendorName').val(),
-                vendor_bank_name:   $('#hdrBankName').val(),
-                vendor_account_name: $('#hdrAccountName').val(),
+                vendor_type:           $('#vendorType').val(),
+                vendor_id:             $('#finalVendorId').val(),
+                vendor_name:           $('#finalVendorName').val(),
+                vendor_bank_name:      $('#hdrBankName').val(),
+                vendor_account_name:   $('#hdrAccountName').val(),
                 vendor_account_number: $('#hdrAccountNumber').val(),
-                voucher_date:       $('#voucherDate').val(),
-                year:               $('#postYear').val(),
-                month:              $('#postMonth').val(),
-                cheque_number:      voucherCheque.cheque_number,
-                voucher_type:       voucherType,
+                voucher_date:          $('#voucherDate').val(),
+                year:                  $('#postYear').val(),
+                month:                 $('#postMonth').val(),
+                voucher_type:          voucherType,
                 lines: pendingEntries.map(function (e) {
                     return {
                         entry_number:      e.entry_number,
                         entry_description: e.description,
                         account_number:    e.account_number,
                         account_bank:      e.account_bank,
+                        cheque_number:     e.cheque_number || null,
                         amount:            e.amount,
                     };
                 }),
             }),
             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
             success: function (r) {
+                // Cheques are now committed — clear all locks so beforeunload won't release them
+                lockedChequesMap    = {};
+                currentEntryCheque  = { leaf_id: null, lock_token: null, cheque_number: null };
+                currentEntryIsReuse = false;
+
                 toastr.success(r.message);
                 const detailUrl = '{{ route("payment.vouchers.details", "PH") }}'.replace('PH', r.encrypted_id);
                 setTimeout(function () { window.location.href = detailUrl; }, 1200);
@@ -1318,14 +1529,16 @@ $(document).ready(function () {
         });
     });
 
-    // ─── Release voucher-level cheque lock if user navigates away ───────────────
+    // ─── Release all held cheque locks when navigating away ─────────────
     $(window).on('beforeunload', function () {
-        if (voucherCheque.leaf_id) {
-            navigator.sendBeacon(
-                '{{ route("ajax.voucher-cheque.release") }}',
-                new URLSearchParams({ leaf_id: voucherCheque.leaf_id, lock_token: voucherCheque.lock_token, _token: '{{ csrf_token() }}' })
-            );
+        // Release any in-flight (not-yet-added) new cheque lock
+        if (currentEntryCheque.leaf_id) {
+            releaseChequeLeaf(currentEntryCheque.leaf_id, currentEntryCheque.lock_token);
         }
+        // Release all unique locks still tracked in the map
+        Object.values(lockedChequesMap).forEach(function (lock) {
+            releaseChequeLeaf(lock.leaf_id, lock.lock_token);
+        });
     });
 
     // ─── Helpers ──────────────────────────────────────────────────────

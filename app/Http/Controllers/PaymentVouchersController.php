@@ -148,6 +148,7 @@ class PaymentVouchersController extends Controller
                 'lines.*.amount'            => ['required', 'numeric', 'min:0.01'],
                 'lines.*.account_number'    => ['nullable', 'string', 'max:100'],
                 'lines.*.account_bank'      => ['nullable', 'string', 'max:255'],
+                'lines.*.cheque_number'     => ['nullable', 'string', 'max:50'],
             ], [
                 'lines.required' => 'Add at least one entry before creating the voucher.',
                 'lines.min'      => 'Add at least one entry before creating the voucher.',
@@ -189,6 +190,7 @@ class PaymentVouchersController extends Controller
                     'entry_month'       => $validated['month'],
                     'account_number'    => $line['account_number'] ?? null,
                     'account_bank'      => $line['account_bank'] ?? null,
+                    'cheque_number'     => $line['cheque_number'] ?? null,
                     'voucher_type'      => $voucherType,
                     'entry_description' => $line['entry_description'],
                     'payee_name'        => $validated['vendor_name'],
