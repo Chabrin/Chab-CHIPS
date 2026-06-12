@@ -94,17 +94,23 @@
                     </div>
                     {{-- Action buttons --}}
                     @permission('update_cheques_printing')
-                    <div class="d-flex gap-2 flex-shrink-0">
+                    <div class="d-flex flex-column gap-2 flex-shrink-0 ms-3">
                         <button type="button" id="printVoucherBtn" class="btn btn-sm btn-primary">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">receipt_long</span> Print Voucher
                         </button>
                         <button type="button" id="printChequeBtn" class="btn btn-sm btn-primary">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">payments</span> Print Cheque
                         </button>
-                        <button type="button" id="submitApprovalBtn" class="btn btn-sm btn-primary"
-                            {{ $approvalRequest ? 'disabled title="Already in approval workflow"' : '' }}>
+                        @if($approvalRequest)
+                        <small class="text-muted d-flex align-items-center gap-1" style="font-size:0.75rem;">
+                            <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span>
+                            Submitted for Approval
+                        </small>
+                        @else
+                        <button type="button" id="submitApprovalBtn" class="btn btn-sm btn-primary">
                             <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">send</span> Submit for Approval
                         </button>
+                        @endif
                     </div>
                     @endpermission
                 </div>
