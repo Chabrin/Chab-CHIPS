@@ -29,6 +29,11 @@ class HomeController extends Controller
             return view('dashboards.hr-manager');
         }
 
+        if ($user->hasRole('accountant')) {
+            Log::info('Loading dashboard for accountant: ' . $user->name);
+            return view('dashboards.accountant');
+        }
+
         Log::info('Loading dashboard for user: ' . $user->name);
 
         return view('home.dashboard');
@@ -103,6 +108,89 @@ class HomeController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading field officer collection stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load collection stats'], 500);
+        }
+    }
+
+    /**
+     * Accountant dashboard stats (AJAX).
+     */
+    public function getAccountantStats()
+    {
+        try {
+            // Cheque leaves: available in open (active) books
+            $leavesInOpenBooks = DB::table('sys_fin_cheque_books_261_repeat as cl')
+                ->join('sys_fin_cheque_books as cb', 'cl.parent_id', '=', 'cb.id')
+                ->where('cl.current_status_id', 1)
+                ->where('cb.current_status_id', 1)
+                ->count();
+
+            // Cheque leaves: available in closed (exhausted) books
+            $leavesInClosedBooks = DB::table('sys_fin_cheque_books_261_repeat as cl')
+                ->join('sys_fin_cheque_books as cb', 'cl.parent_id', '=', 'cb.id')
+                ->where('cl.current_status_id', 1)
+                ->where('cb.current_status_id', 2)
+                ->count();
+
+            // Returns advance: unrecovered landlord advances
+            $returnsAdvance = (float) DB::table('cb_landlord_account')
+                ->where('entry_type_code', '0009')
+                ->where('is_recovered', 0)
+                ->sum('debit_amount');
+
+            // Portfolio
+            $totalProperties = DB::table('sys_pm_properties')->where('active', 1)->count();
+            $totalUnits      = DB::table('sys_pm_units')->count();
+            $totalTenants    = DB::table('sys_pm_clients')->where('type_id', 2)->count();
+
+            // Occupancy for chart
+            $occupiedUnits = DB::table('sys_pm_units')->where('occupancy_status_id', 1)->count();
+            $vacantUnits   = DB::table('sys_pm_units')->where('occupancy_status_id', 3)->count();
+
+            return response()->json([
+                'success' => true,
+                'stats' => [
+                    'leaves_in_open_books'   => $leavesInOpenBooks,
+                    'leaves_in_closed_books' => $leavesInClosedBooks,
+                    'returns_advance'        => round($returnsAdvance, 2),
+                    'total_properties'       => $totalProperties,
+                    'total_units'            => $totalUnits,
+                    'total_tenants'          => $totalTenants,
+                    'occupied_units'         => $occupiedUnits,
+                    'vacant_units'           => $vacantUnits,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading accountant stats: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * Accountant collection vs arrears (AJAX) — company-wide.
+     */
+    public function getAccountantCollection()
+    {
+        try {
+            $overallRow = DB::table('sys_pm_debtors_invoices')
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
+
+            $monthRow = DB::table('sys_pm_debtors_invoices')
+                ->whereYear('date_time', now()->year)
+                ->whereMonth('date_time', now()->month)
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
+
+            return response()->json([
+                'success'       => true,
+                'overall'       => $this->formatCollectionRow($overallRow),
+                'current_month' => $this->formatCollectionRow($monthRow),
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading accountant collection: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load collection'], 500);
         }
     }
 
