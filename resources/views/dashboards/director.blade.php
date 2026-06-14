@@ -247,31 +247,93 @@
 
             <hr class="dir-divider">
 
+            {{-- ── Charts ── --}}
+            <div class="dir-section-label">Occupancy &amp; Collection</div>
+            <div class="row g-3">
+
+                <div class="col-md-4">
+                    <div class="dir-chart-card">
+                        <div class="dir-chart-header">
+                            <span class="material-symbols-outlined">donut_large</span>
+                            Unit Occupancy
+                        </div>
+                        <div class="dir-chart-body">
+                            <div class="dir-chart-wrap">
+                                <canvas id="chartOccupancy"></canvas>
+                                <div class="dir-chart-loading" id="loadingOccupancy"><div class="dir-spinner"></div></div>
+                            </div>
+                            <div class="dir-chart-legend" id="legendOccupancy"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="dir-chart-card">
+                        <div class="dir-chart-header">
+                            <span class="material-symbols-outlined">donut_large</span>
+                            Overall Collection
+                        </div>
+                        <div class="dir-chart-body">
+                            <div class="dir-chart-wrap">
+                                <canvas id="chartOverall"></canvas>
+                                <div class="dir-chart-loading" id="loadingOverall"><div class="dir-spinner"></div></div>
+                            </div>
+                            <div class="dir-chart-legend" id="legendOverall"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="dir-chart-card">
+                        <div class="dir-chart-header">
+                            <span class="material-symbols-outlined">donut_large</span>
+                            {{ now()->format('F Y') }} Collection
+                        </div>
+                        <div class="dir-chart-body">
+                            <div class="dir-chart-wrap">
+                                <canvas id="chartMonth"></canvas>
+                                <div class="dir-chart-loading" id="loadingMonth"><div class="dir-spinner"></div></div>
+                            </div>
+                            <div class="dir-chart-legend" id="legendMonth"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <hr class="dir-divider">
+
             {{-- ── People ── --}}
             <div class="dir-section-label">People</div>
-            <div class="dir-grid-3">
+            <div class="row g-3 mb-3">
 
-                <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
-                    <div class="dir-stat-icon"><span class="material-symbols-outlined">groups</span></div>
-                    <div class="dir-stat-body">
-                        <div class="dir-stat-number" id="stat-employees"><span class="dir-skeleton dir-skeleton-sm"></span></div>
-                        <div class="dir-stat-label">Total Employees</div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                        <div class="dir-stat-icon"><span class="material-symbols-outlined">groups</span></div>
+                        <div class="dir-stat-body">
+                            <div class="dir-stat-number" id="stat-employees"><span class="dir-skeleton dir-skeleton-sm"></span></div>
+                            <div class="dir-stat-label">Total Employees</div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#b7d7f0; --card-icon-bg:#d9ebf7;">
-                    <div class="dir-stat-icon"><span class="material-symbols-outlined">person_pin</span></div>
-                    <div class="dir-stat-body">
-                        <div class="dir-stat-number" id="stat-field-officers"><span class="dir-skeleton dir-skeleton-sm"></span></div>
-                        <div class="dir-stat-label">Field Officers</div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="dir-stat-card" style="--card-accent:#b7d7f0; --card-icon-bg:#d9ebf7;">
+                        <div class="dir-stat-icon"><span class="material-symbols-outlined">person_pin</span></div>
+                        <div class="dir-stat-body">
+                            <div class="dir-stat-number" id="stat-field-officers"><span class="dir-skeleton dir-skeleton-sm"></span></div>
+                            <div class="dir-stat-label">Field Officers</div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#8ab4cc; --card-icon-bg:#d9ebf7;">
-                    <div class="dir-stat-icon"><span class="material-symbols-outlined">event_busy</span></div>
-                    <div class="dir-stat-body">
-                        <div class="dir-stat-number" id="stat-on-leave"><span class="dir-skeleton dir-skeleton-sm"></span></div>
-                        <div class="dir-stat-label">On Leave Today</div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="dir-stat-card" style="--card-accent:#8ab4cc; --card-icon-bg:#d9ebf7;">
+                        <div class="dir-stat-icon"><span class="material-symbols-outlined">event_busy</span></div>
+                        <div class="dir-stat-body">
+                            <div class="dir-stat-number" id="stat-on-leave"><span class="dir-skeleton dir-skeleton-sm"></span></div>
+                            <div class="dir-stat-label">On Leave Today</div>
+                        </div>
                     </div>
                 </div>
 
@@ -343,62 +405,6 @@
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-leaves-closed"><span class="dir-skeleton dir-skeleton-sm"></span></div>
                         <div class="dir-stat-label">Cheque Leaves – Closed Books</div>
-                    </div>
-                </div>
-
-            </div>
-
-            <hr class="dir-divider">
-
-            {{-- ── Charts ── --}}
-            <div class="dir-section-label">Occupancy &amp; Collection</div>
-            <div class="row g-3">
-
-                <div class="col-md-4">
-                    <div class="dir-chart-card">
-                        <div class="dir-chart-header">
-                            <span class="material-symbols-outlined">donut_large</span>
-                            Unit Occupancy
-                        </div>
-                        <div class="dir-chart-body">
-                            <div class="dir-chart-wrap">
-                                <canvas id="chartOccupancy"></canvas>
-                                <div class="dir-chart-loading" id="loadingOccupancy"><div class="dir-spinner"></div></div>
-                            </div>
-                            <div class="dir-chart-legend" id="legendOccupancy"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="dir-chart-card">
-                        <div class="dir-chart-header">
-                            <span class="material-symbols-outlined">donut_large</span>
-                            Overall Collection
-                        </div>
-                        <div class="dir-chart-body">
-                            <div class="dir-chart-wrap">
-                                <canvas id="chartOverall"></canvas>
-                                <div class="dir-chart-loading" id="loadingOverall"><div class="dir-spinner"></div></div>
-                            </div>
-                            <div class="dir-chart-legend" id="legendOverall"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="dir-chart-card">
-                        <div class="dir-chart-header">
-                            <span class="material-symbols-outlined">donut_large</span>
-                            {{ now()->format('F Y') }} Collection
-                        </div>
-                        <div class="dir-chart-body">
-                            <div class="dir-chart-wrap">
-                                <canvas id="chartMonth"></canvas>
-                                <div class="dir-chart-loading" id="loadingMonth"><div class="dir-spinner"></div></div>
-                            </div>
-                            <div class="dir-chart-legend" id="legendMonth"></div>
-                        </div>
                     </div>
                 </div>
 
