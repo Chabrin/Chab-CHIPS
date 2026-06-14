@@ -1430,7 +1430,6 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
 
     // Approval Requests
     Route::get('/accounting/pending/approvals', [App\Http\Controllers\ApprovalRequestsController::class, 'index'])->name('accounting.pending.approvals');
-    Route::get('/accounting/pending/approvals/{encryptedId}', [App\Http\Controllers\ApprovalRequestsController::class, 'show'])->name('accounting.pending.approvals.show');
     Route::get('/ajax/approval-requests/pending', [App\Http\Controllers\ApprovalRequestsController::class, 'getPendingApprovals'])->name('ajax.approval-requests.pending');
     Route::get('/ajax/approval-requests/historical', [App\Http\Controllers\ApprovalRequestsController::class, 'getHistoricalApprovals'])->name('ajax.approval-requests.historical');
     Route::get('/ajax/approval-requests/{encryptedId}', [App\Http\Controllers\ApprovalRequestsController::class, 'getRequestDetails'])->name('ajax.approval-requests.details');

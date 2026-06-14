@@ -423,7 +423,13 @@ class ApprovalService
             ->orderBy('initiated_on', 'desc')
             ->get();
 
-        return $requests->map(function ($request) {
+        $voucherIds = $requests->where('request_type', 'voucher')->pluck('request_id');
+        $vouchers = $voucherIds->isNotEmpty()
+            ? PaymentVoucherHeader::whereIn('id', $voucherIds)->get()->keyBy('id')
+            : collect();
+
+        return $requests->map(function ($request) use ($vouchers) {
+            $voucher = $request->request_type === 'voucher' ? ($vouchers[$request->request_id] ?? null) : null;
             return [
                 'id' => $request->id,
                 'encrypted_id' => encrypt($request->id),
@@ -436,6 +442,9 @@ class ApprovalService
                 'status' => $request->status,
                 'initiated_by' => $request->initiator?->name,
                 'initiated_on' => $request->initiated_on?->format('d M Y'),
+                'voucher_number' => $voucher?->voucher_number,
+                'amount' => $voucher ? number_format((float) $voucher->debit_amount, 2) : null,
+                'payee' => $voucher?->vendor_name,
             ];
         })->values()->toArray();
     }
@@ -469,7 +478,12 @@ class ApprovalService
             ->orderBy('initiated_on', 'desc')
             ->get();
 
-        return $requests->map(function ($request) use ($approverLevels, $userId) {
+        $voucherIds = $requests->where('request_type', 'voucher')->pluck('request_id');
+        $vouchers = $voucherIds->isNotEmpty()
+            ? PaymentVoucherHeader::whereIn('id', $voucherIds)->get()->keyBy('id')
+            : collect();
+
+        return $requests->map(function ($request) use ($approverLevels, $userId, $vouchers) {
             $userLevel = $approverLevels->first(function ($level) use ($request) {
                 return $level->workflow_id === $request->workflow_id;
             });
@@ -483,6 +497,7 @@ class ApprovalService
                 $stage = 'passed';
             }
 
+            $voucher = $request->request_type === 'voucher' ? ($vouchers[$request->request_id] ?? null) : null;
             return [
                 'id' => $request->id,
                 'encrypted_id' => encrypt($request->id),
@@ -496,6 +511,9 @@ class ApprovalService
                 'status' => $request->status,
                 'initiated_by' => $request->initiator?->name,
                 'initiated_on' => $request->initiated_on?->format('d M Y'),
+                'voucher_number' => $voucher?->voucher_number,
+                'amount' => $voucher ? number_format((float) $voucher->debit_amount, 2) : null,
+                'payee' => $voucher?->vendor_name,
             ];
         })->values()->toArray();
     }
