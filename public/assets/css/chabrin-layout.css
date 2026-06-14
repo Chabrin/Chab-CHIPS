@@ -514,7 +514,7 @@ h6,
 .table-responsive {
     border-radius: 8px;
     overflow: hidden;
-    padding: 15px;
+    padding: 10px;
 }
 
 .table,
@@ -525,6 +525,9 @@ table.dataTable {
     font-size: 13px;
     white-space: nowrap;
     text-align: left;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #bad4e8;
 }
 
 .table > thead > tr > th,
