@@ -284,11 +284,11 @@
                                         </div>
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
-                                        <div class="ps-card" style="--ps-accent:#5b9bd5; --ps-icon-bg:#b7d7f0;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">percent</span></div>
+                                        <div class="ps-card" style="--ps-accent:#5b9bd5; background:#5b9bd5; border-color:#5b9bd5;">
+                                            <div class="ps-icon" style="background:rgba(255,255,255,0.25);"><span class="material-symbols-outlined" style="color:#fff !important;">percent</span></div>
                                             <div class="ps-body">
-                                                <div class="ps-value">{{ $occupancyRate }}%</div>
-                                                <div class="ps-label">Occupancy Rate</div>
+                                                <div class="ps-value" style="color:#fff;">{{ $occupancyRate }}%</div>
+                                                <div class="ps-label" style="color:rgba(255,255,255,0.8);">Occupancy Rate</div>
                                             </div>
                                         </div>
                                     </div>
