@@ -55,11 +55,10 @@
 /* ── Stat cards ──────────────────────────────────── */
 .fo-stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
     margin-bottom: 24px;
 }
-@media (max-width: 991px) { .fo-stats-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 575px) { .fo-stats-grid { grid-template-columns: 1fr; } }
 
 .fo-stat-card {
@@ -276,39 +275,37 @@
                     </div>
                 </div>
 
-                {{-- Occupied --}}
-                <div class="fo-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
-                    <div class="fo-stat-icon">
-                        <span class="material-symbols-outlined">person_check</span>
-                    </div>
-                    <div class="fo-stat-body">
-                        <div class="fo-stat-number" id="stat-occupied"><span class="fo-skeleton"></span></div>
-                        <div class="fo-stat-label">Occupied Units</div>
-                    </div>
-                </div>
-
-                {{-- Vacant --}}
-                <div class="fo-stat-card" style="--card-accent:#b7d7f0; --card-icon-bg:#d9ebf7;">
-                    <div class="fo-stat-icon">
-                        <span class="material-symbols-outlined">home_work</span>
-                    </div>
-                    <div class="fo-stat-body">
-                        <div class="fo-stat-number" id="stat-vacant"><span class="fo-skeleton"></span></div>
-                        <div class="fo-stat-label">Vacant Units</div>
-                    </div>
-                </div>
 
             </div>
             {{-- End KPI Stats --}}
 
             <hr class="fo-divider">
 
-            {{-- Collection Charts --}}
-            <div class="fo-section-label">Collection vs Arrears</div>
+            {{-- Charts --}}
+            <div class="fo-section-label">Occupancy &amp; Collection</div>
             <div class="row g-3">
 
-                {{-- Overall --}}
-                <div class="col-md-6">
+                {{-- Occupancy --}}
+                <div class="col-md-4">
+                    <div class="fo-chart-card">
+                        <div class="fo-chart-header">
+                            <span class="material-symbols-outlined">donut_large</span>
+                            Unit Occupancy
+                        </div>
+                        <div class="fo-chart-body">
+                            <div class="fo-chart-wrap">
+                                <canvas id="chartOccupancy"></canvas>
+                                <div class="fo-chart-loading" id="loadingOccupancy">
+                                    <div class="fo-spinner"></div>
+                                </div>
+                            </div>
+                            <div class="fo-chart-legend" id="legendOccupancy"></div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Overall Collection --}}
+                <div class="col-md-4">
                     <div class="fo-chart-card">
                         <div class="fo-chart-header">
                             <span class="material-symbols-outlined">donut_large</span>
@@ -327,7 +324,7 @@
                 </div>
 
                 {{-- Current Month --}}
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="fo-chart-card">
                         <div class="fo-chart-header">
                             <span class="material-symbols-outlined">donut_large</span>
@@ -346,7 +343,7 @@
                 </div>
 
             </div>
-            {{-- End Collection Charts --}}
+            {{-- End Charts --}}
 
         </div>
     </div>
@@ -374,8 +371,7 @@ function loadFieldOfficerStats() {
             var s = response.stats;
             animateCount('stat-properties',  s.properties);
             animateCount('stat-total-units', s.total_units);
-            animateCount('stat-occupied',    s.occupied_units);
-            animateCount('stat-vacant',      s.vacant_units);
+            renderOccupancyChart(s.occupied_units, s.vacant_units, s.total_units);
         },
         error: function () {
             showStatsError();
@@ -405,10 +401,71 @@ function animateCount(id, target) {
 }
 
 function showStatsError() {
-    ['stat-properties','stat-total-units','stat-occupied','stat-vacant'].forEach(function(id) {
+    ['stat-properties','stat-total-units'].forEach(function(id) {
         $('#' + id).html('<span style="font-size:14px;color:#dc3545;">—</span>');
     });
+    $('#loadingOccupancy').hide();
     toastr.error('Failed to load dashboard stats. Please refresh the page.');
+}
+
+function renderOccupancyChart(occupied, vacant, total) {
+    $('#loadingOccupancy').hide();
+    var ctx = document.getElementById('chartOccupancy').getContext('2d');
+    if (window.chartOccupancyInstance) window.chartOccupancyInstance.destroy();
+
+    if (total <= 0) {
+        $('#legendOccupancy').html('<span style="font-size:11px;color:#6b7280;">No unit data.</span>');
+        window.chartOccupancyInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: ['No Data'], datasets: [{ data: [1], backgroundColor: ['#e9ecef'], borderWidth: 0 }] },
+            options: { cutout: '65%', plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+        });
+        return;
+    }
+
+    window.chartOccupancyInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Occupied', 'Vacant'],
+            datasets: [{
+                data: [occupied, vacant],
+                backgroundColor: ['#b7d7f0', '#0a0a0a'],
+                borderWidth: 0,
+                hoverOffset: 4,
+            }]
+        },
+        options: {
+            cutout: '65%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) { return ' ' + ctx.label + ': ' + ctx.raw + ' units'; }
+                    }
+                }
+            }
+        }
+    });
+
+    var pctOcc = total > 0 ? ((occupied / total) * 100).toFixed(1) : '0.0';
+    var pctVac = total > 0 ? ((vacant   / total) * 100).toFixed(1) : '0.0';
+
+    $('#legendOccupancy').html(
+        '<div class="fo-legend-item">' +
+            '<div class="fo-legend-dot" style="background:#b7d7f0;"></div>' +
+            '<div><div class="fo-legend-label">Occupied (' + pctOcc + '%)</div>' +
+            '<div class="fo-legend-value">' + occupied + ' units</div></div>' +
+        '</div>' +
+        '<div class="fo-legend-item">' +
+            '<div class="fo-legend-dot" style="background:#0a0a0a;"></div>' +
+            '<div><div class="fo-legend-label">Vacant (' + pctVac + '%)</div>' +
+            '<div class="fo-legend-value">' + vacant + ' units</div></div>' +
+        '</div>' +
+        '<div class="fo-legend-item" style="border-top:1px solid #d9ebf7;padding-top:8px;">' +
+            '<div><div class="fo-legend-label">Total Units</div>' +
+            '<div class="fo-legend-value">' + total + ' units</div></div>' +
+        '</div>'
+    );
 }
 
 // ── Collection charts ──────────────────────────────
