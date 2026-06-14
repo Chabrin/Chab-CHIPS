@@ -22,6 +22,42 @@ a.view-link {
 a.view-link:hover {
     color: #1a6fa8;
 }
+/* Approval table styling */
+.movie-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    text-align: left;
+    color: #1a2533;
+}
+.movie-table th {
+    background: #5b9bd5;
+    color: #ffffff;
+    font-weight: bold;
+    padding: 8px;
+    border: 1px solid #4a7fb3;
+}
+.movie-table td {
+    padding: 6px 8px;
+    border: 1px solid #8ea9c1;
+}
+.movie-table tbody tr:nth-child(odd) {
+    background-color: #b7d7f0;
+}
+.movie-table tbody tr:nth-child(even) {
+    background-color: #d9ebf7;
+}
+.movie-table tbody tr:hover {
+    background-color: #b8cce4 !important;
+}
+.movie-table td:first-child,
+.movie-table th:first-child {
+    width: 140px;
+}
+.movie-table td:nth-child(2) {
+    text-align: left;
+}
 /* Details modal styles */
 .info-label {
     font-size: 0.7rem;
@@ -112,7 +148,7 @@ a.view-link:hover {
                             <!-- Current Tab -->
                             <div class="tab-pane fade show active" id="current" role="tabpanel">
                                 <div class="table-responsive custom-scrollbar">
-                                    <table class="display" id="currentTable" style="width:100%;">
+                                    <table class="display movie-table" id="currentTable" style="width:100%;">
                                         <thead>
                                             <tr>
                                                 <th>Voucher No.</th>
@@ -131,7 +167,7 @@ a.view-link:hover {
                             <!-- Historical Tab -->
                             <div class="tab-pane fade" id="historical" role="tabpanel">
                                 <div class="table-responsive custom-scrollbar">
-                                    <table class="display" id="historicalTable" style="width:100%;">
+                                    <table class="display movie-table" id="historicalTable" style="width:100%;">
                                         <thead>
                                             <tr>
                                                 <th>Voucher No.</th>
@@ -304,7 +340,7 @@ $(document).ready(function() {
         data: [],
         columns: [
             { data: 'voucher_number', render: (d) => d || '-' },
-            { data: 'amount', className: 'text-end', render: (d) => d || '-' },
+            { data: 'amount', render: (d) => d || '-' },
             { data: 'payee', render: (d) => d || '-' },
             { data: 'current_level_name', render: (d) => d || '-' },
             { data: 'initiated_on', render: (d) => d || '-' },
@@ -329,7 +365,7 @@ $(document).ready(function() {
         data: [],
         columns: [
             { data: 'voucher_number', render: (d) => d || '-' },
-            { data: 'amount', className: 'text-end', render: (d) => d || '-' },
+            { data: 'amount', render: (d) => d || '-' },
             { data: 'payee', render: (d) => d || '-' },
             { data: 'current_level_name', render: (d) => d || '-' },
             {
