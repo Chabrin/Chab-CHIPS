@@ -7,6 +7,7 @@ use App\Models\Position;
 use App\Models\Gender;
 use App\Models\Unit;
 use App\Models\ZoneAssignment;
+use App\Models\DebtorInvoice;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\Auth;
@@ -59,6 +60,58 @@ class HomeController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading field officer stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * Field officer collection vs arrears stats (AJAX).
+     */
+    public function getFieldOfficerCollection()
+    {
+        try {
+            $staffId = Auth::user()->staff_id;
+
+            $propertyIds = ZoneAssignment::where('staff_id', $staffId)
+                ->distinct()
+                ->pluck('property_id')
+                ->filter()
+                ->values();
+
+            $buildStats = function ($query) {
+                $row = (clone $query)
+                    ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                    ->first();
+
+                $invoiced  = (float) $row->total_invoiced;
+                $arrears   = (float) $row->total_arrears;
+                $collected = max(0, $invoiced - $arrears);
+
+                return [
+                    'collected' => round($collected, 2),
+                    'arrears'   => round($arrears, 2),
+                    'total'     => round($invoiced, 2),
+                ];
+            };
+
+            $baseQuery = DebtorInvoice::whereIn('property_id', $propertyIds);
+
+            $overall = $buildStats(clone $baseQuery);
+
+            $currentMonth = $buildStats(
+                (clone $baseQuery)
+                    ->whereYear('date_time', now()->year)
+                    ->whereMonth('date_time', now()->month)
+            );
+
+            return response()->json([
+                'success'       => true,
+                'overall'       => $overall,
+                'current_month' => $currentMonth,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading field officer collection stats: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load collection stats'], 500);
         }
     }
 

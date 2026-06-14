@@ -137,6 +137,91 @@
     100% { background-position: -200% 0; }
 }
 
+/* ── Chart cards ─────────────────────────────────── */
+.fo-chart-card {
+    background: #fff;
+    border: 1px solid #d9ebf7;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.fo-chart-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0a0a0a;
+    border-bottom: 1px solid #d9ebf7;
+    background: #f7fbff;
+}
+.fo-chart-header .material-symbols-outlined {
+    font-size: 16px !important;
+    color: #5b9bd5 !important;
+}
+.fo-chart-body {
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.fo-chart-wrap {
+    position: relative;
+    width: 130px;
+    height: 130px;
+    flex-shrink: 0;
+}
+.fo-chart-wrap canvas {
+    width: 130px !important;
+    height: 130px !important;
+}
+.fo-chart-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.8);
+}
+.fo-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #d9ebf7;
+    border-top-color: #5b9bd5;
+    border-radius: 50%;
+    animation: fo-spin 0.7s linear infinite;
+}
+@keyframes fo-spin { to { transform: rotate(360deg); } }
+
+.fo-chart-legend {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.fo-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.fo-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.fo-legend-label {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.2;
+}
+.fo-legend-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0a0a0a;
+    margin-top: 1px;
+}
+
 /* ── Divider ─────────────────────────────────────── */
 .fo-divider {
     border: none;
@@ -216,15 +301,64 @@
             </div>
             {{-- End KPI Stats --}}
 
+            <hr class="fo-divider">
+
+            {{-- Collection Charts --}}
+            <div class="fo-section-label">Collection vs Arrears</div>
+            <div class="row g-3">
+
+                {{-- Overall --}}
+                <div class="col-md-6">
+                    <div class="fo-chart-card">
+                        <div class="fo-chart-header">
+                            <span class="material-symbols-outlined">donut_large</span>
+                            Overall Collection
+                        </div>
+                        <div class="fo-chart-body">
+                            <div class="fo-chart-wrap">
+                                <canvas id="chartOverall"></canvas>
+                                <div class="fo-chart-loading" id="loadingOverall">
+                                    <div class="fo-spinner"></div>
+                                </div>
+                            </div>
+                            <div class="fo-chart-legend" id="legendOverall"></div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Current Month --}}
+                <div class="col-md-6">
+                    <div class="fo-chart-card">
+                        <div class="fo-chart-header">
+                            <span class="material-symbols-outlined">donut_large</span>
+                            {{ now()->format('F Y') }} Collection
+                        </div>
+                        <div class="fo-chart-body">
+                            <div class="fo-chart-wrap">
+                                <canvas id="chartMonth"></canvas>
+                                <div class="fo-chart-loading" id="loadingMonth">
+                                    <div class="fo-spinner"></div>
+                                </div>
+                            </div>
+                            <div class="fo-chart-legend" id="legendMonth"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            {{-- End Collection Charts --}}
+
         </div>
     </div>
 </div>
 @endsection
 
 @section('scripts')
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 $(document).ready(function () {
     loadFieldOfficerStats();
+    loadFieldOfficerCollection();
 });
 
 function loadFieldOfficerStats() {
@@ -275,6 +409,105 @@ function showStatsError() {
         $('#' + id).html('<span style="font-size:14px;color:#dc3545;">—</span>');
     });
     toastr.error('Failed to load dashboard stats. Please refresh the page.');
+}
+
+// ── Collection charts ──────────────────────────────
+var chartOverallInstance = null;
+var chartMonthInstance   = null;
+
+function loadFieldOfficerCollection() {
+    $.ajax({
+        url: '{{ route("dashboard.field-officer.collection") }}',
+        type: 'GET',
+        dataType: 'json',
+        success: function (response) {
+            if (!response.success) {
+                $('#loadingOverall, #loadingMonth').hide();
+                return;
+            }
+            renderPieChart('chartOverall', 'loadingOverall', 'legendOverall', response.overall, 'chartOverallInstance');
+            renderPieChart('chartMonth',   'loadingMonth',   'legendMonth',   response.current_month, 'chartMonthInstance');
+        },
+        error: function () {
+            $('#loadingOverall, #loadingMonth').hide();
+            toastr.error('Failed to load collection data.');
+        }
+    });
+}
+
+function renderPieChart(canvasId, loadingId, legendId, data, instanceKey) {
+    $('#' + loadingId).hide();
+
+    var collected = data.collected;
+    var arrears   = data.arrears;
+    var total     = data.total;
+
+    var ctx = document.getElementById(canvasId).getContext('2d');
+
+    if (window[instanceKey]) {
+        window[instanceKey].destroy();
+    }
+
+    // Empty state
+    if (total <= 0) {
+        $('#' + legendId).html('<span style="font-size:11px;color:#6b7280;">No invoice data.</span>');
+        window[instanceKey] = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: ['No Data'], datasets: [{ data: [1], backgroundColor: ['#e9ecef'], borderWidth: 0 }] },
+            options: { cutout: '65%', plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+        });
+        return;
+    }
+
+    window[instanceKey] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Collected', 'Arrears'],
+            datasets: [{
+                data: [collected, arrears],
+                backgroundColor: ['#b7d7f0', '#0a0a0a'],
+                borderWidth: 0,
+                hoverOffset: 4,
+            }]
+        },
+        options: {
+            cutout: '65%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return ' ' + ctx.label + ': ' + formatMoney(ctx.raw);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    var pctCollected = total > 0 ? ((collected / total) * 100).toFixed(1) : '0.0';
+    var pctArrears   = total > 0 ? ((arrears   / total) * 100).toFixed(1) : '0.0';
+
+    $('#' + legendId).html(
+        '<div class="fo-legend-item">' +
+            '<div class="fo-legend-dot" style="background:#b7d7f0;"></div>' +
+            '<div><div class="fo-legend-label">Collected (' + pctCollected + '%)</div>' +
+            '<div class="fo-legend-value">' + formatMoney(collected) + '</div></div>' +
+        '</div>' +
+        '<div class="fo-legend-item">' +
+            '<div class="fo-legend-dot" style="background:#0a0a0a;"></div>' +
+            '<div><div class="fo-legend-label">Arrears (' + pctArrears + '%)</div>' +
+            '<div class="fo-legend-value">' + formatMoney(arrears) + '</div></div>' +
+        '</div>' +
+        '<div class="fo-legend-item" style="border-top:1px solid #d9ebf7;padding-top:8px;">' +
+            '<div><div class="fo-legend-label">Total Invoiced</div>' +
+            '<div class="fo-legend-value">' + formatMoney(total) + '</div></div>' +
+        '</div>'
+    );
+}
+
+function formatMoney(val) {
+    return 'KES ' + parseFloat(val).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 </script>
 @endsection
