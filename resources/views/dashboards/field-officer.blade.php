@@ -55,11 +55,11 @@
 /* ── Stat cards ──────────────────────────────────── */
 .fo-stats-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     margin-bottom: 24px;
 }
-@media (max-width: 575px) { .fo-stats-grid { grid-template-columns: 1fr; } }
+@media (max-width: 767px) { .fo-stats-grid { grid-template-columns: 1fr; } }
 
 .fo-stat-card {
     background: #fff;
@@ -275,6 +275,18 @@
                     </div>
                 </div>
 
+                {{-- Zones --}}
+                <div class="fo-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                    <div class="fo-stat-icon">
+                        <span class="material-symbols-outlined">map</span>
+                    </div>
+                    <div class="fo-stat-body">
+                        <div class="fo-stat-number" id="stat-zones"><span class="fo-skeleton"></span></div>
+                        <div class="fo-stat-label">
+                            <a id="zones-label-link" href="#" style="text-decoration:underline;color:#6b7280;font-size:11px;font-weight:500;">Zones</a>
+                        </div>
+                    </div>
+                </div>
 
             </div>
             {{-- End KPI Stats --}}
@@ -348,14 +360,42 @@
         </div>
     </div>
 </div>
+
+{{-- Zones Modal --}}
+<div class="modal fade" id="zonesModal" tabindex="-1" aria-labelledby="zonesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content" style="border-radius:10px;border:1px solid #d9ebf7;">
+            <div class="modal-header" style="padding:10px 14px;border-bottom:1px solid #d9ebf7;background:#f7fbff;">
+                <h6 class="modal-title" id="zonesModalLabel" style="font-size:13px;font-weight:700;color:#0a0a0a;margin:0;">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px;color:#5b9bd5;">map</span>
+                    Your Zones
+                </h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding:14px;" id="zonesModalBody">
+                <div class="text-center py-3">
+                    <div class="fo-spinner" style="margin:auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+var foZonesData = null;
+
 $(document).ready(function () {
     loadFieldOfficerStats();
     loadFieldOfficerCollection();
+    loadFieldOfficerZones();
+
+    $('#zones-label-link').on('click', function (e) {
+        e.preventDefault();
+        openZonesModal();
+    });
 });
 
 function loadFieldOfficerStats() {
@@ -400,8 +440,56 @@ function animateCount(id, target) {
     requestAnimationFrame(step);
 }
 
+function loadFieldOfficerZones() {
+    $.ajax({
+        url: '{{ route("dashboard.field-officer.zones") }}',
+        type: 'GET',
+        dataType: 'json',
+        success: function (response) {
+            if (!response.success) {
+                $('#stat-zones').html('<span style="font-size:14px;color:#dc3545;">—</span>');
+                return;
+            }
+            foZonesData = response.zones;
+            animateCount('stat-zones', response.count);
+        },
+        error: function () {
+            $('#stat-zones').html('<span style="font-size:14px;color:#dc3545;">—</span>');
+        }
+    });
+}
+
+function openZonesModal() {
+    var $body = $('#zonesModalBody');
+
+    if (!foZonesData) {
+        $body.html('<div class="text-center py-3"><div class="fo-spinner" style="margin:auto;"></div></div>');
+        $('#zonesModal').modal('show');
+        return;
+    }
+
+    if (foZonesData.length === 0) {
+        $body.html('<p style="font-size:12px;color:#6b7280;margin:0;">No zones assigned.</p>');
+        $('#zonesModal').modal('show');
+        return;
+    }
+
+    var html = '<ul style="list-style:none;padding:0;margin:0;">';
+    foZonesData.forEach(function (z, i) {
+        html += '<li style="display:flex;align-items:center;gap:8px;padding:6px 0;' +
+            (i < foZonesData.length - 1 ? 'border-bottom:1px solid #d9ebf7;' : '') + '">' +
+            '<span class="material-symbols-outlined" style="font-size:14px;color:#5b9bd5;flex-shrink:0;">location_on</span>' +
+            '<span style="font-size:12px;font-weight:600;color:#0a0a0a;">' + z.zone_name + '</span>' +
+            '</li>';
+    });
+    html += '</ul>';
+
+    $body.html(html);
+    $('#zonesModal').modal('show');
+}
+
 function showStatsError() {
-    ['stat-properties','stat-total-units'].forEach(function(id) {
+    ['stat-properties','stat-total-units','stat-zones'].forEach(function(id) {
         $('#' + id).html('<span style="font-size:14px;color:#dc3545;">—</span>');
     });
     $('#loadingOccupancy').hide();

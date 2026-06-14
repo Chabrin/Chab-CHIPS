@@ -100,6 +100,41 @@ class HomeController extends Controller
         }
     }
 
+    /**
+     * Field officer zone list (AJAX).
+     */
+    public function getFieldOfficerZones()
+    {
+        try {
+            $staffId = Auth::user()->staff_id;
+
+            $propertyIds = ZoneAssignment::where('staff_id', $staffId)
+                ->distinct()
+                ->pluck('property_id')
+                ->filter()
+                ->toArray();
+
+            $zones = DB::table('sys_pm_properties as p')
+                ->join('sys_set_zones as z', 'p.zone_id', '=', 'z.id')
+                ->whereIn('p.id', $propertyIds)
+                ->whereNotNull('p.zone_id')
+                ->select('z.id', 'z.zone_name')
+                ->distinct()
+                ->orderBy('z.zone_name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'count'   => $zones->count(),
+                'zones'   => $zones,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading field officer zones: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load zones'], 500);
+        }
+    }
+
     private function formatCollectionRow(object $row): array
     {
         $invoiced  = (float) ($row->total_invoiced ?? 0);
