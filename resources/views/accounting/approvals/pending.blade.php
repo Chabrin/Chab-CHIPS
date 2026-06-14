@@ -29,7 +29,6 @@ a.view-link:hover {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 14px;
     text-align: left;
-    color: #1a2533;
 }
 .movie-table th {
     background: #5b9bd5;
@@ -41,6 +40,8 @@ a.view-link:hover {
 .movie-table td {
     padding: 6px 8px;
     border: 1px solid #8ea9c1;
+    color: #1c2b3a;
+    font-weight: 600;
 }
 .movie-table tbody tr:nth-child(odd) {
     background-color: #b7d7f0;
