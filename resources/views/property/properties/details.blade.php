@@ -175,191 +175,147 @@
 
                             <!-- Statistics Tab -->
                             <div class="tab-pane fade" id="stats" role="tabpanel" aria-labelledby="stats-tab">
+                                @php
+                                    $totalUnits    = $property->units->count();
+                                    $occupiedUnits = $property->units->where('occupancy_status_id', 1)->count();
+                                    $vacantUnits   = $property->units->where('occupancy_status_id', 3)->count();
+                                    $occupancyRate = $totalUnits > 0 ? round(($occupiedUnits / $totalUnits) * 100, 1) : 0;
+
+                                    $today             = now()->startOfDay();
+                                    $threeMonthsLater  = now()->addMonths(3)->endOfDay();
+                                    $activeLeases      = $property->leaseAgreements
+                                        ->where('current_status_id', 5)
+                                        ->filter(fn($l) => $l->date_end && \Carbon\Carbon::parse($l->date_end)->endOfDay()->isFuture())
+                                        ->count();
+                                    $totalTenants      = $property->leaseAgreements
+                                        ->where('current_status_id', 5)
+                                        ->filter(fn($l) => $l->date_end && \Carbon\Carbon::parse($l->date_end)->endOfDay()->isFuture())
+                                        ->unique('tenant_id')
+                                        ->count();
+                                    $expiringLeases    = $property->leaseAgreements
+                                        ->where('current_status_id', 5)
+                                        ->filter(function($l) use ($today, $threeMonthsLater) {
+                                            if (!$l->date_end) return false;
+                                            $end = \Carbon\Carbon::parse($l->date_end)->endOfDay();
+                                            return $end->greaterThan($today) && $end->lessThanOrEqualTo($threeMonthsLater);
+                                        })
+                                        ->count();
+                                @endphp
+
+                                <style>
+                                .ps-card {
+                                    background: #fff;
+                                    border: 1px solid #d9ebf7;
+                                    border-radius: 8px;
+                                    padding: 12px 14px;
+                                    position: relative;
+                                    overflow: hidden;
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 10px;
+                                    height: 100%;
+                                }
+                                .ps-card::before {
+                                    content: '';
+                                    position: absolute;
+                                    top: 0; left: 0; bottom: 0;
+                                    width: 3px;
+                                    background: var(--ps-accent, #b7d7f0);
+                                    border-radius: 8px 0 0 8px;
+                                }
+                                .ps-icon {
+                                    width: 30px;
+                                    height: 30px;
+                                    border-radius: 7px;
+                                    background: var(--ps-icon-bg, #d9ebf7);
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    flex-shrink: 0;
+                                }
+                                .ps-icon .material-symbols-outlined {
+                                    font-size: 15px !important;
+                                    color: #0a0a0a !important;
+                                    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+                                }
+                                .ps-body { flex: 1; min-width: 0; }
+                                .ps-value {
+                                    font-size: 18px;
+                                    font-weight: 400;
+                                    color: #0a0a0a;
+                                    line-height: 1.1;
+                                    margin-bottom: 1px;
+                                }
+                                .ps-label {
+                                    font-size: 10px;
+                                    font-weight: 600;
+                                    color: #6b7280;
+                                    text-transform: uppercase;
+                                    letter-spacing: 0.05em;
+                                }
+                                </style>
+
                                 <div class="row g-3">
-                                    <!-- Units Overview Card -->
-                                    <div class="col-md-3">
-                                        <div class="card h-100 border-primary">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-primary" style="font-size:48px;">domain</span>
-                                                <h3 class="mt-2 mb-0">{{ $property->units->count() }}</h3>
-                                                <p class="text-muted mb-0">Total Units</p>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#5b9bd5; --ps-icon-bg:#b7d7f0;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">domain</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $totalUnits }}</div>
+                                                <div class="ps-label">Total Units</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Occupied Units Card -->
-                                    <div class="col-md-3">
-                                        <div class="card h-100 border-success">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-success" style="font-size:48px;">check_circle</span>
-                                                <h3 class="mt-2 mb-0">{{ $property->units->where('occupancy_status_id', 38)->count() }}</h3>
-                                                <p class="text-muted mb-0">Occupied</p>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#b7d7f0; --ps-icon-bg:#d9ebf7;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">check_circle</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $occupiedUnits }}</div>
+                                                <div class="ps-label">Occupied</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Vacant Units Card -->
-                                    <div class="col-md-3">
-                                        <div class="card h-100 border-warning">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-warning" style="font-size:48px;">radio_button_unchecked</span>
-                                                <h3 class="mt-2 mb-0">{{ $property->units->where('occupancy_status_id', 31)->count() }}</h3>
-                                                <p class="text-muted mb-0">Vacant</p>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#8ab4cc; --ps-icon-bg:#d9ebf7;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">radio_button_unchecked</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $vacantUnits }}</div>
+                                                <div class="ps-label">Vacant</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Occupancy Rate Card -->
-                                    <div class="col-md-3">
-                                        <div class="card h-100 border-info">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-info" style="font-size:48px;">percent</span>
-                                                @php
-                                                    $totalUnits = $property->units->count();
-                                                    $occupiedUnits = $property->units->where('occupancy_status_id', 38)->count();
-                                                    $occupancyRate = $totalUnits > 0 ? round(($occupiedUnits / $totalUnits) * 100, 1) : 0;
-                                                @endphp
-                                                <h3 class="mt-2 mb-0">{{ $occupancyRate }}%</h3>
-                                                <p class="text-muted mb-0">Occupancy Rate</p>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#5b9bd5; --ps-icon-bg:#b7d7f0;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">percent</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $occupancyRate }}%</div>
+                                                <div class="ps-label">Occupancy Rate</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Active Leases Card -->
-                                    <div class="col-md-4">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-primary" style="font-size:42px;">description</span>
-                                                @php
-                                                    $activeLeases = $property->leaseAgreements
-                                                        ->where('current_status_id', 5)
-                                                        ->filter(function($lease) {
-                                                            return $lease->date_end && \Carbon\Carbon::parse($lease->date_end)->endOfDay()->isFuture();
-                                                        })
-                                                        ->count();
-                                                @endphp
-                                                <h4 class="mt-2 mb-0">{{ $activeLeases }}</h4>
-                                                <p class="text-muted mb-0">Active Leases</p>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#5b9bd5; --ps-icon-bg:#b7d7f0;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">description</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $activeLeases }}</div>
+                                                <div class="ps-label">Active Leases</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Total Tenants Card -->
-                                    <div class="col-md-4">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-success" style="font-size:42px;">group</span>
-                                                @php
-                                                    $totalTenants = $property->leaseAgreements
-                                                        ->where('current_status_id', 5)
-                                                        ->filter(function($lease) {
-                                                            return $lease->date_end && \Carbon\Carbon::parse($lease->date_end)->endOfDay()->isFuture();
-                                                        })
-                                                        ->unique('tenant_id')
-                                                        ->count();
-                                                @endphp
-                                                <h4 class="mt-2 mb-0">{{ $totalTenants }}</h4>
-                                                <p class="text-muted mb-0">Total Tenants</p>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#b7d7f0; --ps-icon-bg:#d9ebf7;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">group</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $totalTenants }}</div>
+                                                <div class="ps-label">Total Tenants</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Expiring Leases Card -->
-                                    <div class="col-md-4">
-                                        <div class="card h-100">
-                                            <div class="card-body text-center">
-                                                <span class="material-symbols-outlined text-warning" style="font-size:42px;">schedule</span>
-                                                @php
-                                                    $today = now()->startOfDay();
-                                                    $threeMonthsFromNow = now()->addMonths(3)->endOfDay();
-                                                    $expiringLeases = $property->leaseAgreements
-                                                        ->where('current_status_id', 5)
-                                                        ->filter(function($lease) use ($today, $threeMonthsFromNow) {
-                                                            if (!$lease->date_end) return false;
-                                                            $endDate = \Carbon\Carbon::parse($lease->date_end)->endOfDay();
-                                                            return $endDate->greaterThan($today) && $endDate->lessThanOrEqualTo($threeMonthsFromNow);
-                                                        })
-                                                        ->count();
-                                                @endphp
-                                                <h4 class="mt-2 mb-0">{{ $expiringLeases }}</h4>
-                                                <p class="text-muted mb-0">Expiring in 3 Months</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Financial Overview Card -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">account_balance_wallet</span>
-                                                    Financial Overview
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-2">
-                                                    @php
-                                                        $totalRent = $property->units->where('occupancy_status_id', 38)->sum('rent_amount');
-                                                        $potentialRent = $property->units->sum('rent_amount');
-                                                        $revenueGap = $potentialRent - $totalRent;
-                                                    @endphp
-                                                    <div class="col-6">
-                                                        <div class="text-center p-2 bg-light rounded">
-                                                            <small class="text-muted d-block">Monthly Rent (Occupied)</small>
-                                                            <strong class="text-success">KES {{ number_format($totalRent, 2) }}</strong>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-6">
-                                                        <div class="text-center p-2 bg-light rounded">
-                                                            <small class="text-muted d-block">Potential Monthly Rent</small>
-                                                            <strong class="text-primary">KES {{ number_format($potentialRent, 2) }}</strong>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <div class="text-center p-2 bg-light rounded">
-                                                            <small class="text-muted d-block">Revenue Gap</small>
-                                                            <strong class="text-danger">KES {{ number_format($revenueGap, 2) }}</strong>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Unit Types Distribution Card -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">category</span>
-                                                    Unit Distribution
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                @php
-                                                    $unitTypes = $property->units->groupBy('unit_type_id');
-                                                @endphp
-                                                @if($unitTypes->count() > 0)
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm table-borderless mb-0">
-                                                            <tbody>
-                                                                @foreach($unitTypes as $typeId => $units)
-                                                                    <tr>
-                                                                        <td><small>Type {{ $typeId }}</small></td>
-                                                                        <td class="text-end">
-                                                                            <span class="badge bg-primary">{{ $units->count() }} units</span>
-                                                                        </td>
-                                                                        <td class="text-end">
-                                                                            <small class="text-muted">{{ $units->where('occupancy_status_id', 38)->count() }} occupied</small>
-                                                                        </td>
-                                                                    </tr>
-                                                                @endforeach
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                @else
-                                                    <p class="text-muted text-center mb-0">No units available</p>
-                                                @endif
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="ps-card" style="--ps-accent:#8ab4cc; --ps-icon-bg:#d9ebf7;">
+                                            <div class="ps-icon"><span class="material-symbols-outlined">schedule</span></div>
+                                            <div class="ps-body">
+                                                <div class="ps-value">{{ $expiringLeases }}</div>
+                                                <div class="ps-label">Expiring in 3 Months</div>
                                             </div>
                                         </div>
                                     </div>
