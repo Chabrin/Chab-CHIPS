@@ -378,6 +378,84 @@ class ClientsController extends Controller
 
 
     /**
+     * Get portfolio & financial stats for the Stats tab (AJAX).
+     */
+    public function getStats($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+
+            // Property IDs owned by this client
+            $propertyIds = DB::table('sys_pm_properties')
+                ->where('client_id', $clientId)
+                ->pluck('id');
+
+            $totalProperties = $propertyIds->count();
+
+            // Unit counts
+            $unitCounts = DB::table('sys_pm_units')
+                ->whereIn('property_id', $propertyIds)
+                ->selectRaw('
+                    COUNT(*) as total,
+                    SUM(CASE WHEN occupancy_status_id = 1 THEN 1 ELSE 0 END) as occupied,
+                    SUM(CASE WHEN occupancy_status_id = 3 THEN 1 ELSE 0 END) as vacant
+                ')
+                ->first();
+
+            $totalUnits    = (int) ($unitCounts->total    ?? 0);
+            $occupiedUnits = (int) ($unitCounts->occupied ?? 0);
+            $vacantUnits   = (int) ($unitCounts->vacant   ?? 0);
+            $occupancyRate = $totalUnits > 0 ? round(($occupiedUnits / $totalUnits) * 100, 1) : 0;
+
+            // Active leases (client_id = landlord, status 5, not expired)
+            $activeLeases = DB::table('sys_pm_lease_agreements')
+                ->where('client_id', $clientId)
+                ->where('current_status_id', 5)
+                ->where('date_end', '>=', now())
+                ->count();
+
+            $totalTenants = DB::table('sys_pm_lease_agreements')
+                ->where('client_id', $clientId)
+                ->where('current_status_id', 5)
+                ->where('date_end', '>=', now())
+                ->distinct('tenant_id')
+                ->count('tenant_id');
+
+            // Financial — from debtors invoices
+            $fin = DB::table('sys_pm_debtors_invoices')
+                ->where('client_id', $clientId)
+                ->selectRaw('
+                    COALESCE(SUM(total_amount), 0)     as total_invoiced,
+                    COALESCE(SUM(current_balance), 0)  as total_arrears
+                ')
+                ->first();
+
+            $invoiced  = (float) ($fin->total_invoiced ?? 0);
+            $arrears   = (float) ($fin->total_arrears  ?? 0);
+            $collected = max(0, $invoiced - $arrears);
+            $collectionRate = $invoiced > 0 ? round(($collected / $invoiced) * 100, 1) : 0;
+
+            return response()->json([
+                'success'         => true,
+                'totalProperties' => $totalProperties,
+                'totalUnits'      => $totalUnits,
+                'vacantUnits'     => $vacantUnits,
+                'occupiedUnits'   => $occupiedUnits,
+                'occupancyRate'   => $occupancyRate,
+                'activeLeases'    => $activeLeases,
+                'totalTenants'    => $totalTenants,
+                'invoiced'        => $invoiced,
+                'collected'       => $collected,
+                'arrears'         => $arrears,
+                'collectionRate'  => $collectionRate,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error loading client stats: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
      * Get properties for a specific client (AJAX)
      */
     public function getProperties($encryptedId)

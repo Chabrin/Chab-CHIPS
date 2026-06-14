@@ -247,60 +247,146 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Statistics Tab -->
                             <div class="tab-pane fade" id="stats" role="tabpanel" aria-labelledby="stats-tab">
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size:0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">home</span>
-                                                    Portfolio Overview
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-7"><small class="text-muted">Total Properties:</small></div>
-                                                    <div class="col-5">2</div>
-                                                    <div class="col-7"><small class="text-muted">Total Units:</small></div>
-                                                    <div class="col-5">16</div>
-                                                    <div class="col-7"><small class="text-muted">Total Vacant Units:</small></div>
-                                                    <div class="col-5">0</div>
-                                                    <div class="col-7"><small class="text-muted">New Properties:</small></div>
-                                                    <div class="col-5">2</div>
-                                                    <div class="col-7"><small class="text-muted">Total Tenants:</small></div>
-                                                    <div class="col-5">16</div>
-                                                    <div class="col-7"><small class="text-muted">Total Leases:</small></div>
-                                                    <div class="col-5">16</div>
-                                                    <div class="col-7"><small class="text-muted">Occupancy Status:</small></div>
-                                                    <div class="col-5">100%</div>
-                                                </div>
+
+                                <style>
+                                .cs-card {
+                                    background: #fff;
+                                    border: 1px solid #d9ebf7;
+                                    border-radius: 8px;
+                                    padding: 12px 14px;
+                                    position: relative;
+                                    overflow: hidden;
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 10px;
+                                    height: 100%;
+                                }
+                                .cs-card::before {
+                                    content: '';
+                                    position: absolute;
+                                    top: 0; left: 0; bottom: 0;
+                                    width: 3px;
+                                    background: var(--cs-accent, #b7d7f0);
+                                    border-radius: 8px 0 0 8px;
+                                }
+                                .cs-icon {
+                                    width: 30px;
+                                    height: 30px;
+                                    border-radius: 7px;
+                                    background: var(--cs-icon-bg, #d9ebf7);
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    flex-shrink: 0;
+                                }
+                                .cs-icon .material-symbols-outlined {
+                                    font-size: 15px !important;
+                                    color: #0a0a0a !important;
+                                    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+                                }
+                                .cs-body { flex: 1; min-width: 0; }
+                                .cs-value {
+                                    font-size: 18px;
+                                    font-weight: 400;
+                                    color: #0a0a0a;
+                                    line-height: 1.1;
+                                    margin-bottom: 1px;
+                                }
+                                .cs-label {
+                                    font-size: 10px;
+                                    font-weight: 600;
+                                    color: #6b7280;
+                                    text-transform: uppercase;
+                                    letter-spacing: 0.05em;
+                                }
+                                .cs-section-title {
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    text-transform: uppercase;
+                                    letter-spacing: 0.08em;
+                                    color: #9ca3af;
+                                    margin: 0 0 10px 0;
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 5px;
+                                }
+                                .cs-skeleton {
+                                    display: inline-block;
+                                    background: linear-gradient(90deg, #d9ebf7 25%, #b7d7f0 50%, #d9ebf7 75%);
+                                    background-size: 200% 100%;
+                                    animation: cs-pulse 1.4s ease infinite;
+                                    border-radius: 4px;
+                                    vertical-align: bottom;
+                                }
+                                @keyframes cs-pulse {
+                                    0%   { background-position: 200% 0; }
+                                    100% { background-position: -200% 0; }
+                                }
+                                </style>
+
+                                {{-- Portfolio Overview --}}
+                                <p class="cs-section-title">
+                                    <span class="material-symbols-outlined" style="font-size:13px;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;">home</span>
+                                    Portfolio Overview
+                                </p>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" style="--cs-accent:#5b9bd5; --cs-icon-bg:#b7d7f0;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">home_work</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-total-properties"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Total Properties</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size:0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">analytics</span>
-                                                    Financial &amp; Tasks Performance
-                                                </h6>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" style="--cs-accent:#b7d7f0; --cs-icon-bg:#d9ebf7;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">domain</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-total-units"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Total Units</div>
                                             </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-7"><small class="text-muted">Overall Collection:</small></div>
-                                                    <div class="col-5">0%</div>
-                                                    <div class="col-7"><small class="text-muted">Collection vs Paid:</small></div>
-                                                    <div class="col-5">0%</div>
-                                                    <div class="col-7"><small class="text-muted">Pending Arrears:</small></div>
-                                                    <div class="col-5">0.00</div>
-                                                    <div class="col-7"><small class="text-muted">Pending Tasks:</small></div>
-                                                    <div class="col-5">0</div>
-                                                    <div class="col-7"><small class="text-muted">Success Rate:</small></div>
-                                                    <div class="col-5">0%</div>
-                                                </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" style="--cs-accent:#8ab4cc; --cs-icon-bg:#d9ebf7;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">radio_button_unchecked</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-vacant-units"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Vacant Units</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" style="--cs-accent:#5b9bd5; --cs-icon-bg:#b7d7f0;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">percent</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-occupancy-rate"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Occupancy Rate</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" style="--cs-accent:#5b9bd5; --cs-icon-bg:#b7d7f0;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">description</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-active-leases"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Active Leases</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" style="--cs-accent:#b7d7f0; --cs-icon-bg:#d9ebf7;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">group</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-total-tenants"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Total Tenants</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+
+
                             </div>
 
                             <!-- Properties Tab -->
@@ -1254,6 +1340,37 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 error: function(xhr, status, error) {
                     console.error('Error loading SLA:', error);
                     toastr.error('Failed to load service agreements. Please try again.');
+                }
+            });
+        }
+
+        // Load stats when tab is clicked
+        var statsLoaded = false;
+        $('#stats-tab').on('click', function() {
+            if (!statsLoaded) {
+                loadClientStats();
+                statsLoaded = true;
+            }
+        });
+
+        function loadClientStats() {
+            $.ajax({
+                url: '{{ route("property.clients.stats", $client->encrypted_id) }}',
+                type: 'GET',
+                dataType: 'json',
+                success: function(r) {
+                    if (!r.success) return;
+                    $('#cs-total-properties').text(r.totalProperties);
+                    $('#cs-total-units').text(r.totalUnits);
+                    $('#cs-vacant-units').text(r.vacantUnits);
+                    $('#cs-occupancy-rate').text(r.occupancyRate + '%');
+                    $('#cs-active-leases').text(r.activeLeases);
+                    $('#cs-total-tenants').text(r.totalTenants);
+                },
+                error: function() {
+                    ['cs-total-properties','cs-total-units','cs-vacant-units','cs-occupancy-rate',
+                     'cs-active-leases','cs-total-tenants'
+                    ].forEach(function(id) { $('#' + id).html('<span style="color:#dc3545;font-size:12px;">—</span>'); });
                 }
             });
         }
