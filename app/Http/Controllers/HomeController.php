@@ -23,6 +23,12 @@ class HomeController extends Controller
             Log::info('Loading dashboard for field officer: ' . $user->name);
             return view('dashboards.field-officer');
         }
+
+        if ($user->hasRole('hr_manager')) {
+            Log::info('Loading dashboard for HR manager: ' . $user->name);
+            return view('dashboards.hr-manager');
+        }
+
         Log::info('Loading dashboard for user: ' . $user->name);
 
         return view('home.dashboard');
@@ -97,6 +103,84 @@ class HomeController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading field officer collection stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load collection stats'], 500);
+        }
+    }
+
+    /**
+     * HR Manager dashboard stats (AJAX).
+     */
+    public function getHrManagerStats()
+    {
+        try {
+            $totalEmployees = DB::table('sys_staff')->where('current_status_id', 5)->count();
+
+            $totalFieldOfficers = DB::table('josya_users as u')
+                ->join('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('r.name', 'field_officer')
+                ->count();
+
+            $onLeaveToday = DB::table('sys_hr_leave_requests')
+                ->whereIn('current_status_id', [5, 49])
+                ->where('start_date', '<=', now())
+                ->where('end_date', '>=', now())
+                ->distinct()
+                ->count('staff_id');
+
+            $totalClients    = DB::table('sys_pm_clients')->where('type_id', 1)->count();
+            $totalProperties = DB::table('sys_pm_properties')->where('active', 1)->count();
+            $totalTenants    = DB::table('sys_pm_clients')->where('type_id', 2)->count();
+
+            $totalUnits    = DB::table('sys_pm_units')->count();
+            $occupiedUnits = DB::table('sys_pm_units')->where('occupancy_status_id', 1)->count();
+            $vacantUnits   = DB::table('sys_pm_units')->where('occupancy_status_id', 3)->count();
+
+            return response()->json([
+                'success' => true,
+                'stats' => [
+                    'total_employees'  => $totalEmployees,
+                    'field_officers'   => $totalFieldOfficers,
+                    'on_leave_today'   => $onLeaveToday,
+                    'total_clients'    => $totalClients,
+                    'total_properties' => $totalProperties,
+                    'total_tenants'    => $totalTenants,
+                    'total_units'      => $totalUnits,
+                    'occupied_units'   => $occupiedUnits,
+                    'vacant_units'     => $vacantUnits,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading HR manager stats: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * HR Manager collection vs arrears (AJAX) — company-wide.
+     */
+    public function getHrManagerCollection()
+    {
+        try {
+            $overallRow = DB::table('sys_pm_debtors_invoices')
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
+
+            $monthRow = DB::table('sys_pm_debtors_invoices')
+                ->whereYear('date_time', now()->year)
+                ->whereMonth('date_time', now()->month)
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
+
+            return response()->json([
+                'success'       => true,
+                'overall'       => $this->formatCollectionRow($overallRow),
+                'current_month' => $this->formatCollectionRow($monthRow),
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading HR manager collection: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load collection'], 500);
         }
     }
 
