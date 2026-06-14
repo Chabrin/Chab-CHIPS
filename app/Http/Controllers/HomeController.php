@@ -189,6 +189,41 @@ class HomeController extends Controller
     }
 
     /**
+     * Director zone managers list (AJAX).
+     */
+    public function getDirectorZoneManagers()
+    {
+        try {
+            $count = DB::table('josya_users as u')
+                ->join('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('r.name', 'zone_manager')
+                ->count();
+
+            $zones = DB::table('sys_pm_zones_assignments as za')
+                ->join('sys_set_zones as z', 'z.id', '=', 'za.zone_id')
+                ->join('josya_users as u', 'u.staff_id', '=', 'za.staff_id')
+                ->join('cb_role_user as ru', 'ru.user_id', '=', 'u.id')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('r.name', 'zone_manager')
+                ->select('z.zone_name', 'u.name as manager_name')
+                ->distinct()
+                ->orderBy('z.zone_name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'count'   => $count,
+                'zones'   => $zones,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading director zone managers: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load zone managers'], 500);
+        }
+    }
+
+    /**
      * Director collection vs arrears (AJAX) — company-wide.
      */
     public function getDirectorCollection()

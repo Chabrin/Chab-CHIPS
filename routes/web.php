@@ -1062,6 +1062,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/dashboard/accountant/collection', [HomeController::class, 'getAccountantCollection'])->name('dashboard.accountant.collection');
     Route::get('/dashboard/director/stats', [HomeController::class, 'getDirectorStats'])->name('dashboard.director.stats');
     Route::get('/dashboard/director/collection', [HomeController::class, 'getDirectorCollection'])->name('dashboard.director.collection');
+    Route::get('/dashboard/director/zone-managers', [HomeController::class, 'getDirectorZoneManagers'])->name('dashboard.director.zone-managers');
     Route::get('/dashboard/stats', [HomeController::class, 'getDashboardStats'])->name('dashboard.stats');
     Route::get('/dashboard/gender', [HomeController::class, 'getStaffByGender'])->name('dashboard.gender');
     Route::get('/dashboard/positions', [HomeController::class, 'getStaffByPosition'])->name('dashboard.positions');

@@ -337,6 +337,18 @@
                     </div>
                 </div>
 
+                <div class="col-lg-3 col-sm-6">
+                    <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                        <div class="dir-stat-icon"><span class="material-symbols-outlined">manage_accounts</span></div>
+                        <div class="dir-stat-body">
+                            <div class="dir-stat-number" id="stat-zone-managers"><span class="dir-skeleton dir-skeleton-sm"></span></div>
+                            <div class="dir-stat-label">
+                                <a id="zone-managers-link" href="#" style="text-decoration:underline;color:#6b7280;font-size:11px;font-weight:500;">Zone Managers</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             {{-- ── Portfolio ── --}}
@@ -413,14 +425,42 @@
         </div>
     </div>
 </div>
+
+{{-- Zone Managers Modal --}}
+<div class="modal fade" id="zoneManagersModal" tabindex="-1" aria-labelledby="zoneManagersModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:10px;border:1px solid #d9ebf7;">
+            <div class="modal-header" style="padding:10px 14px;border-bottom:1px solid #d9ebf7;background:#f7fbff;">
+                <h6 class="modal-title" id="zoneManagersModalLabel" style="font-size:13px;font-weight:700;color:#0a0a0a;margin:0;">
+                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px;color:#5b9bd5;">manage_accounts</span>
+                    Zone Managers
+                </h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding:14px;" id="zoneManagersModalBody">
+                <div class="text-center py-3">
+                    <div class="dir-spinner" style="margin:auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+var dirZoneManagersData = null;
+
 $(document).ready(function () {
     loadDirectorStats();
     loadDirectorCollection();
+    loadDirectorZoneManagers();
+
+    $('#zone-managers-link').on('click', function (e) {
+        e.preventDefault();
+        openZoneManagersModal();
+    });
 });
 
 // ── Stats ──────────────────────────────────────────
@@ -466,8 +506,66 @@ function animateCount(id, target) {
     requestAnimationFrame(step);
 }
 
+function loadDirectorZoneManagers() {
+    $.ajax({
+        url: '{{ route("dashboard.director.zone-managers") }}',
+        type: 'GET',
+        dataType: 'json',
+        success: function (response) {
+            if (!response.success) {
+                $('#stat-zone-managers').html('<span style="font-size:14px;color:#dc3545;">—</span>');
+                return;
+            }
+            dirZoneManagersData = response.zones;
+            animateCount('stat-zone-managers', response.count);
+        },
+        error: function () {
+            $('#stat-zone-managers').html('<span style="font-size:14px;color:#dc3545;">—</span>');
+        }
+    });
+}
+
+function openZoneManagersModal() {
+    var $body = $('#zoneManagersModalBody');
+
+    if (!dirZoneManagersData) {
+        $body.html('<div class="text-center py-3"><div class="dir-spinner" style="margin:auto;"></div></div>');
+        $('#zoneManagersModal').modal('show');
+        return;
+    }
+
+    if (dirZoneManagersData.length === 0) {
+        $body.html('<p style="font-size:12px;color:#6b7280;margin:0;">No zone managers assigned.</p>');
+        $('#zoneManagersModal').modal('show');
+        return;
+    }
+
+    var html = '<table style="width:100%;border-collapse:collapse;">' +
+        '<thead><tr>' +
+        '<th style="font-size:11px;font-weight:700;color:#0a0a0a;padding:6px 8px;border-bottom:2px solid #d9ebf7;text-align:left;background:#f7fbff;">Zone</th>' +
+        '<th style="font-size:11px;font-weight:700;color:#0a0a0a;padding:6px 8px;border-bottom:2px solid #d9ebf7;text-align:left;background:#f7fbff;">Zone Manager</th>' +
+        '</tr></thead><tbody>';
+
+    dirZoneManagersData.forEach(function (row, i) {
+        var bg = i % 2 === 0 ? '#f7fbff' : '#fff';
+        html += '<tr style="background:' + bg + ';">' +
+            '<td style="font-size:12px;padding:7px 8px;border-bottom:1px solid #d9ebf7;color:#0a0a0a;">' +
+                '<span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle;color:#5b9bd5;margin-right:4px;">location_on</span>' +
+                row.zone_name +
+            '</td>' +
+            '<td style="font-size:12px;padding:7px 8px;border-bottom:1px solid #d9ebf7;color:#374151;font-weight:600;">' +
+                row.manager_name +
+            '</td>' +
+            '</tr>';
+    });
+
+    html += '</tbody></table>';
+    $body.html(html);
+    $('#zoneManagersModal').modal('show');
+}
+
 function showStatsError() {
-    ['stat-employees','stat-field-officers','stat-on-leave',
+    ['stat-employees','stat-field-officers','stat-on-leave','stat-zone-managers',
      'stat-clients','stat-properties','stat-units','stat-tenants',
      'stat-advance','stat-leaves-open','stat-leaves-closed']
         .forEach(function(id) {
