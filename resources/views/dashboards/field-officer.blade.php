@@ -106,7 +106,7 @@
 
 .fo-stat-number {
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 400;
     color: #0a0a0a;
     line-height: 1.1;
     margin-bottom: 2px;

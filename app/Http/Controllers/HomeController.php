@@ -43,10 +43,8 @@ class HomeController extends Controller
                 ->values();
 
             $totalUnits    = Unit::whereIn('property_id', $propertyIds)->count();
-            $occupiedUnits = Unit::whereIn('property_id', $propertyIds)
-                ->whereHas('activeLeaseAgreement')
-                ->count();
-            $vacantUnits   = max(0, $totalUnits - $occupiedUnits);
+            $occupiedUnits = Unit::whereIn('property_id', $propertyIds)->where('occupancy_status_id', 1)->count();
+            $vacantUnits   = Unit::whereIn('property_id', $propertyIds)->where('occupancy_status_id', 3)->count();
 
             return response()->json([
                 'success' => true,
