@@ -513,7 +513,8 @@ h6,
 .dataTables_wrapper,
 .table-responsive {
     border-radius: 8px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
     padding: 10px;
 }
 

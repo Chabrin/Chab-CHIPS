@@ -135,10 +135,8 @@
                                     <tbody>
                                         <tr>
                                             <td class="text-muted py-1" width="50%">Status</td>
-                                            <td class="text-end py-1 fw-bold" id="val-status">
-                                                <span class="badge {{ $return->approved_status == 1 ? 'badge-light-success' : 'badge-light-danger' }}">
-                                                    {{ $return->approved_status == 1 ? 'Approved' : 'Pending Approval' }}
-                                                </span>
+                                            <td class="text-end py-1" id="val-status">
+                                                {{ $return->approved_status == 1 ? 'Approved' : 'Pending Approval' }}
                                             </td>
                                         </tr>
                                         <tr>
@@ -147,12 +145,10 @@
                                         </tr>
                                         <tr>
                                             <td class="text-muted py-1">Payment Status</td>
-                                            <td class="text-end py-1" id="val-paid-status">
-                                                <span class="badge badge-light-danger">Unpaid</span>
-                                            </td>
+                                            <td class="text-end py-1" id="val-paid-status">Unpaid</td>
                                         </tr>
                                         <tr>
-                                            <td colspan="2" class="py-1 fw-bold" style="border-top:1px solid #dee2e6;">Threshold Summary</td>
+                                            <td colspan="2" class="py-1" style="border-top:1px solid #dee2e6;">Threshold Summary</td>
                                         </tr>
                                         <tr>
                                             <td class="text-muted py-1">Payable Units</td>
@@ -160,11 +156,11 @@
                                         </tr>
                                         <tr>
                                             <td class="text-muted py-1">Payable Amount</td>
-                                            <td class="text-end py-1 text-success" id="val-payable-amount">{{ number_format($return->payable_amount ?? 0, 2) }}</td>
+                                            <td class="text-end py-1" id="val-payable-amount">{{ number_format($return->payable_amount ?? 0, 2) }}</td>
                                         </tr>
                                         <tr>
                                             <td class="text-muted py-1">Withheld Amount</td>
-                                            <td class="text-end py-1 text-danger" id="val-non-payable-amount">{{ number_format($return->non_payable_amount ?? 0, 2) }}</td>
+                                            <td class="text-end py-1" id="val-non-payable-amount">{{ number_format($return->non_payable_amount ?? 0, 2) }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -448,11 +444,7 @@
                 },
                 {
                     data: 'dr_cr',
-                    render: function(d) {
-                        if (d === 'CR') return '<span class="badge badge-light-success">CR</span>';
-                        if (d === 'DR') return '<span class="badge badge-light-danger">DR</span>';
-                        return d;
-                    }
+                    render: function(d) { return d || '-'; }
                 },
                 {
                     data: 'amount_payable_landlord',
@@ -461,22 +453,14 @@
                 {
                     data: 'net_amount',
                     className: 'text-end',
-                    render: function(d, t, r) {
-                        if (r.entry_type === 'RENT CURRENT' && (d === '0.00' || d === '0')) {
-                            return '<strong class="text-danger">' + d + '</strong>';
-                        }
-                        return '<strong>' + d + '</strong>';
-                    }
+                    render: function(d) { return d || '0.00'; }
                 },
                 {
                     data: 'pay_percentage',
                     className: 'text-end',
                     render: function(d) {
-                        if (!d || d === '' || d === '0') return '<span class="text-danger">0.00</span>';
-                        var num = parseFloat(d);
-                        var fmt = num.toFixed(2);
-                        if (num >= 85) return '<span class="text-success">' + fmt + '</span>';
-                        return '<span class="text-danger">' + fmt + '</span>';
+                        if (!d || d === '' || d === '0') return '0.00';
+                        return parseFloat(d).toFixed(2);
                     }
                 },
                 {
@@ -485,11 +469,9 @@
                     orderable: false,
                     render: function(d, t, r) {
                         var ps = parseInt(d, 10);
-                        if (ps === 1) {
-                            return '<span class="material-symbols-outlined text-success" style="font-size:14px;vertical-align:middle;" title="Payable">check_circle</span>';
-                        }
+                        var label = ps === 1 ? 'Payable' : 'Not Payable';
                         var reason = r.payable_status_reason ? '<br><small class="text-muted" style="font-size:0.62rem;">' + escapeAttr(r.payable_status_reason) + '</small>' : '';
-                        return '<span class="material-symbols-outlined text-danger" style="font-size:14px;vertical-align:middle;" title="Not Payable">cancel</span>' + reason;
+                        return label + reason;
                     }
                 },
                 {

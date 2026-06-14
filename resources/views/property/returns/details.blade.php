@@ -357,26 +357,20 @@
                 },
                 {
                     data: 'payable_amount',
-                    className: 'text-end fw-bold'
+                    className: 'text-end'
                 },
                 {
                     data: 'abstract_threshold',
                     className: 'text-center',
-                    render: function(data, type, row) {
-                        let threshold = parseFloat(data) || 0;
-                        let color = threshold >= 85 ? '#28a745' : '#dc3545';
-                        return `<span style="color: ${color}; font-size: 0.7rem;">${threshold.toFixed(2)}%</span>`;
+                    render: function(data) {
+                        return (parseFloat(data) || 0).toFixed(2) + '%';
                     }
                 },
                 {
                     data: 'approval_status',
                     className: 'text-center',
-                    render: function(data, type, row) {
-                        if (data == 1) {
-                            return '<span class="badge badge-light-success">Approved</span>';
-                        } else {
-                            return '<span class="badge badge-light-danger">Pending</span>';
-                        }
+                    render: function(data) {
+                        return data == 1 ? 'Approved' : 'Pending';
                     }
                 }
             ],
