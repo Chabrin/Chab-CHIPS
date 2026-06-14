@@ -41,7 +41,7 @@ class HomeController extends Controller
 
         Log::info('Loading dashboard for user: ' . $user->name);
 
-        return view('home.dashboard');
+        return view('dashboards.generic');
     }
 
     /**
@@ -113,6 +113,52 @@ class HomeController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading field officer collection stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load collection stats'], 500);
+        }
+    }
+
+    /**
+     * Generic dashboard data (AJAX) — leave balance + roles for logged-in user.
+     */
+    public function getGenericDashboardData()
+    {
+        try {
+            $user    = Auth::user();
+            $staffId = $user->staff_id;
+
+            $roles = DB::table('cb_roles as r')
+                ->join('cb_role_user as ru', 'r.id', '=', 'ru.role_id')
+                ->where('ru.user_id', $user->id)
+                ->select('r.name', 'r.display_name')
+                ->get();
+
+            $leaveBalances = collect();
+
+            if ($staffId) {
+                $leaveBalances = DB::table('sys_hr_leave_calendar as lc')
+                    ->join('sys_hr_leave_types as lt', 'lt.id', '=', 'lc.leave_type_id')
+                    ->where('lc.employee_id', $staffId)
+                    ->where('lc.start_date', '<=', now())
+                    ->where('lc.end_date', '>=', now())
+                    ->select(
+                        'lt.type_name',
+                        'lc.entitled_days',
+                        'lc.balance',
+                        DB::raw('(CAST(lc.entitled_days AS NUMERIC) - CAST(lc.balance AS NUMERIC)) as used_days')
+                    )
+                    ->orderBy('lt.type_name')
+                    ->get();
+            }
+
+            return response()->json([
+                'success'        => true,
+                'name'           => $user->name,
+                'roles'          => $roles,
+                'leave_balances' => $leaveBalances,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading generic dashboard data: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load dashboard data'], 500);
         }
     }
 
