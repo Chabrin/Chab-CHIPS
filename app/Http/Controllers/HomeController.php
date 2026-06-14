@@ -34,6 +34,11 @@ class HomeController extends Controller
             return view('dashboards.accountant');
         }
 
+        if ($user->hasRole('directors')) {
+            Log::info('Loading dashboard for director: ' . $user->name);
+            return view('dashboards.director');
+        }
+
         Log::info('Loading dashboard for user: ' . $user->name);
 
         return view('home.dashboard');
@@ -108,6 +113,106 @@ class HomeController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading field officer collection stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load collection stats'], 500);
+        }
+    }
+
+    /**
+     * Director dashboard stats (AJAX) — combined HR + Finance + Portfolio.
+     */
+    public function getDirectorStats()
+    {
+        try {
+            // People
+            $totalEmployees = DB::table('sys_staff')->where('current_status_id', 5)->count();
+
+            $totalFieldOfficers = DB::table('josya_users as u')
+                ->join('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('r.name', 'field_officer')
+                ->count();
+
+            $onLeaveToday = DB::table('sys_hr_leave_requests')
+                ->whereIn('current_status_id', [5, 49])
+                ->where('start_date', '<=', now())
+                ->where('end_date', '>=', now())
+                ->distinct()
+                ->count('staff_id');
+
+            // Portfolio
+            $totalClients    = DB::table('sys_pm_clients')->where('type_id', 1)->count();
+            $totalProperties = DB::table('sys_pm_properties')->where('active', 1)->count();
+            $totalUnits      = DB::table('sys_pm_units')->count();
+            $totalTenants    = DB::table('sys_pm_clients')->where('type_id', 2)->count();
+            $occupiedUnits   = DB::table('sys_pm_units')->where('occupancy_status_id', 1)->count();
+            $vacantUnits     = DB::table('sys_pm_units')->where('occupancy_status_id', 3)->count();
+
+            // Finance
+            $leavesInOpenBooks = DB::table('sys_fin_cheque_books_261_repeat as cl')
+                ->join('sys_fin_cheque_books as cb', 'cl.parent_id', '=', 'cb.id')
+                ->where('cl.current_status_id', 1)
+                ->where('cb.current_status_id', 1)
+                ->count();
+
+            $leavesInClosedBooks = DB::table('sys_fin_cheque_books_261_repeat as cl')
+                ->join('sys_fin_cheque_books as cb', 'cl.parent_id', '=', 'cb.id')
+                ->where('cl.current_status_id', 1)
+                ->where('cb.current_status_id', 2)
+                ->count();
+
+            $returnsAdvance = (float) DB::table('cb_landlord_account')
+                ->where('entry_type_code', '0009')
+                ->where('is_recovered', 0)
+                ->sum('debit_amount');
+
+            return response()->json([
+                'success' => true,
+                'stats' => [
+                    'total_employees'        => $totalEmployees,
+                    'field_officers'         => $totalFieldOfficers,
+                    'on_leave_today'         => $onLeaveToday,
+                    'total_clients'          => $totalClients,
+                    'total_properties'       => $totalProperties,
+                    'total_units'            => $totalUnits,
+                    'total_tenants'          => $totalTenants,
+                    'occupied_units'         => $occupiedUnits,
+                    'vacant_units'           => $vacantUnits,
+                    'leaves_in_open_books'   => $leavesInOpenBooks,
+                    'leaves_in_closed_books' => $leavesInClosedBooks,
+                    'returns_advance'        => round($returnsAdvance, 2),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading director stats: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * Director collection vs arrears (AJAX) — company-wide.
+     */
+    public function getDirectorCollection()
+    {
+        try {
+            $overallRow = DB::table('sys_pm_debtors_invoices')
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
+
+            $monthRow = DB::table('sys_pm_debtors_invoices')
+                ->whereYear('date_time', now()->year)
+                ->whereMonth('date_time', now()->month)
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
+
+            return response()->json([
+                'success'       => true,
+                'overall'       => $this->formatCollectionRow($overallRow),
+                'current_month' => $this->formatCollectionRow($monthRow),
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading director collection: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load collection'], 500);
         }
     }
 
