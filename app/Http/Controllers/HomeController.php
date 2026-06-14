@@ -7,7 +7,6 @@ use App\Models\Position;
 use App\Models\Gender;
 use App\Models\Unit;
 use App\Models\ZoneAssignment;
-use App\Models\DebtorInvoice;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\Auth;
@@ -75,44 +74,43 @@ class HomeController extends Controller
                 ->distinct()
                 ->pluck('property_id')
                 ->filter()
-                ->values();
+                ->toArray();
 
-            $buildStats = function ($query) {
-                $row = (clone $query)
-                    ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
-                    ->first();
+            $overallRow = DB::table('sys_pm_debtors_invoices')
+                ->whereIn('property_id', $propertyIds)
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
 
-                $invoiced  = (float) $row->total_invoiced;
-                $arrears   = (float) $row->total_arrears;
-                $collected = max(0, $invoiced - $arrears);
-
-                return [
-                    'collected' => round($collected, 2),
-                    'arrears'   => round($arrears, 2),
-                    'total'     => round($invoiced, 2),
-                ];
-            };
-
-            $baseQuery = DebtorInvoice::whereIn('property_id', $propertyIds);
-
-            $overall = $buildStats(clone $baseQuery);
-
-            $currentMonth = $buildStats(
-                (clone $baseQuery)
-                    ->whereYear('date_time', now()->year)
-                    ->whereMonth('date_time', now()->month)
-            );
+            $monthRow = DB::table('sys_pm_debtors_invoices')
+                ->whereIn('property_id', $propertyIds)
+                ->whereYear('date_time', now()->year)
+                ->whereMonth('date_time', now()->month)
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_invoiced, COALESCE(SUM(current_balance), 0) as total_arrears')
+                ->first();
 
             return response()->json([
                 'success'       => true,
-                'overall'       => $overall,
-                'current_month' => $currentMonth,
+                'overall'       => $this->formatCollectionRow($overallRow),
+                'current_month' => $this->formatCollectionRow($monthRow),
             ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading field officer collection stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load collection stats'], 500);
         }
+    }
+
+    private function formatCollectionRow(object $row): array
+    {
+        $invoiced  = (float) ($row->total_invoiced ?? 0);
+        $arrears   = (float) ($row->total_arrears  ?? 0);
+        $collected = max(0, $invoiced - $arrears);
+
+        return [
+            'collected' => round($collected, 2),
+            'arrears'   => round($arrears,   2),
+            'total'     => round($invoiced,   2),
+        ];
     }
 
     /**
