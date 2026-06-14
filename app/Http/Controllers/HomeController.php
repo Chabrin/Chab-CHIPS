@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\Position;
 use App\Models\Gender;
+use App\Models\Unit;
+use App\Models\ZoneAssignment;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -14,7 +17,51 @@ class HomeController extends Controller
 {
     public function Dashboard()
     {
+        $user = Auth::user();
+
+        if ($user->hasRole('field_officer')) {
+            Log::info('Loading dashboard for field officer: ' . $user->name);
+            return view('dashboards.field-officer');
+        }
+        Log::info('Loading dashboard for user: ' . $user->name);
+
         return view('home.dashboard');
+    }
+
+    /**
+     * Field officer dashboard stats (AJAX).
+     */
+    public function getFieldOfficerStats()
+    {
+        try {
+            $staffId = Auth::user()->staff_id;
+
+            $propertyIds = ZoneAssignment::where('staff_id', $staffId)
+                ->distinct()
+                ->pluck('property_id')
+                ->filter()
+                ->values();
+
+            $totalUnits    = Unit::whereIn('property_id', $propertyIds)->count();
+            $occupiedUnits = Unit::whereIn('property_id', $propertyIds)
+                ->whereHas('activeLeaseAgreement')
+                ->count();
+            $vacantUnits   = max(0, $totalUnits - $occupiedUnits);
+
+            return response()->json([
+                'success' => true,
+                'stats'   => [
+                    'properties'    => $propertyIds->count(),
+                    'total_units'   => $totalUnits,
+                    'occupied_units' => $occupiedUnits,
+                    'vacant_units'  => $vacantUnits,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading field officer stats: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
     }
 
     /**
