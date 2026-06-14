@@ -358,11 +358,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         </div>
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
-                                        <div class="cs-card" style="--cs-accent:#5b9bd5; --cs-icon-bg:#b7d7f0;">
-                                            <div class="cs-icon"><span class="material-symbols-outlined">percent</span></div>
+                                        <div class="cs-card" style="--cs-accent:#5b9bd5; --cs-icon-bg:rgba(255,255,255,0.25); background:#5b9bd5; border-color:#5b9bd5;">
+                                            <div class="cs-icon" style="background:rgba(255,255,255,0.25);"><span class="material-symbols-outlined" style="color:#fff !important;">percent</span></div>
                                             <div class="cs-body">
-                                                <div class="cs-value" id="cs-occupancy-rate"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
-                                                <div class="cs-label">Occupancy Rate</div>
+                                                <div class="cs-value" id="cs-occupancy-rate" style="color:#fff;"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label" style="color:rgba(255,255,255,0.8);">Occupancy Rate</div>
                                             </div>
                                         </div>
                                     </div>
