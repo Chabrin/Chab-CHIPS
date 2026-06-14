@@ -510,10 +510,18 @@ h6,
 }
 
 /* ---- TABLES ---- */
+.dataTables_wrapper,
+.table-responsive {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #bad4e8;
+    padding: 15px;
+}
+
 .table,
 table.dataTable {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
     border-spacing: 0;
     font-size: 13px;
     white-space: nowrap;
@@ -522,12 +530,15 @@ table.dataTable {
 
 .table > thead > tr > th,
 table.dataTable > thead > tr > th {
-    background: #5b9bd5 !important;
-    color: #ffffff !important;
+    background: #e8f4fd !important;
+    color: #0a0a0a !important;
     font-size: 11px !important;
     font-weight: 600 !important;
     padding: 4px 6px !important;
-    border: 1px solid #4a7fb3 !important;
+    border-right: 1px solid #bad4e8 !important;
+    border-bottom: 1px solid #bad4e8 !important;
+    border-top: none !important;
+    border-left: none !important;
     white-space: nowrap;
     position: sticky;
     top: 0;
@@ -537,14 +548,19 @@ table.dataTable > thead > tr > th {
     vertical-align: bottom;
 }
 
-/* DataTables sort icons — keep them white */
+.table > thead > tr > th:last-child,
+table.dataTable > thead > tr > th:last-child {
+    border-right: none !important;
+}
+
+/* DataTables sort icons */
 table.dataTable > thead > tr > th.sorting::after,
 table.dataTable > thead > tr > th.sorting_asc::after,
 table.dataTable > thead > tr > th.sorting_desc::after,
 table.dataTable > thead > tr > th.sorting::before,
 table.dataTable > thead > tr > th.sorting_asc::before,
 table.dataTable > thead > tr > th.sorting_desc::before {
-    color: rgba(255,255,255,0.7) !important;
+    color: rgba(0,0,0,0.4) !important;
 }
 
 .table > tbody > tr > td,
@@ -553,10 +569,23 @@ table.dataTable > tbody > tr > td {
     font-size: 11px !important;
     font-weight: 600 !important;
     color: #1c2b3a !important;
-    border: 1px solid #8ea9c1 !important;
+    border-right: 1px solid #bad4e8 !important;
+    border-bottom: 1px solid #bad4e8 !important;
+    border-top: none !important;
+    border-left: none !important;
     line-height: 1;
     vertical-align: middle;
     height: 22px;
+}
+
+.table > tbody > tr > td:last-child,
+table.dataTable > tbody > tr > td:last-child {
+    border-right: none !important;
+}
+
+.table > tbody > tr:last-child > td,
+table.dataTable > tbody > tr:last-child > td {
+    border-bottom: none !important;
 }
 
 /* Alternating row stripes */
