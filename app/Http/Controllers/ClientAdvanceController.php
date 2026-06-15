@@ -7,6 +7,8 @@ use App\Models\ClientAdvance;
 use App\Models\Client;
 use App\Models\Property;
 use App\Models\InvoiceableItem;
+use App\Models\ChartAccount;
+use App\Traits\GlPostingTrait;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -17,6 +19,8 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ClientAdvanceController extends Controller
 {
+    use GlPostingTrait;
+
     /**
      * Display advances page
      */
@@ -1017,6 +1021,10 @@ class ClientAdvanceController extends Controller
                 ->orderBy('id', 'desc')
                 ->value('balance') ?? 0.0;
 
+            // Resolve GL accounts for advance posting (1150 Loans & Advances Receivable / 2297 Clients Expense/Advance/Loans Payable)
+            $glDebitAccountId  = ChartAccount::where('account_code', '1150')->value('id');
+            $glCreditAccountId = ChartAccount::where('account_code', '2297')->value('id');
+
             // Load schedule if not already eager-loaded
             $schedule = $advance->relationLoaded('schedule')
                 ? $advance->schedule
@@ -1064,6 +1072,24 @@ class ClientAdvanceController extends Controller
 
                 foreach ($rows as $row) {
                     DB::table('cb_landlord_account')->insert($row);
+
+                    // Post matching GL journal for this installment
+                    if ($glDebitAccountId && $glCreditAccountId) {
+                        $this->postGlEntry([
+                            'type'              => 'generic',
+                            'amount'            => $row['debit_amount'],
+                            'date'              => $row['entry_date']->toDateString(),
+                            'reference'         => $ref,
+                            'narration'         => $row['entry_particulars'],
+                            'entered_by'        => $userId,
+                            'debit_account_id'  => $glDebitAccountId,
+                            'credit_account_id' => $glCreditAccountId,
+                        ]);
+                    } else {
+                        Log::warning('postToLandlordAccount: GL accounts 1150/2297 not found — GL posting skipped', [
+                            'advance_id' => $advance->id,
+                        ]);
+                    }
                 }
 
                 Log::info('Advance posted to landlord account (installments)', [
@@ -1081,6 +1107,7 @@ class ClientAdvanceController extends Controller
                     : \Carbon\Carbon::parse($advance->disbursement_date);
                 $totalAmount = (float) $advance->total_amount;
                 $runningBalance -= $totalAmount;
+                $particulars = 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y');
 
                 DB::table('cb_landlord_account')->insert([
                     'year'              => $disbDate->year,
@@ -1089,7 +1116,7 @@ class ClientAdvanceController extends Controller
                     'property_code'     => $codes->property_code,
                     'entry_type_code'   => '0009',
                     'entry_description' => 'ADVANCE',
-                    'entry_particulars' => 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y'),
+                    'entry_particulars' => $particulars,
                     'entry_date'        => now(),
                     'debit_amount'      => $totalAmount,
                     'credit_amount'     => 0,
@@ -1100,6 +1127,24 @@ class ClientAdvanceController extends Controller
                     'server_time'       => now(),
                     'user_id'           => $userId,
                 ]);
+
+                // Post matching GL journal
+                if ($glDebitAccountId && $glCreditAccountId) {
+                    $this->postGlEntry([
+                        'type'              => 'generic',
+                        'amount'            => $totalAmount,
+                        'date'              => now()->toDateString(),
+                        'reference'         => $ref,
+                        'narration'         => $particulars,
+                        'entered_by'        => $userId,
+                        'debit_account_id'  => $glDebitAccountId,
+                        'credit_account_id' => $glCreditAccountId,
+                    ]);
+                } else {
+                    Log::warning('postToLandlordAccount: GL accounts 1150/2297 not found — GL posting skipped', [
+                        'advance_id' => $advance->id,
+                    ]);
+                }
 
                 Log::info('Advance posted to landlord account (lump sum)', [
                     'advance_id'   => $advance->id,
