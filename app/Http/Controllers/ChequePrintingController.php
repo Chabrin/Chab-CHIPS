@@ -170,4 +170,115 @@ class ChequePrintingController extends Controller
             return false;
         }
     }
+
+    /**
+     * Render a printable Payment Voucher document.
+     */
+    public function printVoucher(string $encryptedId)
+    {
+        try {
+            $id      = decrypt($encryptedId);
+            $voucher = PaymentVoucherHeader::findOrFail($id);
+            $lines   = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)
+                ->orderBy('id')
+                ->get();
+
+            $amountInWords = $this->numberToWords($voucher->debit_amount ?? 0);
+
+            return view('finance.cheques.print-voucher', compact('voucher', 'lines', 'amountInWords'));
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error printing voucher: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate printable voucher');
+        }
+    }
+
+    /**
+     * Render a printable Cheque document and mark the voucher as printed.
+     */
+    public function printCheque(string $encryptedId)
+    {
+        try {
+            $id      = decrypt($encryptedId);
+            $voucher = PaymentVoucherHeader::findOrFail($id);
+            $entries = PaymentVoucherLine::where('entry_id', $id)->get();
+
+            if ($entries->isEmpty()) {
+                return redirect()->back()->with('error', 'No cheque entries found for this voucher');
+            }
+
+            $cheques = $entries->map(function ($line) {
+                return [
+                    'line'            => $line,
+                    'amount_in_words' => $this->numberToWords($line->amount ?? 0),
+                ];
+            });
+
+            if (!$voucher->is_printed) {
+                $voucher->update(['is_printed' => 1]);
+            }
+
+
+            return view('finance.cheques.print-cheque', compact('voucher', 'cheques'));
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error printing cheque: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate printable cheque');
+        }
+    }
+
+    /**
+     * Convert a numeric amount into words (e.g. "Two Million Kenya Shillings Only").
+     */
+    private function numberToWords(float $amount): string
+    {
+        $amount = round($amount, 2);
+        $whole  = (int) floor($amount);
+        $cents  = (int) round(($amount - $whole) * 100);
+
+        $result = ($whole === 0 ? 'Zero' : $this->convertWholeNumber($whole)) . ' Kenya Shillings';
+
+        if ($cents > 0) {
+            $result .= ' and ' . $this->convertWholeNumber($cents) . ' Cents';
+        }
+
+        return $result . ' Only';
+    }
+
+    private function convertWholeNumber(int $number): string
+    {
+        if ($number === 0) {
+            return '';
+        }
+
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $words = '';
+
+        foreach ([1000000000 => 'Billion', 1000000 => 'Million', 1000 => 'Thousand'] as $value => $label) {
+            if ($number >= $value) {
+                $words .= $this->convertWholeNumber((int) floor($number / $value)) . ' ' . $label . ' ';
+                $number %= $value;
+            }
+        }
+
+        if ($number >= 100) {
+            $words .= $ones[(int) floor($number / 100)] . ' Hundred ';
+            $number %= 100;
+        }
+
+        if ($number >= 20) {
+            $words .= $tens[(int) floor($number / 10)];
+            if ($number % 10 > 0) {
+                $words .= '-' . $ones[$number % 10];
+            }
+        } elseif ($number > 0) {
+            $words .= $ones[$number];
+        }
+
+        return trim($words);
+    }
 }

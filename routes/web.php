@@ -676,6 +676,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/cheque/printing/{id}/details', [App\Http\Controllers\ChequePrintingController::class, 'show'])->name('cheque.printing.details');
     Route::post('/cheque/printing/{id}/mark-printed', [App\Http\Controllers\ChequePrintingController::class, 'markPrinted'])->name('cheque.printing.mark.printed');
     Route::post('/cheque/printing/{id}/submit-approval', [App\Http\Controllers\ChequePrintingController::class, 'submitToApproval'])->name('cheque.printing.submit.approval');
+    Route::get('cheques/printing/{encryptedId}/print-voucher', [App\Http\Controllers\ChequePrintingController::class, 'printVoucher'])
+    ->name('cheque.printing.print-voucher');
+    Route::get('cheques/printing/{encryptedId}/print-cheque', [App\Http\Controllers\ChequePrintingController::class, 'printCheque'])
+    ->name('cheque.printing.print-cheque');
 
     // Payment Vouchers
     Route::get('/payment/vouchers', [App\Http\Controllers\PaymentVouchersController::class, 'index'])->name('payment.vouchers.index');

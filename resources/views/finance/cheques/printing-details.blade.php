@@ -188,14 +188,17 @@ $(document).ready(function () {
     var voucherNumber     = '{{ $voucher->voucher_number }}';
     var urlDetails        = '{{ route("payment.vouchers.details", encrypt($voucher->id)) }}';
     var urlSubmitApproval = '{{ route("cheque.printing.submit.approval", encrypt($voucher->id)) }}';
+    var urlPrintVoucher   = '{{ route("cheque.printing.print-voucher", encrypt($voucher->id)) }}';
+    var urlPrintCheque    = '{{ route("cheque.printing.print-cheque", encrypt($voucher->id)) }}';
     var csrfToken         = '{{ csrf_token() }}';
 
     $('#printVoucherBtn').on('click', function () {
-        window.open(urlDetails + '?print=voucher', '_blank');
+        window.open(urlPrintVoucher, '_blank');
     });
 
     $('#printChequeBtn').on('click', function () {
-        window.open(urlDetails + '?print=cheque', '_blank');
+        window.open(urlPrintCheque, '_blank');
+        setTimeout(function () { location.reload(); }, 1500); // refresh so "Printed" status updates
     });
 
     $('#submitApprovalBtn').on('click', function () {
