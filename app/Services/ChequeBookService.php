@@ -101,7 +101,7 @@ class ChequeBookService
     {
         Log::info('Leaf ID: ' . $leafId . ' | Lock Token: ' . $lockToken);
         $affected = DB::table('sys_fin_cheque_books_261_repeat')
-            ->where('cheque_number', $leafId)
+            ->where('id', $leafId)
             ->where('lock_token', $lockToken)
             ->where('current_status_id', ChequeLeaf::STATUS_LOCKED)
             ->update([
