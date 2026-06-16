@@ -7,8 +7,13 @@
     @page { size: A4; margin: 10mm; }
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; color: #1a1a1a; background: #f3f4f6; }
-    .wrap { display: flex; justify-content: center; padding-top: 40px; }
-    .wrap + .wrap { page-break-before: always; }
+    .cheque-block { margin-bottom: 10px; }
+    .cheque-block + .cheque-block { page-break-before: always; }
+    .wrap { display: flex; justify-content: center; padding-top: 16px; }
+
+    .cheque-toolbar { display: flex; justify-content: space-between; align-items: center; max-width: 180mm; margin: 0 auto; padding: 0 2mm; }
+    .cheque-toolbar-label { font-size: 0.78rem; color: #444; font-weight: 600; }
+    .cheque-toolbar button { padding: 6px 14px; font-size: 0.8rem; cursor: pointer; border: 1px solid #2b3a4a; background: #2b3a4a; color: #fff; border-radius: 4px; }
 
     .cheque {
         width: 180mm;
@@ -56,61 +61,95 @@
     }
 </style>
 </head>
-<body onload="window.print();">
+<body @if($cheques->count() === 1) onload="printCheque(0);" @endif>
 
 @foreach($cheques as $entry)
     @php $line = $entry['line']; @endphp
-    <div class="wrap">
-        <div class="cheque">
+    <div class="cheque-block" id="cheque-block-{{ $loop->index }}">
 
-            <div class="bank-row">
-                <div>
-                    <div class="bank-name">{{ config('app.company_name', config('app.name')) }}</div>
-                    <div class="bank-sub">Account Payee Only &bull; Not Transferable</div>
-                </div>
-                <div class="date-box">
-                    <div class="date-lbl">Date</div>
-                    @php
-                        $d = $voucher->voucher_date ?? now();
-                        $dateDigits = $d->format('dmY');
-                    @endphp
-                    <div class="date-cells">
-                        @foreach(str_split($dateDigits) as $digit)
-                            <span>{{ $digit }}</span>
-                        @endforeach
+        <div class="no-print cheque-toolbar">
+            <span class="cheque-toolbar-label">Cheque {{ $loop->iteration }} of {{ $cheques->count() }} &mdash; {{ $line->payee_name ?? $voucher->vendor_name ?? '-' }}</span>
+            <button onclick="printCheque({{ $loop->index }})">Print This Cheque</button>
+        </div>
+
+        <div class="wrap">
+            <div class="cheque">
+
+                <div class="bank-row">
+                    <div>
+                        <div class="bank-name">{{ config('app.company_name', config('app.name')) }}</div>
+                        <div class="bank-sub">Account Payee Only &bull; Not Transferable</div>
+                    </div>
+                    <div class="date-box">
+                        <div class="date-lbl">Date</div>
+                        @php
+                            $d = $voucher->voucher_date ?? now();
+                            $dateDigits = $d->format('dmY');
+                        @endphp
+                        <div class="date-cells">
+                            @foreach(str_split($dateDigits) as $digit)
+                                <span>{{ $digit }}</span>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="amt-box-row">
-                <div class="date-lbl">Kshs.</div>
-                <div class="amt-box">{{ number_format($line->amount ?? 0, 2) }}</div>
-            </div>
-
-            <div class="pay-row">
-                <div class="lbl">Pay</div>
-                <div class="line">{{ $line->payee_name ?? $voucher->vendor_name ?? '-' }}</div>
-                <div class="lbl">or order</div>
-            </div>
-
-            <div class="words-row">
-                <div class="lbl">The Sum of</div>
-                <div class="line">{{ $entry['amount_in_words'] }}</div>
-            </div>
-
-            <div class="bottom-row">
-                <div class="micr">{{ $line->cheque_number ?? '000000' }} &nbsp;&nbsp; {{ $voucher->voucher_number }}</div>
-                <div class="sig-box">
-                    <div class="sig-line">Authorized Signature</div>
+                <div class="amt-box-row">
+                    <div class="date-lbl">Kshs.</div>
+                    <div class="amt-box">{{ number_format($line->amount ?? 0, 2) }}</div>
                 </div>
-            </div>
 
+                <div class="pay-row">
+                    <div class="lbl">Pay</div>
+                    <div class="line">{{ $line->payee_name ?? $voucher->vendor_name ?? '-' }}</div>
+                    <div class="lbl">or order</div>
+                </div>
+
+                <div class="words-row">
+                    <div class="lbl">The Sum of</div>
+                    <div class="line">{{ $entry['amount_in_words'] }}</div>
+                </div>
+
+                <div class="bottom-row">
+                    <div class="micr">{{ $line->cheque_number ?? '000000' }} &nbsp;&nbsp; {{ $voucher->voucher_number }}</div>
+                    <div class="sig-box">
+                        <div class="sig-line">Authorized Signature</div>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 @endforeach
 
+@if($cheques->count() > 1)
 <div class="no-print">
-    <button onclick="window.print()">Print {{ $cheques->count() > 1 ? 'Cheques' : 'Cheque' }}</button>
+    <button onclick="printAll()">Print All {{ $cheques->count() }} Cheques</button>
 </div>
+@endif
+
+<script>
+function printCheque(index) {
+    document.querySelectorAll('.cheque-block').forEach(function (el, i) {
+        el.style.display = (i === index) ? '' : 'none';
+    });
+    window.print();
+}
+
+function printAll() {
+    document.querySelectorAll('.cheque-block').forEach(function (el) {
+        el.style.display = '';
+    });
+    window.print();
+}
+
+// Restore all cheques to visible once the print dialog closes (covers both
+// printCheque and printAll, and the browser's own Ctrl+P / print icon).
+window.onafterprint = function () {
+    document.querySelectorAll('.cheque-block').forEach(function (el) {
+        el.style.display = '';
+    });
+};
+</script>
 </body>
 </html>
