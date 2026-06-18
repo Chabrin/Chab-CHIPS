@@ -123,14 +123,11 @@ trait GlPostingTrait
     protected function resolveGlLines(array $config, GlAccountSetup $setup): array
     {
         return match ($config['type'] ?? '') {
-            'invoice_payment' => $this->glLinesInvoicePayment($config, $setup),
-            'client_return'   => $this->glLinesClientReturn($config, $setup),
-            'generic'         => $this->glLinesGeneric($config, $setup),
-            // Future entries — uncomment and implement as needed:
-            // 'invoice_raised'        => $this->glLinesInvoiceRaised($config, $setup),
-            // 'payment_voucher'       => $this->glLinesPaymentVoucher($config, $setup),
-            // 'landlord_remittance'   => $this->glLinesLandlordRemittance($config, $setup),
-            default => $this->glLinesGeneric($config, $setup),  // Fallback to generic
+            'invoice_payment'   => $this->glLinesInvoicePayment($config, $setup),
+            'payment_allocation' => $this->glLinesPaymentAllocation($config, $setup),
+            'client_return'     => $this->glLinesClientReturn($config, $setup),
+            'generic'           => $this->glLinesGeneric($config, $setup),
+            default             => $this->glLinesGeneric($config, $setup),
         };
     }
 
@@ -208,6 +205,88 @@ trait GlPostingTrait
             'type'       => 'Credit',
             'amount'     => $amount,
             'narration'  => $base . ' — tenant account cleared',
+        ];
+
+        return $lines;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // PAYMENT ALLOCATION (Journal 3 — Commission + Client Funds Split)
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GL lines for Phase 2: allocating a tenant payment to a debtor invoice.
+     *
+     * This is GL Journal 3 from the allocation docs. It splits the collected amount
+     * between the management commission and the funds payable to the landlord:
+     *
+     * With commission:
+     *   DR  Earned Commission Account   [commission_amount]
+     *   DR  Client Bank / Trust Account [amount − commission_amount]
+     *   CR  Channel Bank Account        [full amount]
+     *
+     * Without commission (commission_amount == 0 or no SLA):
+     *   DR  Client Bank / Trust Account [full amount]
+     *   CR  Channel Bank Account        [full amount]
+     *
+     * This journal uses direct_post semantics — the debit side may not equal the
+     * credit side in edge cases (rounding), so validateGlBalance() only warns, never throws.
+     *
+     * Config keys consumed:
+     *   amount            float   Allocated amount for this invoice
+     *   commission_amount float   Commission portion (0 if not applicable)
+     *   payment_method    string  'mpesa'|'coop'|'equity'|'clients'|'business'
+     *   bank_account_id   int     Override channel bank account (skips payment_method lookup)
+     *   narration         string  Journal description
+     */
+    protected function glLinesPaymentAllocation(array $config, GlAccountSetup $setup): array
+    {
+        $amount     = (float) ($config['amount']            ?? 0);
+        $commission = (float) ($config['commission_amount'] ?? 0);
+
+        if ($amount <= 0) {
+            return [];
+        }
+
+        // Resolve accounts from the GL setup
+        $channelBankId   = $config['bank_account_id']
+                           ?? $this->resolvePaymentBankAccount($config['payment_method'] ?? null, $setup);
+        $clientBankId    = $setup->clients_bank_account_id;
+        $commissionAccId = $setup->earned_commission_acc_id;
+
+        $base  = $config['narration'] ?? 'Tenant payment allocation';
+        $lines = [];
+
+        if ($commission > 0 && $commissionAccId) {
+            // Split: commission debit + net client funds debit
+            $lines[] = [
+                'account_id' => $commissionAccId,
+                'type'       => 'Debit',
+                'amount'     => $commission,
+                'narration'  => $base . ' — commission',
+            ];
+            $lines[] = [
+                'account_id' => $clientBankId,
+                'type'       => 'Debit',
+                'amount'     => round($amount - $commission, 2),
+                'narration'  => $base . ' — client funds',
+            ];
+        } else {
+            // No commission — full amount goes to client bank
+            $lines[] = [
+                'account_id' => $clientBankId,
+                'type'       => 'Debit',
+                'amount'     => $amount,
+                'narration'  => $base . ' — client funds',
+            ];
+        }
+
+        // Credit the channel bank account for the full allocated amount
+        $lines[] = [
+            'account_id' => $channelBankId,
+            'type'       => 'Credit',
+            'amount'     => $amount,
+            'narration'  => $base . ' — channel bank',
         ];
 
         return $lines;
