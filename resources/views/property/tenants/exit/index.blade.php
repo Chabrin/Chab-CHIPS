@@ -203,6 +203,28 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <hr class="my-4">
+                    <h6 class="fw-bold mb-2">Completed Stay History</h6>
+                    <p class="text-muted mb-2" style="font-size:0.82rem;">Permanent record of all tenancies this person has completed — showing landlord, property, unit and duration.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover table-bordered mb-0" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Property</th>
+                                    <th>Unit</th>
+                                    <th>Landlord</th>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th>Duration</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stayHistoryBody">
+                                <tr><td colspan="7" class="text-center text-muted py-3">No completed stays on record.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 {{-- ────────────── TAB: STATEMENT ────────────── --}}
@@ -395,7 +417,7 @@
 
                                         <div class="mb-2">
                                             <label class="form-label">Message <span class="text-danger">*</span></label>
-                                            <textarea name="message_body" id="commBody" class="form-control" rows="7" placeholder="Type your message here…"></textarea>
+                                            <textarea name="message_body" id="commBody" class="form-control" rows="14" style="min-height:280px;resize:vertical;" placeholder="Type your message here…"></textarea>
                                             <small class="text-muted float-end"><span id="commCharCount">0</span> chars</small>
                                         </div>
 
@@ -803,6 +825,9 @@ function loadTenantProfile(encId) {
         /* render deposits */
         renderDeposits(data.deposits);
 
+        /* render stay history */
+        renderStayHistory(data.stay_history);
+
         /* show workspace */
         $('#exitWorkspace').removeClass('d-none');
         $('html, body').animate({ scrollTop: $('#exitWorkspace').offset().top - 20 }, 300);
@@ -871,6 +896,27 @@ function renderDeposits(deposits) {
     });
     html += '</tbody></table></div>';
     $('#depositsTable').html(html);
+}
+
+/* ─── Stay History ──────────────────────────────────────────────────────── */
+function renderStayHistory(history) {
+    if (!history || !history.length) {
+        $('#stayHistoryBody').html('<tr><td colspan="7" class="text-center text-muted py-3">No completed stays on record.</td></tr>');
+        return;
+    }
+    let html = '';
+    history.forEach(h => {
+        html += `<tr>
+            <td>${h.property_name}</td>
+            <td><strong>${h.unit_name}</strong></td>
+            <td>${h.landlord_name}</td>
+            <td>${h.lease_start_date}</td>
+            <td>${h.exit_date}</td>
+            <td><span class="badge bg-light text-dark border">${h.duration}</span></td>
+            <td><span class="badge bg-secondary">${h.exit_reason}</span></td>
+        </tr>`;
+    });
+    $('#stayHistoryBody').html(html);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -225,4 +225,14 @@ class Client extends Model
     {
         return $this->hasOne(ClientBankDetail::class, 'client_id', 'id')->where('is_default', 1);
     }
+
+    public function stayHistory()
+    {
+        return $this->hasMany(TenantHistory::class, 'tenant_id');
+    }
+
+    public function propertiesOwned()
+    {
+        return $this->hasMany(TenantHistory::class, 'landlord_id');
+    }
 }

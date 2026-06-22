@@ -11,6 +11,7 @@ use App\Models\TenantExit;
 use App\Models\TenantExitCommunication;
 use App\Models\TenantExitDepositRefund;
 use App\Models\TenantExitInspection;
+use App\Models\TenantHistory;
 use App\Models\Unit;
 use App\Services\ErrorDispatcher;
 use Illuminate\Http\Request;
@@ -297,6 +298,25 @@ class TenantExitController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->first();
 
+            // ── Prior stay history ────────────────────────────────────────────
+            $stayHistory = TenantHistory::where('tenant_id', $tenantId)
+                ->with([
+                    'property:id,property_name',
+                    'unit:id,unit_name,unit_code',
+                    'landlord:id,names',
+                ])
+                ->orderBy('exit_date', 'desc')
+                ->get()
+                ->map(fn ($h) => [
+                    'property_name'    => $h->property->property_name ?? '-',
+                    'unit_name'        => $h->unit->unit_name ?? $h->unit->unit_code ?? '-',
+                    'landlord_name'    => $h->landlord->names ?? '-',
+                    'lease_start_date' => $h->lease_start_date ? $h->lease_start_date->format('d M Y') : '-',
+                    'exit_date'        => $h->exit_date->format('d M Y'),
+                    'duration'         => $h->duration_label,
+                    'exit_reason'      => $h->exit_reason ?? '-',
+                ]);
+
             return response()->json([
                 'success' => true,
                 'tenant'  => [
@@ -323,6 +343,7 @@ class TenantExitController extends Controller
                 'closing_balance'=> $balance,
                 'closing_balance_formatted' => number_format($balance, 2),
                 'deposits'       => $deposits,
+                'stay_history'   => $stayHistory,
                 'exit_record'    => $exitRecord ? $exitRecord->toArray() : null,
             ]);
         } catch (\Exception $e) {
@@ -611,8 +632,8 @@ class TenantExitController extends Controller
             LeaseAgreement::where('tenant_id', $validated['tenant_id'])
                 ->where('lease_status', 'Active')
                 ->update([
-                    'lease_status'      => 'Ended',
-                    'current_status_id' => 6, // Ended
+                    'lease_status'      => 'Terminated',
+                    'current_status_id' => 2, // Terminated
                     'date_end'          => $validated['actual_exit_date'],
                     'updated_at'        => now(),
                 ]);
@@ -620,7 +641,7 @@ class TenantExitController extends Controller
             // 3. Vacate the unit (set occupancy to Vacant)
             if ($tenant->unit_id) {
                 Unit::where('id', $tenant->unit_id)->update([
-                    'occupancy_status_id' => 0, // Vacant — adjust to your schema's vacant ID
+                    'occupancy_status_id' => 3, // Vacant — adjust to your schema's vacant ID
                     'updated_at'          => now(),
                 ]);
             }
@@ -643,6 +664,33 @@ class TenantExitController extends Controller
                     'refunded_at'   => now(),
                 ]);
             }
+
+            // 6. Write permanent tenant stay history
+            $exitRecord   = TenantExit::find($validated['exit_id']);
+            $property     = Property::select('id', 'client_id')->find($exitRecord?->property_id);
+            $activeLease  = LeaseAgreement::where('tenant_id', $validated['tenant_id'])
+                ->whereIn('lease_status', ['Ended', 'Terminated'])
+                ->orderBy('date_end', 'desc')
+                ->first();
+
+            $leaseStart  = $activeLease?->date_start;
+            $exitDate    = \Carbon\Carbon::parse($validated['actual_exit_date']);
+            $durationDays = $leaseStart ? (int) \Carbon\Carbon::parse($leaseStart)->diffInDays($exitDate) : null;
+
+            TenantHistory::updateOrCreate(
+                ['exit_id' => $validated['exit_id']],
+                [
+                    'tenant_id'        => $validated['tenant_id'],
+                    'landlord_id'      => $property?->client_id,
+                    'property_id'      => $exitRecord?->property_id,
+                    'unit_id'          => $exitRecord?->unit_id,
+                    'lease_start_date' => $leaseStart,
+                    'exit_date'        => $validated['actual_exit_date'],
+                    'duration_days'    => $durationDays,
+                    'exit_reason'      => $exitRecord?->exit_reason,
+                    'recorded_by'      => Auth::id(),
+                ]
+            );
 
             DB::commit();
 
@@ -980,7 +1028,26 @@ class TenantExitController extends Controller
                 'sent_by_name' => $c->sentBy->name ?? '-',
                 'sent_at'      => $c->sent_at,
             ])->toArray();
- 
+
+            // Full stay history for this tenant (all past stays)
+            $stayHistory = TenantHistory::where('tenant_id', $exit->tenant_id)
+                ->with([
+                    'property:id,property_name',
+                    'unit:id,unit_name,unit_code',
+                    'landlord:id,names',
+                ])
+                ->orderBy('exit_date', 'desc')
+                ->get()
+                ->map(fn ($h) => [
+                    'property_name'    => $h->property->property_name ?? '-',
+                    'unit_name'        => $h->unit->unit_name ?? $h->unit->unit_code ?? '-',
+                    'landlord_name'    => $h->landlord->names ?? '-',
+                    'lease_start_date' => $h->lease_start_date ? $h->lease_start_date->format('d M Y') : '-',
+                    'exit_date'        => $h->exit_date->format('d M Y'),
+                    'duration'         => $h->duration_label,
+                    'exit_reason'      => $h->exit_reason ?? '-',
+                ])->toArray();
+
             return response()->json([
                 'success' => true,
                 'tenant'  => [
@@ -1006,6 +1073,7 @@ class TenantExitController extends Controller
                 'closing_balance' => $balance,
                 'refunds'         => $refunds,
                 'communications'  => $comms,
+                'stay_history'    => $stayHistory,
             ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
