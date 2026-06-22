@@ -2,155 +2,272 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Payment Voucher - {{ $voucher->voucher_number }}</title>
+<title>Payment Voucher</title>
 <style>
-    @page { size: A4; margin: 15mm; }
+    @page { size: A4 landscape; margin: 6mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; margin: 0; background: #f3f4f6; }
-    .doc { max-width: 760px; margin: 24px auto; background: #fff; padding: 28px 34px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+    body { 
+        font-family: Arial, sans-serif; 
+        font-size: 10.5px; 
+        color: #000; 
+        margin: 0; 
+        padding: 0;
+    }
+    .doc { 
+        width: 100%; 
+        max-width: 970px; 
+        margin: 10px auto; 
+        padding: 12px 28px 20px;
+        position: relative;
+        background: white;
+    }
 
-    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1a1a1a; padding-bottom: 12px; margin-bottom: 20px; }
-    .company-name { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.3px; }
-    .company-sub { font-size: 0.7rem; color: #777; margin-top: 2px; }
-    .doc-title { text-align: right; }
-    .doc-title h2 { margin: 0; font-size: 1.05rem; letter-spacing: 1.2px; text-transform: uppercase; color: #2b3a4a; }
-    .doc-title .vno { font-size: 0.95rem; font-weight: 700; margin-top: 4px; }
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+    }
 
-    .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 18px; margin-bottom: 20px; }
-    .meta-item .lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 2px; }
-    .meta-item .val { font-size: 0.85rem; font-weight: 600; }
+    .logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .logo-icon {
+        width: 58px;
+        height: 52px;
+        background: #1e3a8a;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .company-name {
+        font-size: 14.5px;
+        font-weight: 800;
+        color: #1e3a8a;
+        line-height: 1.05;
+    }
+    .tagline {
+        font-size: 8.5px;
+        color: #333;
+    }
 
-    table.lines { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-    table.lines th, table.lines td { border: 1px solid #d8dadd; padding: 7px 9px; font-size: 0.78rem; }
-    table.lines th { background: #f3f4f6; text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.4px; color: #555; text-align: left; }
-    table.lines td.amt, table.lines th.amt { text-align: right; }
-    .total-row td { font-weight: 700; background: #fafafa; }
+    .address {
+        text-align: right;
+        font-size: 9px;
+        line-height: 1.3;
+    }
 
-    .words-box { margin: 16px 0 30px; padding: 10px 14px; border: 1px dashed #aab; font-size: 0.82rem; background: #fafbfc; }
-    .words-box .lbl { font-size: 0.6rem; text-transform: uppercase; color: #888; margin-bottom: 3px; letter-spacing: 0.4px; }
+    .header-right {
+        text-align: right;
+    }
 
-    .sign-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 55px; }
-    .sign-box { text-align: center; }
-    .sign-line { border-top: 1px solid #444; margin-top: 44px; padding-top: 6px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.4px; color: #666; }
-    .sign-name { font-size: 0.8rem; font-weight: 600; margin-top: 2px; min-height: 1em; }
+    .voucher-no {
+        font-size: 33px;
+        font-weight: lighter;
+        margin-bottom: 4px;
+    }
 
-    .no-print { text-align: center; margin: 20px 0; }
-    .no-print button { padding: 8px 20px; font-size: 0.85rem; cursor: pointer; border: 1px solid #2b3a4a; background: #2b3a4a; color: #fff; border-radius: 4px; }
+    .title {
+        text-align: center;
+        font-size: 15.5px;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin: 12px 0 2px;
+        letter-spacing: 1px;
+    }
 
-    @media print {
-        body { background: #fff; }
-        .doc { box-shadow: none; margin: 0; max-width: none; }
-        .no-print { display: none; }
+    .voucher-number {
+        text-align: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 10px;
+    }
+
+    .name-row {
+        border: 1px solid #000;
+        padding: 6px 10px;
+        margin-bottom: 12px;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10px;
+    }
+    th, td {
+        border: 1px solid #000;
+        padding: 4px 5px;
+        vertical-align: top;
+    }
+    th {
+        background: #f0f0f0;
+        font-weight: bold;
+        font-size: 9px;
+    }
+    .desc { width: 52%; }
+    .amt { text-align: right; font-weight: 600; width: 13%; }
+
+    .total {
+        font-weight: bold;
+        background: #f8f8f8;
+    }
+
+    .words {
+        border: 1px solid #000;
+        padding: 7px 10px;
+        margin: 12px 0;
+        font-size: 11px;
+    }
+
+    .signatures {
+        display: flex;
+        gap: 40px;
+        margin-top: 15px;
+    }
+    .left-sig { flex: 1; }
+    .right-sig { flex: 1; }
+
+    .sig-label {
+        font-size: 9.5px;
+        margin-bottom: 2px;
+    }
+    .sig-line {
+        border-bottom: 1px solid #000;
+        height: 24px;
+        margin-bottom: 12px;
+    }
+
+    .stamp {
+        position: absolute;
+        top: 195px;
+        right: 85px;
+        transform: rotate(-15deg);
+        color: #c00;
+        border: 3px solid #c00;
+        padding: 6px 14px;
+        font-size: 17px;
+        font-weight: bold;
+        border-radius: 50%;
+        opacity: 0.9;
     }
 </style>
 </head>
 <body onload="window.print();">
+
 <div class="doc">
 
-    <div class="doc-header">
-        <div>
-            <div class="company-name">{{ config('app.company_name', config('app.name')) }}</div>
-            <div class="company-sub">Payment Voucher Document</div>
-        </div>
-        <div class="doc-title">
-            <h2>Payment Voucher</h2>
-            <div class="vno">{{ $voucher->voucher_number }}</div>
-        </div>
-    </div>
-
-    <div class="meta-grid">
-        <div class="meta-item">
-            <div class="lbl">Date</div>
-            <div class="val">{{ $voucher->voucher_date?->format('d M Y') ?? '-' }}</div>
-        </div>
-        <div class="meta-item">
-            <div class="lbl">Period</div>
-            <div class="val">
-                @php $monthName = \Carbon\Carbon::createFromDate(null, $voucher->month, null)->format('F'); @endphp
-                {{ $monthName }} {{ $voucher->year }}
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon">CA</div>
+            <div>
+                <div class="company-name">CHABRIN<br>AGENCIES LTD</div>
+                <div class="tagline">Registered Property Managers & Consultants</div>
             </div>
         </div>
-        <div class="meta-item">
-            <div class="lbl">Payee</div>
-            <div class="val">{{ $voucher->vendor_name ?? '-' }}</div>
-        </div>
-        <div class="meta-item">
-            <div class="lbl">Payee Type</div>
-            <div class="val">{{ $voucher->vendor_type ?? '-' }}</div>
-        </div>
-        <div class="meta-item">
-            <div class="lbl">Cheque No.</div>
-            <div class="val">{{ $voucher->cheque_number ?? 'Pending' }}</div>
-        </div>
-        <div class="meta-item">
-            <div class="lbl">Status</div>
-            <div class="val">{{ $voucher->voucher_status ?? '-' }}</div>
-        </div>
-        <div class="meta-item" style="grid-column: span 2;">
-            <div class="lbl">Description</div>
-            <div class="val">{{ $voucher->description ?? '-' }}</div>
-        </div>
-        <div class="meta-item">
-            <div class="lbl">Prepared By</div>
-            <div class="val">{{ $voucher->prepared_by ?? '-' }}</div>
+
+        <div class="header-right">
+            <span><div class="voucher-no">{{ $voucher->id }}</div>No. </span>
+            <div class="address">
+                MACHO PLAZA, LACHI ROAD<br>
+                SYFREBOOK, NAIROBI<br>
+                P.O. BOX 1663-00100<br>
+                TEL: 0723 164366<br>
+                EMAIL: info@chabrin.co.ke
+            </div>
         </div>
     </div>
 
-    <table class="lines">
+    <div class="title">PAYMENT VOUCHER</div>
+    <div class="voucher-number">{{ $voucher->voucher_number }}</div>
+
+    <div class="name-row">
+        <span><strong>NAME:</strong> {{ $voucher->vendor_name }}</span>
+        <span><strong>DATE:</strong> {{ now()->format('d M Y') }}</span>
+    </div>
+
+    <!-- Dynamic Table -->
+    <table>
         <thead>
             <tr>
-                <th>#</th>
-                <th>Description</th>
-                <th>Payee</th>
-                <th>Account No.</th>
-                <th>Bank</th>
+                <th style="border-right:none;"></th>
+                <th style="border-right:none;border-left:none;">Bank</th>
+                <th style="border-left:none;">CHQ No.</th>
                 <th class="amt">Amount</th>
             </tr>
         </thead>
         <tbody>
-        @foreach($lines as $i => $line)
-            <tr>
-                <td>{{ $i + 1 }}</td>
-                <td>{{ $line->entry_description ?? '-' }}</td>
-                <td>{{ $line->payee_name ?? '-' }}</td>
-                <td>{{ $line->account_number ?? '-' }}</td>
-                <td>{{ $line->account_bank ?? '-' }}</td>
+            @foreach($lines as $key => $line)
+            <tr @if($loop->last) style="height:200px;" @endif>
+                <td style="border-right:none; text-align: center;">{{ $line->entry_description ?? '-' }}</td>
+                <td style="border-right:none;border-left:none; text-align: center;">{{ $line->account_bank ?? 'Co-op' }}</td>
+                <td style="border-left:none; text-align: center;">{{ $line->cheque_number ?? '162717' }}</td>
                 <td class="amt">{{ number_format($line->amount ?? 0, 2) }}</td>
             </tr>
-        @endforeach
-        </tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td colspan="5" style="text-align: right;">Total</td>
-                <td class="amt">{{ number_format($voucher->debit_amount ?? 0, 2) }}</td>
+            @endforeach
+            <tr>
+                {{-- Amount in words on the left, no borders --}}
+                <td colspan="2" style="font-weight:600; text-transform:uppercase; border-left:none; border-bottom:none;">
+                    {{ strtoupper($amountInWords) }}
+                </td>
+
+                {{-- Grand Total label --}}
+                <td style="font-weight:600; text-align:right; border-top:1px solid #000;">
+                    GRAND TOTAL
+                </td>
+
+                {{-- Grand Total amount --}}
+                <td class="amt" style="font-weight:700; border-top:1px solid #000;">
+                    {{ number_format($lines->sum('amount'), 2) }}
+                </td>
             </tr>
-        </tfoot>
+
+        </tbody>
+        
     </table>
 
-    <div class="words-box">
-        <div class="lbl">Amount in Words</div>
-        {{ $amountInWords }}
-    </div>
+    <div class="signatures">
+        <div class="left-sig">
+            <div>
+                <div class="sig-label">Prepared By:</div>
+                <div class="sig-line"></div>
+            </div>
+            <div>
+                <div class="sig-label">Checked By:</div>
+                <div class="sig-line"></div>
+            </div>
+            <div>
+                <div class="sig-label">Authorized By:</div>
+                <div class="sig-line"></div>
+            </div>
+        </div>
 
-    <div class="sign-grid">
-        <div class="sign-box">
-            <div class="sign-line">Prepared By</div>
-            <div class="sign-name">{{ $voucher->prepared_by ?? '' }}</div>
-        </div>
-        <div class="sign-box">
-            <div class="sign-line">Checked By</div>
-            <div class="sign-name">{{ $voucher->checked_by ?? '' }}</div>
-        </div>
-        <div class="sign-box">
-            <div class="sign-line">Authorized By</div>
-            <div class="sign-name">{{ $voucher->authorized_by ?? '' }}</div>
+        <div class="right-sig">
+            <div>
+                <div class="sig-label">Received By:</div>
+                <div class="sig-line"></div>
+            </div>
+            <div>
+                <div class="sig-label">Signature:</div>
+                <div class="sig-line"></div>
+            </div>
+            <div>
+                <div class="sig-label">Date:</div>
+                <div class="sig-line"></div>
+            </div>
         </div>
     </div>
 
 </div>
 
-<div class="no-print">
-    <button onclick="window.print()">Print</button>
-</div>
 </body>
 </html>

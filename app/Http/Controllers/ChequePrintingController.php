@@ -182,6 +182,7 @@ class ChequePrintingController extends Controller
             $lines   = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)
                 ->orderBy('id')
                 ->get();
+            
 
             $amountInWords = $this->numberToWords($voucher->debit_amount ?? 0);
 
