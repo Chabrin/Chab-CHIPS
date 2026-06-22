@@ -400,7 +400,7 @@
                                         <div id="emailFields">
                                             <div class="mb-2">
                                                 <label class="form-label">To (Email)</label>
-                                                <input type="email" name="email_address" id="commEmailAddr" class="form-control form-control-sm">
+                                                <input type="email" name="email_address" id="commEmailAddr" class="form-control form-control-sm" placeholder="Pre-filled from tenant profile">
                                             </div>
                                             <div class="mb-2">
                                                 <label class="form-label">Subject</label>
@@ -653,7 +653,14 @@ function switchWorkspaceTab(tab) {
         if (btn.getAttribute('onclick')?.includes(tab)) btn.classList.add('active');
     });
     // Lazy-load comms when tab activated
-    if (tab === 'communications') loadCommunications();
+    if (tab === 'communications') {
+        loadCommunications();
+        if (currentProfile) {
+            const t = currentProfile.tenant;
+            if (!$('#commEmailAddr').val()) $('#commEmailAddr').val(t.email_address || '');
+            if (!$('#commMobile').val())    $('#commMobile').val(t.mobile_number || '');
+        }
+    }
     if (tab === 'statement') markChecklist('statement');
 }
 
@@ -823,7 +830,7 @@ function loadTenantProfile(encId) {
         renderStatement(data.statement, data.closing_balance);
 
         /* render deposits */
-        renderDeposits(data.deposits);
+        renderDeposits(data.deposits, data.total_deposit_refunded);
 
         /* render stay history */
         renderStayHistory(data.stay_history);
@@ -885,16 +892,21 @@ function renderStatement(entries, closingBalance) {
 }
 
 /* ─── Deposits ──────────────────────────────────────────────────────────── */
-function renderDeposits(deposits) {
+function renderDeposits(deposits, totalRefunded) {
     if (!deposits || !deposits.length) {
         $('#depositsTable').html('<div class="text-muted" style="font-size:0.85rem;">No deposit records found.</div>');
         return;
     }
-    let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Reference</th><th>Property</th><th>Unit</th><th>Amount (KES)</th><th>Received</th><th>Refunded</th></tr></thead><tbody>';
+    let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Reference</th><th>Property</th><th>Unit</th><th class="text-end">Amount (KES)</th><th>Received</th></tr></thead><tbody>';
     deposits.forEach(d => {
-        html += `<tr><td>${d.reference}</td><td>${d.property_name}</td><td>${d.unit_name}</td><td class="text-end">${d.amount}</td><td>${d.date_received}</td><td class="text-end">${d.refunded_amount}</td></tr>`;
+        html += `<tr><td>${d.reference}</td><td>${d.property_name}</td><td>${d.unit_name}</td><td class="text-end">${d.amount}</td><td>${d.date_received}</td></tr>`;
     });
     html += '</tbody></table></div>';
+    if (totalRefunded && parseFloat(totalRefunded.replace(/,/g,'')) > 0) {
+        html += `<div class="mt-2 text-end" style="font-size:0.82rem;">
+            Total refunded via exit: <strong class="text-success">KES ${totalRefunded}</strong>
+        </div>`;
+    }
     $('#depositsTable').html(html);
 }
 

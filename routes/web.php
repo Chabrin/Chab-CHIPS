@@ -871,6 +871,11 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         Route::get('/communications/{exitId}',     [TenantExitController::class, 'getCommunications']);
         Route::post('/finalise',            [TenantExitController::class, 'finaliseExit'])->name('finalise');
         Route::get('/templates',            [TenantExitController::class, 'getTemplates'])->name('templates');
+
+        // PDF downloads (from exited tenants detail panel)
+        Route::get('/pdf/exit-letter/{exitId}',      [TenantExitController::class, 'downloadExitLetter'])->name('pdf.exit-letter');
+        Route::get('/pdf/statement/{exitId}',        [TenantExitController::class, 'downloadStatement'])->name('pdf.statement');
+        Route::get('/pdf/inspection/{exitId}',       [TenantExitController::class, 'downloadInspectionReport'])->name('pdf.inspection');
     });
 
     // Recovery

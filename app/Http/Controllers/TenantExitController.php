@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
@@ -178,8 +179,8 @@ class TenantExitController extends Controller
     {
         try {
             $units = Unit::where('property_id', $propertyId)
+                ->where('occupancy_status_id', '!=', 3) // 31 = Vacant/Available
                 ->whereNotNull('occupancy_status_id')
-                ->where('occupancy_status_id', '!=', 0) // 0 = Vacant typically
                 ->select('id', 'unit_name', 'unit_code', 'rent_amount', 'occupancy_status_id')
                 ->orderBy('unit_name')
                 ->get()
@@ -267,17 +268,18 @@ class TenantExitController extends Controller
                     ->with(['property:id,property_name', 'unit:id,unit_name,unit_code'])
                     ->get()
                     ->map(fn ($d) => [
-                        'id'             => $d->id,
-                        'reference'      => $d->reference_number ?? '-',
-                        'property_name'  => $d->property->property_name ?? '-',
-                        'unit_name'      => $d->unit->unit_name ?? $d->unit->unit_code ?? '-',
-                        'amount'         => number_format($d->amount, 2),
-                        'date_received'  => $d->date_received ? date('d-m-Y', strtotime($d->date_received)) : '-',
-                        'status'         => $d->current_status_id ?? '-',
-                        'refunded_amount'=> isset($d->refunded_amount) ? number_format($d->refunded_amount, 2) : '0.00',
+                        'id'            => $d->id,
+                        'reference'     => $d->reference_number ?? '-',
+                        'property_name' => $d->property->property_name ?? '-',
+                        'unit_name'     => $d->unit->unit_name ?? $d->unit->unit_code ?? '-',
+                        'amount'        => number_format($d->amount, 2),
+                        'date_received' => $d->date_received ? date('d-m-Y', strtotime($d->date_received)) : '-',
                     ])
                     ->toArray();
             }
+
+            // Total deposit refunded via exit workflow (separate from individual deposit records)
+            $totalDepositRefunded = TenantExitDepositRefund::where('tenant_id', $tenantId)->sum('refund_amount');
 
             // ── Lease history ────────────────────────────────────────────────
             $l = $tenant->lease;
@@ -342,9 +344,10 @@ class TenantExitController extends Controller
                 'statement'      => $statementEntries,
                 'closing_balance'=> $balance,
                 'closing_balance_formatted' => number_format($balance, 2),
-                'deposits'       => $deposits,
-                'stay_history'   => $stayHistory,
-                'exit_record'    => $exitRecord ? $exitRecord->toArray() : null,
+                'deposits'                => $deposits,
+                'total_deposit_refunded'  => number_format($totalDepositRefunded, 2),
+                'stay_history'            => $stayHistory,
+                'exit_record'             => $exitRecord ? $exitRecord->toArray() : null,
             ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -641,7 +644,8 @@ class TenantExitController extends Controller
             // 3. Vacate the unit (set occupancy to Vacant)
             if ($tenant->unit_id) {
                 Unit::where('id', $tenant->unit_id)->update([
-                    'occupancy_status_id' => 3, // Vacant — adjust to your schema's vacant ID
+                    'occupancy_status_id' => 3, // 31 = Vacant/Available (system-wide convention)
+                    'current_status_id'   => 2,
                     'updated_at'          => now(),
                 ]);
             }
@@ -1079,6 +1083,117 @@ class TenantExitController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('TenantExit: getExitedTenantDetail — ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to load exit detail'], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  PDF DOWNLOADS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Download exit clearance letter PDF.
+     * GET /tenant-exit/pdf/exit-letter/{exitId}
+     */
+    public function downloadExitLetter(int $exitId)
+    {
+        try {
+            $exit     = TenantExit::with(['inspection', 'depositRefunds'])->findOrFail($exitId);
+            $tenant   = Client::select('id', 'names', 'reference_number', 'mobile_number', 'email_address', 'national_id')->find($exit->tenant_id);
+            $property = Property::select('id', 'property_name', 'reference_number', 'client_id')->find($exit->property_id);
+            $unit     = Unit::selectRaw("id, COALESCE(unit_name, unit_code) as unit_name")->find($exit->unit_id);
+            $landlord = $property?->client_id ? Client::select('names', 'mobile_number')->find($property->client_id) : null;
+            $totalRefunded = $exit->depositRefunds->sum('refund_amount');
+
+            $pdf = Pdf::loadView('property.tenants.exit.pdfs.exit-letter', compact(
+                'exit', 'tenant', 'property', 'unit', 'landlord', 'totalRefunded'
+            ));
+            $pdf->setPaper('A4', 'portrait');
+            $filename = 'ExitLetter_' . ($tenant->reference_number ?? $exitId) . '_' . now()->format('Ymd') . '.pdf';
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: downloadExitLetter — ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate exit letter.');
+        }
+    }
+
+    /**
+     * Download tenant account statement PDF.
+     * GET /tenant-exit/pdf/statement/{exitId}
+     */
+    public function downloadStatement(int $exitId)
+    {
+        try {
+            $exit   = TenantExit::findOrFail($exitId);
+            $tenant = Client::select('id', 'names', 'reference_number', 'mobile_number', 'email_address')->find($exit->tenant_id);
+
+            $transactions = TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
+                ->where('current_status_id', 1)
+                ->orderBy('date_time', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $entries = [];
+            $balance = 0;
+            foreach ($transactions as $txn) {
+                $debit   = abs($txn->debit_amount  ?? 0);
+                $credit  = abs($txn->credit_amount ?? 0);
+                $balance += $credit - $debit;
+                $entries[] = [
+                    'date'      => $txn->date_time ? date('d-m-Y', strtotime($txn->date_time)) : '-',
+                    'reference' => $txn->invoice_number ?? '-',
+                    'narration' => $txn->narration ?? ($debit > 0 ? 'Invoice' : 'Payment'),
+                    'debit'     => $debit  > 0 ? number_format($debit,  2) : '-',
+                    'credit'    => $credit > 0 ? number_format($credit, 2) : '-',
+                    'balance'   => number_format($balance, 2),
+                    'is_neg'    => $balance < 0,
+                ];
+            }
+
+            $property = Property::select('property_name')->find($exit->property_id);
+            $unit     = Unit::selectRaw("COALESCE(unit_name, unit_code) as unit_name")->find($exit->unit_id);
+
+            $pdf = Pdf::loadView('property.tenants.exit.pdfs.statement', compact(
+                'exit', 'tenant', 'property', 'unit', 'entries', 'balance'
+            ));
+            $pdf->setPaper('A4', 'portrait');
+            $filename = 'Statement_' . ($tenant->reference_number ?? $exitId) . '_' . now()->format('Ymd') . '.pdf';
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: downloadStatement — ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate statement.');
+        }
+    }
+
+    /**
+     * Download unit inspection report PDF.
+     * GET /tenant-exit/pdf/inspection/{exitId}
+     */
+    public function downloadInspectionReport(int $exitId)
+    {
+        try {
+            $exit   = TenantExit::with('inspection')->findOrFail($exitId);
+            $insp   = $exit->inspection;
+
+            if (!$insp) {
+                return redirect()->back()->with('error', 'No inspection record found for this exit.');
+            }
+
+            $tenant   = Client::select('id', 'names', 'reference_number')->find($exit->tenant_id);
+            $property = Property::select('property_name')->find($exit->property_id);
+            $unit     = Unit::selectRaw("COALESCE(unit_name, unit_code) as unit_name")->find($exit->unit_id);
+
+            $pdf = Pdf::loadView('property.tenants.exit.pdfs.inspection-report', compact(
+                'exit', 'insp', 'tenant', 'property', 'unit'
+            ));
+            $pdf->setPaper('A4', 'portrait');
+            $filename = 'InspectionReport_' . ($tenant->reference_number ?? $exitId) . '_' . now()->format('Ymd') . '.pdf';
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: downloadInspectionReport — ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to generate inspection report.');
         }
     }
 }
