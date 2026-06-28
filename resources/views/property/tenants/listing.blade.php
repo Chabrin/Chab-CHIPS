@@ -9,7 +9,11 @@
                     <div class="card-header card-no-border d-flex align-items-center justify-content-between">
                         <h5 class="mb-0">Tenant Management</h5>
                         <small class="text-muted" id="result_info" style="display:none;">Showing <strong id="result_count">0</strong> tenants (max 1000)</small>
+                         <a href="{{ route('units.tenants.create') }}" class="btn btn-sm btn-outline-secondary">
+                        <span class="material-symbols-outlined">add_circle</span> Onboard tenant
+                    </a>
                     </div>
+                   
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="tenants-table" style="width:100%;">

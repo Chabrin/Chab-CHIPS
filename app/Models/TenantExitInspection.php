@@ -31,6 +31,7 @@ class TenantExitInspection extends Model
         'general_notes',
         'inspected_by_name',
         'photo_paths',
+        'video_paths',
         'created_by',
         'updated_by',
     ];
@@ -40,6 +41,7 @@ class TenantExitInspection extends Model
         'damage_amount'   => 'decimal:2',
         'cleaning_cost'   => 'decimal:2',
         'photo_paths'     => 'array',
+        'video_paths'     => 'array',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────────────

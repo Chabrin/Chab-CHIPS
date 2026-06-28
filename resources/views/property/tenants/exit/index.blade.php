@@ -791,6 +791,29 @@
                             <label class="form-label form-label-sm mb-1">General Notes</label>
                             <textarea name="general_notes" class="form-control form-control-sm" rows="2" placeholder="Any other observations…"></textarea>
                         </div>
+                        <div class="col-12">
+                            <hr class="my-2">
+                            <p class="text-muted mb-2" style="font-size:0.78rem;">
+                                <span class="material-symbols-outlined align-middle" style="font-size:14px;">photo_camera</span>
+                                Upload photos and/or videos of the unit condition. Multiple files allowed.
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm mb-1">Photos</label>
+                            <input type="file" name="inspection_photos[]" class="form-control form-control-sm"
+                                   accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                   multiple id="exitInspectionPhotos">
+                            <div class="form-text" style="font-size:0.72rem;">JPG, PNG, WEBP, HEIC — multiple allowed</div>
+                            <div id="exitPhotoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm mb-1">Videos</label>
+                            <input type="file" name="inspection_videos[]" class="form-control form-control-sm"
+                                   accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska"
+                                   multiple id="exitInspectionVideos">
+                            <div class="form-text" style="font-size:0.72rem;">MP4, MOV, AVI, MKV — multiple allowed</div>
+                            <div id="exitVideoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                        </div>
                     </div>
                     <div class="mt-3">
                         <button type="submit" class="btn btn-primary btn-sm">
@@ -1871,6 +1894,33 @@ $('#inspectionForm').on('submit', function (e) {
             } else toastr.error(res.message || 'Failed to save inspection.');
         },
         error: () => toastr.error('Failed to save inspection.')
+    });
+});
+
+/* ── Inspection media previews ── */
+document.getElementById('exitInspectionPhotos').addEventListener('change', function() {
+    const preview = document.getElementById('exitPhotoPreview');
+    preview.innerHTML = '';
+    Array.from(this.files).forEach(file => {
+        const url = URL.createObjectURL(file);
+        preview.insertAdjacentHTML('beforeend',
+            `<div class="position-relative" style="width:64px;height:64px;">
+                <img src="${url}" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                <span class="position-absolute bottom-0 start-0 w-100 text-truncate px-1" style="font-size:0.6rem;background:rgba(0,0,0,.45);color:#fff;border-radius:0 0 4px 4px;">${file.name}</span>
+             </div>`
+        );
+    });
+});
+document.getElementById('exitInspectionVideos').addEventListener('change', function() {
+    const preview = document.getElementById('exitVideoPreview');
+    preview.innerHTML = '';
+    Array.from(this.files).forEach(file => {
+        preview.insertAdjacentHTML('beforeend',
+            `<div class="d-flex align-items-center gap-1 border rounded px-2 py-1" style="font-size:0.72rem;max-width:180px;">
+                <span class="material-symbols-outlined" style="font-size:16px;color:#6c757d;">videocam</span>
+                <span class="text-truncate">${file.name}</span>
+             </div>`
+        );
     });
 });
 

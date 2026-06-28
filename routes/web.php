@@ -994,12 +994,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/bulk/upload', [BulkUploadController::class, 'upload'])->name('property.bulk.upload');
 
     // Service Level Agreements (SLAs)
-    Route::get('property/service-agreements', [SLAController::class, 'index'])->name('property.service.agreements.index');
+    Route::get('/property/service-agreements', [SLAController::class, 'index'])->name('property.service.agreements.index');
     Route::get('/property/service-agreements/data', [SLAController::class, 'getAllSLA'])->name('service.agreements.data');
     Route::get('/property/service-agreements', [SLAController::class, 'index'])->name('service.agreements.index');
     Route::get('/property/service-agreements/create', [SLAController::class, 'create'])->name('service.agreements.create');
     Route::get('/ajax/clients/search-select2', [SLAController::class, 'searchClientsAjax'])->name('ajax.clients.search.select2');
     Route::post('/property/service-agreements', [SLAController::class, 'store'])->name('service.agreements.store');
+    Route::get('/property/service-agreements/move-in-inspection-settings', [SLAController::class, 'moveInInspectionSettings'])->name('service.agreements.move-in-settings');
+    Route::post('/property/service-agreements/move-in-inspection-flag',    [SLAController::class, 'updateMoveInInspectionFlag'])->name('service.agreements.move-in-flag');
     Route::get('/property/service-agreements/{id}', [SLAController::class, 'show'])->name('service.agreements.show');
     Route::get('/property/service-agreements/{id}/edit', [SLAController::class, 'edit'])->name('service.agreements.edit');
     Route::put('/property/service-agreements/{id}', [SLAController::class, 'update'])->name('service.agreements.update');

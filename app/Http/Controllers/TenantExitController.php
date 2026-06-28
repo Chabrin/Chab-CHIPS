@@ -497,12 +497,20 @@ class TenantExitController extends Controller
 
         DB::beginTransaction();
         try {
-            // Handle photo uploads
             $photoPaths = [];
             if ($request->hasFile('inspection_photos')) {
-                foreach ($request->file('inspection_photos') as $photo) {
-                    if ($photo->isValid()) {
-                        $photoPaths[] = $photo->store('tenant-exits/inspections', 'public');
+                foreach ($request->file('inspection_photos') as $file) {
+                    if ($file->isValid()) {
+                        $photoPaths[] = $file->store('tenant-exits/inspections/photos', 'public');
+                    }
+                }
+            }
+
+            $videoPaths = [];
+            if ($request->hasFile('inspection_videos')) {
+                foreach ($request->file('inspection_videos') as $file) {
+                    if ($file->isValid()) {
+                        $videoPaths[] = $file->store('tenant-exits/inspections/videos', 'public');
                     }
                 }
             }
@@ -514,13 +522,16 @@ class TenantExitController extends Controller
             ]);
 
             if ($existing) {
-                // Only overwrite photos if new ones were uploaded
                 if (!empty($photoPaths)) {
-                    $data['photo_paths'] = $photoPaths;
+                    $data['photo_paths'] = array_merge($existing->photo_paths ?? [], $photoPaths);
+                }
+                if (!empty($videoPaths)) {
+                    $data['video_paths'] = array_merge($existing->video_paths ?? [], $videoPaths);
                 }
                 $existing->update($data);
             } else {
                 $data['photo_paths'] = $photoPaths;
+                $data['video_paths'] = $videoPaths;
                 $data['created_by']  = Auth::id();
                 TenantExitInspection::create($data);
             }
