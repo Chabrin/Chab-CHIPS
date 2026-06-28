@@ -272,6 +272,9 @@
                                         </div>
                                     </div>
 
+                                    {{-- PDF Downloads --}}
+                                    <div class="d-flex gap-2 flex-wrap mb-3 mt-2" data-field="pdf-links"></div>
+
                                     {{-- Notes --}}
                                     <div class="d-none mb-3" data-field="notes-wrap">
                                         <div class="row g-2">
@@ -342,6 +345,19 @@
                                                 </div>
                                                 <div class="inner-card-body" style="max-height:280px;overflow-y:auto;" data-field="comms-body">
                                                     <div class="text-muted text-center py-2" style="font-size:0.8rem;">No communications logged.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- STAY HISTORY --}}
+                                        <div class="col-12">
+                                            <div class="inner-card">
+                                                <div class="inner-card-header">
+                                                    <span class="material-symbols-outlined">history</span>
+                                                    Tenant Stay History
+                                                </div>
+                                                <div class="inner-card-body p-0" data-field="stay-history-body">
+                                                    <div class="text-muted text-center py-2" style="font-size:0.8rem;">No prior stays on record.</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -484,7 +500,10 @@
 <script>
 'use strict';
 
-const DETAIL_URL  = "{{ url('tenant-exit/exited-detail') }}";
+const DETAIL_URL      = "{{ url('tenant-exit/exited-detail') }}";
+const PDF_LETTER_URL  = "{{ url('tenant-exit/pdf/exit-letter') }}";
+const PDF_STMT_URL    = "{{ url('tenant-exit/pdf/statement') }}";
+const PDF_INSP_URL    = "{{ url('tenant-exit/pdf/inspection') }}";
 const panelCache  = {}; // exitId → true (prevents re-fetch on re-open)
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -604,12 +623,13 @@ function renderPanel(exitId, data) {
     const ep      = document.getElementById('panel-' + exitId).querySelector('.exit-panel');
     const content = ep.querySelector('.panel-content');
 
-    const t      = data.tenant;
-    const ex     = data.exit;
-    const insp   = data.inspection;
-    const stmt   = data.statement      || [];
-    const refunds= data.refunds        || [];
-    const comms  = data.communications || [];
+    const t          = data.tenant;
+    const ex         = data.exit;
+    const insp       = data.inspection;
+    const stmt       = data.statement      || [];
+    const refunds    = data.refunds        || [];
+    const comms      = data.communications || [];
+    const stayHistory= data.stay_history   || [];
     const bal    = parseFloat(data.closing_balance);
     const balFmt = (bal >= 0 ? 'CR ' : 'DR ') +
                    Math.abs(bal).toLocaleString('en-KE', {minimumFractionDigits:2});
@@ -634,6 +654,22 @@ function renderPanel(exitId, data) {
 
     const balEl = content.querySelector('[data-field="closing-balance"]');
     if (balEl) { balEl.textContent = balFmt; balEl.style.color = bal >= 0 ? '#27ae60' : '#e74c3c'; }
+
+    /* ── PDF download buttons ────────────────────────────────────────── */
+    const pdfWrap = content.querySelector('[data-field="pdf-links"]');
+    if (pdfWrap) {
+        const btnStyle = 'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.76rem;border-radius:4px;text-decoration:none;border:1px solid;';
+        const hasInsp  = !!(data.inspection && data.inspection.inspection_date);
+        pdfWrap.innerHTML =
+            '<a href="' + PDF_LETTER_URL + '/' + data.exit.id + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
+                '<span class="material-symbols-outlined" style="font-size:14px;">description</span>Exit Letter</a>' +
+            '<a href="' + PDF_STMT_URL + '/' + data.exit.id + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
+                '<span class="material-symbols-outlined" style="font-size:14px;">receipt_long</span>Statement</a>' +
+            (hasInsp ?
+                '<a href="' + PDF_INSP_URL + '/' + data.exit.id + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
+                    '<span class="material-symbols-outlined" style="font-size:14px;">home_search</span>Inspection Report</a>'
+                : '');
+    }
 
     /* ── notes ───────────────────────────────────────────────────────── */
     let hasNotes = false;
@@ -750,6 +786,27 @@ function renderPanel(exitId, data) {
                 '<div class="comm-meta">By ' + (c.sent_by_name||'-') + ' &bull; ' + (c.sent_at ? new Date(c.sent_at).toLocaleDateString() : '-') + '</div>' +
                 '</div>';
         }).join(''));
+    }
+
+    /* ── 5. STAY HISTORY ────────────────────────────────────────────── */
+    if (stayHistory.length) {
+        const rows = stayHistory.map(function (h) {
+            return '<tr>' +
+                '<td>' + h.property_name + '</td>' +
+                '<td><strong>' + h.unit_name + '</strong></td>' +
+                '<td>' + h.landlord_name + '</td>' +
+                '<td>' + h.lease_start_date + '</td>' +
+                '<td>' + h.exit_date + '</td>' +
+                '<td><span class="badge bg-light text-dark border">' + h.duration + '</span></td>' +
+                '<td><span class="badge bg-secondary">' + h.exit_reason + '</span></td>' +
+                '</tr>';
+        }).join('');
+        html('stay-history-body',
+            '<table class="table table-sm table-bordered mb-0" style="font-size:0.77rem;">' +
+            '<thead class="table-light"><tr><th>Property</th><th>Unit</th><th>Landlord</th>' +
+            '<th>From</th><th>To</th><th>Duration</th><th>Reason</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>'
+        );
     }
 
     /* ── show content ────────────────────────────────────────────────── */

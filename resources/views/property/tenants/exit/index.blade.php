@@ -203,6 +203,28 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <hr class="my-4">
+                    <h6 class="fw-bold mb-2">Completed Stay History</h6>
+                    <p class="text-muted mb-2" style="font-size:0.82rem;">Permanent record of all tenancies this person has completed — showing landlord, property, unit and duration.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover table-bordered mb-0" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Property</th>
+                                    <th>Unit</th>
+                                    <th>Landlord</th>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th>Duration</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stayHistoryBody">
+                                <tr><td colspan="7" class="text-center text-muted py-3">No completed stays on record.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 {{-- ────────────── TAB: STATEMENT ────────────── --}}
@@ -378,7 +400,7 @@
                                         <div id="emailFields">
                                             <div class="mb-2">
                                                 <label class="form-label">To (Email)</label>
-                                                <input type="email" name="email_address" id="commEmailAddr" class="form-control form-control-sm">
+                                                <input type="email" name="email_address" id="commEmailAddr" class="form-control form-control-sm" placeholder="Pre-filled from tenant profile">
                                             </div>
                                             <div class="mb-2">
                                                 <label class="form-label">Subject</label>
@@ -395,7 +417,7 @@
 
                                         <div class="mb-2">
                                             <label class="form-label">Message <span class="text-danger">*</span></label>
-                                            <textarea name="message_body" id="commBody" class="form-control" rows="7" placeholder="Type your message here…"></textarea>
+                                            <textarea name="message_body" id="commBody" class="form-control" rows="14" style="min-height:280px;resize:vertical;" placeholder="Type your message here…"></textarea>
                                             <small class="text-muted float-end"><span id="commCharCount">0</span> chars</small>
                                         </div>
 
@@ -631,7 +653,14 @@ function switchWorkspaceTab(tab) {
         if (btn.getAttribute('onclick')?.includes(tab)) btn.classList.add('active');
     });
     // Lazy-load comms when tab activated
-    if (tab === 'communications') loadCommunications();
+    if (tab === 'communications') {
+        loadCommunications();
+        if (currentProfile) {
+            const t = currentProfile.tenant;
+            if (!$('#commEmailAddr').val()) $('#commEmailAddr').val(t.email_address || '');
+            if (!$('#commMobile').val())    $('#commMobile').val(t.mobile_number || '');
+        }
+    }
     if (tab === 'statement') markChecklist('statement');
 }
 
@@ -801,7 +830,10 @@ function loadTenantProfile(encId) {
         renderStatement(data.statement, data.closing_balance);
 
         /* render deposits */
-        renderDeposits(data.deposits);
+        renderDeposits(data.deposits, data.total_deposit_refunded);
+
+        /* render stay history */
+        renderStayHistory(data.stay_history);
 
         /* show workspace */
         $('#exitWorkspace').removeClass('d-none');
@@ -860,17 +892,43 @@ function renderStatement(entries, closingBalance) {
 }
 
 /* ─── Deposits ──────────────────────────────────────────────────────────── */
-function renderDeposits(deposits) {
+function renderDeposits(deposits, totalRefunded) {
     if (!deposits || !deposits.length) {
         $('#depositsTable').html('<div class="text-muted" style="font-size:0.85rem;">No deposit records found.</div>');
         return;
     }
-    let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Reference</th><th>Property</th><th>Unit</th><th>Amount (KES)</th><th>Received</th><th>Refunded</th></tr></thead><tbody>';
+    let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Reference</th><th>Property</th><th>Unit</th><th class="text-end">Amount (KES)</th><th>Received</th></tr></thead><tbody>';
     deposits.forEach(d => {
-        html += `<tr><td>${d.reference}</td><td>${d.property_name}</td><td>${d.unit_name}</td><td class="text-end">${d.amount}</td><td>${d.date_received}</td><td class="text-end">${d.refunded_amount}</td></tr>`;
+        html += `<tr><td>${d.reference}</td><td>${d.property_name}</td><td>${d.unit_name}</td><td class="text-end">${d.amount}</td><td>${d.date_received}</td></tr>`;
     });
     html += '</tbody></table></div>';
+    if (totalRefunded && parseFloat(totalRefunded.replace(/,/g,'')) > 0) {
+        html += `<div class="mt-2 text-end" style="font-size:0.82rem;">
+            Total refunded via exit: <strong class="text-success">KES ${totalRefunded}</strong>
+        </div>`;
+    }
     $('#depositsTable').html(html);
+}
+
+/* ─── Stay History ──────────────────────────────────────────────────────── */
+function renderStayHistory(history) {
+    if (!history || !history.length) {
+        $('#stayHistoryBody').html('<tr><td colspan="7" class="text-center text-muted py-3">No completed stays on record.</td></tr>');
+        return;
+    }
+    let html = '';
+    history.forEach(h => {
+        html += `<tr>
+            <td>${h.property_name}</td>
+            <td><strong>${h.unit_name}</strong></td>
+            <td>${h.landlord_name}</td>
+            <td>${h.lease_start_date}</td>
+            <td>${h.exit_date}</td>
+            <td><span class="badge bg-light text-dark border">${h.duration}</span></td>
+            <td><span class="badge bg-secondary">${h.exit_reason}</span></td>
+        </tr>`;
+    });
+    $('#stayHistoryBody').html(html);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

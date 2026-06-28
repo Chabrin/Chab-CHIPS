@@ -67,6 +67,11 @@ class TenantExit extends Model
         return $this->hasMany(TenantExitDepositRefund::class, 'exit_id');
     }
 
+    public function history(): HasOne
+    {
+        return $this->hasOne(TenantHistory::class, 'exit_id');
+    }
+
     // ── Scopes ─────────────────────────────────────────────────────────────────
 
     public function scopeInProgress($query)

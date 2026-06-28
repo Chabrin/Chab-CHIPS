@@ -171,7 +171,7 @@
 /* ── Self-service links ──────────────────────────── */
 .gen-links-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
 }
 @media (max-width: 575px) { .gen-links-grid { grid-template-columns: 1fr; } }
@@ -318,6 +318,17 @@
                     <div class="gen-link-body">
                         <div class="gen-link-title">My Payslip</div>
                         <div class="gen-link-sub">Download your payslips</div>
+                    </div>
+                    <span class="material-symbols-outlined gen-link-arrow">chevron_right</span>
+                </a>
+
+                <a href="/self-service/my-disciplinary-cases" class="gen-link-card" style="--link-accent:#b7d7f0; --link-icon-bg:#d9ebf7;">
+                    <div class="gen-link-icon">
+                        <span class="material-symbols-outlined">gavel</span>
+                    </div>
+                    <div class="gen-link-body">
+                        <div class="gen-link-title">My Disciplinary Cases</div>
+                        <div class="gen-link-sub">View your disciplinary cases</div>
                     </div>
                     <span class="material-symbols-outlined gen-link-arrow">chevron_right</span>
                 </a>
