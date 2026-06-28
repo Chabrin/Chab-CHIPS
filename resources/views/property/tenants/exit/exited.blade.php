@@ -39,8 +39,8 @@
     </div>
     <div class="col-4">
         <div class="card border-0 shadow-sm text-center py-3">
-            <div class="fs-4 fw-bold text-primary">{{ $stats['with_refund'] }}</div>
-            <div class="text-muted" style="font-size:0.78rem;">Deposit Refunds</div>
+            <div class="fs-4 fw-bold text-warning">{{ $stats['pending_settlement'] }}</div>
+            <div class="text-muted" style="font-size:0.78rem;">Pending Settlement</div>
         </div>
     </div>
 </div>
@@ -152,6 +152,7 @@
                         <th>Reason</th>
                         <th>Notice</th>
                         <th>Exit Date</th>
+                        <th>Settlement</th>
                         <th class="text-end pe-3">Refund (KES)</th>
                     </tr>
                 </thead>
@@ -203,6 +204,13 @@
                                 <span class="fw-semibold">{{ \Carbon\Carbon::parse($exit->actual_exit_date)->format('d M Y') }}</span>
                             @else
                                 <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                        <td class="align-middle">
+                            @if($exit->current_status_id == 2)
+                                <span class="badge rounded-pill bg-success" style="font-size:0.68rem;">Settled</span>
+                            @else
+                                <span class="badge rounded-pill bg-warning text-dark" style="font-size:0.68rem;">Pending</span>
                             @endif
                         </td>
                         <td class="text-end pe-3 align-middle">
@@ -661,12 +669,12 @@ function renderPanel(exitId, data) {
         const btnStyle = 'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.76rem;border-radius:4px;text-decoration:none;border:1px solid;';
         const hasInsp  = !!(data.inspection && data.inspection.inspection_date);
         pdfWrap.innerHTML =
-            '<a href="' + PDF_LETTER_URL + '/' + data.exit.id + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
+            '<a href="' + PDF_LETTER_URL + '/' + exitId + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
                 '<span class="material-symbols-outlined" style="font-size:14px;">description</span>Exit Letter</a>' +
-            '<a href="' + PDF_STMT_URL + '/' + data.exit.id + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
+            '<a href="' + PDF_STMT_URL + '/' + exitId + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
                 '<span class="material-symbols-outlined" style="font-size:14px;">receipt_long</span>Statement</a>' +
             (hasInsp ?
-                '<a href="' + PDF_INSP_URL + '/' + data.exit.id + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
+                '<a href="' + PDF_INSP_URL + '/' + exitId + '" target="_blank" style="' + btnStyle + 'background:#fff;color:#1a1a2e;border-color:#ccc;">' +
                     '<span class="material-symbols-outlined" style="font-size:14px;">home_search</span>Inspection Report</a>'
                 : '');
     }

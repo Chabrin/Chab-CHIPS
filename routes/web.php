@@ -33,6 +33,9 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\CompaniesController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HrReportsController;
+use App\Http\Controllers\ReportsController;
+use App\Http\Controllers\PropertyReportsController;
+use App\Http\Controllers\AccountsReportsController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\BulkUploadController;
 use App\Http\Controllers\EodReportsController;
@@ -304,10 +307,193 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/payslips/download/{staffId}/{month}', [PayslipsController::class, 'downloadPayslip'])->name('payslips.download');
     Route::post('/ajax/payslips/email', [PayslipsController::class, 'emailPayslip'])->name('ajax.payslips.email');
 
-    // HR Reports - Statutory Deductions
+    // HR Reports - Statutory Deductions (existing)
     Route::get('/statutory/deductions', [HrReportsController::class, 'statutoryDeductions'])->name('reports.statutory.deductions');
     Route::post('/ajax/statutory-deductions/data', [HrReportsController::class, 'getStatutoryDeductions'])->name('ajax.statutory.deductions.data');
     Route::post('/statutory-deductions/download', [HrReportsController::class, 'downloadStatutoryDeductions'])->name('statutory.deductions.download');
+
+    ####### REPORTS HUB ########
+
+    // Hub landing
+    Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
+
+    // ── HR Reports — page views ────────────────────────────────────────────────
+    Route::get('/reports/hr/staff-directory',    [HrReportsController::class, 'staffDirectory'])->name('reports.hr.staff-directory');
+    Route::get('/reports/hr/headcount',          [HrReportsController::class, 'headcount'])->name('reports.hr.headcount');
+    Route::get('/reports/hr/payroll-register',   [HrReportsController::class, 'payrollRegister'])->name('reports.hr.payroll-register');
+    Route::get('/reports/hr/payroll-summary',    [HrReportsController::class, 'payrollSummary'])->name('reports.hr.payroll-summary');
+    Route::get('/reports/hr/helb-schedule',      [HrReportsController::class, 'helbSchedule'])->name('reports.hr.helb-schedule');
+    Route::get('/reports/hr/loan-schedule',      [HrReportsController::class, 'loanSchedule'])->name('reports.hr.loan-schedule');
+    Route::get('/reports/hr/leave-summary',      [HrReportsController::class, 'leaveSummary'])->name('reports.hr.leave-summary');
+    Route::get('/reports/hr/leave-calendar',     [HrReportsController::class, 'leaveCalendar'])->name('reports.hr.leave-calendar');
+    Route::get('/reports/hr/attendance',         [HrReportsController::class, 'attendance'])->name('reports.hr.attendance');
+    Route::get('/reports/hr/contracts',          [HrReportsController::class, 'contracts'])->name('reports.hr.contracts');
+    Route::get('/reports/hr/terminations',       [HrReportsController::class, 'terminations'])->name('reports.hr.terminations');
+    Route::get('/reports/hr/discipline-summary', [HrReportsController::class, 'disciplineSummary'])->name('reports.hr.discipline-summary');
+
+    // ── HR Reports — AJAX data ─────────────────────────────────────────────────
+    Route::post('/ajax/reports/hr/staff-directory',    [HrReportsController::class, 'getStaffDirectory'])->name('ajax.reports.hr.staff-directory');
+    Route::post('/ajax/reports/hr/headcount',          [HrReportsController::class, 'getHeadcount'])->name('ajax.reports.hr.headcount');
+    Route::post('/ajax/reports/hr/payroll-register',   [HrReportsController::class, 'getPayrollRegister'])->name('ajax.reports.hr.payroll-register');
+    Route::post('/ajax/reports/hr/payroll-summary',    [HrReportsController::class, 'getPayrollSummary'])->name('ajax.reports.hr.payroll-summary');
+    Route::post('/ajax/reports/hr/helb-schedule',      [HrReportsController::class, 'getHelbSchedule'])->name('ajax.reports.hr.helb-schedule');
+    Route::post('/ajax/reports/hr/loan-schedule',      [HrReportsController::class, 'getLoanSchedule'])->name('ajax.reports.hr.loan-schedule');
+    Route::post('/ajax/reports/hr/leave-summary',      [HrReportsController::class, 'getLeaveSummary'])->name('ajax.reports.hr.leave-summary');
+    Route::post('/ajax/reports/hr/leave-calendar',     [HrReportsController::class, 'getLeaveCalendar'])->name('ajax.reports.hr.leave-calendar');
+    Route::post('/ajax/reports/hr/attendance',         [HrReportsController::class, 'getAttendance'])->name('ajax.reports.hr.attendance');
+    Route::post('/ajax/reports/hr/contracts',          [HrReportsController::class, 'getContracts'])->name('ajax.reports.hr.contracts');
+    Route::post('/ajax/reports/hr/terminations',       [HrReportsController::class, 'getTerminations'])->name('ajax.reports.hr.terminations');
+    Route::post('/ajax/reports/hr/discipline-summary', [HrReportsController::class, 'getDisciplineSummary'])->name('ajax.reports.hr.discipline-summary');
+
+    // ── HR Reports — Excel exports ─────────────────────────────────────────────
+    Route::post('/reports/hr/staff-directory/export',    [HrReportsController::class, 'exportStaffDirectory'])->name('reports.hr.staff-directory.export');
+    Route::post('/reports/hr/payroll-register/export',   [HrReportsController::class, 'exportPayrollRegister'])->name('reports.hr.payroll-register.export');
+    Route::post('/reports/hr/payroll-summary/export',    [HrReportsController::class, 'exportPayrollSummary'])->name('reports.hr.payroll-summary.export');
+    Route::post('/reports/hr/helb-schedule/export',      [HrReportsController::class, 'exportHelbSchedule'])->name('reports.hr.helb-schedule.export');
+    Route::post('/reports/hr/loan-schedule/export',      [HrReportsController::class, 'exportLoanSchedule'])->name('reports.hr.loan-schedule.export');
+    Route::post('/reports/hr/leave-summary/export',      [HrReportsController::class, 'exportLeaveSummary'])->name('reports.hr.leave-summary.export');
+    Route::post('/reports/hr/attendance/export',         [HrReportsController::class, 'exportAttendance'])->name('reports.hr.attendance.export');
+    Route::post('/reports/hr/contracts/export',          [HrReportsController::class, 'exportContracts'])->name('reports.hr.contracts.export');
+    Route::post('/reports/hr/terminations/export',       [HrReportsController::class, 'exportTerminations'])->name('reports.hr.terminations.export');
+    Route::post('/reports/hr/discipline-summary/export', [HrReportsController::class, 'exportDisciplineSummary'])->name('reports.hr.discipline-summary.export');
+
+    // ── Property Reports — page views ──────────────────────────────────────────
+    Route::get('/reports/property/portfolio',        [PropertyReportsController::class, 'portfolio'])->name('reports.property.portfolio');
+    Route::get('/reports/property/occupancy',        [PropertyReportsController::class, 'occupancy'])->name('reports.property.occupancy');
+    Route::get('/reports/property/vacancy',          [PropertyReportsController::class, 'vacancy'])->name('reports.property.vacancy');
+    Route::get('/reports/property/rent-roll',        [PropertyReportsController::class, 'rentRoll'])->name('reports.property.rent-roll');
+    Route::get('/reports/property/lease-register',   [PropertyReportsController::class, 'leaseRegister'])->name('reports.property.lease-register');
+    Route::get('/reports/property/lease-expiry',     [PropertyReportsController::class, 'leaseExpiry'])->name('reports.property.lease-expiry');
+    Route::get('/reports/property/tenant-roster',    [PropertyReportsController::class, 'tenantRoster'])->name('reports.property.tenant-roster');
+    Route::get('/reports/property/deposit-register', [PropertyReportsController::class, 'depositRegister'])->name('reports.property.deposit-register');
+    Route::get('/reports/property/exits',            [PropertyReportsController::class, 'exits'])->name('reports.property.exits');
+
+    // ── Property Reports — AJAX data ───────────────────────────────────────────
+    Route::post('/ajax/reports/property/portfolio',        [PropertyReportsController::class, 'getPortfolio'])->name('ajax.reports.property.portfolio');
+    Route::post('/ajax/reports/property/occupancy',        [PropertyReportsController::class, 'getOccupancy'])->name('ajax.reports.property.occupancy');
+    Route::post('/ajax/reports/property/vacancy',          [PropertyReportsController::class, 'getVacancy'])->name('ajax.reports.property.vacancy');
+    Route::post('/ajax/reports/property/rent-roll',        [PropertyReportsController::class, 'getRentRoll'])->name('ajax.reports.property.rent-roll');
+    Route::post('/ajax/reports/property/lease-register',   [PropertyReportsController::class, 'getLeaseRegister'])->name('ajax.reports.property.lease-register');
+    Route::post('/ajax/reports/property/lease-expiry',     [PropertyReportsController::class, 'getLeaseExpiry'])->name('ajax.reports.property.lease-expiry');
+    Route::post('/ajax/reports/property/tenant-roster',    [PropertyReportsController::class, 'getTenantRoster'])->name('ajax.reports.property.tenant-roster');
+    Route::post('/ajax/reports/property/deposit-register', [PropertyReportsController::class, 'getDepositRegister'])->name('ajax.reports.property.deposit-register');
+    Route::post('/ajax/reports/property/exits',            [PropertyReportsController::class, 'getExits'])->name('ajax.reports.property.exits');
+
+    // ── Property Reports — Excel exports ───────────────────────────────────────
+    Route::post('/reports/property/portfolio/export',        [PropertyReportsController::class, 'exportPortfolio'])->name('reports.property.portfolio.export');
+    Route::post('/reports/property/occupancy/export',        [PropertyReportsController::class, 'exportOccupancy'])->name('reports.property.occupancy.export');
+    Route::post('/reports/property/vacancy/export',          [PropertyReportsController::class, 'exportVacancy'])->name('reports.property.vacancy.export');
+    Route::post('/reports/property/rent-roll/export',        [PropertyReportsController::class, 'exportRentRoll'])->name('reports.property.rent-roll.export');
+    Route::post('/reports/property/lease-register/export',   [PropertyReportsController::class, 'exportLeaseRegister'])->name('reports.property.lease-register.export');
+    Route::post('/reports/property/lease-expiry/export',     [PropertyReportsController::class, 'exportLeaseExpiry'])->name('reports.property.lease-expiry.export');
+    Route::post('/reports/property/tenant-roster/export',    [PropertyReportsController::class, 'exportTenantRoster'])->name('reports.property.tenant-roster.export');
+    Route::post('/reports/property/deposit-register/export', [PropertyReportsController::class, 'exportDepositRegister'])->name('reports.property.deposit-register.export');
+    Route::post('/reports/property/exits/export',            [PropertyReportsController::class, 'exportExits'])->name('reports.property.exits.export');
+
+    // ── Accounts Reports — page views ──────────────────────────────────────────
+    Route::get('/reports/accounts/arrears',               [AccountsReportsController::class, 'arrears'])->name('reports.accounts.arrears');
+    Route::get('/reports/accounts/payment-collection',    [AccountsReportsController::class, 'paymentCollection'])->name('reports.accounts.payment-collection');
+    Route::get('/reports/accounts/invoice-register',      [AccountsReportsController::class, 'invoiceRegister'])->name('reports.accounts.invoice-register');
+    Route::get('/reports/accounts/unallocated-payments',  [AccountsReportsController::class, 'unallocatedPayments'])->name('reports.accounts.unallocated-payments');
+    Route::get('/reports/accounts/returns-summary',       [AccountsReportsController::class, 'returnsSummary'])->name('reports.accounts.returns-summary');
+    Route::get('/reports/accounts/commission',            [AccountsReportsController::class, 'commission'])->name('reports.accounts.commission');
+    Route::get('/reports/accounts/deposit-refunds',       [AccountsReportsController::class, 'depositRefunds'])->name('reports.accounts.deposit-refunds');
+
+    // ── Accounts Reports — AJAX data ───────────────────────────────────────────
+    Route::post('/ajax/reports/accounts/arrears',               [AccountsReportsController::class, 'getArrears'])->name('ajax.reports.accounts.arrears');
+    Route::post('/ajax/reports/accounts/payment-collection',    [AccountsReportsController::class, 'getPaymentCollection'])->name('ajax.reports.accounts.payment-collection');
+    Route::post('/ajax/reports/accounts/invoice-register',      [AccountsReportsController::class, 'getInvoiceRegister'])->name('ajax.reports.accounts.invoice-register');
+    Route::post('/ajax/reports/accounts/unallocated-payments',  [AccountsReportsController::class, 'getUnallocatedPayments'])->name('ajax.reports.accounts.unallocated-payments');
+    Route::post('/ajax/reports/accounts/returns-summary',       [AccountsReportsController::class, 'getReturnsSummary'])->name('ajax.reports.accounts.returns-summary');
+    Route::post('/ajax/reports/accounts/commission',            [AccountsReportsController::class, 'getCommission'])->name('ajax.reports.accounts.commission');
+    Route::post('/ajax/reports/accounts/deposit-refunds',       [AccountsReportsController::class, 'getDepositRefunds'])->name('ajax.reports.accounts.deposit-refunds');
+
+    // ── Accounts Reports — Excel exports ───────────────────────────────────────
+    Route::post('/reports/accounts/arrears/export',               [AccountsReportsController::class, 'exportArrears'])->name('reports.accounts.arrears.export');
+    Route::post('/reports/accounts/payment-collection/export',    [AccountsReportsController::class, 'exportPaymentCollection'])->name('reports.accounts.payment-collection.export');
+    Route::post('/reports/accounts/invoice-register/export',      [AccountsReportsController::class, 'exportInvoiceRegister'])->name('reports.accounts.invoice-register.export');
+    Route::post('/reports/accounts/unallocated-payments/export',  [AccountsReportsController::class, 'exportUnallocatedPayments'])->name('reports.accounts.unallocated-payments.export');
+    Route::post('/reports/accounts/returns-summary/export',       [AccountsReportsController::class, 'exportReturnsSummary'])->name('reports.accounts.returns-summary.export');
+    Route::post('/reports/accounts/commission/export',            [AccountsReportsController::class, 'exportCommission'])->name('reports.accounts.commission.export');
+    Route::post('/reports/accounts/deposit-refunds/export',       [AccountsReportsController::class, 'exportDepositRefunds'])->name('reports.accounts.deposit-refunds.export');
+
+    // ── Hub summary (KPI + charts) ────────────────────────────────────────────
+    Route::get('/ajax/reports/hub-summary', [ReportsController::class, 'hubSummary'])->name('ajax.reports.hub-summary');
+
+    // ── HR Phase-2 reports ────────────────────────────────────────────────────
+    Route::get('/reports/hr/overtime',              [HrReportsController::class, 'overtime'])->name('reports.hr.overtime');
+    Route::get('/reports/hr/leave-adjustments',     [HrReportsController::class, 'leaveAdjustments'])->name('reports.hr.leave-adjustments');
+    Route::get('/reports/hr/discipline-audit',      [HrReportsController::class, 'disciplineAudit'])->name('reports.hr.discipline-audit');
+    Route::get('/reports/hr/payroll-elements',      [HrReportsController::class, 'payrollElements'])->name('reports.hr.payroll-elements');
+    Route::get('/reports/hr/bank-accounts',         [HrReportsController::class, 'bankAccounts'])->name('reports.hr.bank-accounts');
+    Route::get('/reports/hr/payroll-periods',       [HrReportsController::class, 'payrollPeriods'])->name('reports.hr.payroll-periods');
+
+    Route::post('/ajax/reports/hr/overtime',            [HrReportsController::class, 'getOvertime'])->name('ajax.reports.hr.overtime');
+    Route::post('/ajax/reports/hr/leave-adjustments',   [HrReportsController::class, 'getLeaveAdjustments'])->name('ajax.reports.hr.leave-adjustments');
+    Route::post('/ajax/reports/hr/discipline-audit',    [HrReportsController::class, 'getDisciplineAudit'])->name('ajax.reports.hr.discipline-audit');
+    Route::post('/ajax/reports/hr/payroll-elements',    [HrReportsController::class, 'getPayrollElements'])->name('ajax.reports.hr.payroll-elements');
+    Route::post('/ajax/reports/hr/bank-accounts',       [HrReportsController::class, 'getBankAccounts'])->name('ajax.reports.hr.bank-accounts');
+    Route::post('/ajax/reports/hr/payroll-periods',     [HrReportsController::class, 'getPayrollPeriods'])->name('ajax.reports.hr.payroll-periods');
+
+    Route::post('/reports/hr/overtime/export',          [HrReportsController::class, 'exportOvertime'])->name('reports.hr.overtime.export');
+    Route::post('/reports/hr/leave-adjustments/export', [HrReportsController::class, 'exportLeaveAdjustments'])->name('reports.hr.leave-adjustments.export');
+    Route::post('/reports/hr/discipline-audit/export',  [HrReportsController::class, 'exportDisciplineAudit'])->name('reports.hr.discipline-audit.export');
+    Route::post('/reports/hr/payroll-elements/export',  [HrReportsController::class, 'exportPayrollElements'])->name('reports.hr.payroll-elements.export');
+    Route::post('/reports/hr/bank-accounts/export',     [HrReportsController::class, 'exportBankAccounts'])->name('reports.hr.bank-accounts.export');
+    Route::post('/reports/hr/payroll-periods/export',   [HrReportsController::class, 'exportPayrollPeriods'])->name('reports.hr.payroll-periods.export');
+
+    // ── Property Phase-2 reports ──────────────────────────────────────────────
+    Route::get('/reports/property/rent-escalations',  [PropertyReportsController::class, 'rentEscalations'])->name('reports.property.rent-escalations');
+    Route::get('/reports/property/maintenance',       [PropertyReportsController::class, 'maintenance'])->name('reports.property.maintenance');
+    Route::get('/reports/property/invoice-aging',     [PropertyReportsController::class, 'invoiceAging'])->name('reports.property.invoice-aging');
+    Route::get('/reports/property/tenant-movements',  [PropertyReportsController::class, 'tenantMovements'])->name('reports.property.tenant-movements');
+    Route::get('/reports/property/blacklist',         [PropertyReportsController::class, 'blacklist'])->name('reports.property.blacklist');
+    Route::get('/reports/property/landlord-remittance', [PropertyReportsController::class, 'landlordRemittance'])->name('reports.property.landlord-remittance');
+    Route::get('/reports/property/pending-contracts', [PropertyReportsController::class, 'pendingContracts'])->name('reports.property.pending-contracts');
+
+    Route::post('/ajax/reports/property/rent-escalations',  [PropertyReportsController::class, 'getRentEscalations'])->name('ajax.reports.property.rent-escalations');
+    Route::post('/ajax/reports/property/maintenance',       [PropertyReportsController::class, 'getMaintenance'])->name('ajax.reports.property.maintenance');
+    Route::post('/ajax/reports/property/invoice-aging',     [PropertyReportsController::class, 'getInvoiceAging'])->name('ajax.reports.property.invoice-aging');
+    Route::post('/ajax/reports/property/tenant-movements',  [PropertyReportsController::class, 'getTenantMovements'])->name('ajax.reports.property.tenant-movements');
+    Route::post('/ajax/reports/property/blacklist',         [PropertyReportsController::class, 'getBlacklist'])->name('ajax.reports.property.blacklist');
+    Route::post('/ajax/reports/property/landlord-remittance', [PropertyReportsController::class, 'getLandlordRemittance'])->name('ajax.reports.property.landlord-remittance');
+    Route::post('/ajax/reports/property/pending-contracts', [PropertyReportsController::class, 'getPendingContracts'])->name('ajax.reports.property.pending-contracts');
+
+    Route::post('/reports/property/rent-escalations/export',   [PropertyReportsController::class, 'exportRentEscalations'])->name('reports.property.rent-escalations.export');
+    Route::post('/reports/property/maintenance/export',        [PropertyReportsController::class, 'exportMaintenance'])->name('reports.property.maintenance.export');
+    Route::post('/reports/property/invoice-aging/export',      [PropertyReportsController::class, 'exportInvoiceAging'])->name('reports.property.invoice-aging.export');
+    Route::post('/reports/property/tenant-movements/export',   [PropertyReportsController::class, 'exportTenantMovements'])->name('reports.property.tenant-movements.export');
+    Route::post('/reports/property/blacklist/export',          [PropertyReportsController::class, 'exportBlacklist'])->name('reports.property.blacklist.export');
+    Route::post('/reports/property/landlord-remittance/export',[PropertyReportsController::class, 'exportLandlordRemittance'])->name('reports.property.landlord-remittance.export');
+    Route::post('/reports/property/pending-contracts/export',  [PropertyReportsController::class, 'exportPendingContracts'])->name('reports.property.pending-contracts.export');
+
+    // ── Accounts Phase-2 reports ──────────────────────────────────────────────
+    Route::get('/reports/accounts/cheque-register',        [AccountsReportsController::class, 'chequeRegister'])->name('reports.accounts.cheque-register');
+    Route::get('/reports/accounts/voucher-register',       [AccountsReportsController::class, 'voucherRegister'])->name('reports.accounts.voucher-register');
+    Route::get('/reports/accounts/withholding-tax',        [AccountsReportsController::class, 'withholdingTax'])->name('reports.accounts.withholding-tax');
+    Route::get('/reports/accounts/approval-audit',         [AccountsReportsController::class, 'approvalAudit'])->name('reports.accounts.approval-audit');
+    Route::get('/reports/accounts/payment-allocation',     [AccountsReportsController::class, 'paymentAllocation'])->name('reports.accounts.payment-allocation');
+    Route::get('/reports/accounts/recovery-register',      [AccountsReportsController::class, 'recoveryRegister'])->name('reports.accounts.recovery-register');
+    Route::get('/reports/accounts/landlord-disbursement',  [AccountsReportsController::class, 'landlordDisbursement'])->name('reports.accounts.landlord-disbursement');
+    Route::get('/reports/accounts/returns-status',         [AccountsReportsController::class, 'returnsStatus'])->name('reports.accounts.returns-status');
+
+    Route::post('/ajax/reports/accounts/cheque-register',       [AccountsReportsController::class, 'getChequeRegister'])->name('ajax.reports.accounts.cheque-register');
+    Route::post('/ajax/reports/accounts/voucher-register',      [AccountsReportsController::class, 'getVoucherRegister'])->name('ajax.reports.accounts.voucher-register');
+    Route::post('/ajax/reports/accounts/withholding-tax',       [AccountsReportsController::class, 'getWithholdingTax'])->name('ajax.reports.accounts.withholding-tax');
+    Route::post('/ajax/reports/accounts/approval-audit',        [AccountsReportsController::class, 'getApprovalAudit'])->name('ajax.reports.accounts.approval-audit');
+    Route::post('/ajax/reports/accounts/payment-allocation',    [AccountsReportsController::class, 'getPaymentAllocation'])->name('ajax.reports.accounts.payment-allocation');
+    Route::post('/ajax/reports/accounts/recovery-register',     [AccountsReportsController::class, 'getRecoveryRegister'])->name('ajax.reports.accounts.recovery-register');
+    Route::post('/ajax/reports/accounts/landlord-disbursement', [AccountsReportsController::class, 'getLandlordDisbursement'])->name('ajax.reports.accounts.landlord-disbursement');
+    Route::post('/ajax/reports/accounts/returns-status',        [AccountsReportsController::class, 'getReturnsStatus'])->name('ajax.reports.accounts.returns-status');
+
+    Route::post('/reports/accounts/cheque-register/export',       [AccountsReportsController::class, 'exportChequeRegister'])->name('reports.accounts.cheque-register.export');
+    Route::post('/reports/accounts/voucher-register/export',      [AccountsReportsController::class, 'exportVoucherRegister'])->name('reports.accounts.voucher-register.export');
+    Route::post('/reports/accounts/withholding-tax/export',       [AccountsReportsController::class, 'exportWithholdingTax'])->name('reports.accounts.withholding-tax.export');
+    Route::post('/reports/accounts/approval-audit/export',        [AccountsReportsController::class, 'exportApprovalAudit'])->name('reports.accounts.approval-audit.export');
+    Route::post('/reports/accounts/payment-allocation/export',    [AccountsReportsController::class, 'exportPaymentAllocation'])->name('reports.accounts.payment-allocation.export');
+    Route::post('/reports/accounts/recovery-register/export',     [AccountsReportsController::class, 'exportRecoveryRegister'])->name('reports.accounts.recovery-register.export');
+    Route::post('/reports/accounts/landlord-disbursement/export', [AccountsReportsController::class, 'exportLandlordDisbursement'])->name('reports.accounts.landlord-disbursement.export');
+    Route::post('/reports/accounts/returns-status/export',        [AccountsReportsController::class, 'exportReturnsStatus'])->name('reports.accounts.returns-status.export');
 
     // HR Settings - Shift Rates
     Route::get('/hrsettings/shif/rates', [HrSettingsController::class, 'shifRatesIndex'])->name('settings.hr.shif.rates');
@@ -876,6 +1062,19 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         Route::get('/pdf/exit-letter/{exitId}',      [TenantExitController::class, 'downloadExitLetter'])->name('pdf.exit-letter');
         Route::get('/pdf/statement/{exitId}',        [TenantExitController::class, 'downloadStatement'])->name('pdf.statement');
         Route::get('/pdf/inspection/{exitId}',       [TenantExitController::class, 'downloadInspectionReport'])->name('pdf.inspection');
+
+        // Process 1 — Vacate
+        Route::post('/complete-vacate',              [TenantExitController::class, 'completeVacate'])->name('complete-vacate');
+        Route::post('/date-change',                  [TenantExitController::class, 'logDateChange'])->name('date-change');
+        Route::get('/date-changes/{exitId}',         [TenantExitController::class, 'getDateChanges'])->name('date-changes');
+        Route::post('/field-visit',                  [TenantExitController::class, 'saveFieldVisit'])->name('field-visit');
+        Route::get('/field-visits/{exitId}',         [TenantExitController::class, 'getFieldVisits'])->name('field-visits');
+
+        // Process 2 — Deposit Settlement
+        Route::get('/deposit-as-rent-eligibility',   [TenantExitController::class, 'checkDepositAsRentEligibility'])->name('deposit-as-rent-eligibility');
+        Route::post('/deposit-as-rent',              [TenantExitController::class, 'saveDepositAsRent'])->name('deposit-as-rent');
+        Route::post('/settlement-preview',           [TenantExitController::class, 'getSettlementPreview'])->name('settlement-preview');
+        Route::post('/settlement',                   [TenantExitController::class, 'saveSettlement'])->name('settlement');
     });
 
     // Recovery
