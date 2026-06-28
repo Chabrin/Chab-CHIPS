@@ -31,7 +31,6 @@ trait PaymentAllocationTrait
         $allocated = (float) DB::table('sys_pm_tenants_payments_invoices')
             ->where('payment_id', $paymentId)
             ->sum('amount_allocated');
-
         return $paymentAmount - $allocated;
     }
 
@@ -45,7 +44,6 @@ trait PaymentAllocationTrait
         $allocated = (float) DB::table('sys_pm_tenants_payments_invoices')
             ->where('invoice_id', $invoiceId)
             ->sum('amount_allocated');
-
         return $invoiceTotalAmount - $allocated;
     }
 
