@@ -11,6 +11,7 @@ use App\Models\PayrollElement;
 use App\Models\PayrollSummary;
 use App\Models\PayrollCalendar;
 use App\Models\PayrollPeriod;
+use App\Models\ContractElement;
 use App\Models\EmployeeContract;
 use App\Models\HelbDeduction;
 use App\Models\HelbDeductionRepeat;
@@ -857,7 +858,8 @@ class PayrollController extends Controller
                         $contract->staff->department_id ?? null,
                         $payrollElements,
                         $startDate,
-                        $period->id
+                        $period->id,
+                        $contract->id
                     );
 
                     $results[] = $payrollData;
@@ -893,53 +895,97 @@ class PayrollController extends Controller
     }
 
     /**
+     * Build a self-describing payslip element entry.
+     * Stores name/type/position inline so display never requires a second DB lookup.
+     */
+    private function makePayslipEntry(?PayrollElement $element, float $amount, string $fallbackName = '', string $fallbackType = '1', int $fallbackPos = 999): array
+    {
+        return [
+            'element_id'       => $element?->id ?? 0,
+            'element_name'     => $element?->element_name ?? $fallbackName,
+            'element_type'     => $element?->element_type ?? $fallbackType,
+            'payslip_position' => $element?->payslip_position ?? $fallbackPos,
+            'amount'           => $amount,
+        ];
+    }
+
+    /**
      * Calculate payroll for a single employee
      */
-    private function calculatePayroll($employeeName, $basicSalary, $staffId, $staffNumber, $positionId, $departmentId, $payrollElements, $periodStartDate, $periodId)
+    private function calculatePayroll($employeeName, $basicSalary, $staffId, $staffNumber, $positionId, $departmentId, $payrollElements, $periodStartDate, $periodId, $contractId = null)
     {
-        // Calculate gross pay (basic salary + allowances, for now just basic)
-        $grossPay = $basicSalary;
-        $staffDisability = Staff::where('id', $staffId)->first()->disability;
-        // Calculate statutory deductions using payroll elements
-        $nssfElement = $payrollElements->get('nssf');
-        $nhifElement = $payrollElements->get('nhif');
+        $staffDisability = Staff::where('id', $staffId)->value('disability') ?? 'no';
+
+        // --- Contract allowances & non-statutory deductions ---
+        $contractAllowances   = 0.0;
+        $allowanceEntries     = [];
+        $extraDeductionEntries = [];
+        $statutoryKeys = ['nssf', 'nhif', 'housing_levy', 'payee', 'helb_loans'];
+
+        if ($contractId) {
+            $contractElements = ContractElement::with('payrollElement')
+                ->where('parent_id', $contractId)
+                ->get();
+
+            foreach ($contractElements as $el) {
+                $pe = $el->payrollElement;
+                if (!$pe) {
+                    continue;
+                }
+                $amount = (float) $el->amount;
+                if ($pe->element_type == '2') {
+                    // Allowance — counts toward gross pay and appears under Earnings
+                    $contractAllowances += $amount;
+                    $allowanceEntries[]   = $this->makePayslipEntry($pe, $amount, '', '2');
+                } elseif ($pe->element_type == '1' && !in_array($pe->element_key, $statutoryKeys)) {
+                    // Non-statutory deduction — added post-tax alongside HELB/prorated
+                    $extraDeductionEntries[] = $this->makePayslipEntry($pe, $amount, '', '1');
+                }
+            }
+        }
+
+        // Gross pay = basic salary + contract allowances
+        $grossPay = (float) $basicSalary + $contractAllowances;
+
+        // --- Statutory deductions ---
+        $nssfElement       = $payrollElements->get('nssf');
+        $nhifElement       = $payrollElements->get('nhif');
         $housingLevyElement = $payrollElements->get('housing_levy');
-        $payeeElement = $payrollElements->get('payee');
+        $payeeElement      = $payrollElements->get('payee');
 
-        $nssf = $this->calculateNSSF($basicSalary);
-        $nhif = $this->calculateNHIF($basicSalary);
-        $housingLevy = $this->calculateHousingLevy($basicSalary);
+        // NSSF on pensionable pay (basic salary only in Kenya)
+        $nssf = $this->calculateNSSF((float) $basicSalary);
+        // NHIF/SHIF and Housing Levy on full gross (basic + allowances)
+        $nhif        = $this->calculateNHIF($grossPay);
+        $housingLevy = $this->calculateHousingLevy($grossPay);
 
-        // Calculate taxable income (Gross - NSSF - NHIF - Housing Levy)
+        // Taxable income for PAYE
         $taxableIncome = $grossPay - $nssf - $nhif - $housingLevy;
 
-        // Calculate PAYE (income tax)
         $paye = 0;
-        if (strtolower($staffDisability) == 'yes') {
-            $paye = 0;
-        } else {
+        if (strtolower($staffDisability) !== 'yes') {
             $paye = $this->calculatePAYE($taxableIncome);
         }
 
-        // Calculate income tax before relief (for display)
-        $incomeTaxBeforeRelief = $paye + 2400; // Add back the personal relief
+        $incomeTaxBeforeRelief = $paye + 2400;
 
-        // Initialize total deductions with statutory deductions
         $totalDeductions = $nssf + $nhif + $housingLevy + $paye;
 
-        // Prepare payslip elements array
-        $payslipElements = [];
-        if ($nssfElement) {
-            $payslipElements[] = ['element_id' => $nssfElement->id, 'amount' => $nssf];
-        }
-        if ($nhifElement) {
-            $payslipElements[] = ['element_id' => $nhifElement->id, 'amount' => $nhif];
-        }
-        if ($housingLevyElement) {
-            $payslipElements[] = ['element_id' => $housingLevyElement->id, 'amount' => $housingLevy];
-        }
-        if ($payeeElement) {
-            $payslipElements[] = ['element_id' => $payeeElement->id, 'amount' => $paye];
+        // Build payslip elements — stored with full details so display needs no extra DB query
+        $payslipElements = array_merge(
+            $allowanceEntries,
+            [
+                $this->makePayslipEntry($nssfElement,       $nssf,        'NSSF',         '1', 10),
+                $this->makePayslipEntry($nhifElement,       $nhif,        'SHIF (NHIF)',  '1', 20),
+                $this->makePayslipEntry($housingLevyElement, $housingLevy, 'Housing Levy', '1', 30),
+                $this->makePayslipEntry($payeeElement,      $paye,        'PAYE',         '1', 40),
+            ],
+            $extraDeductionEntries
+        );
+
+        // Add extra contract deductions to total
+        foreach ($extraDeductionEntries as $entry) {
+            $totalDeductions += $entry['amount'];
         }
 
         // Arrays to store deduction repeats info for logging
@@ -954,19 +1000,16 @@ class PayrollController extends Controller
             ->where('start_deduction_date', '>=', $periodStartDate)
             ->first();
 
-        if ($helbDeduction && $helbElement) {
-            $helbAmount = $helbDeduction->monthly_deduction;
+        if ($helbDeduction) {
+            $helbAmount = (float) $helbDeduction->monthly_deduction;
             $totalDeductions += $helbAmount;
-            $payslipElements[] = ['element_id' => $helbElement->id, 'amount' => $helbAmount];
+            $payslipElements[] = $this->makePayslipEntry($helbElement, $helbAmount, 'HELB Loan', '1', 50);
 
-            // Store HELB deduction info for logging
             $helbDeductionInfo = [
-                'parent_id' => $helbDeduction->id,
+                'parent_id'        => $helbDeduction->id,
                 'deduction_amount' => $helbAmount,
-                'deduction_date' => $periodStartDate,
+                'deduction_date'   => $periodStartDate,
             ];
-
-            //Log::info("HELB Deduction for Staff {$staffId}: KSh " . number_format($helbAmount, 2));
         }
 
         // Handle Prorated/Amortized Deductions (Post-tax deductions)
@@ -974,23 +1017,19 @@ class PayrollController extends Controller
             ->where('staff_id', $staffId)
             ->where('cleared', 0)
             ->where('suspended', 0)
-            //->where('deduction_date', '<=', $periodStartDate)
             ->get();
 
         foreach ($proratedDeductions as $deduction) {
             if ($deduction->element) {
-                $deductionAmount = $deduction->monthly_deduction;
+                $deductionAmount = (float) $deduction->monthly_deduction;
                 $totalDeductions += $deductionAmount;
-                $payslipElements[] = ['element_id' => $deduction->element_id, 'amount' => $deductionAmount];
+                $payslipElements[] = $this->makePayslipEntry($deduction->element, $deductionAmount);
 
-                // Store prorated deduction info for logging
                 $proratedDeductionsInfo[] = [
-                    'parent_id' => $deduction->id,
+                    'parent_id'        => $deduction->id,
                     'deduction_amount' => $deductionAmount,
-                    'deduction_date' => $periodStartDate,
+                    'deduction_date'   => $periodStartDate,
                 ];
-
-                //Log::info("Prorated Deduction ({$deduction->element->element_name}) for Staff {$staffId}: KSh " . number_format($deductionAmount, 2));
             }
         }
 
