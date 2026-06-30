@@ -1175,6 +1175,12 @@ class ClientsController extends Controller
                 ->where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
                 ->leftJoin('sys_pm_properties', 'sys_pm_properties.id', '=', 'sys_pm_clients.property_id')
                 ->leftJoin('sys_pm_clients as landlord', 'landlord.id', '=', 'sys_pm_properties.client_id')
+                ->whereNotExists(function ($sub) {
+                    $sub->selectRaw('1')
+                        ->from('cb_tenant_exits')
+                        ->whereColumn('cb_tenant_exits.tenant_id', 'sys_pm_clients.id')
+                        ->where('cb_tenant_exits.current_status_id', 2);
+                })
                 ->select(
                     'sys_pm_clients.id',
                     'sys_pm_clients.names',
@@ -1183,6 +1189,7 @@ class ClientsController extends Controller
                     'sys_pm_properties.property_name',
                     'landlord.names as landlord_name'
                 );
+                
 
             // Scope tenants to properties assigned to the logged-in user (unless role is_global)
             $userId = Auth::id();
