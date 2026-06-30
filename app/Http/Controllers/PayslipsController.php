@@ -67,7 +67,7 @@ class PayslipsController extends Controller
             $month = $validated['payroll_month'];
 
             // Get payroll summary
-            $payrollSummary = PayrollSummary::with(['staff', 'position', 'department'])
+            $payrollSummary = PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department'])
                 ->where('staff_id', $staffId)
                 ->whereYear('period', substr($month, 0, 4))
                 ->whereMonth('period', substr($month, 5, 2))
@@ -170,7 +170,7 @@ class PayslipsController extends Controller
      */
     private function getPayrollSummary($staffId, $month)
     {
-        return PayrollSummary::with(['staff', 'position', 'department'])
+        return PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department'])
             ->where('staff_id', $staffId)
             ->whereYear('period', substr($month, 0, 4))
             ->whereMonth('period', substr($month, 5, 2))
@@ -260,12 +260,14 @@ class PayslipsController extends Controller
         $byKey = PayrollElement::whereIn('element_key', ['nssf', 'nhif', 'housing_levy', 'payee', 'helb_loans'])
             ->get()->keyBy('element_key');
 
+        // Only statutory items that the Blade doesn't check directly.
+        // Akiba/Social Welfare are read directly from columns in the Blade to avoid duplicates.
         $map = [
             'nssf'         => ['col' => 'nssf',        'name' => 'NSSF',         'pos' => 10],
-            'nhif'         => ['col' => 'nhif',         'name' => 'SHIF (NHIF)',  'pos' => 20],
+            'nhif'         => ['col' => 'nhif',         'name' => 'SHIF (NHIF)', 'pos' => 20],
             'housing_levy' => ['col' => 'housing_levy', 'name' => 'Housing Levy', 'pos' => 30],
             'payee'        => ['col' => 'tax_payable',  'name' => 'PAYE',         'pos' => 40],
-            'helb_loans'   => ['col' => 'helb_loans',   'name' => 'HELB Loan',    'pos' => 50],
+            'helb_loans'   => ['col' => 'helb_loans',   'name' => 'HELB Loan',   'pos' => 50],
         ];
 
         $result = collect();

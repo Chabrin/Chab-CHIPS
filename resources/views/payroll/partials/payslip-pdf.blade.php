@@ -1,255 +1,222 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="utf-8">
     <title>Payslip - {{ $payroll->staff_number_id }}</title>
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Segoe UI', 'Calibri', 'Arial', sans-serif;
-            font-size: 11px;
-            margin: 20px;
-            color: #000;
-            letter-spacing: 0.3px;
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-size: 10px;
+            color: #1e293b;
+            padding: 24px;
+            background: #fff;
         }
 
-        .payslip-header {
-            display: table;
-            width: 100%;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-        }
+        /* ── Header ── */
+        .hdr { display: table; width: 100%; border-bottom: 3px solid #1e40af; padding-bottom: 10px; margin-bottom: 14px; }
+        .hdr-left  { display: table-cell; vertical-align: middle; }
+        .hdr-right { display: table-cell; vertical-align: middle; text-align: right; }
+        .co-name   { font-size: 18px; font-weight: bold; color: #1e40af; letter-spacing: -0.3px; }
+        .co-sub    { font-size: 9px; color: #64748b; margin-top: 2px; }
+        .slip-label { font-size: 13px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
+        .slip-period { font-size: 11px; color: #475569; margin-top: 3px; }
 
-        .payslip-header .left {
-            display: table-cell;
-            width: 50%;
-            vertical-align: top;
-        }
+        /* ── Employee Info ── */
+        .info-box { width: 100%; border-collapse: collapse; margin-bottom: 14px;
+                    border: 1px solid #cbd5e1; border-radius: 4px; }
+        .info-box td { padding: 4px 8px; font-size: 10px; border-bottom: 1px solid #e2e8f0; }
+        .info-box tr:last-child td { border-bottom: none; }
+        .info-box tr:nth-child(odd) td  { background: #f8fafc; }
+        .info-box tr:nth-child(even) td { background: #ffffff; }
+        .lbl { color: #64748b; width: 15%; white-space: nowrap; }
+        .val { color: #0f172a; font-weight: 600; width: 35%; }
 
-        .payslip-header .right {
-            display: table-cell;
-            width: 50%;
-            vertical-align: top;
-            text-align: right;
-        }
+        /* ── Main payslip table ── */
+        .slip-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .slip-tbl th, .slip-tbl td { border: 1px solid #cbd5e1; }
 
-        .company-name {
-            font-size: 16px;
-            font-weight: bold;
-            color: #3598db;
-        }
+        .sec-hdr { background: #1e40af; color: #fff; font-size: 9px; font-weight: bold;
+                   letter-spacing: 0.6px; padding: 6px 8px; text-transform: uppercase; }
+        .col-hdr { background: #e0e7ff; color: #1e3a8a; font-size: 9px; font-weight: 700;
+                   padding: 5px 8px; }
+        .col-hdr-r { text-align: right; }
 
-        .payslip-title {
-            font-size: 11px;
-            font-weight: bold;
-            color: #000;
-        }
+        .slip-tbl tbody tr:nth-child(odd)  td { background: #f8fafc; }
+        .slip-tbl tbody tr:nth-child(even) td { background: #ffffff; }
+        .slip-tbl tbody td { padding: 4px 8px; font-size: 10px; }
+        .amt { text-align: right; }
 
-        .period {
-            font-size: 11px;
-            color: #000;
-            margin-top: 2px;
-        }
+        .total-row td { background: #1e3a8a !important; color: #fff !important;
+                        font-weight: 700; font-size: 10px; padding: 6px 8px; }
 
-        .employee-info {
-            margin-bottom: 12px;
-            font-size: 11px;
-            line-height: 1.5;
-        }
+        /* ── Tax table ── */
+        .tax-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .tax-hdr td { background: #0f172a; color: #fff; font-size: 9px; font-weight: bold;
+                      letter-spacing: 0.6px; padding: 5px 8px; text-transform: uppercase; }
+        .tax-tbl td { border: 1px solid #cbd5e1; padding: 4px 8px; font-size: 10px; }
+        .tax-tbl tr:nth-child(odd)  td { background: #f8fafc; }
+        .tax-tbl tr:nth-child(even) td { background: #fff; }
+        .tax-lbl { color: #475569; width: 27%; }
+        .tax-val { text-align: right; font-weight: 600; color: #0f172a; width: 23%; }
 
-        .employee-info table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        /* ── Net Pay ── */
+        .net-tbl { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+        .net-tbl td { padding: 8px 10px; }
+        .net-label { background: #0f172a; color: #fff; font-size: 11px; font-weight: bold;
+                     width: 70%; letter-spacing: 0.5px; }
+        .net-amount { background: #0f172a; color: #4ade80; font-size: 14px; font-weight: bold;
+                      text-align: right; width: 30%; }
 
-        .employee-info td {
-            padding: 2px 5px;
-            vertical-align: top;
-        }
-
-        .employee-info strong {
-            color: #000;
-            font-weight: normal;
-            font-size: 11px;
-            font-family: 'Segoe UI', 'Calibri', 'Arial', sans-serif;
-        }
-
-        .payslip-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 12px;
-            font-size: 11px;
-        }
-
-        .payslip-table th {
-            background: transparent;
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #ddd;
-            font-weight: 600;
-            color: #000;
-            font-size: 11px;
-            font-family: 'Segoe UI', 'Calibri', 'Arial', sans-serif;
-        }
-
-        .payslip-table td {
-            padding: 6px 8px;
-            border: 1px solid #ddd;
-            color: #000;
-            font-family: 'Segoe UI', 'Calibri', 'Arial', sans-serif;
-        }
-
-        .text-right {
-            text-align: right;
-        }
-
-        .total-row {
-            background: transparent;
-            font-weight: 600;
-            color: #000;
-        }
-
-        .net-pay-row {
-            background: transparent;
-            font-weight: 600;
-            font-size: 11px;
-            color: #3598db;
-        }
-
-        .section-title {
-            background: transparent;
-            color: #3598db;
-            padding: 6px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            border: 1px solid #ddd !important;
-        }
-
-        .footer {
-            margin-top: 15px;
-            font-size: 9px;
-            color: #666;
-            text-align: center;
-        }
+        /* ── Footer ── */
+        .footer { border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 4px;
+                  font-size: 8px; color: #94a3b8; text-align: center; }
     </style>
 </head>
-
 <body>
-    <div class="payslip-header">
-        <div class="left">
-            <div class="company-name">CHABRIN AGENCIES LTD</div>
-            <div style="font-size: 11px; color: #666; margin-top: 5px;">Currency: KSh</div>
-        </div>
-        <div class="right">
-            <div class="payslip-title">PAYSLIP</div>
-            <div class="period">{{ date('F Y', strtotime($payroll->period)) }}</div>
-        </div>
+
+@php
+    $positionName   = $payroll->position->position_name   ?? $payroll->staff->position->position_name   ?? 'N/A';
+    $departmentName = $payroll->department->department_name ?? $payroll->staff->department->department_name ?? 'N/A';
+    $bankName       = $payroll->staff->bank->bank_name ?? 'N/A';
+    $accountName    = $payroll->staff->account_name   ?? 'N/A';
+    $accountNumber  = $payroll->staff->account_number ?? 'N/A';
+
+    $additions = collect([['name' => 'Basic Salary', 'amount' => $payroll->basic_salary]]);
+    if (($payroll->salary_arrears  ?? 0) > 0) $additions->push(['name' => 'Salary Arrears',   'amount' => $payroll->salary_arrears]);
+    if (($payroll->acting_allowance ?? 0) > 0) $additions->push(['name' => 'Acting Allowance', 'amount' => $payroll->acting_allowance]);
+    foreach ($elements->where('element_type', '2')->filter(fn($e) => $e['amount'] > 0) as $e)
+        $additions->push(['name' => $e['element_name'], 'amount' => $e['amount']]);
+
+    $deductions = collect();
+    foreach ($elements->where('element_type', '1')->filter(fn($e) => $e['amount'] > 0) as $e)
+        $deductions->push(['name' => $e['element_name'], 'amount' => $e['amount']]);
+    if (($payroll->akiba_sacco_loan        ?? 0) > 0) $deductions->push(['name' => 'Akiba Sacco Loan',        'amount' => $payroll->akiba_sacco_loan]);
+    if (($payroll->akiba_share_contribution ?? 0) > 0) $deductions->push(['name' => 'Akiba Share Contribution','amount' => $payroll->akiba_share_contribution]);
+    if (($payroll->social_welfare           ?? 0) > 0) $deductions->push(['name' => 'Social Welfare',          'amount' => $payroll->social_welfare]);
+    if (($payroll->other_deductions         ?? 0) > 0) $deductions->push(['name' => 'Other Deductions',        'amount' => $payroll->other_deductions]);
+
+    $grossPay        = $payroll->basic_salary + ($payroll->salary_arrears ?? 0) + ($payroll->acting_allowance ?? 0)
+                       + $elements->where('element_type', '2')->sum('amount');
+    $taxableIncome   = $grossPay - ($payroll->nssf ?? 0) - ($payroll->nhif ?? 0) - ($payroll->housing_levy ?? 0);
+    $taxBeforeRelief = ($payroll->tax_payable ?? 0) + 2400;
+    $maxRows         = max($additions->count(), $deductions->count());
+@endphp
+
+{{-- Header --}}
+<div class="hdr">
+    <div class="hdr-left">
+        <div class="co-name">CHABRIN AGENCIES LTD</div>
+        <div class="co-sub">Currency: Kenya Shillings (KSh)</div>
     </div>
-
-    <div class="employee-info">
-        <table>
-            <tr>
-                <td style="width: 20%;">Employee:</td>
-                <td style="width: 30%;">{{ $payroll->staff->full_names ?? 'N/A' }}</td>
-                <td style="width: 20%;">Staff No:</td>
-                <td style="width: 30%;">{{ $payroll->staff_number_id ?? 'N/A' }}</td>
-            </tr>
-            <tr>
-                <td>Position:</td>
-                <td>{{ $payroll->position->position_name ?? 'N/A' }}</td>
-                <td>Department:</td>
-                <td>{{ $payroll->department->department_name ?? 'N/A' }}</td>
-            </tr>
-            <tr>
-                <td>Period:</td>
-                <td>{{ date('d/m/Y', strtotime($payroll->period)) }}</td>
-                <td>Pay Date:</td>
-                <td>{{ date('d/m/Y', strtotime($payroll->date_time)) }}</td>
-            </tr>
-        </table>
+    <div class="hdr-right">
+        <div class="slip-label">PAYSLIP</div>
+        <div class="slip-period">{{ date('F Y', strtotime($payroll->period)) }}</div>
     </div>
+</div>
 
-    <table class="payslip-table">
-        <thead>
-            <tr>
-                <th colspan="2" class="section-title">Earnings / Additions</th>
-                <th colspan="2" class="section-title">Deductions</th>
-            </tr>
-            <tr>
-                <th>Description</th>
-                <th class="text-right">Amount (KSh)</th>
-                <th>Description</th>
-                <th class="text-right">Amount (KSh)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @php
-            $additions = collect([['name' => 'Basic Salary', 'amount' => $payroll->basic_salary]]);
-            if($payroll->salary_arrears > 0) {
-            $additions->push(['name' => 'Salary Arrears', 'amount' => $payroll->salary_arrears]);
-            }
-            if($payroll->acting_allowance > 0) {
-            $additions->push(['name' => 'Acting Allowance', 'amount' => $payroll->acting_allowance]);
-            }
-            // Add element_type 2 (additions/allowances) - only non-zero
-            foreach($elements->where('element_type', '2')->filter(function($element) { return $element['amount'] > 0; }) as $element) {
-            $additions->push(['name' => $element['element_name'], 'amount' => $element['amount']]);
-            }
+{{-- Employee Info --}}
+<table class="info-box">
+    <tr>
+        <td class="lbl">Employee</td>
+        <td class="val">{{ $payroll->staff->full_names ?? 'N/A' }}</td>
+        <td class="lbl">Staff No</td>
+        <td class="val">{{ $payroll->staff_number_id ?? 'N/A' }}</td>
+    </tr>
+    <tr>
+        <td class="lbl">Position</td>
+        <td class="val">{{ $positionName }}</td>
+        <td class="lbl">Department</td>
+        <td class="val">{{ $departmentName }}</td>
+    </tr>
+    <tr>
+        <td class="lbl">Period</td>
+        <td class="val">{{ date('d/m/Y', strtotime($payroll->period)) }}</td>
+        <td class="lbl">Pay Date</td>
+        <td class="val">{{ date('d/m/Y', strtotime($payroll->date_time)) }}</td>
+    </tr>
+    <tr>
+        <td class="lbl">Bank</td>
+        <td class="val">{{ $bankName }}</td>
+        <td class="lbl">Account No</td>
+        <td class="val">{{ $accountNumber }}</td>
+    </tr>
+    <tr>
+        <td class="lbl">Acct Name</td>
+        <td class="val" colspan="3">{{ $accountName }}</td>
+    </tr>
+</table>
 
-            $deductions = collect();
-            // Add element_type 1 (deductions) - only non-zero
-            foreach($elements->where('element_type', '1')->filter(function($element) { return $element['amount'] > 0; }) as $element) {
-            $deductions->push(['name' => $element['element_name'], 'amount' => $element['amount']]);
-            }
-            if($payroll->other_deductions > 0) {
-            $deductions->push(['name' => 'Other Deductions', 'amount' => $payroll->other_deductions]);
-            }
-
-            $maxRows = max($additions->count(), $deductions->count());
-            @endphp
-
-            @for($i = 0; $i < $maxRows; $i++)
-                <tr>
-                @if($additions->has($i))
+{{-- Earnings & Deductions --}}
+<table class="slip-tbl">
+    <thead>
+        <tr>
+            <th colspan="2" class="sec-hdr">Earnings / Additions</th>
+            <th colspan="2" class="sec-hdr">Deductions</th>
+        </tr>
+        <tr>
+            <th class="col-hdr"     style="width:30%;">Description</th>
+            <th class="col-hdr col-hdr-r" style="width:20%;">Amount (KSh)</th>
+            <th class="col-hdr"     style="width:30%;">Description</th>
+            <th class="col-hdr col-hdr-r" style="width:20%;">Amount (KSh)</th>
+        </tr>
+    </thead>
+    <tbody>
+        @for ($i = 0; $i < $maxRows; $i++)
+        <tr>
+            @if ($additions->has($i))
                 <td>{{ $additions[$i]['name'] }}</td>
-                <td class="text-right">{{ number_format($additions[$i]['amount'], 2) }}</td>
-                @else
-                <td>&nbsp;</td>
-                <td class="text-right">&nbsp;</td>
-                @endif
-
-                @if($deductions->has($i))
+                <td class="amt">{{ number_format($additions[$i]['amount'], 2) }}</td>
+            @else
+                <td>&nbsp;</td><td>&nbsp;</td>
+            @endif
+            @if ($deductions->has($i))
                 <td>{{ $deductions[$i]['name'] }}</td>
-                <td class="text-right">{{ number_format($deductions[$i]['amount'], 2) }}</td>
-                @else
-                <td>&nbsp;</td>
-                <td class="text-right">&nbsp;</td>
-                @endif
-                </tr>
-                @endfor
+                <td class="amt">{{ number_format($deductions[$i]['amount'], 2) }}</td>
+            @else
+                <td>&nbsp;</td><td>&nbsp;</td>
+            @endif
+        </tr>
+        @endfor
+        <tr class="total-row">
+            <td>GROSS PAY</td>
+            <td class="amt">{{ number_format($grossPay, 2) }}</td>
+            <td>TOTAL DEDUCTIONS</td>
+            <td class="amt">{{ number_format($payroll->total_deductions, 2) }}</td>
+        </tr>
+    </tbody>
+</table>
 
-                <tr class="total-row">
-                    <td>GROSS PAY</td>
-                    <td class="text-right">{{ number_format($payroll->basic_salary + $payroll->salary_arrears + $payroll->acting_allowance + $elements->where('element_type', '2')->sum('amount'), 2) }}</td>
-                    <td>TOTAL DEDUCTIONS</td>
-                    <td class="text-right">{{ number_format($payroll->total_deductions, 2) }}</td>
-                </tr>
-        </tbody>
-    </table>
+{{-- PAYE Tax Breakdown --}}
+<table class="tax-tbl">
+    <tr class="tax-hdr">
+        <td colspan="4">PAYE Tax Calculation</td>
+    </tr>
+    <tr>
+        <td class="tax-lbl">Taxable Earnings</td>
+        <td class="tax-val">{{ number_format($taxableIncome, 2) }}</td>
+        <td class="tax-lbl">Tax Chargeable</td>
+        <td class="tax-val">{{ number_format($taxBeforeRelief, 2) }}</td>
+    </tr>
+    <tr>
+        <td class="tax-lbl">Personal Relief</td>
+        <td class="tax-val">2,400.00</td>
+        <td class="tax-lbl">PAYE Payable</td>
+        <td class="tax-val" style="color:#1e40af;">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
+    </tr>
+</table>
 
-    <table class="payslip-table">
-        <tbody>
-            <tr class="net-pay-row">
-                <td><strong>NET PAY</strong></td>
-                <td class="text-right"><strong>{{ number_format($payroll->net_pay, 2) }}</strong></td>
-            </tr>
-        </tbody>
-    </table>
+{{-- Net Pay --}}
+<table class="net-tbl">
+    <tr>
+        <td class="net-label">NET PAY</td>
+        <td class="net-amount">KSh {{ number_format($payroll->net_pay, 2) }}</td>
+    </tr>
+</table>
 
-    <div class="footer">
-        <p>This is a computer-generated payslip and does not require a signature.</p>
-        <p>Generated on {{ date('d/m/Y H:i:s') }}</p>
-    </div>
+<div class="footer">
+    This is a computer-generated payslip and does not require a signature. &nbsp;|&nbsp; Generated on {{ date('d/m/Y H:i:s') }}
+</div>
+
 </body>
-
 </html>
