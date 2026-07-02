@@ -1171,18 +1171,34 @@ class ClientsController extends Controller
     public function getTenantsListingData(Request $request)
     {
         try {
+            $status = $request->input('status', 'active'); // active | exited | all
+
             $query = Client::withoutGlobalScope('user_clients_properties')
                 ->where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
                 ->leftJoin('sys_pm_properties', 'sys_pm_properties.id', '=', 'sys_pm_clients.property_id')
                 ->leftJoin('sys_pm_clients as landlord', 'landlord.id', '=', 'sys_pm_properties.client_id')
+                ->leftJoin('cb_tenant_exits', function ($join) {
+                    $join->on('cb_tenant_exits.tenant_id', '=', 'sys_pm_clients.id')
+                         ->where('cb_tenant_exits.current_status_id', 2);
+                })
                 ->select(
                     'sys_pm_clients.id',
                     'sys_pm_clients.names',
                     'sys_pm_clients.mobile_number',
                     'sys_pm_clients.national_id',
                     'sys_pm_properties.property_name',
-                    'landlord.names as landlord_name'
+                    'landlord.names as landlord_name',
+                    'cb_tenant_exits.actual_exit_date',
+                    'cb_tenant_exits.exit_reason',
+                    DB::raw('CASE WHEN cb_tenant_exits.id IS NOT NULL THEN 1 ELSE 0 END as is_exited')
                 );
+
+            if ($status === 'active') {
+                $query->whereNull('cb_tenant_exits.id');
+            } elseif ($status === 'exited') {
+                $query->whereNotNull('cb_tenant_exits.id');
+            }
+                
 
             // Scope tenants to properties assigned to the logged-in user (unless role is_global)
             $userId = Auth::id();
@@ -1233,13 +1249,18 @@ class ClientsController extends Controller
                 ->get()
                 ->map(function ($t) {
                     return [
-                        'id' => $t->id,
-                        'encrypted_id' => Crypt::encrypt($t->id),
-                        'names' => $t->names ?? '-',
-                        'mobile_number' => $t->mobile_number ?? '-',
-                        'national_id' => $t->national_id ?? '-',
-                        'property_name' => $t->property_name ?? '-',
-                        'landlord_name' => $t->landlord_name ?? '-',
+                        'id'             => $t->id,
+                        'encrypted_id'   => Crypt::encrypt($t->id),
+                        'names'          => $t->names ?? '-',
+                        'mobile_number'  => $t->mobile_number ?? '-',
+                        'national_id'    => $t->national_id ?? '-',
+                        'property_name'  => $t->property_name ?? '-',
+                        'landlord_name'  => $t->landlord_name ?? '-',
+                        'is_exited'      => (bool) $t->is_exited,
+                        'exit_date'      => $t->actual_exit_date
+                            ? \Carbon\Carbon::parse($t->actual_exit_date)->format('d M Y')
+                            : null,
+                        'exit_reason'    => $t->exit_reason ?? null,
                     ];
                 });
 

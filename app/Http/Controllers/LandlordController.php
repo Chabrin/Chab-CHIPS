@@ -185,6 +185,7 @@ class LandlordController extends Controller
                 ->get()
                 ->map(function ($l) {
                     return [
+                        'id'               => $l->id,
                         'encrypted_id'     => encrypt($l->id),
                         'names'            => $l->names ?? 'N/A',
                         'mobile_number'    => $l->mobile_number,

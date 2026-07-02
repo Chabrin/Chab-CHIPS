@@ -30,12 +30,14 @@ class ServiceAgreement extends Model
         'years',
         'vat_per',
         'flat_rate_vat',
+        'move_in_inspection_required',
     ];
 
     protected $casts = [
-        'date_time' => 'datetime',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'date_time'                    => 'datetime',
+        'created_at'                   => 'datetime',
+        'updated_at'                   => 'datetime',
+        'move_in_inspection_required'  => 'boolean',
     ];
 
     public function property()
@@ -76,5 +78,10 @@ class ServiceAgreement extends Model
     public function invoiceClients()
     {
         return $this->hasMany(ServiceAgreementInvoiceClient::class, 'parent_id');
+    }
+
+    public function moveInInspections()
+    {
+        return $this->hasMany(MoveInInspection::class, 'sla_id');
     }
 }

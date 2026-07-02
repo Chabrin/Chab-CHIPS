@@ -131,9 +131,9 @@ class SLAController extends Controller
     {
         try {
             $sla = ServiceAgreement::where('property_id', $propertyId)
-                ->where('current_status_id', 5) // Only active SLAs
+                // ->where('current_status_id', 2)
                 ->orderBy('date_start', 'desc')
-                ->get(['id', 'reference_number', 'date_start', 'date_end', 'commission_percentage']);
+                ->get(['id', 'reference_number', 'date_start', 'date_end', 'commission_percentage', 'move_in_inspection_required']);
             
             return response()->json(['sla' => $sla]);
         } catch (\Exception $e) {
@@ -168,20 +168,21 @@ class SLAController extends Controller
         try {
             // Validate the request
             $validated = $request->validate([
-                'client_id' => 'required|exists:sys_pm_clients,id',
-                'property_id' => 'required|exists:sys_pm_properties,id',
-                'commission_percentage' => 'required|numeric|min:0|max:100',
-                'vat_able' => 'required|in:Yes,No,Flat Rate',
-                'vat_percentage' => 'nullable|numeric|min:0|max:100',
-                'flat_rate_vat' => 'nullable|numeric|min:0',
-                'auto_renewal' => 'required',
-                'payment_date' => 'required|integer|min:1|max:31',
-                'date_start' => 'required|date',
-                'duration_years' => 'required|integer|min:1',
-                'sla_documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
-                'invoice_charges' => 'nullable|array',
-                'billing_charges' => 'nullable|array',
-                'return_groups' => 'nullable|array',
+                'client_id'                    => 'required|exists:sys_pm_clients,id',
+                'property_id'                  => 'required|exists:sys_pm_properties,id',
+                'commission_percentage'         => 'required|numeric|min:0|max:100',
+                'vat_able'                     => 'required|in:Yes,No,Flat Rate',
+                'vat_percentage'               => 'nullable|numeric|min:0|max:100',
+                'flat_rate_vat'                => 'nullable|numeric|min:0',
+                'auto_renewal'                 => 'required',
+                'payment_date'                 => 'required|integer|min:1|max:31',
+                'date_start'                   => 'required|date',
+                'duration_years'               => 'required|integer|min:1',
+                'move_in_inspection_required'  => 'nullable|boolean',
+                'sla_documents.*'              => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+                'invoice_charges'              => 'nullable|array',
+                'billing_charges'              => 'nullable|array',
+                'return_groups'                => 'nullable|array',
             ]);
 
             // Calculate end date
@@ -214,22 +215,23 @@ class SLAController extends Controller
 
             // Create the Service Agreement
             $serviceAgreement = ServiceAgreement::create([
-                'date_time' => now(),
-                'client_d' => $validated['client_id'],
-                'property_id' => $validated['property_id'],
-                'zone_id' => $property->zone_id ?? null,
-                'commission_percentage' => $validated['commission_percentage'],
-                'vat' => $vatValue,
-                'vat_per' => $validated['vat_percentage'] ?? 0,
-                'flat_rate_vat' => $validated['flat_rate_vat'] ?? 0,
-                'date_start' => $validated['date_start'],
-                'date_end' => $endDate->format('Y-m-d'),
-                'years' => $validated['duration_years'],
-                'landlord_payment_date' => $validated['payment_date'],
-                'auto_renewal' => $validated['auto_renewal'],
-                'created_by_id' => Auth::id(),
-                'current_status_id' => 5, // Assuming 1 is Active status
-                'reference_number' => null, // Will be updated below
+                'date_time'                   => now(),
+                'client_d'                    => $validated['client_id'],
+                'property_id'                 => $validated['property_id'],
+                'zone_id'                     => $property->zone_id ?? null,
+                'commission_percentage'        => $validated['commission_percentage'],
+                'vat'                         => $vatValue,
+                'vat_per'                     => $validated['vat_percentage'] ?? 0,
+                'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
+                'date_start'                  => $validated['date_start'],
+                'date_end'                    => $endDate->format('Y-m-d'),
+                'years'                       => $validated['duration_years'],
+                'landlord_payment_date'       => $validated['payment_date'],
+                'auto_renewal'                => $validated['auto_renewal'],
+                'created_by_id'               => Auth::id(),
+                'current_status_id'           => 5,
+                'reference_number'            => null,
+                'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
             ]);
 
             Log::info('Service Agreement created with ID: ' . $serviceAgreement->id);
@@ -514,20 +516,21 @@ class SLAController extends Controller
     
             // Validate the request
             $validated = $request->validate([
-                'client_id' => 'required|exists:sys_pm_clients,id',
-                'property_id' => 'required|exists:sys_pm_properties,id',
-                'commission_percentage' => 'required|numeric|min:0|max:100',
-                'vat_able' => 'required|in:Yes,No,Flat Rate',
-                'vat_percentage' => 'nullable|numeric|min:0|max:100',
-                'flat_rate_vat' => 'nullable|numeric|min:0',
-                'auto_renewal' => 'required|in:Yes,No',
-                'payment_date' => 'required|integer|min:1|max:31',
-                'date_start' => 'required|date',
-                'duration_years' => 'required|integer|min:1',
-                'sla_documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
-                'invoice_charges' => 'nullable|array',
-                'billing_charges' => 'nullable|array',
-                'return_groups' => 'nullable|array',
+                'client_id'                   => 'required|exists:sys_pm_clients,id',
+                'property_id'                 => 'required|exists:sys_pm_properties,id',
+                'commission_percentage'        => 'required|numeric|min:0|max:100',
+                'vat_able'                    => 'required|in:Yes,No,Flat Rate',
+                'vat_percentage'              => 'nullable|numeric|min:0|max:100',
+                'flat_rate_vat'               => 'nullable|numeric|min:0',
+                'auto_renewal'                => 'required|in:Yes,No',
+                'payment_date'                => 'required|integer|min:1|max:31',
+                'date_start'                  => 'required|date',
+                'duration_years'              => 'required|integer|min:1',
+                'move_in_inspection_required' => 'nullable|boolean',
+                'sla_documents.*'             => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+                'invoice_charges'             => 'nullable|array',
+                'billing_charges'             => 'nullable|array',
+                'return_groups'               => 'nullable|array',
             ]);
     
             // Calculate end date
@@ -559,18 +562,19 @@ class SLAController extends Controller
     
             // Update the Service Agreement
             $serviceAgreement->update([
-                'client_d' => $validated['client_id'],
-                'property_id' => $validated['property_id'],
-                'zone_id' => $property->zone_id ?? null,
-                'commission_percentage' => $validated['commission_percentage'],
-                'vat' => $vatValue,
-                'vat_per' => $validated['vat_percentage'] ?? 0,
-                'flat_rate_vat' => $validated['flat_rate_vat'] ?? 0,
-                'date_start' => $validated['date_start'],
-                'date_end' => $endDate->format('Y-m-d'),
-                'years' => $validated['duration_years'],
-                'landlord_payment_date' => $validated['payment_date'],
-                'auto_renewal' => $validated['auto_renewal'],
+                'client_d'                    => $validated['client_id'],
+                'property_id'                 => $validated['property_id'],
+                'zone_id'                     => $property->zone_id ?? null,
+                'commission_percentage'        => $validated['commission_percentage'],
+                'vat'                         => $vatValue,
+                'vat_per'                     => $validated['vat_percentage'] ?? 0,
+                'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
+                'date_start'                  => $validated['date_start'],
+                'date_end'                    => $endDate->format('Y-m-d'),
+                'years'                       => $validated['duration_years'],
+                'landlord_payment_date'       => $validated['payment_date'],
+                'auto_renewal'                => $validated['auto_renewal'],
+                'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
             ]);
     
             // Delete and recreate Invoice Charges
@@ -619,6 +623,56 @@ class SLAController extends Controller
         }
     }
     
+    /**
+     * Mass management page for move-in inspection settings.
+     * GET /service-agreements/move-in-inspection-settings
+     */
+    public function moveInInspectionSettings()
+    {
+        try {
+            $slas = ServiceAgreement::with(['property', 'client'])
+                ->select(['id', 'reference_number', 'property_id', 'client_d', 'current_status_id', 'date_start', 'date_end', 'move_in_inspection_required'])
+                ->orderByRaw('current_status_id = 5 DESC')
+                ->orderBy('date_start', 'desc')
+                ->get();
+
+            $stats = [
+                'total'    => $slas->count(),
+                'required' => $slas->where('move_in_inspection_required', true)->count(),
+                'optional' => $slas->where('move_in_inspection_required', false)->count(),
+            ];
+
+            return view('property.properties.sla.move-in-inspection-settings', compact('slas', 'stats'));
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading move-in inspection settings: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load settings');
+        }
+    }
+
+    /**
+     * Toggle move-in inspection flag for a single SLA via AJAX.
+     * POST /service-agreements/move-in-inspection-flag
+     */
+    public function updateMoveInInspectionFlag(Request $request)
+    {
+        try {
+            $request->validate([
+                'sla_id'   => 'required|exists:sys_pm_service_agreements,id',
+                'required' => 'required|boolean',
+            ]);
+
+            ServiceAgreement::where('id', $request->sla_id)
+                ->update(['move_in_inspection_required' => (bool) $request->required]);
+
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating move-in inspection flag: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update'], 500);
+        }
+    }
+
     /**
      * Delete a service agreement document (AJAX)
      */

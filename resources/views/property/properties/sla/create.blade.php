@@ -13,7 +13,7 @@
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
                                 <span>Save SLA</span>
                             </button>
-                            <a href="{{ $client ? route('property.clients.show', $client->encrypted_id) : route('property.properties.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                            <a href="{{ $client ? route('property.clients.show', $client->encrypted_id) : url('/property/service-agreements') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back</span>
                             </a>
@@ -118,6 +118,15 @@
                                     @error('auto_renewal')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                </div>
+
+                                <div class="col-md-4 mb-3">
+                                    <label for="move_in_inspection_required" class="form-label">Move-in Inspection Required</label>
+                                    <select class="form-select" id="move_in_inspection_required" name="move_in_inspection_required">
+                                        <option value="0" {{ old('move_in_inspection_required', '0') == '0' ? 'selected' : '' }}>No — Optional</option>
+                                        <option value="1" {{ old('move_in_inspection_required') == '1' ? 'selected' : '' }}>Yes — Mandatory</option>
+                                    </select>
+                                    <div class="form-text text-muted" style="font-size:0.75rem;">When enabled, a move-in inspection must be completed during tenant onboarding.</div>
                                 </div>
 
                                 <div class="col-md-4 mb-3">

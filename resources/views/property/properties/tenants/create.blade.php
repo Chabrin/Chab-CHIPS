@@ -1,3 +1,4 @@
+
 @extends('layouts.main')
 @section('content')
 <div class="page-body" style="padding-top:10px;">
@@ -44,6 +45,7 @@
                                     <button class="nav-link active" id="unit-details-tab" data-bs-toggle="tab" data-bs-target="#unit-details" type="button" role="tab" aria-controls="unit-details" aria-selected="true">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">home</span>
                                         Unit Details
+                                        <span id="inspectionBadge" class="badge bg-secondary ms-1" style="font-size:0.65rem;display:none;">Optional</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
@@ -77,6 +79,7 @@
                                     </button>
                                 </li>
                             </ul>
+                            <input type="hidden" name="inspection_required" id="inspectionRequired" value="0">
 
                             <!-- Tab Content -->
                             <div class="tab-content mt-3" id="unitTenantTabsContent">
@@ -87,10 +90,31 @@
                                             <h6 class="text-muted border-bottom pb-2">Unit Information</h6>
                                         </div>
 
+                                        @if(!$client)
+                                        {{-- Landlord search — only shown when not coming from a client profile --}}
+                                        <div class="col-md-4 mb-3" id="landlordSearchWrapper">
+                                            <label class="form-label">Landlord <span class="text-danger">*</span></label>
+                                            <div class="position-relative">
+                                                <input type="text" class="form-control" id="landlordSearch"
+                                                       placeholder="Search by name, ref or mobile..."
+                                                       autocomplete="off">
+                                                <div id="landlordResults"
+                                                     class="list-group shadow position-absolute w-100"
+                                                     style="z-index:1050;top:100%;left:0;display:none;max-height:240px;overflow-y:auto;background:#fff;border:1px solid rgba(0,0,0,.15);border-radius:4px;"></div>
+                                            </div>
+                                            <div id="landlordSelected" class="mt-1" style="display:none;">
+                                                <span class="badge bg-primary fs-6 fw-normal" id="landlordSelectedName"></span>
+                                                <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1" id="clearLandlord">clear</button>
+                                            </div>
+                                            <input type="hidden" id="selectedLandlordId">
+                                        </div>
+                                        @endif
+
                                         <div class="col-md-4 mb-3">
                                             <label for="property_id" class="form-label">Property <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('property_id') is-invalid @enderror" id="property_id" name="property_id" required>
-                                                <option value="">Loading properties...</option>
+                                            <select class="form-select @error('property_id') is-invalid @enderror" id="property_id" name="property_id" required
+                                                    @if(!$client) disabled @endif>
+                                                <option value="">@if(!$client) Select a landlord first @else Loading... @endif</option>
                                             </select>
                                             @error('property_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -193,13 +217,91 @@
 
                                         <div class="col-md-4 mb-3">
                                             <label for="overcraft_penalty" class="form-label">Overcraft Penalty(%)</label>
-                                            <input type="number" step="0.01" class="form-control @error('overcraft_penalty') is-invalid @enderror" 
-                                                   id="overcraft_penalty" name="overcraft_penalty" 
+                                            <input type="number" step="0.01" class="form-control @error('overcraft_penalty') is-invalid @enderror"
+                                                   id="overcraft_penalty" name="overcraft_penalty"
                                                    value="{{ old('overcraft_penalty', '5') }}" placeholder="5">
                                             @error('overcraft_penalty')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+
+                                        {{-- Move-in Inspection Section (inline in Unit Details tab) --}}
+                                        <div class="col-12 mt-2 mb-3" id="inspectionSection">
+                                            <h6 class="text-muted border-bottom pb-2">
+                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">search_check</span>
+                                                Move-in Inspection
+                                            </h6>
+                                            <div id="inspectionRequiredAlert" class="alert alert-warning d-none" role="alert" style="font-size:0.83rem;">
+                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">warning</span>
+                                                A move-in inspection is <strong>mandatory</strong> for this property. Please complete the form below.
+                                            </div>
+                                            <div id="inspectionOptionalAlert" class="alert alert-info d-none" role="alert" style="font-size:0.83rem;">
+                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">info</span>
+                                                A move-in inspection is <strong>optional</strong> for this property. You may complete it now or skip.
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
+                                            <label for="inspection_date" class="form-label">Inspection Date <span id="inspectionDateRequired" class="text-danger" style="display:none;">*</span></label>
+                                            <input type="date" class="form-control" id="inspection_date" name="inspection_date">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="inspector_name" class="form-label">Inspector Name</label>
+                                            <input type="text" class="form-control" id="inspector_name" name="inspector_name" placeholder="Name of inspector">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="overall_condition" class="form-label">Overall Condition</label>
+                                            <select class="form-select" id="overall_condition" name="overall_condition">
+                                                <option value="">— Select —</option>
+                                                <option value="Excellent">Excellent</option>
+                                                <option value="Good">Good</option>
+                                                <option value="Fair">Fair</option>
+                                                <option value="Poor">Poor</option>
+                                            </select>
+                                        </div>
+
+                                        @foreach([['walls','Walls'],['floors','Floors'],['ceiling','Ceiling'],['doors','Doors'],['windows','Windows'],['plumbing','Plumbing'],['electrical','Electrical']] as [$key, $label])
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">{{ $label }}</label>
+                                            <select class="form-select" name="{{ $key }}_condition">
+                                                <option value="">— Select —</option>
+                                                <option value="Excellent">Excellent</option>
+                                                <option value="Good">Good</option>
+                                                <option value="Fair">Fair</option>
+                                                <option value="Poor">Poor</option>
+                                            </select>
+                                        </div>
+                                        @endforeach
+
+                                        <div class="col-12 mb-3">
+                                            <label for="inspection_notes" class="form-label">Notes</label>
+                                            <textarea class="form-control" id="inspection_notes" name="inspection_notes" rows="3" placeholder="Any observations or notes about the unit condition..."></textarea>
+                                        </div>
+
+                                        <div class="col-12 mb-1">
+                                            <hr class="mt-0 mb-2">
+                                            <p class="text-muted mb-2" style="font-size:0.8rem;">
+                                                <span class="material-symbols-outlined align-middle" style="font-size:15px;">photo_camera</span>
+                                                Upload photos and/or videos documenting the unit condition at move-in.
+                                            </p>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Photos</label>
+                                            <input type="file" name="inspection_photos[]" class="form-control"
+                                                   accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                                   multiple id="moveInPhotos">
+                                            <div class="form-text" style="font-size:0.72rem;">JPG, PNG, WEBP, HEIC — multiple allowed</div>
+                                            <div id="moveInPhotoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Videos</label>
+                                            <input type="file" name="inspection_videos[]" class="form-control"
+                                                   accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska"
+                                                   multiple id="moveInVideos">
+                                            <div class="form-text" style="font-size:0.72rem;">MP4, MOV, AVI, MKV — multiple allowed</div>
+                                            <div id="moveInVideoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                                        </div>
+
                                     </div>
                                 </div>
 
@@ -611,6 +713,8 @@
                                         </div>
                                     </div>
                                 </div>
+
+
                             </div>
                         </form>
                     </div>
@@ -625,8 +729,39 @@
         let banksData = [];
         let branchesData = [];
 
-        // Form submission with spinner
+        // Move-in inspection state management
+        function updateInspectionState(required) {
+            $('#inspectionRequired').val(required);
+            const $badge  = $('#inspectionBadge');
+            const $date   = $('#inspection_date');
+            const $reqMark = $('#inspectionDateRequired');
+
+            $badge.show();
+            if (required) {
+                $badge.removeClass('bg-secondary bg-info').addClass('bg-danger').text('Required');
+                $('#inspectionRequiredAlert').removeClass('d-none');
+                $('#inspectionOptionalAlert').addClass('d-none');
+                $date.prop('required', true);
+                $reqMark.show();
+            } else {
+                $badge.removeClass('bg-danger').addClass('bg-secondary').text('Optional');
+                $('#inspectionRequiredAlert').addClass('d-none');
+                $('#inspectionOptionalAlert').removeClass('d-none');
+                $date.prop('required', false);
+                $reqMark.hide();
+            }
+        }
+
+        // Form submission with spinner + inspection gate
         $('#unitTenantForm').on('submit', function(e) {
+            const inspRequired = parseInt($('#inspectionRequired').val());
+            const inspDate = $('#inspection_date').val();
+            if (inspRequired && !inspDate) {
+                e.preventDefault();
+                $('#inspectionRequiredAlert').removeClass('d-none');
+                $('html, body').animate({ scrollTop: $('#inspectionSection').offset().top - 100 }, 300);
+                return false;
+            }
             $('#submitSpinner').removeClass('d-none');
             $('#saveButton').prop('disabled', true);
         });
@@ -691,35 +826,127 @@
         if (clientId) {
             loadProperties(clientId);
         }
+        // If no clientId, property dropdown stays disabled until a landlord is picked via search.
 
-        // Function to load properties for the client
-        function loadProperties(clientId) {
+        // Function to load properties for a given landlord/client ID
+        function loadProperties(ownerId) {
             $('#property_id').html('<option value="">Loading properties...</option>').prop('disabled', true);
-            
+
             $.ajax({
-                url: `/client/${clientId}/properties`,
+                url: `/client/${ownerId}/properties`,
                 method: 'GET',
                 dataType: 'json',
                 success: function(response) {
-                    console.log('Properties loaded:', response);
                     $('#property_id').empty().prop('disabled', false);
                     $('#property_id').append('<option value="">Please select</option>');
-                    
                     if (response.properties && response.properties.length > 0) {
                         response.properties.forEach(function(property) {
                             $('#property_id').append(`<option value="${property.id}">${property.property_name}</option>`);
                         });
                     } else {
-                        $('#property_id').append('<option value="">No properties found for this client</option>');
+                        $('#property_id').append('<option value="">No properties found for this landlord</option>');
                     }
                 },
-                error: function(xhr, status, error) {
-                    console.error('Error loading properties:', xhr.responseText);
+                error: function() {
                     $('#property_id').empty().prop('disabled', false);
                     $('#property_id').append('<option value="">Error loading properties</option>');
                 }
             });
         }
+
+        /* ── Landlord search (only rendered when no client_id) ── */
+        let landlordSearchTimer = null;
+
+        $('#landlordSearch').on('input', function() {
+            const q = $(this).val().trim();
+            clearTimeout(landlordSearchTimer);
+            $('#landlordResults').hide().empty();
+
+            if (q.length < 2) return;
+
+            landlordSearchTimer = setTimeout(function() {
+                $.ajax({
+                    url: '/ajax/landlord/search-landlords',
+                    data: { search: q },
+                    success: function(res) {
+                        const $results = $('#landlordResults').empty();
+                        if (res.landlords && res.landlords.length) {
+                            res.landlords.forEach(function(l) {
+                                $results.append(
+                                    `<button type="button" class="list-group-item list-group-item-action landlord-result-item"
+                                             data-id="${l.id}" data-name="${l.names}" style="font-size:0.83rem;background:#fff;border:0;border-bottom:1px solid #f0f0f0;text-align:left;width:100%;padding:8px 12px;">
+                                        <span class="fw-semibold">${l.names}</span>
+                                        <span class="text-muted ms-2" style="font-size:0.75rem;">${l.reference_number || ''}</span>
+                                        ${l.mobile_number ? `<span class="text-muted ms-1" style="font-size:0.75rem;">· ${l.mobile_number}</span>` : ''}
+                                    </button>`
+                                );
+                            });
+                            $results.show();
+                        } else {
+                            $results.append('<div class="list-group-item text-muted" style="font-size:0.82rem;">No landlords found.</div>').show();
+                        }
+                    }
+                });
+            }, 280);
+        });
+
+        $(document).on('click', '.landlord-result-item', function() {
+            const id   = $(this).data('id');
+            const name = $(this).data('name');
+            $('#selectedLandlordId').val(id);
+            $('#landlordSearch').val('').hide();
+            $('#landlordResults').hide().empty();
+            $('#landlordSelectedName').text(name);
+            $('#landlordSelected').show();
+            loadProperties(id);
+        });
+
+        $('#clearLandlord').on('click', function() {
+            $('#selectedLandlordId').val('');
+            $('#landlordSelectedName').text('');
+            $('#landlordSelected').hide();
+            $('#landlordSearch').val('').show().focus();
+            // Reset property and downstream
+            $('#property_id').html('<option value="">Select a landlord first</option>').prop('disabled', true);
+            $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
+            $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
+            updateInspectionState(0);
+        });
+
+        // Close dropdown when clicking outside
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#landlordSearchWrapper').length) {
+                $('#landlordResults').hide();
+            }
+        });
+
+        // Move-in inspection media previews
+        document.getElementById('moveInPhotos').addEventListener('change', function() {
+            const preview = document.getElementById('moveInPhotoPreview');
+            preview.innerHTML = '';
+            Array.from(this.files).forEach(file => {
+                const url = URL.createObjectURL(file);
+                preview.insertAdjacentHTML('beforeend',
+                    `<div class="position-relative" style="width:72px;height:72px;">
+                        <img src="${url}" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                        <span class="position-absolute bottom-0 start-0 w-100 text-truncate px-1" style="font-size:0.6rem;background:rgba(0,0,0,.45);color:#fff;border-radius:0 0 4px 4px;">${file.name}</span>
+                     </div>`
+                );
+            });
+        });
+        document.getElementById('moveInVideos').addEventListener('change', function() {
+            const preview = document.getElementById('moveInVideoPreview');
+            preview.innerHTML = '';
+            Array.from(this.files).forEach(file => {
+                preview.insertAdjacentHTML('beforeend',
+                    `<div class="d-flex align-items-center gap-1 border rounded px-2 py-1" style="font-size:0.75rem;max-width:200px;">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#6c757d;">videocam</span>
+                        <span class="text-truncate">${file.name}</span>
+                     </div>`
+                );
+            });
+        });
+
 
         // Load units when property is selected
         $('#property_id').on('change', function() {
@@ -746,10 +973,18 @@
                         
                         if (response.sla && response.sla.length > 0) {
                             response.sla.forEach(function(sla) {
-                                slaSelect.append(`<option value="${sla.id}">${sla.sla_reference || sla.reference_number}</option>`);
+                                slaSelect.append(`<option value="${sla.id}" data-inspection-required="${sla.move_in_inspection_required ? '1' : '0'}">${sla.sla_reference || sla.reference_number}</option>`);
                             });
+                            // If only one SLA, auto-select and trigger inspection update
+                            if (response.sla.length === 1) {
+                                slaSelect.val(response.sla[0].id);
+                                updateInspectionState(response.sla[0].move_in_inspection_required ? 1 : 0);
+                            } else {
+                                updateInspectionState(0);
+                            }
                         } else {
                             slaSelect.append('<option value="">No SLA found for this property</option>');
+                            updateInspectionState(0);
                         }
                     },
                     error: function(xhr, status, error) {
@@ -757,6 +992,12 @@
                         slaSelect.empty().prop('disabled', false);
                         slaSelect.append('<option value="">Error loading SLA</option>');
                     }
+                });
+
+                // When SLA is manually changed, update inspection state
+                slaSelect.off('change.inspection').on('change.inspection', function() {
+                    const req = parseInt($(this).find(':selected').data('inspection-required') || 0);
+                    updateInspectionState(req);
                 });
         
                 // Load units

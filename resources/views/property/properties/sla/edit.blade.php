@@ -111,6 +111,15 @@
                                             @enderror
                                         </div>
 
+                                        <div class="col-md-3 mb-3">
+                                            <label for="move_in_inspection_required" class="form-label">Move-in Inspection Required</label>
+                                            <select class="form-select" id="move_in_inspection_required" name="move_in_inspection_required">
+                                                <option value="0" {{ !$sla->move_in_inspection_required ? 'selected' : '' }}>No — Optional</option>
+                                                <option value="1" {{ $sla->move_in_inspection_required  ? 'selected' : '' }}>Yes — Mandatory</option>
+                                            </select>
+                                            <div class="form-text text-muted" style="font-size:0.75rem;">When enabled, a move-in inspection must be completed during tenant onboarding.</div>
+                                        </div>
+
                                         <div class="col-md-4 mb-3">
                                             <label for="payment_date" class="form-label">Payment Date (Day of Month) <span class="text-danger">*</span></label>
                                             <input type="number" min="1" max="31" class="form-control @error('payment_date') is-invalid @enderror" id="payment_date" name="payment_date" value="{{ old('payment_date', $sla->landlord_payment_date) }}" required>

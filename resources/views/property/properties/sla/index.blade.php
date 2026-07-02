@@ -7,14 +7,18 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Service Level Agreements</h5>
-                        @permission('create_service_agreements')
                         <div class="ms-auto d-flex gap-2">
+                            @permission('create_service_agreements')
+                            <a href="{{ route('service.agreements.move-in-settings') }}" class="btn btn-light border btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined" style="font-size:17px;">search_check</span>
+                                <span class="ms-1">Move-in Inspection Settings</span>
+                            </a>
                             <a href="{{ route('service.agreements.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">add_circle</span>
                                 <span class="ms-1">Add SLA</span>
                             </a>
+                            @endpermission
                         </div>
-                        @endpermission
                     </div>
                     <div class="card-body">
                         @if(session('success'))

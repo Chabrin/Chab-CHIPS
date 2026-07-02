@@ -4,13 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Deposit;
+use App\Models\DepositApplication;
+use App\Models\DebtorInvoice;
 use App\Models\LeaseAgreement;
 use App\Models\Property;
 use App\Models\TenantAccountTransaction;
 use App\Models\TenantExit;
 use App\Models\TenantExitCommunication;
+use App\Models\TenantExitDateChange;
 use App\Models\TenantExitDepositRefund;
+use App\Models\TenantExitFieldVisit;
 use App\Models\TenantExitInspection;
+use App\Models\TenantExitSettlement;
 use App\Models\TenantHistory;
 use App\Models\Unit;
 use App\Services\ErrorDispatcher;
@@ -300,6 +305,24 @@ class TenantExitController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->first();
 
+            $dateChanges = $exitRecord ? TenantExitDateChange::where('exit_id', $exitRecord->id)->orderBy('created_at')->get()->map(fn($dc) => [
+                'previous_date' => $dc->previous_date->format('d M Y'),
+                'new_date'      => $dc->new_date->format('d M Y'),
+                'reason'        => $dc->reason ?? '-',
+                'changed_by'    => \App\Models\User::select('name')->find($dc->changed_by)?->name ?? '-',
+                'created_at'    => $dc->created_at?->format('d M Y H:i'),
+            ]) : collect();
+
+            $fieldVisits = $exitRecord ? TenantExitFieldVisit::where('exit_id', $exitRecord->id)->orderBy('visit_date')->get()->map(fn($v) => [
+                'visit_date'        => $v->visit_date->format('d M Y'),
+                'officer_name'      => $v->officer_name,
+                'unit_status_found' => $v->unit_status_found,
+                'notes'             => $v->notes ?? '-',
+                'created_at'        => $v->created_at?->format('d M Y H:i'),
+            ]) : collect();
+
+            $settlement = $exitRecord ? TenantExitSettlement::where('exit_id', $exitRecord->id)->first() : null;
+
             // ── Prior stay history ────────────────────────────────────────────
             $stayHistory = TenantHistory::where('tenant_id', $tenantId)
                 ->with([
@@ -329,6 +352,8 @@ class TenantExitController extends Controller
                     'mobile_number'    => $tenant->mobile_number,
                     'email_address'    => $tenant->email_address,
                     'national_id'      => $tenant->national_id ?? '-',
+                    'property_id'      => $tenant->property_id,
+                    'unit_id'          => $tenant->unit_id,
                     'property_name'    => $tenant->property->property_name ?? '-',
                     'unit_name'        => $tenant->unit->unit_name ?? $tenant->unit->unit_code ?? '-',
                     'rent_amount'      => $tenant->rent_amount ? number_format($tenant->rent_amount, 2) : '-',
@@ -348,6 +373,11 @@ class TenantExitController extends Controller
                 'total_deposit_refunded'  => number_format($totalDepositRefunded, 2),
                 'stay_history'            => $stayHistory,
                 'exit_record'             => $exitRecord ? $exitRecord->toArray() : null,
+                'date_changes'            => $dateChanges,
+                'field_visits'            => $fieldVisits,
+                'settlement'              => $settlement,
+                'vacate_type'             => $exitRecord?->vacate_type ?? 'With Notice',
+                'process_1_completed'     => !is_null($exitRecord?->process_1_completed_at),
             ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -365,14 +395,25 @@ class TenantExitController extends Controller
      */
     public function initiateExit(Request $request)
     {
+        $isWithNotice = $request->input('vacate_type') === 'With Notice';
+
+        // Force non-applicable fields to null so empty strings don't fail nullable|date
+        if (!$isWithNotice) {
+            $request->merge([
+                'vacate_notice_date' => null,
+                'intended_exit_date' => null,
+            ]);
+        }
+
         $validated = $request->validate([
             'tenant_id'           => 'required|integer|exists:sys_pm_clients,id',
             'property_id'         => 'required|integer|exists:sys_pm_properties,id',
             'unit_id'             => 'required|integer|exists:sys_pm_units,id',
-            'vacate_notice_date'  => 'required|date',
-            'intended_exit_date'  => 'required|date|after_or_equal:vacate_notice_date',
-            'actual_exit_date'    => 'nullable|date',
-            'exit_reason'         => 'required|string|max:50',
+            'vacate_type'         => 'required|in:Eviction,Without Notice,With Notice',
+            'vacate_notice_date'  => $isWithNotice ? 'required|date' : 'nullable|date',
+            'intended_exit_date'  => $isWithNotice ? 'required|date|after_or_equal:vacate_notice_date' : 'nullable|date',
+            'actual_exit_date'    => !$isWithNotice ? 'required|date' : 'nullable|date',
+            'exit_reason'         => 'required|string|max:500',
             'exit_notes'          => 'nullable|string|max:2000',
         ]);
 
@@ -382,15 +423,21 @@ class TenantExitController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->first();
 
+            // For Without Notice / Eviction, the exit date IS the intended date
+            $intendedDate = $validated['intended_exit_date']
+                ?? $validated['actual_exit_date']
+                ?? null;
+
             $data = [
                 'tenant_id'          => $validated['tenant_id'],
                 'property_id'        => $validated['property_id'],
                 'unit_id'            => $validated['unit_id'],
-                'vacate_notice_date' => $validated['vacate_notice_date'],
-                'intended_exit_date' => $validated['intended_exit_date'],
+                'vacate_notice_date' => $validated['vacate_notice_date'] ?? null,
+                'intended_exit_date' => $intendedDate,
                 'actual_exit_date'   => $validated['actual_exit_date'] ?? null,
                 'exit_reason'        => $validated['exit_reason'],
                 'exit_notes'         => $validated['exit_notes'] ?? null,
+                'vacate_type'        => $validated['vacate_type'],
                 'current_status_id'  => 1, // In Progress
                 'updated_by'         => Auth::id(),
             ];
@@ -450,12 +497,20 @@ class TenantExitController extends Controller
 
         DB::beginTransaction();
         try {
-            // Handle photo uploads
             $photoPaths = [];
             if ($request->hasFile('inspection_photos')) {
-                foreach ($request->file('inspection_photos') as $photo) {
-                    if ($photo->isValid()) {
-                        $photoPaths[] = $photo->store('tenant-exits/inspections', 'public');
+                foreach ($request->file('inspection_photos') as $file) {
+                    if ($file->isValid()) {
+                        $photoPaths[] = $file->store('tenant-exits/inspections/photos', 'public');
+                    }
+                }
+            }
+
+            $videoPaths = [];
+            if ($request->hasFile('inspection_videos')) {
+                foreach ($request->file('inspection_videos') as $file) {
+                    if ($file->isValid()) {
+                        $videoPaths[] = $file->store('tenant-exits/inspections/videos', 'public');
                     }
                 }
             }
@@ -467,13 +522,16 @@ class TenantExitController extends Controller
             ]);
 
             if ($existing) {
-                // Only overwrite photos if new ones were uploaded
                 if (!empty($photoPaths)) {
-                    $data['photo_paths'] = $photoPaths;
+                    $data['photo_paths'] = array_merge($existing->photo_paths ?? [], $photoPaths);
+                }
+                if (!empty($videoPaths)) {
+                    $data['video_paths'] = array_merge($existing->video_paths ?? [], $videoPaths);
                 }
                 $existing->update($data);
             } else {
                 $data['photo_paths'] = $photoPaths;
+                $data['video_paths'] = $videoPaths;
                 $data['created_by']  = Auth::id();
                 TenantExitInspection::create($data);
             }
@@ -636,17 +694,15 @@ class TenantExitController extends Controller
                 ->where('lease_status', 'Active')
                 ->update([
                     'lease_status'      => 'Terminated',
-                    'current_status_id' => 2, // Terminated
+                    'current_status_id' => 2,
                     'date_end'          => $validated['actual_exit_date'],
-                    'updated_at'        => now(),
                 ]);
 
             // 3. Vacate the unit (set occupancy to Vacant)
             if ($tenant->unit_id) {
                 Unit::where('id', $tenant->unit_id)->update([
-                    'occupancy_status_id' => 3, // 31 = Vacant/Available (system-wide convention)
+                    'occupancy_status_id' => 3,
                     'current_status_id'   => 2,
-                    'updated_at'          => now(),
                 ]);
             }
 
@@ -654,7 +710,6 @@ class TenantExitController extends Controller
             $tenant->update([
                 'unit_id'     => null,
                 'property_id' => null,
-                'updated_at'  => now(),
             ]);
 
             // 5. Record deposit refund if provided
@@ -830,24 +885,26 @@ class TenantExitController extends Controller
         try {
             // ── Build query ──────────────────────────────────────────────────
             $query = TenantExit::query()
-                ->where('cb_tenant_exits.current_status_id', 2) // Completed only
+                ->whereNotNull('cb_tenant_exits.process_1_completed_at') // Physically vacated (P1 done)
                 ->join('sys_pm_clients as c',       'cb_tenant_exits.tenant_id',    '=', 'c.id')
                 ->join('sys_pm_properties as pr',   'cb_tenant_exits.property_id',  '=', 'pr.id')
-                ->join('sys_pm_units as u',        'cb_tenant_exits.unit_id',      '=', 'u.id')
-                ->leftJoin('sys_pm_clients as ll', 'pr.client_id',                 '=', 'll.id') // landlord = client record on the property (type_id=1)
-                ->leftJoin('josya_users as fu',    'cb_tenant_exits.finalised_by', '=', 'fu.id')
+                ->join('sys_pm_units as u',         'cb_tenant_exits.unit_id',      '=', 'u.id')
+                ->leftJoin('sys_pm_clients as ll',  'pr.client_id',                 '=', 'll.id')
+                ->leftJoin('josya_users as fu',     'cb_tenant_exits.finalised_by', '=', 'fu.id')
                 ->leftJoin('cb_tenant_exit_deposit_refunds as dr', function ($join) {
                     $join->on('dr.exit_id', '=', 'cb_tenant_exits.id');
                 })
                 ->select([
                     'cb_tenant_exits.id',
                     'cb_tenant_exits.tenant_id',
+                    'cb_tenant_exits.current_status_id',
                     'cb_tenant_exits.exit_reason',
                     'cb_tenant_exits.exit_notes',
                     'cb_tenant_exits.vacate_notice_date',
                     'cb_tenant_exits.intended_exit_date',
                     'cb_tenant_exits.actual_exit_date',
                     'cb_tenant_exits.finalised_at',
+                    'cb_tenant_exits.vacate_type',
                     'c.names as tenant_name',
                     'c.reference_number as tenant_ref',
                     'c.mobile_number as tenant_mobile',
@@ -863,12 +920,14 @@ class TenantExitController extends Controller
                 ->groupBy(
                     'cb_tenant_exits.id',
                     'cb_tenant_exits.tenant_id',
+                    'cb_tenant_exits.current_status_id',
                     'cb_tenant_exits.exit_reason',
                     'cb_tenant_exits.exit_notes',
                     'cb_tenant_exits.vacate_notice_date',
                     'cb_tenant_exits.intended_exit_date',
                     'cb_tenant_exits.actual_exit_date',
                     'cb_tenant_exits.finalised_at',
+                    'cb_tenant_exits.vacate_type',
                     'c.names',
                     'c.reference_number',
                     'c.mobile_number',
@@ -918,12 +977,14 @@ class TenantExitController extends Controller
 
             // ── Stats (unfiltered totals for the strip) ──────────────────────
             $stats = [
-                'total'       => TenantExit::where('current_status_id', 2)->count(),
-                'this_month'  => TenantExit::where('current_status_id', 2)
-                                    ->whereMonth('actual_exit_date', now()->month)
-                                    ->whereYear('actual_exit_date',  now()->year)
-                                    ->count(),
-                'with_refund' => TenantExitDepositRefund::distinct('exit_id')->count('exit_id'),
+                'total'               => TenantExit::whereNotNull('process_1_completed_at')->count(),
+                'this_month'          => TenantExit::whereNotNull('process_1_completed_at')
+                                            ->whereMonth('actual_exit_date', now()->month)
+                                            ->whereYear('actual_exit_date',  now()->year)
+                                            ->count(),
+                'pending_settlement'  => TenantExit::whereNotNull('process_1_completed_at')
+                                            ->where('current_status_id', 1)->count(),
+                'with_refund'         => TenantExitDepositRefund::distinct('exit_id')->count('exit_id'),
             ];
 
             // ── Filter dropdowns ─────────────────────────────────────────────
@@ -1194,6 +1255,609 @@ class TenantExitController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('TenantExit: downloadInspectionReport — ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to generate inspection report.');
+        }
+    }
+
+    // ── PROCESS 1 — VACATE TRACKING ──────────────────────────────────────────
+
+    /**
+     * Complete the vacate step: mark process_1_completed_at, end active leases,
+     * vacate the unit, clear tenant links, and write tenant history.
+     *
+     * POST /tenant-exit/complete-vacate
+     */
+    public function completeVacate(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'exit_id'          => 'required|integer|exists:cb_tenant_exits,id',
+            'tenant_id'        => 'required|integer|exists:sys_pm_clients,id',
+            'actual_exit_date' => 'required|date',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $exit   = TenantExit::findOrFail($validated['exit_id']);
+            $tenant = Client::findOrFail($validated['tenant_id']);
+
+            // 1. Set process_1_completed_at
+            $exit->update([
+                'actual_exit_date'       => $validated['actual_exit_date'],
+                'process_1_completed_at' => now(),
+                'updated_by'             => Auth::id(),
+            ]);
+
+            // 2. Set leases to "Vacating" — unit physically empty but accounting stays open
+            LeaseAgreement::where('tenant_id', $validated['tenant_id'])
+                ->where('lease_status', 'Active')
+                ->update([
+                    'lease_status' => 'Vacating',
+                    'date_end'     => $validated['actual_exit_date'],
+                ]);
+
+            // 3. Mark unit physically vacant — do NOT clear tenant/lease link yet
+            if ($tenant->unit_id) {
+                Unit::where('id', $tenant->unit_id)->update([
+                    'occupancy_status_id' => 3,
+                ]);
+            }
+
+            // 4. Write tenant history (physical exit captured; financial closure happens at settlement)
+            $property    = Property::select('id', 'client_id')->find($exit->property_id);
+            $vacatingLease = LeaseAgreement::where('tenant_id', $validated['tenant_id'])
+                ->where('lease_status', 'Vacating')
+                ->orderBy('date_end', 'desc')->first();
+            $leaseStart   = $vacatingLease?->date_start;
+            $exitDate     = \Carbon\Carbon::parse($validated['actual_exit_date']);
+            $durationDays = $leaseStart ? (int) \Carbon\Carbon::parse($leaseStart)->diffInDays($exitDate) : null;
+
+            TenantHistory::updateOrCreate(
+                ['exit_id' => $exit->id],
+                [
+                    'tenant_id'        => $validated['tenant_id'],
+                    'landlord_id'      => $property?->client_id,
+                    'property_id'      => $exit->property_id,
+                    'unit_id'          => $exit->unit_id,
+                    'lease_start_date' => $leaseStart,
+                    'exit_date'        => $validated['actual_exit_date'],
+                    'duration_days'    => $durationDays,
+                    'exit_reason'      => $exit->exit_reason,
+                    'recorded_by'      => Auth::id(),
+                ]
+            );
+
+            DB::commit();
+            return response()->json(['success' => true, 'message' => 'Vacate process completed. Unit has been marked vacant. Proceed to deposit settlement to close the accounting cycle.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: completeVacate — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to complete vacate process'], 500);
+        }
+    }
+
+    /**
+     * Log a change to the intended exit date and update the exit record.
+     *
+     * POST /tenant-exit/log-date-change
+     */
+    public function logDateChange(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'exit_id'       => 'required|integer|exists:cb_tenant_exits,id',
+            'previous_date' => 'required|date',
+            'new_date'      => 'required|date|after:previous_date',
+            'reason'        => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            // Update the intended_exit_date on the exit record
+            TenantExit::where('id', $validated['exit_id'])->update([
+                'intended_exit_date' => $validated['new_date'],
+                'updated_by'         => Auth::id(),
+            ]);
+
+            // Log the change
+            TenantExitDateChange::create([
+                'exit_id'       => $validated['exit_id'],
+                'previous_date' => $validated['previous_date'],
+                'new_date'      => $validated['new_date'],
+                'reason'        => $validated['reason'] ?? null,
+                'changed_by'    => Auth::id(),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Exit date updated and change logged.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: logDateChange — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to log date change'], 500);
+        }
+    }
+
+    /**
+     * Return all exit date change records for a given exit.
+     *
+     * GET /tenant-exit/date-changes/{exitId}
+     */
+    public function getDateChanges(int $exitId): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $changes = TenantExitDateChange::where('exit_id', $exitId)
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(fn($dc) => [
+                    'previous_date' => $dc->previous_date->format('d M Y'),
+                    'new_date'      => $dc->new_date->format('d M Y'),
+                    'reason'        => $dc->reason ?? '-',
+                    'changed_by'    => \App\Models\User::select('name')->find($dc->changed_by)?->name ?? '-',
+                    'created_at'    => $dc->created_at?->format('d M Y H:i'),
+                ]);
+            return response()->json(['success' => true, 'changes' => $changes]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: getDateChanges — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load date changes'], 500);
+        }
+    }
+
+    /**
+     * Log a field visit for an exit record.
+     *
+     * POST /tenant-exit/field-visit
+     */
+    public function saveFieldVisit(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'exit_id'           => 'required|integer|exists:cb_tenant_exits,id',
+            'visit_date'        => 'required|date',
+            'officer_name'      => 'required|string|max:255',
+            'unit_status_found' => 'required|in:Occupied,Partially Cleared,Fully Cleared/Empty',
+            'notes'             => 'nullable|string|max:2000',
+        ]);
+
+        try {
+            TenantExitFieldVisit::create(array_merge($validated, ['created_by' => Auth::id()]));
+            return response()->json(['success' => true, 'message' => 'Field visit logged successfully.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: saveFieldVisit — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to save field visit'], 500);
+        }
+    }
+
+    /**
+     * Return all field visits for a given exit.
+     *
+     * GET /tenant-exit/field-visits/{exitId}
+     */
+    public function getFieldVisits(int $exitId): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $visits = TenantExitFieldVisit::where('exit_id', $exitId)
+                ->orderBy('visit_date', 'desc')
+                ->get()
+                ->map(fn($v) => [
+                    'visit_date'        => $v->visit_date->format('d M Y'),
+                    'officer_name'      => $v->officer_name,
+                    'unit_status_found' => $v->unit_status_found,
+                    'notes'             => $v->notes ?? '-',
+                    'created_at'        => $v->created_at?->format('d M Y H:i'),
+                ]);
+            return response()->json(['success' => true, 'visits' => $visits]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: getFieldVisits — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load field visits'], 500);
+        }
+    }
+
+    // ── PROCESS 2 — DEPOSIT SETTLEMENT ───────────────────────────────────────
+
+    /**
+     * Save the deposit-as-rent preference for an exit.
+     *
+     * POST /tenant-exit/deposit-as-rent
+     */
+    /**
+     * Check whether a tenant qualifies for deposit-as-rent, and return the residual hold calc.
+     *
+     * GET /tenant-exit/deposit-as-rent-eligibility?exit_id=…
+     */
+    public function checkDepositAsRentEligibility(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $request->validate(['exit_id' => 'required|integer|exists:cb_tenant_exits,id']);
+
+        try {
+            $exit    = TenantExit::findOrFail($request->exit_id);
+            $issues  = [];
+            $eligible = true;
+
+            // Gate 1: must be With Notice
+            if ($exit->vacate_type !== 'With Notice') {
+                $eligible = false;
+                $issues[] = 'Deposit-as-rent is only available for tenants who gave formal notice (With Notice).';
+            }
+
+            // Gate 2: no outstanding arrears
+            $balance = TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
+                ->where('current_status_id', 1)
+                ->selectRaw('COALESCE(SUM(debit_amount), 0) - COALESCE(SUM(credit_amount), 0) as net')
+                ->value('net') ?? 0;
+            if ($balance > 0.01) {
+                $eligible = false;
+                $issues[] = 'Tenant has outstanding arrears of KES ' . number_format($balance, 2) . '. Clear arrears before applying deposit to rent.';
+            }
+
+            // Calculator values
+            $depositTotal = (float) Deposit::where('tenant_id', $exit->tenant_id)->sum('amount');
+            $unit         = Unit::find($exit->unit_id);
+            $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
+            $darAmount    = min($depositTotal, $monthlyRent);
+            $residualHold = max(0, $depositTotal - $monthlyRent);
+            $shortfall    = max(0, $monthlyRent - $depositTotal);
+
+            return response()->json([
+                'success'       => true,
+                'eligible'      => $eligible,
+                'issues'        => $issues,
+                'deposit_total' => round($depositTotal, 2),
+                'monthly_rent'  => round($monthlyRent, 2),
+                'dar_amount'    => round($darAmount, 2),
+                'residual_hold' => round($residualHold, 2),
+                'shortfall'     => round($shortfall, 2),
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: checkDepositAsRentEligibility — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to check eligibility'], 500);
+        }
+    }
+
+    public function saveDepositAsRent(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'exit_id'                   => 'required|integer|exists:cb_tenant_exits,id',
+            'deposit_as_rent'           => 'required|boolean',
+            'deposit_as_rent_approved'  => 'nullable|boolean',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $exit = TenantExit::findOrFail($validated['exit_id']);
+
+            if ($validated['deposit_as_rent']) {
+                // Eligibility gates
+                if ($exit->vacate_type !== 'With Notice') {
+                    throw new \Exception('Deposit-as-rent requires the tenant to have given formal notice (With Notice).');
+                }
+                $balance = TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
+                    ->where('current_status_id', 1)
+                    ->selectRaw('COALESCE(SUM(debit_amount), 0) - COALESCE(SUM(credit_amount), 0) as net')
+                    ->value('net') ?? 0;
+                if ($balance > 0.01) {
+                    throw new \Exception('Cannot apply deposit to rent: tenant has arrears of KES ' . number_format($balance, 2) . '.');
+                }
+                if (!($validated['deposit_as_rent_approved'] ?? false)) {
+                    throw new \Exception('Landlord approval is required before applying deposit to rent.');
+                }
+
+                // Calculate amounts
+                $depositTotal = (float) Deposit::where('tenant_id', $exit->tenant_id)->sum('amount');
+                $unit         = Unit::find($exit->unit_id);
+                $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
+                $darAmount    = min($depositTotal, $monthlyRent);
+                $shortfall    = max(0, $monthlyRent - $depositTotal);
+
+                // Track how deposit is split
+                DepositApplication::updateOrCreate(
+                    ['exit_id' => $exit->id, 'type' => 'RENT'],
+                    [
+                        'tenant_id'            => $exit->tenant_id,
+                        'amount'               => $darAmount,
+                        'approved_by_landlord' => true,
+                        'approved_by_agent'    => Auth::id(),
+                        'notes'                => $shortfall > 0.01
+                            ? 'Partial credit: KES ' . number_format($darAmount, 2) . ' applied. Shortfall of KES ' . number_format($shortfall, 2) . ' will be invoiced on settlement.'
+                            : 'Full rent credit applied from deposit.',
+                    ]
+                );
+
+                $exit->update([
+                    'deposit_as_rent'             => true,
+                    'deposit_as_rent_amount'       => $darAmount,
+                    'deposit_as_rent_approved'     => true,
+                    'deposit_as_rent_approved_by'  => Auth::id(),
+                    'updated_by'                   => Auth::id(),
+                ]);
+
+                $msg = 'Deposit-as-rent saved.';
+                if ($shortfall > 0.01) {
+                    $msg .= ' Shortfall of KES ' . number_format($shortfall, 2) . ' will be invoiced on settlement.';
+                }
+            } else {
+                // Remove deposit-as-rent
+                DepositApplication::where('exit_id', $exit->id)->where('type', 'RENT')->delete();
+                $exit->update([
+                    'deposit_as_rent'             => false,
+                    'deposit_as_rent_amount'       => null,
+                    'deposit_as_rent_approved'     => false,
+                    'deposit_as_rent_approved_by'  => null,
+                    'updated_by'                   => Auth::id(),
+                ]);
+                $msg = 'Deposit-as-rent removed.';
+            }
+
+            DB::commit();
+            return response()->json(['success' => true, 'message' => $msg]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: saveDepositAsRent — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Compute a live settlement preview without persisting anything.
+     *
+     * GET /tenant-exit/settlement-preview?exit_id=…[&other_deductions=…]
+     */
+    public function getSettlementPreview(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $request->validate(['exit_id' => 'required|integer|exists:cb_tenant_exits,id']);
+
+        try {
+            $exit = TenantExit::with('inspection')->findOrFail($request->exit_id);
+
+            // Deposit on record
+            $depositOnRecord = Deposit::where('tenant_id', $exit->tenant_id)->sum('amount');
+
+            // Arrears: closing balance from transactions (positive = DR balance = tenant owes us)
+            $transactions = \App\Models\TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
+                ->where('current_status_id', 1)->get();
+            $balance = 0;
+            foreach ($transactions as $txn) {
+                $balance += abs($txn->credit_amount ?? 0) - abs($txn->debit_amount ?? 0);
+            }
+            $arrearsAmount = $balance < 0 ? abs($balance) : 0; // DR balance
+
+            // Inspection costs
+            $inspectionDamage = $exit->inspection?->damage_amount ?? 0;
+            $cleaningCost     = $exit->inspection?->cleaning_cost ?? 0;
+
+            // Deposit-as-rent applied
+            $depositAsRentApplied = $exit->deposit_as_rent ? ($exit->deposit_as_rent_amount ?? 0) : 0;
+
+            // Other deductions (from request override if passed)
+            $otherDeductions = $request->input('other_deductions', 0);
+
+            // Settlement balance: positive = we owe tenant; negative = tenant owes us
+            $settlementBalance = $depositOnRecord
+                - $arrearsAmount
+                - $inspectionDamage
+                - $cleaningCost
+                - $depositAsRentApplied
+                - $otherDeductions;
+
+            if ($settlementBalance > 0.005) {
+                $settlementType = 'Refund to Tenant';
+            } elseif ($settlementBalance < -0.005) {
+                $settlementType = 'Invoice to Tenant';
+            } else {
+                $settlementType    = 'Zero Balance';
+                $settlementBalance = 0;
+            }
+
+            // Residual hold = deposit that remains after rent credit (for repair coverage)
+            $unit         = Unit::find($exit->unit_id);
+            $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
+            $residualHold = $exit->deposit_as_rent ? max(0, $depositOnRecord - $depositAsRentApplied) : 0;
+
+            return response()->json([
+                'success'                 => true,
+                'deposit_on_record'       => round($depositOnRecord, 2),
+                'monthly_rent'            => round($monthlyRent, 2),
+                'residual_hold'           => round($residualHold, 2),
+                'arrears_amount'          => round($arrearsAmount, 2),
+                'inspection_damage'       => round($inspectionDamage, 2),
+                'cleaning_cost'           => round($cleaningCost, 2),
+                'deposit_as_rent_applied' => round($depositAsRentApplied, 2),
+                'other_deductions'        => round($otherDeductions, 2),
+                'settlement_balance'      => round(abs($settlementBalance), 2),
+                'settlement_type'         => $settlementType,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: getSettlementPreview — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to compute settlement'], 500);
+        }
+    }
+
+    /**
+     * Persist the final deposit settlement, optionally create a refund record,
+     * and mark the exit as fully completed.
+     *
+     * POST /tenant-exit/save-settlement
+     */
+    public function saveSettlement(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'exit_id'                  => 'required|integer|exists:cb_tenant_exits,id',
+            'tenant_id'                => 'required|integer',
+            'deposit_on_record'        => 'required|numeric|min:0',
+            'arrears_amount'           => 'required|numeric|min:0',
+            'inspection_damage'        => 'required|numeric|min:0',
+            'cleaning_cost'            => 'required|numeric|min:0',
+            'deposit_as_rent_applied'  => 'required|numeric|min:0',
+            'other_deductions'         => 'nullable|numeric|min:0',
+            'other_deductions_notes'   => 'nullable|string|max:1000',
+            'settlement_balance'       => 'required|numeric',
+            'settlement_type'          => 'required|in:Refund to Tenant,Invoice to Tenant,Zero Balance',
+            'notes'                    => 'nullable|string|max:2000',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $exit = TenantExit::findOrFail($validated['exit_id']);
+
+            // 1. Persist the settlement record
+            $settlement = TenantExitSettlement::updateOrCreate(
+                ['exit_id' => $validated['exit_id']],
+                array_merge($validated, [
+                    'other_deductions' => $validated['other_deductions'] ?? 0,
+                    'settled_by'       => Auth::id(),
+                    'settled_at'       => now(),
+                ])
+            );
+
+            $refNum = 'EXIT-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
+
+            // 2. Post ledger entries and create invoices based on settlement type
+            if ($validated['settlement_type'] === 'Refund to Tenant' && $validated['settlement_balance'] > 0.005) {
+                // CR entry — reducing tenant balance (credit to tenant)
+                TenantAccountTransaction::create([
+                    'date_time'         => now(),
+                    'narration'         => 'Exit deposit settlement — refund to tenant',
+                    'dr_cr'             => 'CR',
+                    'debit_amount'      => 0,
+                    'credit_amount'     => $validated['settlement_balance'],
+                    'receipt_number'    => $refNum,
+                    'tenant_id'         => $validated['tenant_id'],
+                    'property_id'       => $exit->property_id,
+                    'unit_id'           => $exit->unit_id,
+                    'current_status_id' => 1,
+                    'entry_by'          => Auth::id(),
+                ]);
+
+                TenantExitDepositRefund::create([
+                    'exit_id'       => $validated['exit_id'],
+                    'tenant_id'     => $validated['tenant_id'],
+                    'refund_amount' => $validated['settlement_balance'],
+                    'refund_notes'  => $validated['notes'] ?? 'Exit settlement refund',
+                    'refunded_by'   => Auth::id(),
+                    'refunded_at'   => now(),
+                ]);
+
+            } elseif ($validated['settlement_type'] === 'Invoice to Tenant' && $validated['settlement_balance'] > 0.005) {
+                // DR entry + invoice — tenant owes the balance
+                $invoice = DebtorInvoice::create([
+                    'date_time'         => now(),
+                    'date_due'          => now()->addDays(30),
+                    'debtor_type_id'    => 2,
+                    'tenant_id'         => $validated['tenant_id'],
+                    'property_id'       => $exit->property_id,
+                    'unit_id'           => $exit->unit_id,
+                    'reference_number'  => $refNum,
+                    'narration'         => 'Exit settlement — balance due after deposit deductions',
+                    'total_amount'      => $validated['settlement_balance'],
+                    'current_balance'   => $validated['settlement_balance'],
+                    'current_status_id' => 1,
+                    'created_by'        => Auth::id(),
+                    'created_date'      => now(),
+                ]);
+
+                TenantAccountTransaction::create([
+                    'date_time'         => now(),
+                    'narration'         => 'Exit settlement — amount due from tenant after deposit deductions',
+                    'dr_cr'             => 'DR',
+                    'debit_amount'      => $validated['settlement_balance'],
+                    'credit_amount'     => 0,
+                    'invoice_number'    => $refNum,
+                    'invoice_id'        => $invoice->id,
+                    'tenant_id'         => $validated['tenant_id'],
+                    'property_id'       => $exit->property_id,
+                    'unit_id'           => $exit->unit_id,
+                    'current_status_id' => 1,
+                    'entry_by'          => Auth::id(),
+                ]);
+            }
+
+            // 3. If deposit-as-rent was applied and there's a shortfall, generate the shortfall invoice
+            if ($exit->deposit_as_rent && ($exit->deposit_as_rent_amount ?? 0) > 0) {
+                $unit         = Unit::find($exit->unit_id);
+                $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
+                $depositTotal = (float) Deposit::where('tenant_id', $validated['tenant_id'])->sum('amount');
+                $shortfall    = max(0, $monthlyRent - $depositTotal);
+
+                if ($shortfall > 0.005) {
+                    $sfRefNum = 'EXIT-SF-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
+                    $sfInvoice = DebtorInvoice::create([
+                        'date_time'         => now(),
+                        'date_due'          => now()->addDays(14),
+                        'debtor_type_id'    => 2,
+                        'tenant_id'         => $validated['tenant_id'],
+                        'property_id'       => $exit->property_id,
+                        'unit_id'           => $exit->unit_id,
+                        'reference_number'  => $sfRefNum,
+                        'narration'         => 'Final rent shortfall — deposit partially applied, balance due',
+                        'total_amount'      => $shortfall,
+                        'current_balance'   => $shortfall,
+                        'current_status_id' => 1,
+                        'created_by'        => Auth::id(),
+                        'created_date'      => now(),
+                    ]);
+
+                    TenantAccountTransaction::create([
+                        'date_time'         => now(),
+                        'narration'         => 'Exit — final rent shortfall (deposit applied to rent, balance owed)',
+                        'dr_cr'             => 'DR',
+                        'debit_amount'      => $shortfall,
+                        'credit_amount'     => 0,
+                        'invoice_number'    => $sfRefNum,
+                        'invoice_id'        => $sfInvoice->id,
+                        'tenant_id'         => $validated['tenant_id'],
+                        'property_id'       => $exit->property_id,
+                        'unit_id'           => $exit->unit_id,
+                        'current_status_id' => 1,
+                        'entry_by'          => Auth::id(),
+                    ]);
+                }
+            }
+
+            // 4. Record how the deposit was split (ARREARS and REPAIRS portions)
+            $arrearsAmt = (float) ($validated['arrears_amount'] ?? 0);
+            $repairsAmt = (float) ($validated['inspection_damage'] ?? 0) + (float) ($validated['cleaning_cost'] ?? 0);
+            if ($arrearsAmt > 0.005) {
+                DepositApplication::updateOrCreate(
+                    ['exit_id' => $exit->id, 'type' => 'ARREARS'],
+                    ['tenant_id' => $validated['tenant_id'], 'amount' => $arrearsAmt]
+                );
+            }
+            if ($repairsAmt > 0.005) {
+                DepositApplication::updateOrCreate(
+                    ['exit_id' => $exit->id, 'type' => 'REPAIRS'],
+                    ['tenant_id' => $validated['tenant_id'], 'amount' => $repairsAmt]
+                );
+            }
+
+            // 5. Finalise the lease (Vacating → Terminated) and clear tenant links
+            LeaseAgreement::where('tenant_id', $validated['tenant_id'])
+                ->where('lease_status', 'Vacating')
+                ->update([
+                    'lease_status'      => 'Terminated',
+                    'current_status_id' => 2,
+                ]);
+
+            $tenant = Client::find($validated['tenant_id']);
+            if ($tenant) {
+                $tenant->update(['unit_id' => null, 'property_id' => null]);
+            }
+
+            // 6. Mark exit fully completed
+            TenantExit::where('id', $validated['exit_id'])->update([
+                'current_status_id' => 2,
+                'final_notes'       => $validated['notes'] ?? null,
+                'finalised_by'      => Auth::id(),
+                'finalised_at'      => now(),
+                'updated_by'        => Auth::id(),
+            ]);
+
+            DB::commit();
+            return response()->json(['success' => true, 'message' => 'Settlement finalised. Lease terminated and accounting cycle closed.', 'settlement_id' => $settlement->id]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('TenantExit: saveSettlement — ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to save settlement'], 500);
         }
     }
 }

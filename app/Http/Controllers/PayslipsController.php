@@ -67,7 +67,7 @@ class PayslipsController extends Controller
             $month = $validated['payroll_month'];
 
             // Get payroll summary
-            $payrollSummary = PayrollSummary::with(['staff', 'position', 'department'])
+            $payrollSummary = PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department'])
                 ->where('staff_id', $staffId)
                 ->whereYear('period', substr($month, 0, 4))
                 ->whereMonth('period', substr($month, 5, 2))
@@ -81,7 +81,7 @@ class PayslipsController extends Controller
             }
 
             // Get payslip elements with details
-            $elements = $this->getPayslipElements($payrollSummary->payslip_elements);
+            $elements = $this->getPayslipElements($payrollSummary->payslip_elements, $payrollSummary);
 
             // Generate HTML
             $html = view('payroll.partials.payslip-preview', [
@@ -170,7 +170,7 @@ class PayslipsController extends Controller
      */
     private function getPayrollSummary($staffId, $month)
     {
-        return PayrollSummary::with(['staff', 'position', 'department'])
+        return PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department'])
             ->where('staff_id', $staffId)
             ->whereYear('period', substr($month, 0, 4))
             ->whereMonth('period', substr($month, 5, 2))
@@ -182,7 +182,7 @@ class PayslipsController extends Controller
      */
     private function generatePayslipPdf($payrollSummary)
     {
-        $elements = $this->getPayslipElements($payrollSummary->payslip_elements);
+        $elements = $this->getPayslipElements($payrollSummary->payslip_elements, $payrollSummary);
 
         return Pdf::loadView('payroll.partials.payslip-pdf', [
             'payroll' => $payrollSummary,
@@ -191,39 +191,99 @@ class PayslipsController extends Controller
     }
 
     /**
-     * Get payslip elements with details from PayrollElement
+     * Get payslip elements with details from PayrollElement.
+     * Supports two JSON formats:
+     *   - Old: [{'element_id': X, 'amount': Y}, ...]  — requires DB lookup
+     *   - New: [{'element_id': X, 'element_name': '...', 'element_type': '1', 'amount': Y, ...}]
+     * Falls back to building from PayrollSummary columns when array is empty.
      */
-    private function getPayslipElements($payslipElementsJson)
+    private function getPayslipElements($payslipElementsJson, $payrollSummary = null)
     {
-        if (empty($payslipElementsJson)) {
-            return collect();
+        $payslipElements = [];
+
+        if (!empty($payslipElementsJson)) {
+            $payslipElements = is_array($payslipElementsJson) ? $payslipElementsJson : json_decode($payslipElementsJson, true);
         }
 
-        $payslipElements = is_array($payslipElementsJson) ? $payslipElementsJson : json_decode($payslipElementsJson, true);
+        if (!empty($payslipElements)) {
+            // Check if new inline format (has element_name stored) or old format (ID-only)
+            $needsLookup = collect($payslipElements)->contains(fn($item) => !isset($item['element_name']));
 
-        if (empty($payslipElements)) {
-            return collect();
+            $elementDetails = collect();
+            if ($needsLookup) {
+                $elementIds = array_filter(array_column($payslipElements, 'element_id'));
+                if (!empty($elementIds)) {
+                    $elementDetails = PayrollElement::whereIn('id', $elementIds)->get()->keyBy('id');
+                }
+            }
+
+            $result = collect($payslipElements)->map(function ($item) use ($elementDetails) {
+                // New format: element details already stored inline
+                if (isset($item['element_name'])) {
+                    return [
+                        'element_id'       => $item['element_id'],
+                        'element_name'     => $item['element_name'],
+                        'element_type'     => $item['element_type'] ?? '1',
+                        'payslip_position' => $item['payslip_position'] ?? 999,
+                        'amount'           => $item['amount'],
+                    ];
+                }
+                // Old format: look up by element_id
+                $element = $elementDetails->get($item['element_id']);
+                return [
+                    'element_id'       => $item['element_id'],
+                    'element_name'     => $element?->element_name ?? 'Unknown',
+                    'element_type'     => $element?->element_type ?? '1',
+                    'payslip_position' => $element?->payslip_position ?? 999,
+                    'amount'           => $item['amount'],
+                ];
+            })->sortBy('payslip_position');
+
+            if ($result->isNotEmpty()) {
+                return $result;
+            }
         }
 
-        $elementIds = array_column($payslipElements, 'element_id');
+        // Fallback: reconstruct from PayrollSummary individual columns (handles older processed payrolls)
+        if ($payrollSummary) {
+            return $this->buildElementsFromSummaryColumns($payrollSummary);
+        }
 
-        // Get element details
-        $elementDetails = PayrollElement::whereIn('id', $elementIds)
-            ->get()
-            ->keyBy('id');
+        return collect();
+    }
 
-        // Merge amount with element details
-        $result = collect($payslipElements)->map(function ($item) use ($elementDetails) {
-            $element = $elementDetails->get($item['element_id']);
-            return [
-                'element_id' => $item['element_id'],
-                'element_name' => $element->element_name ?? 'Unknown',
-                'element_type' => $element->element_type ?? '1',
-                'payslip_position' => $element->payslip_position ?? 999,
-                'amount' => $item['amount']
-            ];
-        })->sortBy('payslip_position');
+    /**
+     * Build element list from stored PayrollSummary columns when payslip_elements is empty.
+     */
+    private function buildElementsFromSummaryColumns($payroll): \Illuminate\Support\Collection
+    {
+        $byKey = PayrollElement::whereIn('element_key', ['nssf', 'nhif', 'housing_levy', 'payee', 'helb_loans'])
+            ->get()->keyBy('element_key');
 
-        return $result;
+        // Only statutory items that the Blade doesn't check directly.
+        // Akiba/Social Welfare are read directly from columns in the Blade to avoid duplicates.
+        $map = [
+            'nssf'         => ['col' => 'nssf',        'name' => 'NSSF',         'pos' => 10],
+            'nhif'         => ['col' => 'nhif',         'name' => 'SHIF (NHIF)', 'pos' => 20],
+            'housing_levy' => ['col' => 'housing_levy', 'name' => 'Housing Levy', 'pos' => 30],
+            'payee'        => ['col' => 'tax_payable',  'name' => 'PAYE',         'pos' => 40],
+            'helb_loans'   => ['col' => 'helb_loans',   'name' => 'HELB Loan',   'pos' => 50],
+        ];
+
+        $result = collect();
+        foreach ($map as $key => $info) {
+            $amount = (float) ($payroll->{$info['col']} ?? 0);
+            if ($amount > 0) {
+                $el = $byKey->get($key);
+                $result->push([
+                    'element_id'       => $el?->id ?? 0,
+                    'element_name'     => $el?->element_name ?? $info['name'],
+                    'element_type'     => '1',
+                    'payslip_position' => $el?->payslip_position ?? $info['pos'],
+                    'amount'           => $amount,
+                ]);
+            }
+        }
+        return $result->sortBy('payslip_position')->values();
     }
 }

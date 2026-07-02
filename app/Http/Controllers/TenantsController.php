@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Models\SystemCountry;
+use App\Models\MoveInInspection;
 use App\Models\TenantPaymentAllocated;
 use App\Models\ClientDocument;
 use App\Models\LeaseAgreement;
@@ -247,6 +248,9 @@ class TenantsController extends Controller
 
             $this->saveNextOfKin($request, $tenant->id);
             Log::info('Next of kin saved for tenant ID: ' . $tenant->id);
+
+            $this->saveMoveInInspection($request, $tenant, $validated);
+            Log::info('Move-in inspection processed for tenant ID: ' . $tenant->id);
 
             DB::commit();
 
@@ -758,6 +762,55 @@ class TenantsController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Save move-in inspection if inspection_date is provided.
+     */
+    private function saveMoveInInspection(Request $request, Client $tenant, array $validated)
+    {
+        if (!$request->filled('inspection_date')) {
+            return;
+        }
+
+        $photoPaths = [];
+        if ($request->hasFile('inspection_photos')) {
+            foreach ($request->file('inspection_photos') as $file) {
+                if ($file->isValid()) {
+                    $photoPaths[] = $file->store('move-in-inspections/photos', 'public');
+                }
+            }
+        }
+
+        $videoPaths = [];
+        if ($request->hasFile('inspection_videos')) {
+            foreach ($request->file('inspection_videos') as $file) {
+                if ($file->isValid()) {
+                    $videoPaths[] = $file->store('move-in-inspections/videos', 'public');
+                }
+            }
+        }
+
+        MoveInInspection::create([
+            'tenant_id'            => $tenant->id,
+            'property_id'          => $validated['property_id'],
+            'unit_id'              => $validated['unit_id'],
+            'sla_id'               => $validated['sla_ref'] ?? null,
+            'inspection_date'      => $request->input('inspection_date'),
+            'inspector_name'       => $request->input('inspector_name'),
+            'walls_condition'      => $request->input('walls_condition')      ?: null,
+            'floors_condition'     => $request->input('floors_condition')     ?: null,
+            'ceiling_condition'    => $request->input('ceiling_condition')    ?: null,
+            'doors_condition'      => $request->input('doors_condition')      ?: null,
+            'windows_condition'    => $request->input('windows_condition')    ?: null,
+            'plumbing_condition'   => $request->input('plumbing_condition')   ?: null,
+            'electrical_condition' => $request->input('electrical_condition') ?: null,
+            'overall_condition'    => $request->input('overall_condition')    ?: null,
+            'notes'                => $request->input('inspection_notes'),
+            'photo_paths'          => $photoPaths ?: null,
+            'video_paths'          => $videoPaths ?: null,
+            'conducted_by'         => Auth::id(),
+        ]);
     }
 
     /**

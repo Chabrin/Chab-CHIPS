@@ -15,6 +15,7 @@ class TenantExit extends Model
         'tenant_id',
         'property_id',
         'unit_id',
+        'vacate_type',
         'vacate_notice_date',
         'intended_exit_date',
         'actual_exit_date',
@@ -26,13 +27,22 @@ class TenantExit extends Model
         'updated_by',
         'finalised_by',
         'finalised_at',
+        'process_1_completed_at',
+        'deposit_as_rent',
+        'deposit_as_rent_approved',
+        'deposit_as_rent_approved_by',
+        'deposit_as_rent_amount',
     ];
 
     protected $casts = [
-        'vacate_notice_date' => 'date',
-        'intended_exit_date' => 'date',
-        'actual_exit_date'   => 'date',
-        'finalised_at'       => 'datetime',
+        'vacate_notice_date'      => 'date',
+        'intended_exit_date'      => 'date',
+        'actual_exit_date'        => 'date',
+        'finalised_at'            => 'datetime',
+        'process_1_completed_at'  => 'datetime',
+        'deposit_as_rent'         => 'boolean',
+        'deposit_as_rent_approved'=> 'boolean',
+        'deposit_as_rent_amount'  => 'decimal:2',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────────────
@@ -70,6 +80,26 @@ class TenantExit extends Model
     public function history(): HasOne
     {
         return $this->hasOne(TenantHistory::class, 'exit_id');
+    }
+
+    public function dateChanges(): HasMany
+    {
+        return $this->hasMany(TenantExitDateChange::class, 'exit_id');
+    }
+
+    public function fieldVisits(): HasMany
+    {
+        return $this->hasMany(TenantExitFieldVisit::class, 'exit_id');
+    }
+
+    public function settlement(): HasOne
+    {
+        return $this->hasOne(TenantExitSettlement::class, 'exit_id');
+    }
+
+    public function depositApplications(): HasMany
+    {
+        return $this->hasMany(DepositApplication::class, 'exit_id');
     }
 
     // ── Scopes ─────────────────────────────────────────────────────────────────
