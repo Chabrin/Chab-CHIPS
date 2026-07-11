@@ -12,24 +12,29 @@ class Deposit extends Model
 
     protected $fillable = [
         'date_time',
+        'deposit_date',
         'tenant_id',
         'client_id',
         'property_id',
+        'sla_id',
         'unit_id',
         'lease_id',
         'invoice_id',
+        'item_id',
         'amount',
-        'payment_mode',
+        'created_by_id',
+        'current_status_id',
         'reference_number',
+        'zone_id',
+        'invoice_balance',
         'narration',
-        'created_by',
-        'created_date'
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
-        'created_date' => 'datetime',
-        'amount' => 'decimal:2'
+        'deposit_date' => 'datetime',
+        'amount' => 'decimal:2',
+        'invoice_balance' => 'decimal:2',
     ];
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Deposit;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Models\SystemCountry;
@@ -15,6 +16,7 @@ use App\Models\ClientBankAccount;
 use App\Services\ErrorDispatcher;
 use App\Models\ClientOtherContact;
 use App\Services\TenantBalanceService;
+use App\Models\TenantAccountTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -237,6 +239,9 @@ class TenantsController extends Controller
             $tenant = $this->createTenant($validated, $referenceNumber, $photoPath);
             Log::info('Tenant created with ID: ' . $tenant->id . ' by User ID: ' . Auth::id());
 
+            $this->saveDeposit($validated, $tenant);
+            Log::info('Deposit processed for tenant ID: ' . $tenant->id);
+
             $this->saveBankAccounts($request, $tenant->id);
             Log::info('Bank accounts saved for tenant ID: ' . $tenant->id);
 
@@ -285,6 +290,8 @@ class TenantsController extends Controller
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
             'overcraft_penalty' => 'nullable|numeric|min:0',
+            'deposit_amount' => 'nullable|numeric|min:0',
+            'deposit_reference' => 'nullable|string|max:255',
 
             // Tenant Information
             'title' => 'required|string|max:10',
@@ -413,6 +420,56 @@ class TenantsController extends Controller
         ];
 
         return Client::create($tenantData);
+    }
+
+    /**
+     * Record the move-in deposit, if one was entered, in the dedicated deposits
+     * register and mirror it as a credit entry on the tenant's ledger so it
+     * shows up consistently on the tenant statement and exit workflow alike.
+     */
+    private function saveDeposit(array $validated, Client $tenant): void
+    {
+        $amount = (float) ($validated['deposit_amount'] ?? 0);
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        $property = Property::find($validated['property_id']);
+        $narration = 'Move-in security deposit';
+        $now = now();
+
+        Deposit::create([
+            'date_time' => $now,
+            'deposit_date' => $now,
+            'tenant_id' => $tenant->id,
+            'client_id' => $property->client_id ?? null,
+            'property_id' => $validated['property_id'],
+            'sla_id' => $validated['sla_ref'] ?? null,
+            'unit_id' => $validated['unit_id'],
+            'amount' => $amount,
+            'created_by_id' => Auth::id(),
+            'current_status_id' => 1,
+            'reference_number' => $validated['deposit_reference'] ?? null,
+            'narration' => $narration,
+        ]);
+
+        TenantAccountTransaction::create([
+            'date_time' => $now,
+            'narration' => $narration,
+            'pay_for' => 'Security Deposit',
+            'dr_cr' => 'CR',
+            'debit_amount' => 0,
+            'credit_amount' => $amount,
+            'entry_ref' => $validated['deposit_reference'] ?? null,
+            'tenant_id' => $tenant->id,
+            'property_id' => $validated['property_id'],
+            'unit_id' => $validated['unit_id'],
+            'client_id' => $property->client_id ?? null,
+            'sla_id' => $validated['sla_ref'] ?? null,
+            'current_status_id' => 1,
+            'entry_by' => Auth::id(),
+        ]);
     }
 
     /**

@@ -1350,7 +1350,7 @@ class ClientsController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $tenant = Client::with(['property', 'unit.zone'])
+            $tenant = Client::with(['property', 'unit.zone', 'deposits'])
                 ->tenants()
                 ->findOrFail($id);
             $tenantBalance = \App\Services\TenantBalanceService::getBalance((int) $id);

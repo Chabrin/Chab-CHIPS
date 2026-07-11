@@ -182,6 +182,50 @@
                                         </div>
                                     </div>
                                     @endif
+
+                                    <!-- Deposit Information Card -->
+                                    <div class="col-12">
+                                        <div class="card border-0 shadow-sm">
+                                            <div class="card-header bg-light py-2 d-flex align-items-center gap-2">
+                                                <span class="material-symbols-outlined" style="font-size:18px;">savings</span>
+                                                <span class="fw-semibold small">Deposit Information</span>
+                                            </div>
+                                            <div class="card-body py-2">
+                                                @if($tenant->deposits->isNotEmpty())
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm mb-0" style="font-size:0.8rem;">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Date</th>
+                                                                <th>Reference</th>
+                                                                <th>Narration</th>
+                                                                <th class="text-end">Amount</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach($tenant->deposits as $deposit)
+                                                            <tr>
+                                                                <td>{{ $deposit->deposit_date ? $deposit->deposit_date->format('d-m-Y') : '-' }}</td>
+                                                                <td>{{ $deposit->reference_number ?? '-' }}</td>
+                                                                <td>{{ $deposit->narration ?? '-' }}</td>
+                                                                <td class="text-end">{{ number_format($deposit->amount, 2) }}</td>
+                                                            </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                        <tfoot>
+                                                            <tr>
+                                                                <th colspan="3" class="text-end">Total Deposit:</th>
+                                                                <th class="text-end">{{ number_format($tenant->deposits->sum('amount'), 2) }}</th>
+                                                            </tr>
+                                                        </tfoot>
+                                                    </table>
+                                                </div>
+                                                @else
+                                                <p class="text-muted small mb-0">No deposit records found for this tenant.</p>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

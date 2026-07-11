@@ -206,6 +206,11 @@ class Client extends Model
         return $this->hasOne(LeaseAgreement::class, 'tenant_id', 'id');
     }
 
+    public function deposits()
+    {
+        return $this->hasMany(Deposit::class, 'tenant_id', 'id');
+    }
+
     public function sla()
     {
         return $this->belongsTo(ServiceAgreement::class, 'sla_id');
