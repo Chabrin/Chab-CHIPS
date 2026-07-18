@@ -12,7 +12,7 @@ use App\Models\TenantPaymentAllocated;
 use App\Models\ClientDocument;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
-use App\Models\ClientBankAccount;
+use App\Models\ClientBankDetail;
 use App\Services\ErrorDispatcher;
 use App\Models\ClientOtherContact;
 use App\Services\TenantBalanceService;
@@ -360,7 +360,7 @@ class TenantsController extends Controller
             // Tenant Information
             'title' => 'required|string|max:10',
             'names' => 'required|string|max:255',
-            'gender' => 'required|in:Male,Female,Other',
+            'gender' => 'nullable|in:Male,Female,Other',
             'preferred_language' => 'nullable|string|max:50',
             'tenant_type' => 'required',
             'phone' => 'nullable|string|max:20',
@@ -543,18 +543,31 @@ class TenantsController extends Controller
             return;
         }
 
+        $isFirst = ClientBankDetail::where('client_id', $tenantId)->count() === 0;
+
         foreach ($request->input('bank_accounts') as $bankData) {
-            if (empty($bankData['bank_id'])) {
+            $bankId = $bankData['bank_id'] ?? null;
+            $branchId = $bankData['branch_id'] ?? null;
+            $accountName = $bankData['account_name'] ?? null;
+            $accountNumber = $bankData['account_number'] ?? null;
+
+            // Skip only if the entire row is blank
+            if (empty($bankId) && empty($branchId) && empty($accountName) && empty($accountNumber)) {
                 continue;
             }
 
-            ClientBankAccount::create([
-                'parent_id' => $tenantId,
-                'bank_id' => $bankData['bank_id'],
-                'branch' => $bankData['branch_id'] ?? null,
-                'account_name' => $bankData['account_name'] ?? null,
-                'account_number' => $bankData['account_number'] ?? null,
+            ClientBankDetail::create([
+                'client_id' => $tenantId,
+                'bank_id' => $bankId ?: null,
+                'branch_id' => $branchId ?: null,
+                'account_name' => $accountName ?: null,
+                'account_number' => $accountNumber ?: null,
+                'is_default' => $isFirst ? 1 : 0,
+                'added_by' => Auth::id(),
+                'added_on' => now(),
             ]);
+
+            $isFirst = false;
         }
     }
 
@@ -737,7 +750,7 @@ class TenantsController extends Controller
         $tenant->update([
             'names' => $names,
             'title' => $validated['title'],
-            'gender' => $validated['gender'],
+            'gender' => $validated['gender'] ?? null,
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'],
             'pin_number' => $validated['pin_number'] ?? null,
@@ -769,23 +782,37 @@ class TenantsController extends Controller
      */
     private function updateBankAccounts(Request $request, int $tenantId)
     {
-        // Delete existing bank accounts
-        ClientBankAccount::where('parent_id', $tenantId)->delete();
+        // Delete existing bank details
+        ClientBankDetail::where('client_id', $tenantId)->delete();
 
-        // Save new bank accounts
+        // Save new bank details
         if ($request->has('bank_accounts')) {
+            $isFirst = true;
+
             foreach ($request->input('bank_accounts') as $bankData) {
-                if (empty($bankData['bank_id'])) {
+                $bankId = $bankData['bank_id'] ?? null;
+                $branchId = $bankData['branch_id'] ?? null;
+                $accountName = $bankData['account_name'] ?? null;
+                $accountNumber = $bankData['account_number'] ?? null;
+
+                // Skip only if the entire row is blank
+                if (empty($bankId) && empty($branchId) && empty($accountName) && empty($accountNumber)) {
                     continue;
                 }
 
-                ClientBankAccount::create([
-                    'parent_id' => $tenantId,
-                    'bank_id' => $bankData['bank_id'],
-                    'branch' => $bankData['branch_id'] ?? null,
-                    'account_name' => $bankData['account_name'] ?? null,
-                    'account_number' => $bankData['account_number'] ?? null,
+                ClientBankDetail::create([
+                    'client_id' => $tenantId,
+                    // Cast empty strings to null - bank_id/branch_id are integer columns
+                    'bank_id' => $bankId ?: null,
+                    'branch_id' => $branchId ?: null,
+                    'account_name' => $accountName ?: null,
+                    'account_number' => $accountNumber ?: null,
+                    'is_default' => $isFirst ? 1 : 0,
+                    'added_by' => Auth::id(),
+                    'added_on' => now(),
                 ]);
+
+                $isFirst = false;
             }
         }
     }

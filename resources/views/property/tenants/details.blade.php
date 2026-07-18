@@ -36,7 +36,7 @@
                         <div class="mb-3">
                             <p class="text-muted mb-0" style="font-size: 0.875rem;">
                                 <strong>Ref #:</strong> {{ $tenant->reference_number ?? 'N/A' }} |
-                                <strong>PIN:</strong> {{ $tenant->national_id ?? 'N/A' }} |
+                                <strong>PIN:</strong> {{ $tenant->pin_number ?? 'N/A' }} |
                                 <strong>Mobile:</strong> {{ $tenant->mobile_number ?? 'N/A' }}
                             </p>
                         </div>
@@ -53,12 +53,6 @@
                                 <button class="nav-link" id="contacts-tab" data-bs-toggle="tab" data-bs-target="#contacts" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">contacts</span>
                                     Contacts
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="statistics-tab" data-bs-toggle="tab" data-bs-target="#statistics" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">analytics</span>
-                                    Statistics
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
@@ -99,6 +93,10 @@
                                             <span class="info-value">{{ $tenant->names ?? '-' }}</span>
                                         </div>
                                         <div class="info-row">
+                                            <span class="info-label">Gender:</span>
+                                            <span class="info-value">{{ $tenant->gender ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
                                             <span class="info-label">Mobile Number:</span>
                                             <span class="info-value">
                                                 {{ $tenant->mobile_number ?? '-' }}
@@ -118,6 +116,15 @@
                                         </div>
                                         <div class="info-row">
                                             <span class="info-label">PIN Number:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->pin_number ?? '-' }}
+                                                @if($tenant->pin_number)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->pin_number }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">National ID:</span>
                                             <span class="info-value">
                                                 {{ $tenant->national_id ?? '-' }}
                                                 @if($tenant->national_id)
@@ -322,13 +329,6 @@
                                 </div>
                             </div>
 
-                            <!-- Statistics Tab -->
-                            <div class="tab-pane fade" id="statistics" role="tabpanel" aria-labelledby="statistics-tab">
-                                <div class="alert alert-info">
-                                    <span class="material-symbols-outlined" style="vertical-align: middle;">info</span>
-                                    Statistics will be implemented in the next phase
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>

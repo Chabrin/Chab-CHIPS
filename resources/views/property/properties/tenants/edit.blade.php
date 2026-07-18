@@ -213,19 +213,6 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
-                                            <label for="gender" class="form-label">Gender <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender" required>
-                                                <option value="">Please select</option>
-                                                <option value="Male" {{ old('gender', $tenant->gender) == 'Male' ? 'selected' : '' }}>Male</option>
-                                                <option value="Female" {{ old('gender', $tenant->gender) == 'Female' ? 'selected' : '' }}>Female</option>
-                                                <option value="Other" {{ old('gender', $tenant->gender) == 'Other' ? 'selected' : '' }}>Other</option>
-                                            </select>
-                                            @error('gender')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
                                         <div class="col-md-4 mb-3">
                                             <label for="tenant_type" class="form-label">Tenant Type <span class="text-danger">*</span></label>
                                             <select class="form-select @error('tenant_type') is-invalid @enderror" id="tenant_type" name="tenant_type" required>
@@ -264,6 +251,19 @@
                                                 @endforeach
                                             </select>
                                             @error('national_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
+                                            <label for="gender" class="form-label">Gender</label>
+                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender">
+                                                <option value="">Please select</option>
+                                                <option value="Male" {{ old('gender', $tenant->gender) == 'Male' ? 'selected' : '' }}>Male</option>
+                                                <option value="Female" {{ old('gender', $tenant->gender) == 'Female' ? 'selected' : '' }}>Female</option>
+                                                <option value="Other" {{ old('gender', $tenant->gender) == 'Other' ? 'selected' : '' }}>Other</option>
+                                            </select>
+                                            @error('gender')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
@@ -580,7 +580,7 @@
         // Store existing data for pre-population (single bank account only)
         let existingBankAccounts = [{
             bank_id: {{ old('bank_accounts.0.bank_id', optional($tenant->bankAccounts->first())->bank_id ?? 'null') }},
-            branch_id: {{ old('bank_accounts.0.branch_id', optional($tenant->bankAccounts->first())->branch ?? 'null') }}
+            branch_id: {{ old('bank_accounts.0.branch_id', optional($tenant->bankAccounts->first())->branch_id ?? 'null') }}
         }];
 
         // Reset spinner on page load if there are errors
