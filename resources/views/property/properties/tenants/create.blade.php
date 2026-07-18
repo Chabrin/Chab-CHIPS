@@ -225,6 +225,26 @@
                                             @enderror
                                         </div>
 
+                                        <div class="col-md-4 mb-3">
+                                            <label for="deposit_amount" class="form-label">Deposit Amount</label>
+                                            <input type="number" step="0.01" class="form-control @error('deposit_amount') is-invalid @enderror"
+                                                   id="deposit_amount" name="deposit_amount"
+                                                   value="{{ old('deposit_amount') }}" placeholder="0.00">
+                                            @error('deposit_amount')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
+                                            <label for="deposit_reference" class="form-label">Deposit Reference</label>
+                                            <input type="text" class="form-control @error('deposit_reference') is-invalid @enderror"
+                                                   id="deposit_reference" name="deposit_reference"
+                                                   value="{{ old('deposit_reference') }}" placeholder="Receipt / transaction number">
+                                            @error('deposit_reference')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
                                         {{-- Move-in Inspection Section (inline in Unit Details tab) --}}
                                         <div class="col-12 mt-2 mb-3" id="inspectionSection">
                                             <h6 class="text-muted border-bottom pb-2">

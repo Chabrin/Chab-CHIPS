@@ -50,6 +50,91 @@
     </div>
 </div>
 
+<style>
+    #property-confirmations-table td {
+        vertical-align: middle;
+        padding-top: 0.65rem;
+        padding-bottom: 0.65rem;
+    }
+
+    /* Softer, lighter row striping — the theme default was too dark and fought with the badges/text */
+    #property-confirmations-table.table-striped > tbody > tr:nth-of-type(odd) > * {
+        background-color: #f8f9fb;
+    }
+
+    #property-confirmations-table.table-hover > tbody > tr:hover > * {
+        background-color: #eef2f7;
+    }
+
+    .confirmation-field-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+
+    .confirmation-field-row {
+        display: flex;
+        gap: 0.35rem;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+    .confirmation-field-row .text-muted {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    .confirmation-field-value {
+        font-weight: 600;
+        word-break: break-word;
+    }
+</style>
+
+<!-- Confirm Action Modal (replaces native confirm()) -->
+<div class="modal fade" id="confirmActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmActionModalTitle">Confirm Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="confirmActionModalBody">Are you sure?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined me-2" style="font-size:18px;">close</span>Cancel
+                </button>
+                <button type="button" class="btn d-flex align-items-center" id="confirmActionModalConfirmBtn">
+                    <span class="material-symbols-outlined me-2" style="font-size:18px;">check</span>Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rejection Reason Modal (replaces native prompt()) -->
+<div class="modal fade" id="rejectReasonModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reason for Rejection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label for="rejectReasonInput" class="form-label form-label-sm">Please provide a reason:</label>
+                <textarea class="form-control" id="rejectReasonInput" rows="3" placeholder="Rejection reason…"></textarea>
+                <div class="invalid-feedback" id="rejectReasonError">A reason is required.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined me-2" style="font-size:18px;">close</span>Cancel
+                </button>
+                <button type="button" class="btn btn-danger d-flex align-items-center" id="rejectReasonConfirmBtn">
+                    <span class="material-symbols-outlined me-2" style="font-size:18px;">check</span>Confirm Rejection
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 $(document).ready(function() {
@@ -58,7 +143,9 @@ $(document).ready(function() {
     
     let table = $('#property-confirmations-table').DataTable({
         processing: true,
-        serverSide: false,
+        serverSide: true,
+        ordering: false,
+        searching: true,
         ajax: {
             url: "{{ route('property.confirmations.list') }}",
             type: 'GET',
@@ -77,9 +164,9 @@ $(document).ready(function() {
                 }
             },
             { data: null, orderable: false, searchable: false, render: (data, type, row, meta) => meta.row + 1 },
-            { data: null, render: function(data) { return $('#confirmation-section').val() || '-'; } },
-            { 
-                data: null, 
+            { data: null, render: function(data) { return sectionBadge($('#confirmation-section').val()); } },
+            {
+                data: null,
                 render: function(data) {
                     return renderDetails($('#confirmation-section').val(), data);
                 }
@@ -107,88 +194,92 @@ $(document).ready(function() {
         lengthChange: true
     });
 
+    // Badge color per section, cycling through the app's existing badge-light-* palette
+    const sectionBadgeClasses = [
+        'badge-light-primary', 'badge-light-success', 'badge-light-warning',
+        'badge-light-danger', 'badge-light-info', 'badge-light-secondary'
+    ];
+    function sectionBadge(section) {
+        if (!section) return '-';
+        let sections = $('#confirmation-section option').map(function() { return this.value; }).get().filter(Boolean);
+        let idx = Math.max(0, sections.indexOf(section)) % sectionBadgeClasses.length;
+        return `<span class="badge ${sectionBadgeClasses[idx]}">${section}</span>`;
+    }
+
+    // Compact "Label: value" list, one field per line — shared by the Details column
+    // and the details modal. Deliberately not a side-by-side grid: a DataTable cell is
+    // too narrow for label/value columns to sit side by side without wrapping badly.
+    function fieldGrid(pairs) {
+        return `<div class="confirmation-field-list">` + pairs.map(([label, value]) => `
+                <div class="confirmation-field-row">
+                    <small class="text-muted">${label}:</small>
+                    <span class="confirmation-field-value">${value ?? '-'}</span>
+                </div>
+            `).join('') + `</div>`;
+    }
+
     // Render details based on section
     function renderDetails(section, data) {
         switch(section) {
             case 'Clients':
-                return `<strong>Ref:</strong> ${data.reference_number}<br>
-                        <strong>Name:</strong> ${data.names}<br>
-                        <strong>Email:</strong> ${data.email}<br>
-                        <strong>Phone:</strong> ${data.phone_number}<br>
-                        <strong>Type:</strong> ${data.client_type}<br>
-                        <strong>Zone:</strong> ${data.zone}`;
+                return fieldGrid([
+                    ['Ref', data.reference_number], ['Name', data.names], ['Email', data.email],
+                    ['Phone', data.phone_number], ['Type', data.client_type], ['Zone', data.zone]
+                ]);
             case 'Properties':
-                return `<strong>Ref:</strong> ${data.reference_number}<br>
-                        <strong>Name:</strong> ${data.property_name}<br>
-                        <strong>Client:</strong> ${data.client}<br>
-                        <strong>Zone:</strong> ${data.zone}<br>
-                        <strong>Type:</strong> ${data.property_type}`;
+                return fieldGrid([
+                    ['Ref', data.reference_number], ['Name', data.property_name], ['Client', data.client],
+                    ['Zone', data.zone], ['Type', data.property_type]
+                ]);
             case 'Units':
-                return `<strong>Code:</strong> ${data.unit_code}<br>
-                        <strong>Number:</strong> ${data.unit_number}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Client:</strong> ${data.client}<br>
-                        <strong>Type:</strong> ${data.unit_type}<br>
-                        <strong>Status:</strong> ${data.occupancy_status}`;
+                return fieldGrid([
+                    ['Code', data.unit_code], ['Number', data.unit_number], ['Property', data.property],
+                    ['Client', data.client], ['Type', data.unit_type], ['Status', data.occupancy_status]
+                ]);
             case 'Tenants':
-                return `<strong>Ref:</strong> ${data.reference_number}<br>
-                        <strong>Name:</strong> ${data.names}<br>
-                        <strong>Email:</strong> ${data.email}<br>
-                        <strong>Phone:</strong> ${data.phone_number}<br>
-                        <strong>ID Number:</strong> ${data.id_number}`;
+                return fieldGrid([
+                    ['Ref', data.reference_number], ['Name', data.names], ['Email', data.email],
+                    ['Phone', data.phone_number], ['ID Number', data.id_number]
+                ]);
             case 'Service Agreements':
-                return `<strong>Ref:</strong> ${data.ref_number}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Client:</strong> ${data.client}<br>
-                        <strong>Start Date:</strong> ${data.date_start}<br>
-                        <strong>End Date:</strong> ${data.date_end}<br>
-                        <strong>Duration:</strong> ${data.duration_years} years`;
+                return fieldGrid([
+                    ['Ref', data.ref_number], ['Property', data.property], ['Client', data.client],
+                    ['Start Date', data.date_start], ['End Date', data.date_end], ['Duration', data.duration_years ? data.duration_years + ' years' : null]
+                ]);
             case 'Recoveries':
-                return `<strong>Ref:</strong> ${data.ref_number}<br>
-                        <strong>Date:</strong> ${data.recovery_date}<br>
-                        <strong>Amount:</strong> ${data.amount}<br>
-                        <strong>Client:</strong> ${data.client}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Zone:</strong> ${data.zone}<br>
-                        <strong>Commissionable:</strong> ${data.commisionable}`;
+                return fieldGrid([
+                    ['Ref', data.ref_number], ['Date', data.recovery_date], ['Amount', data.amount],
+                    ['Client', data.client], ['Property', data.property], ['Zone', data.zone],
+                    ['Commissionable', data.commisionable]
+                ]);
             case 'Lease Agreements':
-                return `<strong>Ref:</strong> ${data.ref_number}<br>
-                        <strong>Tenant:</strong> ${data.tenant}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Unit:</strong> ${data.unit}<br>
-                        <strong>Start Date:</strong> ${data.date_start}<br>
-                        <strong>End Date:</strong> ${data.date_end}<br>
-                        <strong>Rent:</strong> ${data.rent_amount}`;
+                return fieldGrid([
+                    ['Ref', data.ref_number], ['Tenant', data.tenant], ['Property', data.property],
+                    ['Unit', data.unit], ['Start Date', data.date_start], ['End Date', data.date_end],
+                    ['Rent', data.rent_amount]
+                ]);
             case 'Inspections':
-                return `<strong>Date:</strong> ${data.inspection_date}<br>
-                        <strong>Zone:</strong> ${data.zone}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Type:</strong> ${data.inspection_type}<br>
-                        <strong>Remarks:</strong> ${data.general_remarks}`;
+                return fieldGrid([
+                    ['Date', data.inspection_date], ['Zone', data.zone], ['Property', data.property],
+                    ['Type', data.inspection_type], ['Remarks', data.general_remarks]
+                ]);
             case 'Tenant Movements':
-                return `<strong>Ref:</strong> ${data.ref_number}<br>
-                        <strong>Client:</strong> ${data.client}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Unit From:</strong> ${data.unit_from}<br>
-                        <strong>Unit To:</strong> ${data.unit_to}<br>
-                        <strong>Lease:</strong> ${data.lease}<br>
-                        <strong>Effective Date:</strong> ${data.effective_date}`;
+                return fieldGrid([
+                    ['Ref', data.ref_number], ['Client', data.client], ['Property', data.property],
+                    ['Unit From', data.unit_from], ['Unit To', data.unit_to], ['Lease', data.lease],
+                    ['Effective Date', data.effective_date]
+                ]);
             case 'Tenant Blacklist':
-                return `<strong>Date:</strong> ${data.blacklist_date}<br>
-                        <strong>Tenant:</strong> ${data.tenant}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Unit:</strong> ${data.unit}<br>
-                        <strong>Lease:</strong> ${data.lease}<br>
-                        <strong>Reason:</strong> ${data.reason}<br>
-                        <strong>Balance:</strong> ${data.current_balance}<br>
-                        <strong>Description:</strong> ${data.description}`;
+                return fieldGrid([
+                    ['Date', data.blacklist_date], ['Tenant', data.tenant], ['Property', data.property],
+                    ['Unit', data.unit], ['Lease', data.lease], ['Reason', data.reason],
+                    ['Balance', data.current_balance], ['Description', data.description]
+                ]);
             case 'Repairs & Maintenance':
-                return `<strong>Ref:</strong> ${data.ref_number}<br>
-                        <strong>Property:</strong> ${data.property}<br>
-                        <strong>Client:</strong> ${data.client}<br>
-                        <strong>Zone:</strong> ${data.zone}<br>
-                        <strong>Visited Date:</strong> ${data.visited_date}<br>
-                        <strong>Description:</strong> ${data.description}`;
+                return fieldGrid([
+                    ['Ref', data.ref_number], ['Property', data.property], ['Client', data.client],
+                    ['Zone', data.zone], ['Visited Date', data.visited_date], ['Description', data.description]
+                ]);
             default:
                 return 'N/A';
         }
@@ -235,7 +326,7 @@ $(document).ready(function() {
         let checked = this.checked;
         
         if (checked) {
-            // Add all IDs from all pages to selectedIds
+            // Add all IDs on the current page to selectedIds (server-side paging — other pages aren't loaded client-side)
             table.rows().every(function() {
                 let data = this.data();
                 if (data && data.id) {
@@ -282,28 +373,34 @@ $(document).ready(function() {
         
         let section = $('#confirmation-section').val();
         let detailsContent = `
-            <div class="row g-2">
+            <div class="row g-3">
                 <div class="col-12">
-                    <small class="text-muted">Type:</small><br>
-                    <strong>${section || '-'}</strong>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="mb-0" style="font-size:0.9rem;">Record Information</h6>
+                        </div>
+                        <div class="card-body py-2">
+                            ${fieldGrid([
+                                ['Type', sectionBadge(section)],
+                                ['Created By', data.created_by_name],
+                                ['Created At', data.created_at]
+                            ])}
+                        </div>
+                    </div>
                 </div>
                 <div class="col-12">
-                    <small class="text-muted">Created By:</small><br>
-                    <strong>${data.created_by_name || '-'}</strong>
-                </div>
-                <div class="col-12">
-                    <small class="text-muted">Created At:</small><br>
-                    <strong>${data.created_at || '-'}</strong>
-                </div>
-                <div class="col-12">
-                    <small class="text-muted">Details:</small><br>
-                    <div class="border p-2 rounded">
-                        ${renderDetails(section, data)}
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="mb-0" style="font-size:0.9rem;">Details</h6>
+                        </div>
+                        <div class="card-body py-2">
+                            ${renderDetails(section, data)}
+                        </div>
                     </div>
                 </div>
             </div>
         `;
-        
+
         let modalContent = `
             <div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
                 <div class="modal-dialog modal-lg">
@@ -346,13 +443,63 @@ $(document).ready(function() {
         }
     }
     
+    // Confirm Action modal (replaces native confirm())
+    function confirmAction(title, body, confirmClass = 'btn-primary') {
+        return new Promise(resolve => {
+            $('#confirmActionModalTitle').text(title);
+            $('#confirmActionModalBody').text(body);
+            let $confirmBtn = $('#confirmActionModalConfirmBtn')
+                .removeClass('btn-primary btn-success btn-danger')
+                .addClass(confirmClass);
+            let modalEl = document.getElementById('confirmActionModal');
+            let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            let settled = false;
+
+            $confirmBtn.off('click').on('click', function() {
+                settled = true;
+                modal.hide();
+                resolve(true);
+            });
+            $(modalEl).off('hidden.bs.modal').on('hidden.bs.modal', function() {
+                if (!settled) resolve(false);
+            });
+            modal.show();
+        });
+    }
+
+    // Rejection Reason modal (replaces native prompt())
+    function promptRejectReason() {
+        return new Promise(resolve => {
+            $('#rejectReasonInput').val('').removeClass('is-invalid');
+            let modalEl = document.getElementById('rejectReasonModal');
+            let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            let settled = false;
+
+            $('#rejectReasonConfirmBtn').off('click').on('click', function() {
+                let reason = $('#rejectReasonInput').val().trim();
+                if (!reason) {
+                    $('#rejectReasonInput').addClass('is-invalid');
+                    return;
+                }
+                settled = true;
+                modal.hide();
+                resolve(reason);
+            });
+            $(modalEl).off('hidden.bs.modal').on('hidden.bs.modal', function() {
+                if (!settled) resolve(null);
+            });
+            modal.show();
+        });
+    }
+
     // Approve single
-    $(document).on('click', '.approve-btn', function(e) {
+    $(document).on('click', '.approve-btn', async function(e) {
         e.stopPropagation();
         let $btn = $(this);
         let id = $btn.data('id');
         let section = $('#confirmation-section').val();
-        if (!confirm('Are you sure you want to approve this item?')) return;
+        let ok = await confirmAction('Approve Record', 'Are you sure you want to approve this item?', 'btn-success');
+        if (!ok) return;
         setButtonLoading($btn, true);
         $.post(`/property/confirmations/${id}/approve`, {
             _token: $('meta[name="csrf-token"]').attr('content'),
@@ -369,14 +516,14 @@ $(document).ready(function() {
             setButtonLoading($btn, false);
         });
     });
-    
+
     // Reject single
-    $(document).on('click', '.reject-btn', function(e) {
+    $(document).on('click', '.reject-btn', async function(e) {
         e.stopPropagation();
         let $btn = $(this);
         let id = $btn.data('id');
         let section = $('#confirmation-section').val();
-        let reason = prompt('Please provide a reason for rejection:');
+        let reason = await promptRejectReason();
         if (!reason) return;
         setButtonLoading($btn, true);
         $.post(`/property/confirmations/${id}/reject`, {
@@ -395,14 +542,15 @@ $(document).ready(function() {
             setButtonLoading($btn, false);
         });
     });
-    
+
     // Bulk Approve
-    $('#bulk-approve').on('click', function() {
+    $('#bulk-approve').on('click', async function() {
         let $btn = $(this);
         let section = $('#confirmation-section').val();
         let ids = Array.from(selectedIds);
-        if (ids.length === 0) return alert('Select at least one item.');
-        if (!confirm('Are you sure you want to approve the selected items?')) return;
+        if (ids.length === 0) return toastr.warning('Select at least one item.');
+        let ok = await confirmAction('Approve Selected Records', 'Are you sure you want to approve the selected items?', 'btn-success');
+        if (!ok) return;
         setButtonLoading($btn, true);
         $.post('/property/confirmations/bulk-approve', {
             _token: $('meta[name="csrf-token"]').attr('content'),
@@ -420,14 +568,14 @@ $(document).ready(function() {
             setButtonLoading($btn, false);
         });
     });
-    
+
     // Bulk Reject
-    $('#bulk-reject').on('click', function() {
+    $('#bulk-reject').on('click', async function() {
         let $btn = $(this);
         let section = $('#confirmation-section').val();
         let ids = Array.from(selectedIds);
-        if (ids.length === 0) return alert('Select at least one item.');
-        let reason = prompt('Please provide a reason for rejection:');
+        if (ids.length === 0) return toastr.warning('Select at least one item.');
+        let reason = await promptRejectReason();
         if (!reason) return;
         setButtonLoading($btn, true);
         $.post('/property/confirmations/bulk-reject', {

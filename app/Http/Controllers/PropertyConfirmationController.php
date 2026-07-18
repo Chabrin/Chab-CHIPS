@@ -7,80 +7,15 @@ use App\Models\ConfirmationLog;
 use App\Models\DebtorInvoice;
 use App\Models\InvoiceWorkflow;
 use App\Services\TenantBalanceService;
+use App\Traits\HasWorkflowStatuses;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 
 class PropertyConfirmationController extends Controller
 {
-    private $workflowStatuses = [
-        1 => 'Pending',
-        2 => 'Paid',
-        3 => 'Cancelled',
-        4 => 'Suspended',
-        5 => 'Approved',
-        6 => 'Posted',
-        7 => 'Converted',
-        8 => 'Partially Cleared',
-        9 => 'Cleared',
-        10 => 'N/A',
-        11 => 'Unallocated',
-        12 => 'Partially Allocated',
-        13 => 'Fully Allocated',
-        15 => 'Reconciled',
-        16 => 'Unreconciled',
-        17 => 'Processed',
-        18 => 'Unmatched',
-        19 => 'Completed',
-        20 => 'Not Posted',
-        21 => 'Renewed',
-        22 => 'Expired',
-        23 => 'Partially Posted',
-        24 => 'Partially Approved',
-        25 => 'Sent',
-        26 => 'Failed',
-        27 => 'Offsetted',
-        28 => 'Terminated',
-        29 => 'Withdrawn',
-        30 => 'Blacklisted',
-        31 => 'Vacant',
-        32 => "Owner's Account",
-        33 => 'Maintenance',
-        34 => 'Paid Vacant',
-        35 => 'Sat Deposit',
-        36 => 'Absconded',
-        37 => 'Paid Owner',
-        38 => 'Occupied',
-        39 => 'Unreconciled Amount',
-        40 => 'Solved',
-        41 => 'Rejected',
-        42 => 'Closed',
-        46 => 'Deleted',
-        47 => 'Exported',
-        48 => 'Vacation Request',
-        49 => 'Active',
-        50 => 'On Leave',
-        60 => 'Read',
-        61 => 'Unread',
-        62 => 'Returns Cleared',
-        70 => 'Topped Up',
-        71 => 'Utilized',
-        72 => 'Cleared Voucher',
-        75 => 'FO Approved',
-        77 => 'ZM Approved',
-        78 => 'PM Approved',
-        79 => 'Clerical Approved',
-        81 => 'Paid Arrears',
-        82 => 'SFO Approved',
-        83 => 'Internal Audit Approved',
-        84 => 'Received',
-        85 => 'Checked',
-        87 => 'Verified',
-        88 => 'Reset',
-        89 => 'Deleted',
-        91 => 'Rescheduled',
-        94 => 'Reinstated',
-    ];
+    use HasWorkflowStatuses;
 
     public function index()
     {
@@ -138,12 +73,32 @@ class PropertyConfirmationController extends Controller
     {
         $section = $request->get('section');
         $records = [];
+        $recordsTotal = 0;
+
+        // Server-side pagination — several of these queues run into the tens of
+        // thousands of pending rows, which previously loaded (with eager relations)
+        // in full on every request and exhausted PHP's memory limit.
+        $start = max(0, (int) $request->get('start', 0));
+        $length = (int) $request->get('length', 25);
+        $length = $length > 0 ? min($length, 100) : 25;
+        $draw = (int) $request->get('draw', 1);
+        $search = trim((string) data_get($request->get('search'), 'value', ''));
 
         switch ($section) {
             case 'Clients':
-                $records = \App\Models\Client::where('current_status_id', 1) // Pending
-                    ->where('reference_number', 'LIKE', 'LAN%') // Only landlords/clients
-                    ->orderBy('date_time', 'desc')
+                $base = \App\Models\Client::where('current_status_id', 1) // Pending
+                    ->where('reference_number', 'LIKE', 'LAN%'); // Only landlords/clients
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('reference_number', 'ILIKE', "%{$search}%")
+                            ->orWhere('names', 'ILIKE', "%{$search}%")
+                            ->orWhere('email_address', 'ILIKE', "%{$search}%")
+                            ->orWhere('mobile_number', 'ILIKE', "%{$search}%");
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($client) {
                         return [
@@ -162,9 +117,18 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Properties':
-                $records = \App\Models\Property::where('current_status_id', 1) // Pending
-                    ->with(['client', 'zone'])
+                $base = \App\Models\Property::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('reference_number', 'ILIKE', "%{$search}%")
+                            ->orWhere('property_name', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['client', 'zone'])
                     ->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($property) {
                         return [
@@ -182,9 +146,19 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Units':
-                $records = \App\Models\Unit::where('current_status_id', 1) // Pending
-                    ->with(['property', 'client'])
+                $base = \App\Models\Unit::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('unit_code', 'ILIKE', "%{$search}%")
+                            ->orWhere('unit_number', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['property', 'client'])
                     ->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($unit) {
                         return [
@@ -203,9 +177,20 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Tenants':
-                $records = \App\Models\Client::where('current_status_id', 1) // Pending
-                    ->where('reference_number', 'LIKE', 'TEN%') // Only tenants
-                    ->orderBy('date_time', 'desc')
+                $base = \App\Models\Client::where('current_status_id', 1) // Pending
+                    ->where('reference_number', 'LIKE', 'TEN%'); // Only tenants
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('reference_number', 'ILIKE', "%{$search}%")
+                            ->orWhere('names', 'ILIKE', "%{$search}%")
+                            ->orWhere('email_address', 'ILIKE', "%{$search}%")
+                            ->orWhere('mobile_number', 'ILIKE', "%{$search}%")
+                            ->orWhere('national_id', 'ILIKE', "%{$search}%");
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($tenant) {
                         return [
@@ -223,9 +208,18 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Service Agreements':
-                $records = \App\Models\ServiceAgreement::where('current_status_id', 1) // Pending
-                    ->with(['property', 'client'])
+                $base = \App\Models\ServiceAgreement::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('reference_number', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['property', 'client'])
                     ->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($sla) {
                         return [
@@ -244,9 +238,18 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Recoveries':
-                $records = \App\Models\Recovery::where('current_status_id', 1) // Pending
-                    ->with(['client', 'property', 'zone'])
+                $base = \App\Models\Recovery::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('ref_number', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['client', 'property', 'zone'])
                     ->orderBy('recovery_date', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($recovery) {
                         return [
@@ -266,9 +269,19 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Lease Agreements':
-                $records = \App\Models\LeaseAgreement::where('current_status_id', 1) // Pending
-                    ->with(['tenant', 'property', 'unit'])
+                $base = \App\Models\LeaseAgreement::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('ref_number', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('tenant', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('unit', fn($rq) => $rq->where('unit_number', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['tenant', 'property', 'unit'])
                     ->orderBy('date_start', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($lease) {
                         return [
@@ -288,9 +301,17 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Inspections':
-                $records = \App\Models\Inspection::where('current_status_id', 1) // Pending
-                    ->with(['zone', 'property', 'createdBy'])
+                $base = \App\Models\Inspection::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->whereHas('zone', fn($rq) => $rq->where('zone_name', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['zone', 'property', 'createdBy'])
                     ->orderBy('visited_date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($inspection) {
                         return [
@@ -308,9 +329,18 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Tenant Movements':
-                $records = \App\Models\TenantMovement::where('current_status_id', 1) // Pending
-                    ->with(['client', 'property', 'unitFrom', 'unitTo', 'lease', 'createdBy'])
+                $base = \App\Models\TenantMovement::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('reference_number', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['client', 'property', 'unitFrom', 'unitTo', 'lease', 'createdBy'])
                     ->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($movement) {
                         return [
@@ -330,9 +360,18 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Tenant Blacklist':
-                $records = \App\Models\TenantBlacklist::where('current_status_id', 1) // Pending
-                    ->with(['tenant', 'client', 'property', 'unit', 'lease', 'reason', 'zone', 'createdBy'])
+                $base = \App\Models\TenantBlacklist::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('description', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('tenant', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['tenant', 'client', 'property', 'unit', 'lease', 'reason', 'zone', 'createdBy'])
                     ->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($blacklist) {
                         return [
@@ -355,9 +394,18 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Repairs & Maintenance':
-                $records = \App\Models\RepairRequest::where('current_status_id', 1) // Pending
-                    ->with(['property', 'client', 'zone', 'createdBy'])
+                $base = \App\Models\RepairRequest::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->where('description', 'ILIKE', "%{$search}%")
+                            ->orWhereHas('property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['property', 'client', 'zone', 'createdBy'])
                     ->orderBy('date_time', 'desc')
+                    ->skip($start)->take($length)
                     ->get()
                     ->map(function ($repair) {
                         return [
@@ -376,7 +424,12 @@ class PropertyConfirmationController extends Controller
                 break;
         }
 
-        return response()->json(['records' => $records]);
+        return response()->json([
+            'records' => $records,
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsTotal,
+        ]);
     }
 
     public function approve(Request $request, $id)
@@ -406,130 +459,77 @@ class PropertyConfirmationController extends Controller
 
                 case 'Units':
                     $record = \App\Models\Unit::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
 
                 case 'Tenants':
                     $record = \App\Models\Client::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
 
                 case 'Service Agreements':
                     $record = \App\Models\ServiceAgreement::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
 
                 case 'Recoveries':
                     $record = \App\Models\Recovery::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
 
                 case 'Lease Agreements':
                     $record = \App\Models\LeaseAgreement::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
 
                 case 'Inspections':
                     $record = \App\Models\Inspection::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
 
                 case 'Tenant Movements':
                     $record = \App\Models\TenantMovement::findOrFail($id);
-                    $record->current_status_id = 5; // Confirmed
-                    $record->save();
-
-                    // Terminate old lease
-                    if ($record->lease_id) {
-                        $oldLease = \App\Models\LeaseAgreement::find($record->lease_id);
-                        if ($oldLease) {
-                            $oldLease->current_status_id = 28; // Terminated
-                            $oldLease->save();
-                        }
-                    }
-
-                    // Release old unit — vacant
-                    if ($record->unit_from_id) {
-                        $oldUnit = \App\Models\Unit::find($record->unit_from_id);
-                        if ($oldUnit) {
-                            $oldUnit->occupancy_status_id = 31;
-                            $oldUnit->current_status_id   = 31;
-                            $oldUnit->save();
-                        }
-                    }
-
-                    // Activate new lease
-                    if ($record->new_lease_id) {
-                        $newLease = \App\Models\LeaseAgreement::find($record->new_lease_id);
-                        if ($newLease) {
-                            $newLease->current_status_id = 5; // Active
-                            $newLease->save();
-                        }
-                    }
-
-                    // Mark new unit as occupied
-                    if ($record->unit_to_id) {
-                        $newUnit = \App\Models\Unit::find($record->unit_to_id);
-                        if ($newUnit) {
-                            $newUnit->occupancy_status_id = 38; // Occupied
-                            $newUnit->save();
-                        }
-                    }
-
-                    // Carry-forward invoice — only if flagged and tenant is in arrears
-                    if ($record->move_with_balance && $record->tenant_id && $record->new_lease_id) {
-                        $balanceData = TenantBalanceService::getBalance((int) $record->tenant_id);
-                        if ($balanceData['is_in_arrears']) {
-                            $arrearAmount = abs($balanceData['balance']);
-                            $cfRef = 'CF-' . date('Ymd') . '-' . str_pad(DebtorInvoice::tenantInvoices()->count() + 1, 5, '0', STR_PAD_LEFT);
-                            $cfInvoice = DebtorInvoice::create([
-                                'date_time'         => now(),
-                                'date_due'          => now()->toDateString(),
-                                'debtor_type_id'    => 2,
-                                'tenant_id'         => $record->tenant_id,
-                                'lease_id'          => $record->new_lease_id,
-                                'unit_id'           => $record->unit_to_id,
-                                'property_id'       => $record->property_id,
-                                'client_id'         => $record->client_id,
-                                'zone_id'           => $record->zone_id,
-                                'sla_id'            => $record->sla_id,
-                                'reference_number'  => $cfRef,
-                                'narration'         => 'Balance carried forward from Unit ' . ($record->unitFrom->unit_code ?? $record->unit_from_id) . ' — Movement Ref: ' . ($record->reference_number ?? $record->id),
-                                'total_amount'      => $arrearAmount,
-                                'current_balance'   => $arrearAmount,
-                                'current_status_id' => 1,
-                                'created_by'        => Auth::id(),
-                                'created_date'      => now(),
-                            ]);
-                            InvoiceWorkflow::create([
-                                'parent_id'          => $cfInvoice->id,
-                                'action_by_id'       => Auth::id(),
-                                'action_position_id' => 1,
-                                'action_id'          => 1,
-                                'action_date_time'   => now(),
-                                'remark'             => 'Carry-forward invoice created from Movement ' . ($record->reference_number ?? $record->id),
-                            ]);
-                        }
-                    }
+                    $previousStatus = $record->current_status_id;
+                    $newStatus = 5;
+                    $this->applyTenantMovementApproval($record);
                     break;
 
                 case 'Tenant Blacklist':
                     $record = \App\Models\TenantBlacklist::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 17; // Processed
+                    $newStatus = 17;
                     $record->save();
                     break;
 
                 case 'Repairs & Maintenance':
                     $record = \App\Models\RepairRequest::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
+                    $newStatus = 5;
                     $record->save();
                     break;
+
+                default:
+                    return response()->json(['success' => false, 'error' => 'Unknown confirmation section.'], 422);
             }
 
             $this->logConfirmation($section, 'approve', $id, null, [
@@ -543,6 +543,94 @@ class PropertyConfirmationController extends Controller
             Log::error('Error approving record: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to approve record'], 500);
         }
+    }
+
+    /**
+     * Apply a Tenant Movement approval: mark the movement approved, terminate the old
+     * lease, free the old unit, activate the new lease, occupy the new unit, and — if
+     * flagged and the tenant is in arrears — raise a carry-forward invoice. Wrapped in
+     * a transaction so a failure partway through can't leave a half-applied movement.
+     * Shared by both single and bulk approval so the two can never drift apart.
+     */
+    private function applyTenantMovementApproval(\App\Models\TenantMovement $record): void
+    {
+        DB::transaction(function () use ($record) {
+            $record->current_status_id = 5; // Approved
+            $record->save();
+
+            // Terminate old lease
+            if ($record->lease_id) {
+                $oldLease = \App\Models\LeaseAgreement::find($record->lease_id);
+                if ($oldLease) {
+                    $oldLease->current_status_id = 28; // Terminated
+                    $oldLease->save();
+                }
+            }
+
+            // Release old unit — vacant
+            if ($record->unit_from_id) {
+                $oldUnit = \App\Models\Unit::find($record->unit_from_id);
+                if ($oldUnit) {
+                    $oldUnit->occupancy_status_id = 31;
+                    $oldUnit->current_status_id   = 31;
+                    $oldUnit->save();
+                }
+            }
+
+            // Activate new lease
+            if ($record->new_lease_id) {
+                $newLease = \App\Models\LeaseAgreement::find($record->new_lease_id);
+                if ($newLease) {
+                    $newLease->current_status_id = 5; // Active
+                    $newLease->save();
+                }
+            }
+
+            // Mark new unit as occupied
+            if ($record->unit_to_id) {
+                $newUnit = \App\Models\Unit::find($record->unit_to_id);
+                if ($newUnit) {
+                    $newUnit->occupancy_status_id = 38; // Occupied
+                    $newUnit->save();
+                }
+            }
+
+            // Carry-forward invoice — only if flagged and tenant is in arrears
+            if ($record->move_with_balance && $record->tenant_id && $record->new_lease_id) {
+                $balanceData = TenantBalanceService::getBalance((int) $record->tenant_id);
+                if ($balanceData['is_in_arrears']) {
+                    $arrearAmount = abs($balanceData['balance']);
+                    $cfRef = 'CF-' . date('Ymd') . '-' . str_pad(DebtorInvoice::tenantInvoices()->count() + 1, 5, '0', STR_PAD_LEFT);
+                    $cfInvoice = DebtorInvoice::create([
+                        'date_time'         => now(),
+                        'date_due'          => now()->toDateString(),
+                        'debtor_type_id'    => 2,
+                        'tenant_id'         => $record->tenant_id,
+                        'lease_id'          => $record->new_lease_id,
+                        'unit_id'           => $record->unit_to_id,
+                        'property_id'       => $record->property_id,
+                        'client_id'         => $record->client_id,
+                        'zone_id'           => $record->zone_id,
+                        'sla_id'            => $record->sla_id,
+                        'reference_number'  => $cfRef,
+                        'narration'         => 'Balance carried forward from Unit ' . ($record->unitFrom->unit_code ?? $record->unit_from_id) . ' — Movement Ref: ' . ($record->reference_number ?? $record->id),
+                        'total_amount'      => $arrearAmount,
+                        'current_balance'   => $arrearAmount,
+                        'current_status_id' => 1,
+                        'created_by'        => Auth::id(),
+                        'created_date'      => now(),
+                    ]);
+                    InvoiceWorkflow::create([
+                        'parent_id'          => $cfInvoice->id,
+                        'action_by_id'       => Auth::id(),
+                        'action_position_id' => 1,
+                        'action_id'          => 1,
+                        'action_date_time'   => now(),
+                        'remark'             => 'Carry-forward invoice created from Movement ' . ($record->reference_number ?? $record->id),
+                    ]);
+                }
+            }
+        });
     }
 
     public function reject(Request $request, $id)
@@ -573,57 +661,78 @@ class PropertyConfirmationController extends Controller
 
                 case 'Units':
                     $record = \App\Models\Unit::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Tenants':
                     $record = \App\Models\Client::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Service Agreements':
                     $record = \App\Models\ServiceAgreement::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Recoveries':
                     $record = \App\Models\Recovery::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Lease Agreements':
                     $record = \App\Models\LeaseAgreement::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Inspections':
                     $record = \App\Models\Inspection::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Tenant Movements':
                     $record = \App\Models\TenantMovement::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Tenant Blacklist':
                     $record = \App\Models\TenantBlacklist::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
 
                 case 'Repairs & Maintenance':
                     $record = \App\Models\RepairRequest::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
+                    $newStatus = 41;
                     $record->save();
                     break;
+
+                default:
+                    return response()->json(['success' => false, 'error' => 'Unknown confirmation section.'], 422);
             }
 
             $this->logConfirmation($section, 'reject', $id, null, [
@@ -680,7 +789,10 @@ class PropertyConfirmationController extends Controller
                     break;
 
                 case 'Tenant Movements':
-                    \App\Models\TenantMovement::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                    $movements = \App\Models\TenantMovement::whereIn('id', $ids)->get();
+                    foreach ($movements as $movement) {
+                        $this->applyTenantMovementApproval($movement);
+                    }
                     break;
 
                 case 'Tenant Blacklist':
@@ -690,6 +802,9 @@ class PropertyConfirmationController extends Controller
                 case 'Repairs & Maintenance':
                     \App\Models\RepairRequest::whereIn('id', $ids)->update(['current_status_id' => 5]);
                     break;
+
+                default:
+                    return response()->json(['success' => false, 'error' => 'Unknown confirmation section.'], 422);
             }
 
             $this->logConfirmation($section, 'bulk approve', $ids, null, [
@@ -756,6 +871,9 @@ class PropertyConfirmationController extends Controller
                 case 'Repairs & Maintenance':
                     \App\Models\RepairRequest::whereIn('id', $ids)->update(['current_status_id' => 41]);
                     break;
+
+                default:
+                    return response()->json(['success' => false, 'error' => 'Unknown confirmation section.'], 422);
             }
 
             $this->logConfirmation($section, 'bulk reject', $ids, null, [

@@ -229,7 +229,7 @@ class SLAController extends Controller
                 'landlord_payment_date'       => $validated['payment_date'],
                 'auto_renewal'                => $validated['auto_renewal'],
                 'created_by_id'               => Auth::id(),
-                'current_status_id'           => 5,
+                'current_status_id'           => 1, // Pending — awaiting maker-checker approval
                 'reference_number'            => null,
                 'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
             ]);

@@ -1410,7 +1410,7 @@ class TenantExitController extends Controller
             'exit_id'           => 'required|integer|exists:cb_tenant_exits,id',
             'visit_date'        => 'required|date',
             'officer_name'      => 'required|string|max:255',
-            'unit_status_found' => 'required|in:Occupied,Partially Cleared,Fully Cleared/Empty',
+            'unit_status_found' => 'required|in:Occupied,Partially Cleared,Fully Cleared/Empty,Fully Cleared,Empty',
             'notes'             => 'nullable|string|max:2000',
         ]);
 

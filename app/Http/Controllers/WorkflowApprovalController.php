@@ -736,12 +736,12 @@ class WorkflowApprovalController extends Controller
                         ->first();
                     
                     // Check if same person trying to approve again
-                    // if ($firstApproval && $firstApproval->confirmed_by == Auth::id()) {
-                    //     return response()->json([
-                    //         'success' => false, 
-                    //         'error' => 'You cannot approve the same leave application twice. A different approver is required for the second stage.'
-                    //     ], 422);
-                    // }
+                    if ($firstApproval && $firstApproval->confirmed_by == Auth::id()) {
+                        return response()->json([
+                            'success' => false,
+                            'error' => 'You cannot approve the same leave application twice. A different approver is required for the second stage.'
+                        ], 422);
+                    }
                     
                     $confirm_days = $request->input('confirm_days', false);
                     

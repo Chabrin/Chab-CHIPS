@@ -364,7 +364,7 @@
                                     </div>
                                     <div class="mb-2">
                                         <label class="form-label form-label-sm mb-1">Notes</label>
-                                        <textarea name="visit_notes" class="form-control form-control-sm" rows="2" placeholder="Observations…"></textarea>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Observations…"></textarea>
                                     </div>
                                     <button type="submit" class="btn btn-success btn-sm w-100">
                                         <span class="material-symbols-outlined align-middle" style="font-size:13px;">save</span> Save Visit
@@ -1660,7 +1660,7 @@ function loadFieldVisits() {
         if (!data.success || !data.visits.length) return;
         let html = '';
         data.visits.forEach(v => {
-            html += `<tr><td>${v.visit_date}</td><td>${v.officer_name}</td><td>${v.unit_status_found}</td><td>${v.visit_notes || '—'}</td></tr>`;
+            html += `<tr><td>${v.visit_date}</td><td>${v.officer_name}</td><td>${v.unit_status_found}</td><td>${v.notes || '—'}</td></tr>`;
         });
         $('#visitTableBody').html(html);
     });

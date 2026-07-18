@@ -8,7 +8,7 @@ class ServiceAgreement extends Model
 {
     protected $table = 'sys_pm_service_agreements';
     protected $primaryKey = 'id';
-    public $timestamps = true;
+    public $timestamps = false; // table has no created_at/updated_at columns
 
     protected $fillable = [
         'date_time',
