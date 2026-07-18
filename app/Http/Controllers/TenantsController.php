@@ -296,7 +296,7 @@ class TenantsController extends Controller
             'tenant_type' => 'required',
             'phone' => 'nullable|string|max:20',
             'mobile_number' => 'required',
-            'email_address' => 'required|email|max:255',
+            'email_address' => 'nullable|email|max:255',
             'pin_number' => 'nullable|string|max:50',
             'registered_date' => 'required|date',
             'nationality_id' => 'required',
@@ -306,6 +306,67 @@ class TenantsController extends Controller
             'national_id' => 'nullable|string|max:50',
 
             // Bank Accounts (repeater)
+            'bank_accounts.*.bank_id' => 'nullable|integer',
+            'bank_accounts.*.branch_id' => 'nullable|integer',
+            'bank_accounts.*.account_name' => 'nullable|string|max:255',
+            'bank_accounts.*.account_number' => 'nullable|string|max:100',
+
+            // Other Contacts (repeater)
+            'other_contacts.*.name' => 'nullable|string|max:255',
+            'other_contacts.*.email' => 'nullable|email|max:255',
+            'other_contacts.*.mobile' => 'nullable|string|max:20',
+
+            // Tenant Files (repeater)
+            'tenant_files.*.type' => 'nullable|string|max:100',
+            'tenant_files.*.file' => 'nullable|file|max:5120',
+
+            // Next of Kin (repeater)
+            'next_of_kin.*.names' => 'nullable|string|max:255',
+            'next_of_kin.*.mobile' => 'nullable|string|max:20',
+            'next_of_kin.*.email' => 'nullable|email|max:255',
+            'next_of_kin.*.relationship' => 'nullable|string|max:50',
+            'next_of_kin.*.national_id' => 'nullable|string|max:50',
+            'next_of_kin.*.second_name' => 'nullable|string|max:255',
+            'next_of_kin.*.last_name' => 'nullable|string|max:255',
+        ]);
+    }
+
+    /**
+     * Validate the tenant edit form request (single "Names" field, no property/unit/SLA/rent editing)
+     */
+    private function validateTenantEditRequest(Request $request)
+    {
+        return $request->validate([
+            // Unit Details (read-only on the edit form; carried through as hidden fields)
+            'property_id' => 'required|integer|exists:sys_pm_properties,id',
+            'unit_id' => 'required|integer|exists:sys_pm_units,id',
+            'sla_ref' => 'nullable|integer|exists:sys_pm_service_agreements,id',
+            'lease_start_date' => 'required|date',
+            'lease_years' => 'required|integer|min:1',
+            'rent_amount' => 'required|numeric|min:0',
+            'escalation_rate' => 'nullable|numeric|min:0',
+            'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually',
+            'address_2' => 'nullable|string|max:255',
+            'address_3' => 'nullable|string|max:255',
+            'overcraft_penalty' => 'nullable|numeric|min:0',
+
+            // Tenant Information
+            'title' => 'required|string|max:10',
+            'names' => 'required|string|max:255',
+            'gender' => 'required|in:Male,Female,Other',
+            'preferred_language' => 'nullable|string|max:50',
+            'tenant_type' => 'required',
+            'phone' => 'nullable|string|max:20',
+            'mobile_number' => 'required',
+            'email_address' => 'nullable|email|max:255',
+            'pin_number' => 'nullable|string|max:50',
+            'registered_date' => 'required|date',
+            'nationality_id' => 'required',
+            'passport_number' => 'nullable|string|max:50',
+            'address' => 'nullable|string',
+            'national_id' => 'nullable|string|max:50',
+
+            // Bank Accounts (single account only)
             'bank_accounts.*.bank_id' => 'nullable|integer',
             'bank_accounts.*.branch_id' => 'nullable|integer',
             'bank_accounts.*.account_name' => 'nullable|string|max:255',
@@ -571,7 +632,7 @@ class TenantsController extends Controller
             $tenant = Client::findOrFail($id);
 
             // Validate the request
-            $validated = $this->validateTenantRequest($request);
+            $validated = $this->validateTenantEditRequest($request);
 
             // Handle photo upload (if new photo provided)
             $photoPath = $tenant->photo;
@@ -613,18 +674,11 @@ class TenantsController extends Controller
     private function updateTenant(Client $tenant, array $validated, ?string $photoPath)
     {
         // Combine names
-        $names = trim(
-            ($validated['title'] ?? '') . ' ' .
-                ($validated['first_name'] ?? '') . ' ' .
-                ($validated['second_name'] ?? '') . ' ' .
-                ($validated['last_name'] ?? '')
-        );
+        $names = trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
 
         $tenant->update([
             'names' => $names,
             'title' => $validated['title'],
-            'second_name' => $validated['second_name'],
-            'last_name' => $validated['last_name'] ?? null,
             'gender' => $validated['gender'],
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'],
