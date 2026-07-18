@@ -1557,18 +1557,23 @@ class ClientsController extends Controller
     {
         $prefix = "LAN";
 
-        // Query for the last client with this specific prefix
-        $lastClient = Client::where('reference_number', 'LIKE', "{$prefix}-%")
-            ->orderBy('reference_number', 'desc')
-            ->first();
+        // Only consider well-formed "LAN-<digits>" reference numbers when computing the next
+        // number. A handful of malformed legacy entries exist (e.g. "LAN-LAN00855", "LAN-A") —
+        // a plain string ORDER BY lets one of those win (since "LAN-L..." sorts above "LAN-0...")
+        // and intval() of its non-numeric suffix silently resets the sequence back to 0001.
+        $lastNumber = Client::where('reference_number', 'LIKE', "{$prefix}-%")
+            ->pluck('reference_number')
+            ->map(function ($ref) use ($prefix) {
+                return preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/', $ref, $matches)
+                    ? (int) $matches[1]
+                    : null;
+            })
+            ->filter(fn ($number) => $number !== null)
+            ->max();
 
-        if ($lastClient) {
-            // Extract the number part after the last hyphen
-            $lastNumber = intval(substr($lastClient->reference_number, strrpos($lastClient->reference_number, '-') + 1));
-            $newNumber = str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
-        } else {
-            $newNumber = '0001';
-        }
+        // Pad to at least 5 digits — matches the width already established by existing
+        // records (e.g. "LAN-01266"); str_pad leaves it untouched once numbers grow past that.
+        $newNumber = str_pad(($lastNumber ?? 0) + 1, 5, '0', STR_PAD_LEFT);
 
         return "{$prefix}-{$newNumber}";
     }
