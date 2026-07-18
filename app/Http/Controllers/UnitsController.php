@@ -45,7 +45,7 @@ class UnitsController extends Controller
     {
         try {
             $units = Unit::where('property_id', $propertyId)
-                ->where('current_status_id', 31) // Only active units
+                ->where('occupancy_status_id', 31) // Only vacant units
                 ->whereDoesntHave('leaseAgreements') // No leases at all
                 ->orderBy('unit_number')
                 ->get(['id', 'unit_name', 'unit_number', 'current_status_id']);
@@ -243,7 +243,7 @@ class UnitsController extends Controller
                 'date_time' => now(),
                 'created_by_id' => Auth::id(),
                 'occupancy_status_id' => $validated['occupancy_status_id'] ?? 31, // Default to vacant
-                'current_status_id' => $validated['occupancy_status_id'] ?? 31, // Default to active
+                'current_status_id' => 1, // Pending — awaiting maker-checker approval
             ]);
 
             // Handle file uploads and save to UnitDocument model

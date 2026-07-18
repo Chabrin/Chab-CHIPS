@@ -55,6 +55,7 @@ use App\Http\Controllers\ApprovalRequestsController;
 use App\Http\Controllers\WorkflowApprovalController;
 use App\Http\Controllers\DisciplineTrackerController;
 use App\Http\Controllers\PropertyConfirmationController;
+use App\Http\Controllers\OnboardingPipelineController;
 use App\Http\Controllers\ClientReturnsController;
 use App\Http\Controllers\CompanyBankAccountController;
 use App\Http\Controllers\ChequeBookController;
@@ -1094,6 +1095,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/confirmations/{id}/reject', [PropertyConfirmationController::class, 'reject'])->name('property.confirmations.reject');
     Route::post('/property/confirmations/bulk-approve', [PropertyConfirmationController::class, 'bulkApprove'])->name('property.confirmations.bulk-approve');
     Route::post('/property/confirmations/bulk-reject', [PropertyConfirmationController::class, 'bulkReject'])->name('property.confirmations.bulk-reject');
+
+    // Personal onboarding pipeline tracker
+    Route::get('/property/my-onboarding', [OnboardingPipelineController::class, 'index'])->name('property.onboarding.mine');
 
     // AJAX routes for inspections
     Route::get('/zone/{zoneId}/properties', [InspectionsController::class, 'getPropertiesByZone'])->name('zone.properties');

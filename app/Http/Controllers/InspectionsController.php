@@ -67,7 +67,7 @@ class InspectionsController extends Controller
     {
         try {
             $units = Unit::where('property_id', $propertyId)
-                ->where('current_status_id', 31) // Only active units
+                ->where('occupancy_status_id', 31) // Only vacant units
                 ->orderBy('unit_number')
                 ->get(['id', 'unit_name', 'unit_number', 'unit_code', 'occupancy_status_id']);
             

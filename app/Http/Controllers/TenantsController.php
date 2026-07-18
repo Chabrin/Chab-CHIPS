@@ -417,6 +417,7 @@ class TenantsController extends Controller
             'photo' => $photoPath,
             'created_by' => Auth::id(),
             'date_time' => now(),
+            'current_status_id' => 1, // Pending — awaiting maker-checker approval
         ];
 
         return Client::create($tenantData);
