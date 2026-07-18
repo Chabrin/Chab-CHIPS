@@ -58,6 +58,7 @@ use App\Http\Controllers\PropertyConfirmationController;
 use App\Http\Controllers\OnboardingPipelineController;
 use App\Http\Controllers\ClientReturnsController;
 use App\Http\Controllers\CompanyBankAccountController;
+use App\Http\Controllers\CountryController;
 use App\Http\Controllers\ChequeBookController;
 use App\Http\Controllers\SelfServiceController;
 use App\Http\Controllers\PaymentsAllocationController;
@@ -1535,6 +1536,13 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::post('/settings/company-bank-accounts/store', [CompanyBankAccountController::class, 'store']);
     Route::post('/settings/company-bank-accounts/update/{id}', [CompanyBankAccountController::class, 'update']);
     Route::delete('/settings/company-bank-accounts/delete/{id}', [CompanyBankAccountController::class, 'destroy']);
+
+    // Countries (manage/countries) AJAX CRUD
+    Route::get('/manage/countries', [CountryController::class, 'index'])->name('manage.countries.index');
+    Route::get('/manage/countries/data', [CountryController::class, 'getData']);
+    Route::post('/manage/countries/store', [CountryController::class, 'store']);
+    Route::post('/manage/countries/update/{id}', [CountryController::class, 'update']);
+    Route::delete('/manage/countries/delete/{id}', [CountryController::class, 'destroy']);
 
     // Cheque Books AJAX
     Route::get('/get/finance/cheque-books/data', [ChequeBookController::class, 'getData']);

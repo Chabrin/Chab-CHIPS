@@ -14,7 +14,7 @@ class SystemCountry extends Model
     }
     protected $table = 'sys_set_countries';
     protected $primaryKey = 'id';
-    public $timestamps = true;
+    public $timestamps = false;
 
     protected $fillable = [
         'country_code',

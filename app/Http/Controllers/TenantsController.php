@@ -295,11 +295,8 @@ class TenantsController extends Controller
 
             // Tenant Information
             'title' => 'required|string|max:10',
-            'first_name' => 'required|string|max:255',
-            'second_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'gender' => 'required|in:Male,Female,Other',
-            'preferred_language' => 'nullable|string|max:50',
+            'names' => 'required|string|max:255',
+            'gender' => 'nullable|in:Male,Female,Other',
             'tenant_type' => 'required',
             'phone' => 'nullable|string|max:20',
             'mobile_number' => 'required',
@@ -440,20 +437,13 @@ class TenantsController extends Controller
     private function createTenant(array $validated, string $referenceNumber, ?string $photoPath)
     {
         // Combine names
-        $names = trim(
-            ($validated['title'] ?? '') . ' ' .
-                ($validated['first_name'] ?? '') . ' ' .
-                ($validated['second_name'] ?? '') . ' ' .
-                ($validated['last_name'] ?? '')
-        );
+        $names = trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
 
         $tenantData = [
             'reference_number' => $referenceNumber,
             'names' => $names,
             'title' => $validated['title'],
-            'second_name' => $validated['second_name'],
-            'last_name' => $validated['last_name'] ?? null,
-            'gender' => $validated['gender'],
+            'gender' => $validated['gender'] ?? null,
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'],
             'pin_number' => $validated['pin_number'] ?? null,
@@ -464,7 +454,7 @@ class TenantsController extends Controller
             'address_3' => $validated['address_3'] ?? null,
             'registered_date' => $validated['registered_date'],
             'nationality_id' => $validated['nationality_id'] ?? null,
-            'prefered_messages_language_id' => $validated['preferred_language'] ?? 'English',
+            'prefered_messages_language_id' => 'English',
             'client_type_id' => $validated['tenant_type'] ?? 'Individual',
             'property_id' => $validated['property_id'],
             'sla_id' => $validated['sla_ref'],
