@@ -1374,8 +1374,7 @@ class ClientsController extends Controller
             $tenant = Client::with(['property', 'unit.zone', 'deposits'])
                 ->tenants()
                 ->findOrFail($id);
-            $tenantBalance = \App\Services\TenantBalanceService::getBalance((int) $id);
-            return view('property.tenants.details', compact('tenant', 'tenantBalance'));
+            return view('property.tenants.details', compact('tenant'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading tenant details: ' . $e->getMessage());

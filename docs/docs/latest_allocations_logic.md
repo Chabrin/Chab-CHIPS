@@ -40,7 +40,7 @@ WHERE i.current_balance > 0
 
 For each unallocated payment it runs three passes in order:
 
-| Pass | What it does |
+| Pass | What it does | 
 |------|-------------|
 | 1 — Previous unit | Checks `sys_pm_movement_requests` for tenant transfers. If tenant moved from an old unit, clears pending invoices on the **old** lease first. |
 | 2 — Current lease | Allocates against invoices on the payment's own `lease_id`. |

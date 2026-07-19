@@ -12,7 +12,7 @@ use App\Models\TenantPaymentAllocated;
 use App\Models\ClientDocument;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
-use App\Models\ClientBankAccount;
+use App\Models\ClientBankDetail;
 use App\Services\ErrorDispatcher;
 use App\Models\ClientOtherContact;
 use App\Services\TenantBalanceService;
@@ -295,15 +295,12 @@ class TenantsController extends Controller
 
             // Tenant Information
             'title' => 'required|string|max:10',
-            'first_name' => 'required|string|max:255',
-            'second_name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'gender' => 'required|in:Male,Female,Other',
-            'preferred_language' => 'nullable|string|max:50',
+            'names' => 'required|string|max:255',
+            'gender' => 'nullable|in:Male,Female,Other',
             'tenant_type' => 'required',
             'phone' => 'nullable|string|max:20',
             'mobile_number' => 'required',
-            'email_address' => 'required|email|max:255',
+            'email_address' => 'nullable|email|max:255',
             'pin_number' => 'nullable|string|max:50',
             'registered_date' => 'required|date',
             'nationality_id' => 'required',
@@ -313,6 +310,67 @@ class TenantsController extends Controller
             'national_id' => 'nullable|string|max:50',
 
             // Bank Accounts (repeater)
+            'bank_accounts.*.bank_id' => 'nullable|integer',
+            'bank_accounts.*.branch_id' => 'nullable|integer',
+            'bank_accounts.*.account_name' => 'nullable|string|max:255',
+            'bank_accounts.*.account_number' => 'nullable|string|max:100',
+
+            // Other Contacts (repeater)
+            'other_contacts.*.name' => 'nullable|string|max:255',
+            'other_contacts.*.email' => 'nullable|email|max:255',
+            'other_contacts.*.mobile' => 'nullable|string|max:20',
+
+            // Tenant Files (repeater)
+            'tenant_files.*.type' => 'nullable|string|max:100',
+            'tenant_files.*.file' => 'nullable|file|max:5120',
+
+            // Next of Kin (repeater)
+            'next_of_kin.*.names' => 'nullable|string|max:255',
+            'next_of_kin.*.mobile' => 'nullable|string|max:20',
+            'next_of_kin.*.email' => 'nullable|email|max:255',
+            'next_of_kin.*.relationship' => 'nullable|string|max:50',
+            'next_of_kin.*.national_id' => 'nullable|string|max:50',
+            'next_of_kin.*.second_name' => 'nullable|string|max:255',
+            'next_of_kin.*.last_name' => 'nullable|string|max:255',
+        ]);
+    }
+
+    /**
+     * Validate the tenant edit form request (single "Names" field, no property/unit/SLA/rent editing)
+     */
+    private function validateTenantEditRequest(Request $request)
+    {
+        return $request->validate([
+            // Unit Details (read-only on the edit form; carried through as hidden fields)
+            'property_id' => 'required|integer|exists:sys_pm_properties,id',
+            'unit_id' => 'required|integer|exists:sys_pm_units,id',
+            'sla_ref' => 'nullable|integer|exists:sys_pm_service_agreements,id',
+            'lease_start_date' => 'required|date',
+            'lease_years' => 'required|integer|min:1',
+            'rent_amount' => 'required|numeric|min:0',
+            'escalation_rate' => 'nullable|numeric|min:0',
+            'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually',
+            'address_2' => 'nullable|string|max:255',
+            'address_3' => 'nullable|string|max:255',
+            'overcraft_penalty' => 'nullable|numeric|min:0',
+
+            // Tenant Information
+            'title' => 'required|string|max:10',
+            'names' => 'required|string|max:255',
+            'gender' => 'nullable|in:Male,Female,Other',
+            'preferred_language' => 'nullable|string|max:50',
+            'tenant_type' => 'required',
+            'phone' => 'nullable|string|max:20',
+            'mobile_number' => 'required',
+            'email_address' => 'nullable|email|max:255',
+            'pin_number' => 'nullable|string|max:50',
+            'registered_date' => 'required|date',
+            'nationality_id' => 'required',
+            'passport_number' => 'nullable|string|max:50',
+            'address' => 'nullable|string',
+            'national_id' => 'nullable|string|max:50',
+
+            // Bank Accounts (single account only)
             'bank_accounts.*.bank_id' => 'nullable|integer',
             'bank_accounts.*.branch_id' => 'nullable|integer',
             'bank_accounts.*.account_name' => 'nullable|string|max:255',
@@ -379,20 +437,13 @@ class TenantsController extends Controller
     private function createTenant(array $validated, string $referenceNumber, ?string $photoPath)
     {
         // Combine names
-        $names = trim(
-            ($validated['title'] ?? '') . ' ' .
-                ($validated['first_name'] ?? '') . ' ' .
-                ($validated['second_name'] ?? '') . ' ' .
-                ($validated['last_name'] ?? '')
-        );
+        $names = trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
 
         $tenantData = [
             'reference_number' => $referenceNumber,
             'names' => $names,
             'title' => $validated['title'],
-            'second_name' => $validated['second_name'],
-            'last_name' => $validated['last_name'] ?? null,
-            'gender' => $validated['gender'],
+            'gender' => $validated['gender'] ?? null,
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'],
             'pin_number' => $validated['pin_number'] ?? null,
@@ -403,7 +454,7 @@ class TenantsController extends Controller
             'address_3' => $validated['address_3'] ?? null,
             'registered_date' => $validated['registered_date'],
             'nationality_id' => $validated['nationality_id'] ?? null,
-            'prefered_messages_language_id' => $validated['preferred_language'] ?? 'English',
+            'prefered_messages_language_id' => 'English',
             'client_type_id' => $validated['tenant_type'] ?? 'Individual',
             'property_id' => $validated['property_id'],
             'sla_id' => $validated['sla_ref'],
@@ -482,18 +533,31 @@ class TenantsController extends Controller
             return;
         }
 
+        $isFirst = ClientBankDetail::where('client_id', $tenantId)->count() === 0;
+
         foreach ($request->input('bank_accounts') as $bankData) {
-            if (empty($bankData['bank_id'])) {
+            $bankId = $bankData['bank_id'] ?? null;
+            $branchId = $bankData['branch_id'] ?? null;
+            $accountName = $bankData['account_name'] ?? null;
+            $accountNumber = $bankData['account_number'] ?? null;
+
+            // Skip only if the entire row is blank
+            if (empty($bankId) && empty($branchId) && empty($accountName) && empty($accountNumber)) {
                 continue;
             }
 
-            ClientBankAccount::create([
-                'parent_id' => $tenantId,
-                'bank_id' => $bankData['bank_id'],
-                'branch' => $bankData['branch_id'] ?? null,
-                'account_name' => $bankData['account_name'] ?? null,
-                'account_number' => $bankData['account_number'] ?? null,
+            ClientBankDetail::create([
+                'client_id' => $tenantId,
+                'bank_id' => $bankId ?: null,
+                'branch_id' => $branchId ?: null,
+                'account_name' => $accountName ?: null,
+                'account_number' => $accountNumber ?: null,
+                'is_default' => $isFirst ? 1 : 0,
+                'added_by' => Auth::id(),
+                'added_on' => now(),
             ]);
+
+            $isFirst = false;
         }
     }
 
@@ -629,7 +693,7 @@ class TenantsController extends Controller
             $tenant = Client::findOrFail($id);
 
             // Validate the request
-            $validated = $this->validateTenantRequest($request);
+            $validated = $this->validateTenantEditRequest($request);
 
             // Handle photo upload (if new photo provided)
             $photoPath = $tenant->photo;
@@ -671,19 +735,12 @@ class TenantsController extends Controller
     private function updateTenant(Client $tenant, array $validated, ?string $photoPath)
     {
         // Combine names
-        $names = trim(
-            ($validated['title'] ?? '') . ' ' .
-                ($validated['first_name'] ?? '') . ' ' .
-                ($validated['second_name'] ?? '') . ' ' .
-                ($validated['last_name'] ?? '')
-        );
+        $names = trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
 
         $tenant->update([
             'names' => $names,
             'title' => $validated['title'],
-            'second_name' => $validated['second_name'],
-            'last_name' => $validated['last_name'] ?? null,
-            'gender' => $validated['gender'],
+            'gender' => $validated['gender'] ?? null,
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'],
             'pin_number' => $validated['pin_number'] ?? null,
@@ -715,23 +772,37 @@ class TenantsController extends Controller
      */
     private function updateBankAccounts(Request $request, int $tenantId)
     {
-        // Delete existing bank accounts
-        ClientBankAccount::where('parent_id', $tenantId)->delete();
+        // Delete existing bank details
+        ClientBankDetail::where('client_id', $tenantId)->delete();
 
-        // Save new bank accounts
+        // Save new bank details
         if ($request->has('bank_accounts')) {
+            $isFirst = true;
+
             foreach ($request->input('bank_accounts') as $bankData) {
-                if (empty($bankData['bank_id'])) {
+                $bankId = $bankData['bank_id'] ?? null;
+                $branchId = $bankData['branch_id'] ?? null;
+                $accountName = $bankData['account_name'] ?? null;
+                $accountNumber = $bankData['account_number'] ?? null;
+
+                // Skip only if the entire row is blank
+                if (empty($bankId) && empty($branchId) && empty($accountName) && empty($accountNumber)) {
                     continue;
                 }
 
-                ClientBankAccount::create([
-                    'parent_id' => $tenantId,
-                    'bank_id' => $bankData['bank_id'],
-                    'branch' => $bankData['branch_id'] ?? null,
-                    'account_name' => $bankData['account_name'] ?? null,
-                    'account_number' => $bankData['account_number'] ?? null,
+                ClientBankDetail::create([
+                    'client_id' => $tenantId,
+                    // Cast empty strings to null - bank_id/branch_id are integer columns
+                    'bank_id' => $bankId ?: null,
+                    'branch_id' => $branchId ?: null,
+                    'account_name' => $accountName ?: null,
+                    'account_number' => $accountNumber ?: null,
+                    'is_default' => $isFirst ? 1 : 0,
+                    'added_by' => Auth::id(),
+                    'added_on' => now(),
                 ]);
+
+                $isFirst = false;
             }
         }
     }

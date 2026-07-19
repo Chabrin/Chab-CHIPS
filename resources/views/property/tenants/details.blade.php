@@ -36,7 +36,7 @@
                         <div class="mb-3">
                             <p class="text-muted mb-0" style="font-size: 0.875rem;">
                                 <strong>Ref #:</strong> {{ $tenant->reference_number ?? 'N/A' }} |
-                                <strong>PIN:</strong> {{ $tenant->national_id ?? 'N/A' }} |
+                                <strong>PIN:</strong> {{ $tenant->pin_number ?? 'N/A' }} |
                                 <strong>Mobile:</strong> {{ $tenant->mobile_number ?? 'N/A' }}
                             </p>
                         </div>
@@ -50,9 +50,9 @@
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="statistics-tab" data-bs-toggle="tab" data-bs-target="#statistics" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">analytics</span>
-                                    Statistics
+                                <button class="nav-link" id="contacts-tab" data-bs-toggle="tab" data-bs-target="#contacts" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">contacts</span>
+                                    Contacts
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
@@ -72,159 +72,207 @@
                         <!-- Tabs Content -->
                         <div class="tab-content" id="tenantTabsContent">
                             <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
-                                <div class="row g-3">
-                                    <!-- Personal Information -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">person</span>
-                                                    Personal Information
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Full Names:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->names ?? '-' }}</strong></small></div>
+                                <style>
+                                    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e9ecef; }
+                                    .info-row:last-child { border-bottom: none; }
+                                    .info-label { color: #6c757d; font-size: 0.875rem; }
+                                    .info-value { font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+                                    .section-divider { margin: 20px 0 15px 0; padding-top: 10px; }
+                                    .section-title { font-weight: 600; font-size: 1rem; color: #333; margin-bottom: 10px; }
+                                    .copy-icon { cursor: pointer; color: #5aa9e0; font-size: 16px; line-height: 1; transition: color 0.15s ease; }
+                                    .copy-icon:hover { color: #3598db; }
+                                    .copy-icon.copied { color: #3598db; }
+                                </style>
 
-                                                    <div class="col-5"><small class="text-muted">Mobile Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->mobile_number ?? '-' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">PIN Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->national_id ?? '-' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Reference Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->reference_number ?? '-' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Email Address:</small></div>
-                                                    <div class="col-7"><small>{{ $tenant->email_address ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Physical Address:</small></div>
-                                                    <div class="col-7"><small>{{ $tenant->address ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Registered Date:</small></div>
-                                                    <div class="col-7"><small>{{ $tenant->registered_date ? $tenant->registered_date->format('d-m-Y') : '-' }}</small></div>
-                                                </div>
-                                            </div>
+                                <div class="row">
+                                    <!-- Personal & Property Info - Left Column -->
+                                    <div class="col-lg-6">
+                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">person</span> Personal Information</div>
+                                        <div class="info-row">
+                                            <span class="info-label">Full Names:</span>
+                                            <span class="info-value">{{ $tenant->names ?? '-' }}</span>
                                         </div>
-                                    </div>
-
-                                    <!-- Property & Unit Information -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">home</span>
-                                                    Property & Unit Details
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Property:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->property->property_name ?? '-' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Unit Name:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->unit->unit_name ?? '-' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Unit Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->unit->unit_number ?? '-' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Rent Amount:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $tenant->unit && $tenant->unit->rent_amount ? number_format($tenant->unit->rent_amount, 2) : '0.00' }}</strong></small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone:</small></div>
-                                                    <div class="col-7"><small>{{ $tenant->unit->zone->zone_name ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Account Name:</small></div>
-                                                    <div class="col-7"><small>{{ $tenant->account_name ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Account Number:</small></div>
-                                                    <div class="col-7"><small>{{ $tenant->account_number ?? '-' }}</small></div>
-                                                </div>
-                                            </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Gender:</span>
+                                            <span class="info-value">{{ $tenant->gender ?? '-' }}</span>
                                         </div>
-                                    </div>
-
-                                    <!-- Account Balance Card -->
-                                    @if($tenantBalance)
-                                    <div class="col-12">
-                                        <div class="card border-0 shadow-sm">
-                                            <div class="card-header bg-light py-2 d-flex align-items-center gap-2">
-                                                <span class="material-symbols-outlined" style="font-size:18px;">account_balance_wallet</span>
-                                                <span class="fw-semibold small">Tenant Account Balance</span>
-                                                <span class="ms-auto">
-                                                    @if($tenantBalance['is_in_arrears'])
-                                                    <span class="badge bg-danger">In Arrears</span>
-                                                    @else
-                                                    <span class="badge bg-success">Credit</span>
-                                                    @endif
-                                                </span>
-                                            </div>
-                                            <div class="card-body py-3">
-                                                <div class="row text-center">
-                                                    <div class="col-4 border-end">
-                                                        <small class="text-muted d-block mb-1">Total Invoiced</small>
-                                                        <span class="fw-bold">{{ number_format($tenantBalance['total_invoiced'], 2) }}</span>
-                                                    </div>
-                                                    <div class="col-4 border-end">
-                                                        <small class="text-muted d-block mb-1">Total Paid</small>
-                                                        <span class="fw-bold text-success">{{ number_format($tenantBalance['total_paid'], 2) }}</span>
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <small class="text-muted d-block mb-1">Balance</small>
-                                                        <span class="fw-bold {{ $tenantBalance['is_in_arrears'] ? 'text-danger' : 'text-success' }}">
-                                                            @if($tenantBalance['is_in_arrears'])({{ $tenantBalance['balance_formatted'] }})@else{{ $tenantBalance['balance_formatted'] }}@endif
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <p class="text-muted small mb-0 mt-2 text-center">As of: {{ $tenantBalance['as_of_date'] }}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    @endif
-
-                                    <!-- Deposit Information Card -->
-                                    <div class="col-12">
-                                        <div class="card border-0 shadow-sm">
-                                            <div class="card-header bg-light py-2 d-flex align-items-center gap-2">
-                                                <span class="material-symbols-outlined" style="font-size:18px;">savings</span>
-                                                <span class="fw-semibold small">Deposit Information</span>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                @if($tenant->deposits->isNotEmpty())
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm mb-0" style="font-size:0.8rem;">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>Date</th>
-                                                                <th>Reference</th>
-                                                                <th>Narration</th>
-                                                                <th class="text-end">Amount</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            @foreach($tenant->deposits as $deposit)
-                                                            <tr>
-                                                                <td>{{ $deposit->deposit_date ? $deposit->deposit_date->format('d-m-Y') : '-' }}</td>
-                                                                <td>{{ $deposit->reference_number ?? '-' }}</td>
-                                                                <td>{{ $deposit->narration ?? '-' }}</td>
-                                                                <td class="text-end">{{ number_format($deposit->amount, 2) }}</td>
-                                                            </tr>
-                                                            @endforeach
-                                                        </tbody>
-                                                        <tfoot>
-                                                            <tr>
-                                                                <th colspan="3" class="text-end">Total Deposit:</th>
-                                                                <th class="text-end">{{ number_format($tenant->deposits->sum('amount'), 2) }}</th>
-                                                            </tr>
-                                                        </tfoot>
-                                                    </table>
-                                                </div>
-                                                @else
-                                                <p class="text-muted small mb-0">No deposit records found for this tenant.</p>
+                                        <div class="info-row">
+                                            <span class="info-label">Mobile Number:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->mobile_number ?? '-' }}
+                                                @if($tenant->mobile_number)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->mobile_number }}" title="Copy">content_copy</span>
                                                 @endif
-                                            </div>
+                                            </span>
                                         </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Reference Number:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->reference_number ?? '-' }}
+                                                @if($tenant->reference_number)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->reference_number }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">PIN Number:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->pin_number ?? '-' }}
+                                                @if($tenant->pin_number)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->pin_number }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">National ID:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->national_id ?? '-' }}
+                                                @if($tenant->national_id)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->national_id }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+
+                                        <div class="section-divider"></div>
+                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">home</span> Property & Unit</div>
+                                        <div class="info-row">
+                                            <span class="info-label">Property:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->property->property_name ?? '-' }}
+                                                @if($tenant->property && $tenant->property->property_name)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->property->property_name }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Unit:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->unit->unit_name ?? $tenant->unit->unit_number ?? '-' }}
+                                                @if($tenant->unit && ($tenant->unit->unit_name || $tenant->unit->unit_number))
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->unit->unit_name ?? $tenant->unit->unit_number }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Rent Amount:</span>
+                                            <span class="info-value">{{ $tenant->unit && $tenant->unit->rent_amount ? number_format($tenant->unit->rent_amount, 2) : '0.00' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Zone:</span>
+                                            <span class="info-value">{{ $tenant->unit->zone->zone_name ?? '-' }}</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Contact & Additional Details - Right Column -->
+                                    <div class="col-lg-6">
+                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">mail</span> Contact</div>
+                                        <div class="info-row">
+                                            <span class="info-label">Email Address:</span>
+                                            <span class="info-value">{{ $tenant->email_address ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Phone:</span>
+                                            <span class="info-value">{{ $tenant->phone ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Physical Address:</span>
+                                            <span class="info-value">{{ $tenant->address ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Registered Date:</span>
+                                            <span class="info-value">{{ $tenant->registered_date ? $tenant->registered_date->format('d-m-Y') : '-' }}</span>
+                                        </div>
+
+                                        <div class="section-divider"></div>
+                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">account_balance</span> Bank Account</div>
+                                        @if($tenant->bankAccounts && $tenant->bankAccounts->count() > 0)
+                                            @foreach($tenant->bankAccounts as $account)
+                                            <div class="info-row">
+                                                <span class="info-label">Bank:</span>
+                                                <span class="info-value">{{ $account->bank->bank_name ?? '-' }}</span>
+                                            </div>
+                                            <div class="info-row">
+                                                <span class="info-label">Account Name:</span>
+                                                <span class="info-value">{{ $account->account_name ?? '-' }}</span>
+                                            </div>
+                                            <div class="info-row">
+                                                <span class="info-label">Account Number:</span>
+                                                <span class="info-value">{{ $account->account_number ?? '-' }}</span>
+                                            </div>
+                                            @endforeach
+                                        @else
+                                            <div class="info-row">
+                                                <span class="info-value text-muted">No bank account information</span>
+                                            </div>
+                                        @endif
+
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Contacts Tab -->
+                            <div class="tab-pane fade" id="contacts" role="tabpanel" aria-labelledby="contacts-tab">
+                                <div class="mb-4">
+                                    <h6 class="text-muted border-bottom pb-2">
+                                        <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">contacts</span>
+                                        Other Contacts
+                                    </h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Email</th>
+                                                    <th>Mobile</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @forelse($tenant->otherContacts as $contact)
+                                                <tr>
+                                                    <td>{{ $contact->contact_names ?? '-' }}</td>
+                                                    <td>{{ $contact->other_email ?? '-' }}</td>
+                                                    <td>{{ $contact->other_mobile_number ?? '-' }}</td>
+                                                </tr>
+                                                @empty
+                                                <tr>
+                                                    <td colspan="3" class="text-muted text-center">No other contacts</td>
+                                                </tr>
+                                                @endforelse
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <h6 class="text-muted border-bottom pb-2">
+                                        <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">family_restroom</span>
+                                        Next of Kin
+                                    </h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Relationship</th>
+                                                    <th>Mobile</th>
+                                                    <th>Email</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @forelse($tenant->nextOfKins as $kin)
+                                                <tr>
+                                                    <td>{{ $kin->names ?? '-' }}</td>
+                                                    <td>{{ $kin->relationship ?? '-' }}</td>
+                                                    <td>{{ $kin->mobile_number ?? '-' }}</td>
+                                                    <td>{{ $kin->email_address ?? '-' }}</td>
+                                                </tr>
+                                                @empty
+                                                <tr>
+                                                    <td colspan="4" class="text-muted text-center">No next of kin information</td>
+                                                </tr>
+                                                @endforelse
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
@@ -281,13 +329,6 @@
                                 </div>
                             </div>
 
-                            <!-- Statistics Tab -->
-                            <div class="tab-pane fade" id="statistics" role="tabpanel" aria-labelledby="statistics-tab">
-                                <div class="alert alert-info">
-                                    <span class="material-symbols-outlined" style="vertical-align: middle;">info</span>
-                                    Statistics will be implemented in the next phase
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -314,6 +355,30 @@
         var leasesTable = null;
         var paymentsLoaded = false;
         var leasesLoaded = false;
+
+        // Copy-to-clipboard for info fields
+        $(document).on('click', '.copy-icon', function() {
+            var $icon = $(this);
+            var text = $icon.data('copy');
+            if (!text) return;
+
+            function showCopied() {
+                var original = $icon.text();
+                $icon.addClass('copied').text('check');
+                setTimeout(function() {
+                    $icon.removeClass('copied').text(original);
+                }, 1200);
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(String(text)).then(showCopied);
+            } else {
+                var $tmp = $('<textarea>').val(text).appendTo('body').select();
+                document.execCommand('copy');
+                $tmp.remove();
+                showCopied();
+            }
+        });
 
         // Helper: format date to dd/mm/yy
         function formatDateShort(dateStr) {

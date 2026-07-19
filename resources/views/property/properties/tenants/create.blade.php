@@ -346,56 +346,12 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
-                                            <label for="first_name" class="form-label">First Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('first_name') is-invalid @enderror" 
-                                                   id="first_name" name="first_name" 
-                                                   value="{{ old('first_name') }}" required>
-                                            @error('first_name')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-3 mb-3">
-                                            <label for="second_name" class="form-label">Second Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('second_name') is-invalid @enderror" 
-                                                   id="second_name" name="second_name" 
-                                                   value="{{ old('second_name') }}" required>
-                                            @error('second_name')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-3 mb-3">
-                                            <label for="last_name" class="form-label">Last Name</label>
-                                            <input type="text" class="form-control @error('last_name') is-invalid @enderror" 
-                                                   id="last_name" name="last_name" 
-                                                   value="{{ old('last_name') }}">
-                                            @error('last_name')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="gender" class="form-label">Gender <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender" required>
-                                                <option value="">Please select</option>
-                                                <option value="Male" {{ old('gender') == 'Male' ? 'selected' : '' }}>Male</option>
-                                                <option value="Female" {{ old('gender') == 'Female' ? 'selected' : '' }}>Female</option>
-                                                <option value="Other" {{ old('gender') == 'Other' ? 'selected' : '' }}>Other</option>
-                                            </select>
-                                            @error('gender')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="preferred_language" class="form-label">Preferred Messages Language</label>
-                                            <select class="form-select @error('preferred_language') is-invalid @enderror" id="preferred_language" name="preferred_language">
-                                                <option value="1" {{ old('preferred_language') == '1' ? 'selected' : 'selected' }}>English</option>
-                                                <option value="2" {{ old('preferred_language') == '2' ? 'selected' : '' }}>Swahili</option>
-                                            </select>
-                                            @error('preferred_language')
+                                        <div class="col-md-6 mb-3">
+                                            <label for="names" class="form-label">Names <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('names') is-invalid @enderror"
+                                                   id="names" name="names"
+                                                   value="{{ old('names') }}" placeholder="Enter full name" required>
+                                            @error('names')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
@@ -414,10 +370,23 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
+                                            <label for="gender" class="form-label">Gender</label>
+                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender">
+                                                <option value="">Please select</option>
+                                                <option value="Male" {{ old('gender') == 'Male' ? 'selected' : '' }}>Male</option>
+                                                <option value="Female" {{ old('gender') == 'Female' ? 'selected' : '' }}>Female</option>
+                                                <option value="Other" {{ old('gender') == 'Other' ? 'selected' : '' }}>Other</option>
+                                            </select>
+                                            @error('gender')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
                                             <label for="phone" class="form-label">Phone</label>
-                                            <input type="text" class="form-control @error('phone') is-invalid @enderror" 
-                                                   id="phone" name="phone" 
-                                                   value="{{ old('phone') }}" >
+                                            <input type="text" class="form-control @error('phone') is-invalid @enderror"
+                                                   id="phone" name="phone"
+                                                   value="{{ old('phone') }}" placeholder="e.g., +254712345678">
                                             @error('phone')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -524,45 +493,32 @@
                                         <div class="col-12 mb-3">
                                             <h6 class="text-muted border-bottom pb-2">Bank Account Information</h6>
                                         </div>
-                                
-                                        <div class="col-12 mb-3">
-                                            <button type="button" class="btn btn-success btn-sm" id="addBankAccount">
-                                                <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
-                                                Add Bank Account
-                                            </button>
-                                        </div>
-                                
+
                                         <div id="bankAccountsContainer">
                                             <div class="bank-account-entry mb-3 p-3 border rounded">
                                                 <div class="row">
-                                                    <div class="col-md-4 mb-3">
+                                                    <div class="col-md-6 mb-3">
                                                         <label for="bank_id_0" class="form-label">Bank</label>
                                                         <select class="form-select bank-select" id="bank_id_0" name="bank_accounts[0][bank_id]" data-index="0">
                                                             <option value="">Please select</option>
                                                         </select>
                                                     </div>
-                                
-                                                    <div class="col-md-4 mb-3">
+
+                                                    <div class="col-md-6 mb-3">
                                                         <label for="branch_id_0" class="form-label">Branch</label>
                                                         <select class="form-select branch-select" id="branch_id_0" name="bank_accounts[0][branch_id]" data-index="0">
                                                             <option value="">Please select</option>
                                                         </select>
                                                     </div>
-                                
-                                                    <div class="col-md-4 mb-3">
+
+                                                    <div class="col-md-6 mb-3">
                                                         <label for="account_name_0" class="form-label">Account Name</label>
                                                         <input type="text" class="form-control" id="account_name_0" name="bank_accounts[0][account_name]">
                                                     </div>
-                                
-                                                    <div class="col-md-4 mb-3">
+
+                                                    <div class="col-md-6 mb-3">
                                                         <label for="account_number_0" class="form-label">Account Number</label>
                                                         <input type="text" class="form-control" id="account_number_0" name="bank_accounts[0][account_number]">
-                                                    </div>
-                                
-                                                    <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                        <button type="button" class="btn btn-danger btn-sm remove-bank-account d-none">
-                                                            <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -578,7 +534,7 @@
                                         </div>
 
                                         <div class="col-12 mb-3">
-                                            <button type="button" class="btn btn-success btn-sm" id="addOtherContact">
+                                            <button type="button" class="btn btn-primary btn-sm" id="addOtherContact">
                                                 <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
                                                 Add Contact
                                             </button>
@@ -603,10 +559,10 @@
                                                     </div>
 
                                                     <div class="col-md-2 mb-3 d-flex align-items-end gap-1">
-                                                        <button type="button" class="btn btn-success btn-sm add-contact-inline d-none">
+                                                        <button type="button" class="btn btn-primary btn-sm add-contact-inline d-none">
                                                             <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                                         </button>
-                                                        <button type="button" class="btn btn-danger btn-sm remove-other-contact d-none">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm remove-other-contact d-none">
                                                             <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
                                                         </button>
                                                     </div>
@@ -624,7 +580,7 @@
                                         </div>
 
                                         <div class="col-12 mb-3">
-                                            <button type="button" class="btn btn-success btn-sm" id="addTenantFile">
+                                            <button type="button" class="btn btn-primary btn-sm" id="addTenantFile">
                                                 <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
                                                 Add Document
                                             </button>
@@ -651,7 +607,7 @@
                                                     </div>
 
                                                     <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                        <button type="button" class="btn btn-danger btn-sm remove-tenant-file d-none">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm remove-tenant-file d-none">
                                                             <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                         </button>
                                                     </div>
@@ -669,7 +625,7 @@
                                         </div>
 
                                         <div class="col-12 mb-3">
-                                            <button type="button" class="btn btn-success btn-sm" id="addNextOfKin">
+                                            <button type="button" class="btn btn-primary btn-sm" id="addNextOfKin">
                                                 <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
                                                 Add Next of Kin
                                             </button>
@@ -694,10 +650,10 @@
                                                     </div>
 
                                                     <div class="col-md-2 mb-3 d-flex align-items-end gap-1">
-                                                        <button type="button" class="btn btn-success btn-sm add-kin-inline d-none">
+                                                        <button type="button" class="btn btn-primary btn-sm add-kin-inline d-none">
                                                             <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                                         </button>
-                                                        <button type="button" class="btn btn-danger btn-sm remove-nok d-none">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm remove-nok d-none">
                                                             <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
                                                         </button>
                                                     </div>
@@ -1051,53 +1007,6 @@
             }
         });
 
-        // Dynamic Bank Accounts
-        let bankCounter = 1;
-        $('#addBankAccount').on('click', function() {
-            const bankEntry = `
-                <div class="bank-account-entry mb-3 p-3 border rounded">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="bank_id_${bankCounter}" class="form-label">Bank</label>
-                            <select class="form-select bank-select" id="bank_id_${bankCounter}" name="bank_accounts[${bankCounter}][bank_id]" data-index="${bankCounter}">
-                                <option value="">Please select</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="branch_id_${bankCounter}" class="form-label">Branch</label>
-                            <select class="form-select branch-select" id="branch_id_${bankCounter}" name="bank_accounts[${bankCounter}][branch_id]" data-index="${bankCounter}">
-                                <option value="">Please select</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="account_name_${bankCounter}" class="form-label">Account Name</label>
-                            <input type="text" class="form-control" id="account_name_${bankCounter}" name="bank_accounts[${bankCounter}][account_name]">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="account_number_${bankCounter}" class="form-label">Account Number</label>
-                            <input type="text" class="form-control" id="account_number_${bankCounter}" name="bank_accounts[${bankCounter}][account_number]">
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-bank-account">
-                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('#bankAccountsContainer').append(bankEntry);
-            bankCounter++;
-            
-            // Populate bank dropdown for the new entry
-            populateAllBankDropdowns();
-            updateRemoveButtons('.bank-account-entry', '.remove-bank-account');
-        });
-
-        $(document).on('click', '.remove-bank-account', function() {
-            $(this).closest('.bank-account-entry').remove();
-            updateRemoveButtons('.bank-account-entry', '.remove-bank-account');
-        });
-
         // Dynamic Other Contacts
         let contactCounter = 1;
         $('#addOtherContact').on('click', function() {
@@ -1117,7 +1026,7 @@
                             <input type="text" class="form-control" id="contact_mobile_${contactCounter}" name="other_contacts[${contactCounter}][mobile]">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end gap-1">
-                            <button type="button" class="btn btn-danger btn-sm remove-other-contact">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-other-contact">
                                 <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
                             </button>
                         </div>
@@ -1156,7 +1065,7 @@
                             <input type="file" class="form-control" id="file_upload_${fileCounter}" name="tenant_files[${fileCounter}][file]" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-tenant-file">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-tenant-file">
                                 <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                             </button>
                         </div>
@@ -1192,7 +1101,7 @@
                             <input type="email" class="form-control" id="kin_email_${kinCounter}" name="next_of_kin[${kinCounter}][email]">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end gap-1">
-                            <button type="button" class="btn btn-danger btn-sm remove-nok">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-nok">
                                 <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
                             </button>
                         </div>
@@ -1252,12 +1161,9 @@
         });
 
         // Auto-populate account name from tenant name
-        $('#first_name, #second_name, #last_name').on('blur', function() {
-            let firstName = $('#first_name').val();
-            let secondName = $('#second_name').val();
-            let lastName = $('#last_name').val();
-            let fullName = [firstName, secondName, lastName].filter(Boolean).join(' ');
-            
+        $('#names').on('blur', function() {
+            let fullName = $('#names').val();
+
             if (fullName && $('.bank-account-entry').length > 0) {
                 $('.bank-account-entry').each(function(index) {
                     let accountNameField = $(this).find(`#account_name_${index}`);
