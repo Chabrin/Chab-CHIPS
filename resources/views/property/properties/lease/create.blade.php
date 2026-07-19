@@ -95,16 +95,14 @@
                                 </div>
 
                                 <div class="col-md-4 mb-3">
-                                    <label for="tenant_name" class="form-label">Tenant <span class="text-danger">*</span></label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control @error('tenant_name') is-invalid @enderror" 
-                                               id="tenant_name" name="tenant_name" 
-                                               value="{{ old('tenant_name') }}" required readonly>
-                                        <input type="hidden" id="tenant_id" name="tenant_id" value="{{ old('tenant_id') }}">
-                                        @error('tenant_name')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
+                                    <label for="tenant_id" class="form-label">Tenant <span class="text-danger">*</span></label>
+                                    <select class="form-select @error('tenant_id') is-invalid @enderror" id="tenant_id" name="tenant_id" required>
+                                        <option value="">Select a unit to auto-fill, or search for a tenant...</option>
+                                    </select>
+                                    @error('tenant_id')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                    <small class="text-muted">Auto-fills from the selected unit's current tenant — search to pick a different one.</small>
                                 </div>
 
                                 <div class="col-md-4 mb-3">
@@ -330,11 +328,60 @@
                     $('#property_id').html('<option value="">Select a client first</option>').prop('disabled', true);
                     $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
                     $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
-                    $('#tenant_name').val('');
-                    $('#tenant_id').val('');
+                    clearTenantSelection();
                 }
             });
         @endif
+
+        // Tenant search dropdown — auto-fills from the selected unit's current tenant
+        // (see loadTenantForUnit below), but can also be searched/overridden manually.
+        // Reuses the same ajax.clients.list endpoint as the client search above, filtered
+        // to tenants instead of landlords.
+        $('#tenant_id').select2({
+            placeholder: 'Select a unit to auto-fill, or search for a tenant...',
+            allowClear: true,
+            width: '100%',
+            minimumInputLength: 2,
+            ajax: {
+                url: "{{ route('ajax.clients.list') }}",
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return {
+                        client_type: 'Tenant',
+                        search: params.term
+                    };
+                },
+                processResults: function(response) {
+                    return {
+                        results: response.data.map(function(tenant) {
+                            return {
+                                id: tenant.id,
+                                text: `${tenant.names} (${tenant.reference_number})`
+                            };
+                        })
+                    };
+                },
+                cache: true
+            }
+        });
+
+        // Set (or clear) the tenant select2's selection, injecting a matching <option>
+        // first since select2 can't display a value with no corresponding option element.
+        function setTenantSelection(id, text) {
+            if (!id) {
+                clearTenantSelection();
+                return;
+            }
+            if ($('#tenant_id').find(`option[value="${id}"]`).length === 0) {
+                $('#tenant_id').append(new Option(text, id, true, true));
+            }
+            $('#tenant_id').val(id).trigger('change');
+        }
+
+        function clearTenantSelection() {
+            $('#tenant_id').val(null).trigger('change');
+        }
 
         // Function to load properties for the client
         function loadProperties(clientId) {
@@ -376,8 +423,7 @@
                 // Reset dependent fields
                 $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', false);
                 $('#unit_id').html('<option value="">Please select</option>').prop('disabled', false);
-                $('#tenant_name').val('');
-                $('#tenant_id').val('');
+                clearTenantSelection();
             }
         });
 
@@ -447,9 +493,7 @@
             if (unitId && propertyId) {
                 loadTenantForUnit(propertyId, unitId);
             } else {
-                // Reset tenant field
-                $('#tenant_name').val('');
-                $('#tenant_id').val('');
+                clearTenantSelection();
             }
         });
 
@@ -461,113 +505,20 @@
                 dataType: 'json',
                 success: function(response) {
                     console.log('Tenant loaded:', response);
-                    
+
                     if (response.tenant) {
-                        $('#tenant_id').val(response.tenant.id);
-                        $('#tenant_name').val(response.tenant.full_name || response.tenant.name);
+                        setTenantSelection(response.tenant.id, response.tenant.full_name || response.tenant.name);
                     } else {
-                        $('#tenant_name').val('');
-                        $('#tenant_id').val('');
+                        clearTenantSelection();
                         console.log('No tenant found for this unit');
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Error loading tenant:', xhr.responseText);
-                    $('#tenant_name').val('');
-                    $('#tenant_id').val('');
+                    clearTenantSelection();
                 }
             });
         }
-
-        // Client Search Modal
-        $('#searchClientBtn').on('click', function() {
-            $('#clientSearchModal').modal('show');
-        });
-
-        $('#clientSearchInput').on('keyup', function() {
-            let searchTerm = $(this).val();
-            if (searchTerm.length > 2) {
-                // AJAX search for clients
-                $.ajax({
-                    url: '/api/clients/search',
-                    method: 'GET',
-                    data: { term: searchTerm },
-                    success: function(response) {
-                        let resultsHtml = '<div class="list-group">';
-                        response.clients.forEach(function(client) {
-                            resultsHtml += `
-                                <a href="#" class="list-group-item list-group-item-action select-client" 
-                                   data-client-id="${client.id}" 
-                                   data-client-name="${client.full_name}">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <h6 class="mb-1">${client.full_name}</h6>
-                                        <small>${client.client_number}</small>
-                                    </div>
-                                    <p class="mb-1">${client.email || ''}</p>
-                                    <small>${client.phone || ''}</small>
-                                </a>
-                            `;
-                        });
-                        resultsHtml += '</div>';
-                        $('#clientSearchResults').html(resultsHtml);
-                    }
-                });
-            }
-        });
-
-        $(document).on('click', '.select-client', function(e) {
-            e.preventDefault();
-            let clientId = $(this).data('client-id');
-            let clientName = $(this).data('client-name');
-            $('#client_id').val(clientId);
-            $('#client_name').val(clientName);
-            $('#clientSearchModal').modal('hide');
-        });
-
-        // Tenant Search Modal
-        $('#searchTenantBtn').on('click', function() {
-            $('#tenantSearchModal').modal('show');
-        });
-
-        $('#tenantSearchInput').on('keyup', function() {
-            let searchTerm = $(this).val();
-            if (searchTerm.length > 2) {
-                // AJAX search for tenants
-                $.ajax({
-                    url: '/api/tenants/search',
-                    method: 'GET',
-                    data: { term: searchTerm },
-                    success: function(response) {
-                        let resultsHtml = '<div class="list-group">';
-                        response.tenants.forEach(function(tenant) {
-                            resultsHtml += `
-                                <a href="#" class="list-group-item list-group-item-action select-tenant" 
-                                   data-tenant-id="${tenant.id}" 
-                                   data-tenant-name="${tenant.full_name}">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <h6 class="mb-1">${tenant.full_name}</h6>
-                                        <small>${tenant.tenant_number}</small>
-                                    </div>
-                                    <p class="mb-1">${tenant.email || ''}</p>
-                                    <small>${tenant.phone || ''}</small>
-                                </a>
-                            `;
-                        });
-                        resultsHtml += '</div>';
-                        $('#tenantSearchResults').html(resultsHtml);
-                    }
-                });
-            }
-        });
-
-        $(document).on('click', '.select-tenant', function(e) {
-            e.preventDefault();
-            let tenantId = $(this).data('tenant-id');
-            let tenantName = $(this).data('tenant-name');
-            $('#tenant_id').val(tenantId);
-            $('#tenant_name').val(tenantName);
-            $('#tenantSearchModal').modal('hide');
-        });
 
         // Edit Client Button
         $('#editClientBtn').on('click', function() {

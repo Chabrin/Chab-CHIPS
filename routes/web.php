@@ -693,6 +693,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/leases/store', [App\Http\Controllers\LeasesController::class, 'store'])->name('property.leases.store');
     Route::get('/property/leases/{encryptedId}/view-signed-contract', [App\Http\Controllers\LeasesController::class, 'viewSignedContract'])->name('property.leases.view-signed-contract');
     Route::post('/property/leases/{id}/send-contract', [App\Http\Controllers\LeasesController::class, 'sendContract'])->name('property.leases.send-contract');
+    Route::get('/property/leases/{encryptedId}/edit', [App\Http\Controllers\LeasesController::class, 'edit'])->name('property.leases.edit');
+    Route::put('/property/leases/{id}', [App\Http\Controllers\LeasesController::class, 'update'])->name('property.leases.update');
+    Route::post('/property/leases/{id}/cancel', [App\Http\Controllers\LeasesController::class, 'cancel'])->name('property.leases.cancel');
     Route::get('/tenants/lease/create', [App\Http\Controllers\LeasesController::class, 'create'])->name('tenant.lease.create');
 
     // Lease Contract Template Management

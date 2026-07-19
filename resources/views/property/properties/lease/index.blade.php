@@ -704,11 +704,15 @@
                         let viewContractBtn = row.has_signed_pdf
                             ? `<a href="/property/leases/${row.encrypted_id}/view-signed-contract" class="btn btn-sm btn-outline-success ms-1" target="_blank" title="View Signed Contract"><i class="fa fa-file-pdf-o"></i></a>`
                             : '';
+                        let editBtn = `<a href="/property/leases/${row.encrypted_id}/edit" class="btn btn-sm btn-outline-secondary ms-1" title="Edit Lease"><i class="fa fa-pencil"></i></a>`;
+                        let cancelBtn = row.lease_status === 'Active'
+                            ? `<button class="btn btn-sm btn-outline-danger ms-1 cancel-lease-btn" data-id="${row.id}" title="Cancel Lease"><i class="fa fa-ban"></i></button>`
+                            : '';
                         return `
                             <a href="/tenants/${encryptedId}" class="text-primary" title="View Tenant">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">visibility</span>
                             </a>
-                            ${sendBtn}${viewContractBtn}
+                            ${sendBtn}${viewContractBtn}${editBtn}${cancelBtn}
                         `;
                     }
                 }
@@ -1114,6 +1118,29 @@
                 error: function(xhr) {
                     toastr.error(xhr.responseJSON?.message || 'Failed to send contract.');
                     btn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i>');
+                }
+            });
+        });
+
+        // Cancel Lease button
+        $(document).on('click', '.cancel-lease-btn', function() {
+            const id = $(this).data('id');
+            const btn = $(this);
+            if (!confirm('Cancel this lease? This will end it immediately and mark the unit as vacant.')) return;
+
+            btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+
+            $.ajax({
+                url: '/property/leases/' + id + '/cancel',
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                success: function(res) {
+                    toastr.success(res.message);
+                    loadLeasesData({ client_id: $('#filter_client').val(), property_id: $('#filter_property').val() });
+                },
+                error: function(xhr) {
+                    toastr.error(xhr.responseJSON?.error || 'Failed to cancel lease.');
+                    btn.prop('disabled', false).html('<i class="fa fa-ban"></i>');
                 }
             });
         });
