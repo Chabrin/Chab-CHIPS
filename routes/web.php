@@ -897,6 +897,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Property edit routes
     Route::get('/property/properties/{encryptedId}/edit', [PropertiesController::class, 'edit'])->name('property.properties.edit');
     Route::put('/property/properties/{encryptedId}', [PropertiesController::class, 'update'])->name('property.properties.update');
+
+    // Property Activation Management (mass activate/deactivate)
+    Route::get('/property/activation', [App\Http\Controllers\PropertyActivationController::class, 'index'])->name('property.activation.index');
+    Route::get('/property/activation/data', [App\Http\Controllers\PropertyActivationController::class, 'getData'])->name('property.activation.data');
+    Route::post('/property/activation/preview', [App\Http\Controllers\PropertyActivationController::class, 'preview'])->name('property.activation.preview');
+    Route::post('/property/activation/activate', [App\Http\Controllers\PropertyActivationController::class, 'activate'])->name('property.activation.activate');
+    Route::post('/property/activation/deactivate', [App\Http\Controllers\PropertyActivationController::class, 'deactivate'])->name('property.activation.deactivate');
+
     // Property Settings
     Route::get('/property/settings/items', [App\Http\Controllers\PropertySettingsController::class, 'index'])->name('property.settings.index');
 

@@ -1214,6 +1214,15 @@ class ClientsController extends Controller
                     DB::raw('CASE WHEN cb_tenant_exits.id IS NOT NULL THEN 1 ELSE 0 END as is_exited')
                 );
 
+            // Exclude tenants whose assigned property has been explicitly deactivated,
+            // but keep tenants with no property_id at all visible — a left-joined-but
+            // unmatched row has sys_pm_properties.active as NULL, so the whereNull half
+            // of this orWhere is what re-includes those rows correctly.
+            $query->where(function ($q) {
+                $q->whereNull('sys_pm_clients.property_id')
+                  ->orWhere('sys_pm_properties.active', 1);
+            });
+
             if ($status === 'active') {
                 $query->whereNull('cb_tenant_exits.id');
             } elseif ($status === 'exited') {
@@ -1371,9 +1380,18 @@ class ClientsController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $tenant = Client::with(['property', 'unit.zone', 'deposits'])
+            $tenant = Client::with([
+                    // Bypass the zone-assignment scope on this eager load — the tenant record
+                    // was already confirmed accessible above, so their own assigned property
+                    // shouldn't disappear just because sys_pm_zones_assignments has no row for
+                    // it (a real data gap that otherwise silently nulls this relation).
+                    'property' => fn ($query) => $query->withoutGlobalScope('user_properties'),
+                    'unit.zone',
+                    'deposits',
+                ])
                 ->tenants()
                 ->findOrFail($id);
+
             return view('property.tenants.details', compact('tenant'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
