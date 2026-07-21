@@ -22,6 +22,7 @@ class Deposit extends Model
         'invoice_id',
         'item_id',
         'amount',
+        'held_by',
         'created_by_id',
         'current_status_id',
         'reference_number',

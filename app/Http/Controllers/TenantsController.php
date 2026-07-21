@@ -292,6 +292,7 @@ class TenantsController extends Controller
             'overcraft_penalty' => 'nullable|numeric|min:0',
             'deposit_amount' => 'nullable|numeric|min:0',
             'deposit_reference' => 'nullable|string|max:255',
+            'deposit_held_by' => 'required_with:deposit_amount|nullable|in:Company,Landlord',
 
             // Tenant Information
             'title' => 'required|string|max:10',
@@ -500,6 +501,7 @@ class TenantsController extends Controller
             'sla_id' => $validated['sla_ref'] ?? null,
             'unit_id' => $validated['unit_id'],
             'amount' => $amount,
+            'held_by' => $validated['deposit_held_by'] ?? null,
             'created_by_id' => Auth::id(),
             'current_status_id' => 1,
             'reference_number' => $validated['deposit_reference'] ?? null,

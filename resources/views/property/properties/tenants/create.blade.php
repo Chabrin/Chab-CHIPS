@@ -245,6 +245,20 @@
                                             @enderror
                                         </div>
 
+                                        <div class="col-md-4 mb-3">
+                                            <label for="deposit_held_by" class="form-label">Deposit Held By</label>
+                                            <select class="form-select @error('deposit_held_by') is-invalid @enderror"
+                                                    id="deposit_held_by" name="deposit_held_by">
+                                                <option value="">Select if deposit entered</option>
+                                                <option value="Company" {{ old('deposit_held_by') == 'Company' ? 'selected' : '' }}>Chabrin (Company)</option>
+                                                <option value="Landlord" {{ old('deposit_held_by') == 'Landlord' ? 'selected' : '' }}>Landlord</option>
+                                            </select>
+                                            <div class="form-text text-muted" style="font-size:0.75rem;">Who actually holds this deposit — required whenever a deposit amount is entered, to avoid disputes at move-out.</div>
+                                            @error('deposit_held_by')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
                                         {{-- Move-in Inspection Section (inline in Unit Details tab) --}}
                                         <div class="col-12 mt-2 mb-3" id="inspectionSection">
                                             <h6 class="text-muted border-bottom pb-2">
