@@ -14,19 +14,6 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        @if(session('success'))
-                        <div class="alert alert-light-success alert-dismissible fade show" role="alert">
-                            {{ session('success') }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                        @endif
-                        @if(session('error'))
-                        <div class="alert alert-light-danger alert-dismissible fade show" role="alert">
-                            {{ session('error') }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                        @endif
-
                         <div class="alert alert-light-info mb-3">
                             <i class="fa fa-info-circle me-1"></i>
                             Contract templates define the content of the PDF sent to tenants for digital signing.

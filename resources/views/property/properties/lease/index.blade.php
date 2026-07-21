@@ -25,19 +25,6 @@
                         {{-- @endpermission --}}
                     </div>
                     <div class="card-body">
-                        @if(session('success'))
-                        <div class="alert alert-light-success alert-dismissible fade show" role="alert">
-                            <strong>Success!</strong> {{ session('success') }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        @endif
-                        @if(session('error'))
-                        <div class="alert alert-light-danger alert-dismissible fade show" role="alert">
-                            <strong>Error!</strong> {{ session('error') }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        @endif
-
                         <!-- Lease Stats -->
                         <div class="row g-3 mb-4" id="leaseStatsRow">
                             <div class="col">

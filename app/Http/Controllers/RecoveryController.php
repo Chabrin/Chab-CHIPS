@@ -78,6 +78,60 @@ class RecoveryController extends Controller
     }
 
     /**
+     * Store a newly created recovery
+     */
+    public function store(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validated = $request->validate([
+                'ref_number' => 'required|string|max:255',
+                'type_id' => 'required|exists:sys_set_transactions_types,id',
+                'recovery_date' => 'required|date',
+                'amount' => 'required|numeric|min:0',
+                'narration' => 'nullable|string',
+                'client_id' => 'required|exists:sys_pm_clients,id',
+                'property_id' => 'required|exists:sys_pm_properties,id',
+                'sla_id' => 'nullable|exists:sys_pm_service_agreements,id',
+                'unit_id' => 'nullable|exists:sys_pm_units,id',
+                'tenant_id' => 'nullable|exists:sys_pm_clients,id',
+                'lease_id' => 'nullable|exists:sys_pm_lease_agreements,id',
+                'offset_invoice_id' => 'nullable|exists:sys_pm_debtors_invoices,id',
+                'commisionable' => 'required|in:Yes,No',
+                'return_type_id' => 'nullable|string|max:255',
+                'account_id' => 'nullable|integer',
+            ]);
+
+            $recovery = Recovery::create(array_merge($validated, [
+                'date_time' => now(),
+                'created_by' => Auth::id(),
+                'current_status_id' => 1, // Pending — awaiting maker-checker approval
+            ]));
+
+            DB::commit();
+
+            return redirect()
+                ->route('property.recoveries.show', Crypt::encrypt($recovery->id))
+                ->with('success', 'Recovery created successfully');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return redirect()
+                ->back()
+                ->withErrors($e->validator)
+                ->withInput();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating recovery: ' . $e->getMessage());
+            return redirect()
+                ->back()
+                ->with('error', 'Failed to create recovery: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
      * Display the specified recovery
      */
     public function show($encryptedId)
@@ -137,7 +191,7 @@ class RecoveryController extends Controller
 
             $validated = $request->validate([
                 'ref_number' => 'required|string|max:255',
-                'type_id' => 'required|exists:sys_pm_transaction_types,id',
+                'type_id' => 'required|exists:sys_set_transactions_types,id',
                 'recovery_date' => 'required|date',
                 'amount' => 'required|numeric|min:0',
                 'narration' => 'nullable|string',
@@ -147,9 +201,10 @@ class RecoveryController extends Controller
                 'unit_id' => 'nullable|exists:sys_pm_units,id',
                 'tenant_id' => 'nullable|exists:sys_pm_clients,id',
                 'lease_id' => 'nullable|exists:sys_pm_lease_agreements,id',
-                'offset_invoice_id' => 'nullable|exists:sys_pm_invoices,id',
+                'offset_invoice_id' => 'nullable|exists:sys_pm_debtors_invoices,id',
                 'commisionable' => 'required|in:Yes,No',
                 'return_type_id' => 'nullable|string|max:255',
+                'account_id' => 'nullable|integer',
             ]);
 
             $recovery->update($validated);

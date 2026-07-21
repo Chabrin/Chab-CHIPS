@@ -1096,9 +1096,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/recoveries', [RecoveryController::class, 'index'])->name('property.recoveries.index');
     Route::get('/ajax/property/recoveries/list', [RecoveryController::class, 'list'])->name('ajax.property.recoveries.list');
     Route::get('/property/recovery/create', [RecoveryController::class, 'create'])->name('property.recovery.create');
+    Route::post('/property/recovery', [RecoveryController::class, 'store'])->name('property.recoveries.store');
     Route::get('/property/recovery/{encryptedId}', [RecoveryController::class, 'show'])->name('property.recoveries.show');
     Route::get('/property/recovery/{encryptedId}/edit', [RecoveryController::class, 'edit'])->name('property.recoveries.edit');
     Route::put('/property/recovery/{encryptedId}', [RecoveryController::class, 'update'])->name('property.recoveries.update');
+
+    // Recovery → Landlord Account posting (manual bulk action, decoupled from automatic returns processing)
+    Route::get('/property/recoveries/landlord-posting', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'index'])->name('property.recoveries.landlord-posting.index');
+    Route::get('/property/recoveries/landlord-posting/data', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'getData'])->name('property.recoveries.landlord-posting.data');
+    Route::post('/property/recoveries/landlord-posting/post', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'post'])->name('property.recoveries.landlord-posting.post');
 
     // Property Confirmations
     Route::get('/property/confirmations', [PropertyConfirmationController::class, 'index'])->name('property.confirmations.index');

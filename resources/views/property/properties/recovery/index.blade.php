@@ -8,6 +8,12 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Recoveries Management</h5>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('update_recoveries')
+                            <a href="{{ route('property.recoveries.landlord-posting.index') }}" class="btn btn-outline-secondary btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">account_balance</span>
+                                <span class="ms-1">Post to Landlord Account</span>
+                            </a>
+                            @endpermission
                             <a href="{{ route('property.recovery.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">add_circle</span>
                                 <span class="ms-1">Add Recovery</span>
@@ -15,19 +21,6 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        @if(session('success'))
-                        <div class="alert alert-light-success alert-dismissible fade show" role="alert">
-                            <strong>Success!</strong> {{ session('success') }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        @endif
-                        @if(session('error'))
-                        <div class="alert alert-light-danger alert-dismissible fade show" role="alert">
-                            <strong>Error!</strong> {{ session('error') }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        @endif
-
                         <!-- Preloader -->
                         <div id="recoveries-preloader" class="text-center my-5">
                             <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
