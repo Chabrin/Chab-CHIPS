@@ -35,10 +35,14 @@
                         <!-- Summary Header -->
                         <div class="d-flex justify-content-between align-items-center mb-4">
                             <div class="mb-3">
-                                <p class="text-muted mb-0" style="font-size: 0.875rem;">
-                                    <strong>Ref #:</strong> {{ $property->reference_number ?? 'N/A' }} |
-                                    <strong>Property ID:</strong> {{ $property->id }} |
-                                    <strong>Client:</strong> {{ $property->client->names ?? '-' }} 
+                                <p class="text-muted mb-0 d-flex align-items-center flex-wrap" style="font-size: 0.875rem;">
+                                    <strong class="me-1">Property Reference:</strong>
+                                    <span id="propRefSummary">{{ $property->reference_number ?? 'N/A' }}</span>
+                                    @if($property->reference_number)
+                                    <span class="material-symbols-outlined copy-icon ms-1 me-2" data-copy="{{ $property->reference_number }}" title="Copy">content_copy</span>
+                                    @endif
+                                    <span class="mx-1">|</span>
+                                    <strong class="ms-1 me-1">Client:</strong> {{ $property->client->names ?? '-' }}
                                 </p>
                             </div>
 
@@ -101,74 +105,80 @@
                         <div class="tab-content" id="propertyTabsContent">
                             <!-- Property Information Tab -->
                             <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
-                                <div class="row g-3">
-                                    <!-- Basic Information Card -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">info</span>
-                                                    Basic Information
-                                                </h6>
+                                <div class="info-panel">
+                                    <div class="info-panel-header">
+                                        <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">home_work</span>
+                                        Property Information
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="info-row">
+                                                <span class="info-label">Property Name</span>
+                                                <span class="info-value">{{ $property->property_name ?? '-' }}</span>
                                             </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Property ID:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->id }}</strong></small></div>
 
-                                                    <div class="col-5"><small class="text-muted">Property Name:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->property_name ?? '-' }}</strong></small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">Reference Number</span>
+                                                <span class="info-value d-flex align-items-center">
+                                                    {{ $property->reference_number ?? '-' }}
+                                                    @if($property->reference_number)
+                                                    <span class="material-symbols-outlined copy-icon ms-2" data-copy="{{ $property->reference_number }}" title="Copy">content_copy</span>
+                                                    @endif
+                                                </span>
+                                            </div>
 
-                                                    <div class="col-5"><small class="text-muted">Reference Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->reference_number ?? '-' }}</strong></small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">LR Number</span>
+                                                <span class="info-value">{{ $property->lr_number ?? '-' }}</span>
+                                            </div>
 
-                                                    <div class="col-5"><small class="text-muted">LR Number:</small></div>
-                                                    <div class="col-7"><small>{{ $property->lr_number ?? '-' }}</small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">Acquisition Date</span>
+                                                <span class="info-value">{{ $property->acquisition_date ? $property->acquisition_date->format('d-m-Y') : '-' }}</span>
+                                            </div>
 
-                                                    <div class="col-5"><small class="text-muted">Acquisition Date:</small></div>
-                                                    <div class="col-7"><small>{{ $property->acquisition_date ? $property->acquisition_date->format('d-m-Y') : '-' }}</small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">Owner/Client</span>
+                                                <span class="info-value">{{ $property->client->names ?? '-' }}</span>
+                                            </div>
+                                        </div>
 
-                                                    <div class="col-12 mt-2"><small class="text-muted">Description:</small></div>
-                                                    <div class="col-12"><small>{{ $property->description ?? '-' }}</small></div>
-                                                </div>
+                                        <div class="col-md-6">
+                                            <div class="info-row">
+                                                <span class="info-label">Zone</span>
+                                                <span class="info-value">{{ $property->zone->zone_name ?? '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Zone Area</span>
+                                                <span class="info-value">{{ $property->zoneArea->area_name ?? '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Field Officer</span>
+                                                <span class="info-value">{{ $property->fieldOfficer ? strtoupper($property->fieldOfficer->full_names) : '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Zone Supervisor</span>
+                                                <span class="info-value">{{ $property->zoneSupervisor ? strtoupper($property->zoneSupervisor->full_names) : '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Zone Manager</span>
+                                                <span class="info-value">{{ $property->zoneManager ? strtoupper($property->zoneManager->full_names) : '-' }}</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Location & Management Card -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">location_on</span>
-                                                    Location & Management
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Owner/Client:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->client->names ?? '-' }}</strong></small></div>
+                                    <div class="info-row">
+                                        <span class="info-label">Coordinates</span>
+                                        <span class="info-value">{{ $property->lat_long ?? '-' }}</span>
+                                    </div>
 
-                                                    <div class="col-5"><small class="text-muted">Zone:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zone->zone_name ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone Area:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zoneArea->area_name ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Field Officer:</small></div>
-                                                    <div class="col-7"><small>{{ $property->fieldOfficer ? strtoupper($property->fieldOfficer->full_names) : '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone Supervisor:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zoneSupervisor ? strtoupper($property->zoneSupervisor->full_names) : '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone Manager:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zoneManager ? strtoupper($property->zoneManager->full_names) : '-' }}</small></div>
-
-                                                    <div class="col-12 mt-2"><small class="text-muted">Coordinates:</small></div>
-                                                    <div class="col-12"><small>{{ $property->lat_long ?? '-' }}</small></div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="info-row description-row">
+                                        <span class="info-label">Description</span>
+                                        <span class="info-value">{{ $property->description ?? '-' }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -731,12 +741,101 @@
     .card {
         border: 1px solid #e0e0e0;
     }
+
+    .info-panel {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        background: #fff;
+    }
+
+    .info-panel-header {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .info-row {
+        display: flex;
+        flex-wrap: wrap;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.85rem;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-row.description-row {
+        align-items: flex-start;
+    }
+
+    .info-label {
+        flex: 0 0 45%;
+        max-width: 45%;
+        color: #6b7280;
+    }
+
+    .info-value {
+        flex: 1;
+        min-width: 0;
+        color: #212529;
+        font-weight: 500;
+        word-break: break-word;
+    }
+
+    .copy-icon {
+        cursor: pointer;
+        color: #5aa9e0;
+        font-size: 16px;
+        line-height: 1;
+        transition: color 0.15s ease;
+    }
+
+    .copy-icon:hover {
+        color: #3598db;
+    }
+
+    .copy-icon.copied {
+        color: #3598db;
+    }
 </style>
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(function() {
         var unitsTable = null;
         var unitsLoaded = false;
+
+        // Copy-to-clipboard for info fields
+        $(document).on('click', '.copy-icon', function() {
+            var $icon = $(this);
+            var text = $icon.data('copy');
+            if (!text) return;
+
+            function showCopied() {
+                var original = $icon.text();
+                $icon.addClass('copied').text('check');
+                setTimeout(function() {
+                    $icon.removeClass('copied').text(original);
+                }, 1200);
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(String(text)).then(showCopied);
+            } else {
+                var $tmp = $('<textarea>').val(text).appendTo('body').select();
+                document.execCommand('copy');
+                $tmp.remove();
+                showCopied();
+            }
+        });
         
         // format ISO date to dd/mm/yy
         function formatDateShort(dateStr) {

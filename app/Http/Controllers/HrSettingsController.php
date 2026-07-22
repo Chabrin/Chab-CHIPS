@@ -16,7 +16,6 @@ use Illuminate\Http\Request;
 use App\Models\Communication;
 use App\Models\PublicHoliday;
 use App\Models\PayrollElement;
-use App\Models\ZoneAssignment;
 use App\Services\ErrorDispatcher;
 use App\Models\ZoneAssignmentType;
 use Illuminate\Support\Facades\Log;
@@ -985,375 +984,147 @@ class HrSettingsController extends Controller
         return view('settings.hr.zone_assignments');
     }
 
-    public function zoneAssignmentsList()
+    /**
+     * Field Officers report — one row per staff member who is set as
+     * field_officer_id on at least one property, with their property count.
+     * Read directly off sys_pm_properties; no separate assignment table involved.
+     */
+    public function fieldOfficersReport()
     {
         try {
-            $canUpdate = Auth::user()->isAbleTo('update_zone_assignments');
-            $canDelete = Auth::user()->isAbleTo('delete_zone_assignments');
-
-            $rows = DB::table('sys_pm_zones_assignments as za')
-                ->leftJoin('sys_set_zones as z', 'z.id', '=', 'za.zone_id')
-                ->leftJoin('cb_roles as r', 'r.id', '=', 'za.assigned_as')
-                ->leftJoin('sys_staff as s', 's.id', '=', 'za.staff_id')
-                ->leftJoin('josya_users as u', 'u.id', '=', 'za.created_by')
-                ->select(
-                    'za.id',
-                    'za.staff_id',
-                    'za.assigned_as',
-                    'za.zone_id',
-                    'za.property_id',
-                    'za.date_time',
-                    'za.current_status_id',
-                    'z.zone_name',
-                    'r.name as role_name',
-                    'r.display_name as role_display_name',
-                    's.full_names as staff_name',
-                    'u.name as created_by_name'
-                )
-                ->orderBy('za.date_time', 'desc')
+            $rows = DB::table('sys_pm_properties as p')
+                ->join('sys_staff as s', 's.id', '=', 'p.field_officer_id')
+                ->select('s.id', 's.full_names', 's.mobile_number', 's.email_address', DB::raw('COUNT(p.id) as properties_count'))
+                ->whereNotNull('p.field_officer_id')
+                ->groupBy('s.id', 's.full_names', 's.mobile_number', 's.email_address')
+                ->orderBy('s.full_names')
                 ->get();
 
-            // Collapse one-row-per-property into one group per (staff, role, zone).
-            $groups = [];
-            foreach ($rows as $row) {
-                $key = $row->staff_id . '|' . $row->assigned_as . '|' . $row->zone_id;
-                if (!isset($groups[$key])) {
-                    $groups[$key] = [
-                        'id' => $row->id, // representative row id; controller resolves the group from it
-                        'staff_id' => $row->staff_id,
-                        'assigned_as' => $row->assigned_as,
-                        'zone_id' => $row->zone_id,
-                        'zone_name' => $row->zone_name,
-                        'role_name' => $row->role_display_name ?: $row->role_name,
-                        'staff_name' => $row->staff_name,
-                        'created_by_name' => $row->created_by_name,
-                        'date_time' => $row->date_time,
-                        'properties_count' => 0,
-                        'property_ids' => [],
-                        'can_update' => $canUpdate,
-                        'can_delete' => $canDelete,
-                    ];
-                }
-                $groups[$key]['properties_count']++;
-                if ($row->property_id !== null) {
-                    $groups[$key]['property_ids'][] = (int) $row->property_id;
-                }
-                if ($row->date_time > $groups[$key]['date_time']) {
-                    $groups[$key]['date_time'] = $row->date_time;
-                }
-            }
-
-            return response()->json(['zone_assignments' => array_values($groups)]);
+            return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['error' => 'Failed to load zone assignments'], 500);
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading field officers report: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load field officers'], 500);
         }
     }
 
     /**
-     * Check whether the given assigned_as value refers to the field_officer role.
-     * Resolves against cb_roles (used by the dropdown) with a fallback to ZoneAssignmentType.
+     * Zone Managers report — one row per staff member set as zone_manager_id
+     * on at least one property, with property count and distinct field-officer count.
      */
-    private function isFieldOfficerRole($assignedAs): bool
+    public function zoneManagersReport()
     {
-        $role = DB::table('cb_roles')->where('id', $assignedAs)->first();
-        if ($role && strtolower($role->name) === 'field_officer') {
-            return true;
-        }
+        try {
+            $rows = DB::table('sys_pm_properties as p')
+                ->join('sys_staff as s', 's.id', '=', 'p.zone_manager_id')
+                ->select(
+                    's.id',
+                    's.full_names',
+                    's.mobile_number',
+                    's.email_address',
+                    DB::raw('COUNT(p.id) as properties_count'),
+                    DB::raw('COUNT(DISTINCT p.field_officer_id) as field_officers_count')
+                )
+                ->whereNotNull('p.zone_manager_id')
+                ->groupBy('s.id', 's.full_names', 's.mobile_number', 's.email_address')
+                ->orderBy('s.full_names')
+                ->get();
 
-        $type = ZoneAssignmentType::find($assignedAs);
-        if ($type && strtolower($type->type_name) === 'field officer') {
-            return true;
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading zone managers report: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load zone managers'], 500);
         }
-
-        return false;
     }
 
     /**
-     * Get all role identifiers that represent the field_officer role
-     * across cb_roles and ZoneAssignmentType tables.
+     * Zone Supervisors report — same shape as Field Officers.
      */
-    private function getFieldOfficerRoleIds(): array
-    {
-        $ids = [];
-
-        $cbIds = DB::table('cb_roles')
-            ->where('name', 'field_officer')
-            ->pluck('id')
-            ->toArray();
-        $ids = array_merge($ids, $cbIds);
-
-        $typeIds = ZoneAssignmentType::whereRaw('LOWER(type_name) = ?', ['field officer'])
-            ->pluck('id')
-            ->toArray();
-        $ids = array_merge($ids, $typeIds);
-
-        return array_values(array_unique($ids));
-    }
-
-    public function zoneAssignmentsStore(Request $request)
+    public function zoneSupervisorsReport()
     {
         try {
-            $validated = $request->validate([
-                'zone_id' => 'required|integer|exists:sys_set_zones,id',
-                'assigned_as' => 'required|string|max:255',
-                'staff_id' => 'required|integer|exists:sys_staff,id',
-                'properties_ids' => 'required|array|min:1',
-                'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
-            ]);
+            $rows = DB::table('sys_pm_properties as p')
+                ->join('sys_staff as s', 's.id', '=', 'p.zone_supervisor_id')
+                ->select('s.id', 's.full_names', 's.mobile_number', 's.email_address', DB::raw('COUNT(p.id) as properties_count'))
+                ->whereNotNull('p.zone_supervisor_id')
+                ->groupBy('s.id', 's.full_names', 's.mobile_number', 's.email_address')
+                ->orderBy('s.full_names')
+                ->get();
 
-            // Validate: field officers cannot be assigned to multiple zones
-            if ($this->isFieldOfficerRole($validated['assigned_as'])) {
-                $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
-                    ->where('assigned_as', $validated['assigned_as'])
-                    ->where('zone_id', '!=', $validated['zone_id'])
-                    ->exists();
-
-                if ($existingAssignments) {
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'Field officers cannot be assigned to multiple zones. This staff member is already assigned to another zone.'
-                    ], 422);
-                }
-            }
-
-            $propertyIds = array_values(array_unique(array_map('intval', $validated['properties_ids'])));
-            $createdBy = Auth::id();
-            $now = now();
-
-            $insertedIds = DB::transaction(function () use ($validated, $propertyIds, $createdBy, $now) {
-                $ids = [];
-                foreach ($propertyIds as $propertyId) {
-                    $assignment = new ZoneAssignment();
-                    $assignment->zone_id = $validated['zone_id'];
-                    $assignment->assigned_as = $validated['assigned_as'];
-                    $assignment->staff_id = $validated['staff_id'];
-                    $assignment->property_id = $propertyId;
-                    $assignment->current_status_id = 1;
-                    $assignment->created_by = $createdBy;
-                    $assignment->date_time = $now;
-                    $assignment->save();
-                    $ids[] = $assignment->id;
-                }
-                return $ids;
-            });
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Zone assignment created successfully',
-                'created_count' => count($insertedIds),
-                'ids' => $insertedIds,
-            ]);
-        } catch (ValidationException $e) {
-            Log::warning('Zone assignment validation error:', $e->errors());
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            Log::error('Zone assignment store error: ' . $e->getMessage(), [
-                'exception' => $e,
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to save zone assignment: ' . $e->getMessage()], 500);
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading zone supervisors report: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load zone supervisors'], 500);
         }
     }
 
-    public function zoneAssignmentsUpdate(Request $request, $id)
+    /**
+     * Property Managers report — staff holding the "PROPERTY MANAGER" position.
+     * Properties don't carry a property_manager_id column, so this is listed by
+     * staff position rather than a per-property count.
+     */
+    public function propertyManagersReport()
     {
         try {
-            $validated = $request->validate([
-                'zone_id' => 'required|integer|exists:sys_set_zones,id',
-                'assigned_as' => 'required|string|max:255',
-                'staff_id' => 'required|integer|exists:sys_staff,id',
-                'properties_ids' => 'required|array|min:1',
-                'properties_ids.*' => 'integer|exists:sys_pm_properties,id',
-            ]);
+            $rows = DB::table('sys_staff as s')
+                ->join('sys_set_staff_positions as pos', 'pos.id', '=', 's.position_id')
+                ->select('s.id', 's.full_names', 's.mobile_number', 's.email_address', 'pos.position_name')
+                ->where('pos.position_name', 'ILIKE', 'PROPERTY MANAGER')
+                ->orderBy('s.full_names')
+                ->get();
 
-            // The {id} URL parameter is a representative row of the group;
-            // resolve the group by its (staff_id, assigned_as, zone_id) tuple.
-            $existing = ZoneAssignment::findOrFail($id);
-            $groupStaffId = $existing->staff_id;
-            $groupAssignedAs = $existing->assigned_as;
-            $groupZoneId = $existing->zone_id;
-
-            // Validate: field officers cannot be assigned to multiple zones
-            if ($this->isFieldOfficerRole($validated['assigned_as'])) {
-                $existingAssignments = ZoneAssignment::where('staff_id', $validated['staff_id'])
-                    ->where('assigned_as', $validated['assigned_as'])
-                    ->where('zone_id', '!=', $validated['zone_id'])
-                    ->where(function ($q) use ($groupStaffId, $groupAssignedAs, $groupZoneId) {
-                        // Don't count the group we're editing as a conflict
-                        $q->where('staff_id', '!=', $groupStaffId)
-                            ->orWhere('assigned_as', '!=', $groupAssignedAs)
-                            ->orWhere('zone_id', '!=', $groupZoneId);
-                    })
-                    ->exists();
-
-                if ($existingAssignments) {
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'Field officers cannot be assigned to multiple zones. This staff member is already assigned to another zone.'
-                    ], 422);
-                }
-            }
-
-            $propertyIds = array_values(array_unique(array_map('intval', $validated['properties_ids'])));
-            $createdBy = Auth::id();
-            $now = now();
-
-            $insertedIds = DB::transaction(function () use (
-                $groupStaffId, $groupAssignedAs, $groupZoneId,
-                $validated, $propertyIds, $createdBy, $now
-            ) {
-                // Drop the entire existing group, then re-insert one row per property.
-                ZoneAssignment::where('staff_id', $groupStaffId)
-                    ->where('assigned_as', $groupAssignedAs)
-                    ->where('zone_id', $groupZoneId)
-                    ->delete();
-
-                $ids = [];
-                foreach ($propertyIds as $propertyId) {
-                    $assignment = new ZoneAssignment();
-                    $assignment->zone_id = $validated['zone_id'];
-                    $assignment->assigned_as = $validated['assigned_as'];
-                    $assignment->staff_id = $validated['staff_id'];
-                    $assignment->property_id = $propertyId;
-                    $assignment->current_status_id = 1;
-                    $assignment->created_by = $createdBy;
-                    $assignment->date_time = $now;
-                    $assignment->save();
-                    $ids[] = $assignment->id;
-                }
-                return $ids;
-            });
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Zone assignment updated successfully',
-                'created_count' => count($insertedIds),
-                'ids' => $insertedIds,
-            ]);
-        } catch (ValidationException $e) {
-            Log::warning('Zone assignment validation error:', $e->errors());
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            Log::error('Zone assignment update error: ' . $e->getMessage(), [
-                'exception' => $e,
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-                'assignment_id' => $id
-            ]);
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to update zone assignment: ' . $e->getMessage()], 500);
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading property managers report: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load property managers'], 500);
         }
     }
 
-    public function zoneAssignmentsDelete($id)
+    /**
+     * Properties assigned to a given staff member under a given zone-assignment
+     * role column (field_officer_id / zone_manager_id / zone_supervisor_id).
+     * Backs the "Details" drill-down modal on the zone assignments report tabs.
+     */
+    public function zoneAssignmentStaffProperties(Request $request)
     {
         try {
-            // {id} is a representative row of the group — delete the whole
-            // (staff_id, assigned_as, zone_id) group it belongs to.
-            $assignment = ZoneAssignment::findOrFail($id);
+            $columnMap = [
+                'field_officer' => 'field_officer_id',
+                'zone_manager' => 'zone_manager_id',
+                'zone_supervisor' => 'zone_supervisor_id',
+            ];
 
-            $deleted = ZoneAssignment::where('staff_id', $assignment->staff_id)
-                ->where('assigned_as', $assignment->assigned_as)
-                ->where('zone_id', $assignment->zone_id)
-                ->delete();
+            $type = $request->input('type');
+            $staffId = $request->input('staff_id');
 
-            return response()->json(['success' => true, 'deleted_count' => $deleted]);
+            if (!isset($columnMap[$type]) || !$staffId) {
+                return response()->json(['error' => 'Invalid role type or staff id'], 400);
+            }
+
+            $column = $columnMap[$type];
+
+            $rows = DB::table('sys_pm_properties as p')
+                ->leftJoin('sys_pm_clients as c', 'c.id', '=', 'p.client_id')
+                ->leftJoin('sys_set_zones as z', 'z.id', '=', 'p.zone_id')
+                ->select(
+                    'p.id',
+                    'p.property_name',
+                    'p.reference_number',
+                    'c.names as client_name',
+                    'z.zone_name'
+                )
+                ->where("p.$column", $staffId)
+                ->orderBy('p.reference_number')
+                ->get();
+
+            return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to delete zone assignment'], 500);
-        }
-    }
-
-    public function zoneAssignmentView($id)
-    {
-        // {id} is a representative row of the group; resolve the whole group
-        // and load every property assigned under (staff, role, zone).
-        $assignment = ZoneAssignment::with('createdBy', 'staff', 'assignment_type', 'zone')->findOrFail($id);
-
-        $propertyIds = ZoneAssignment::where('staff_id', $assignment->staff_id)
-            ->where('assigned_as', $assignment->assigned_as)
-            ->where('zone_id', $assignment->zone_id)
-            ->pluck('property_id')
-            ->filter()
-            ->map(fn($v) => (int) $v)
-            ->all();
-
-        $properties = !empty($propertyIds)
-            ? Property::withAll()->whereIn('id', $propertyIds)->orderBy('reference_number')->get()
-            : collect();
-
-        return view('settings.hr.zone_assignment_view', compact('assignment', 'properties'));
-    }
-
-    public function zoneAssignmentUnassignProperty(Request $request, $id)
-    {
-        try {
-            $validated = $request->validate([
-                'property_id' => 'required|integer|exists:sys_pm_properties,id',
-            ]);
-
-            // {id} is a representative row of the group; locate the matching row
-            // in the same (staff, role, zone) group for the requested property.
-            $representative = ZoneAssignment::findOrFail($id);
-
-            $rowToRemove = ZoneAssignment::where('staff_id', $representative->staff_id)
-                ->where('assigned_as', $representative->assigned_as)
-                ->where('zone_id', $representative->zone_id)
-                ->where('property_id', $validated['property_id'])
-                ->first();
-
-            if (!$rowToRemove) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Property is not part of this assignment.'
-                ], 422);
-            }
-
-            $rowToRemove->delete();
-
-            $remainingCount = ZoneAssignment::where('staff_id', $representative->staff_id)
-                ->where('assigned_as', $representative->assigned_as)
-                ->where('zone_id', $representative->zone_id)
-                ->count();
-
-            return response()->json([
-                'success' => true,
-                'deleted' => $remainingCount === 0,
-                'message' => $remainingCount === 0
-                    ? 'Last property unassigned. Assignment removed.'
-                    : 'Property unassigned successfully.',
-                'remaining_count' => $remainingCount,
-            ]);
-        } catch (ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to unassign property'], 500);
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading staff properties: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load properties'], 500);
         }
     }
 
@@ -1457,77 +1228,6 @@ class HrSettingsController extends Controller
             return response()->json(['success' => false, 'error' => 'Failed to fetch roles'], 500);
         }
     }
-
-    public function availablePropertiesInZone(Request $request)
-    {
-        try {
-            $zoneId = $request->input('zone_id');
-            $assignedAs = $request->input('assigned_as');
-            $staffId = $request->input('staff_id');
-
-            if (!$zoneId || !$assignedAs) {
-                return response()->json(['success' => false, 'error' => 'Zone and Role are required'], 400);
-            }
-
-            // Get all properties in the zone (admin view — bypass user_properties scope)
-            $allPropertiesInZone = Property::withAll()
-                ->where('zone_id', $zoneId)
-                ->pluck('id')
-                ->toArray();
-
-            if (empty($allPropertiesInZone)) {
-                return response()->json(['success' => true, 'properties' => []]);
-            }
-
-            // For field officers, exclude properties assigned to ANY other field officer
-            // (across all field_officer role identifiers). For other roles, only exclude
-            // assignments under the same role.
-            if ($this->isFieldOfficerRole($assignedAs)) {
-                $excludedRoles = $this->getFieldOfficerRoleIds();
-                if (empty($excludedRoles)) {
-                    $excludedRoles = [$assignedAs];
-                }
-                $assignedQuery = DB::table('sys_pm_zones_assignments')
-                    ->where('zone_id', $zoneId)
-                    ->whereIn('assigned_as', $excludedRoles);
-            } else {
-                $assignedQuery = DB::table('sys_pm_zones_assignments')
-                    ->where('zone_id', $zoneId)
-                    ->where('assigned_as', $assignedAs);
-            }
-
-            $assignedPropIds = $assignedQuery
-                ->when($staffId, function ($query) use ($staffId) {
-                    // Exclude current staff's own assignments
-                    return $query->where('staff_id', '!=', $staffId);
-                })
-                ->whereNotNull('property_id')
-                ->distinct()
-                ->pluck('property_id')
-                ->map(fn($v) => (int) $v)
-                ->all();
-
-            // Get available properties (not assigned for this role)
-            $availablePropIds = array_values(array_diff($allPropertiesInZone, $assignedPropIds));
-
-            // Fetch property details
-            $properties = Property::withAll()
-                ->whereIn('id', $availablePropIds)
-                ->select('id', 'reference_number', 'property_name')
-                ->orderBy('reference_number')
-                ->get();
-
-            return response()->json(['success' => true, 'properties' => $properties]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to fetch available properties'], 500);
-        }
-    }
-
 
     public function communicationTemplatesIndex()
     {
