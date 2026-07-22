@@ -1005,7 +1005,7 @@
                         if (response.units && response.units.length > 0) {
                             response.units.forEach(function(unit) {
                                 let unitLabel = unit.unit_name || unit.unit_number;
-                                let status = unit.occupancy_status_id == 4 ? ' (Occupied)' : '';
+                                let status = unit.status == 'Occupied' ? ' (Occupied)' : '';
                                 unitSelect.append(`<option value="${unit.id}">${unitLabel}${status}</option>`);
                             });
                         } else {
