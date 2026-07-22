@@ -16,23 +16,22 @@ class BankBranch extends Model
     }
 
     protected $table = 'sys_set_banks_branches';
+    public $timestamps = false;
 
     protected $fillable = [
+        'date_time',
         'branch_code',
         'branch_name',
         'bank_id',
-        'added_by',
-        'added_on'
+        'current_status_id',
     ];
 
     protected $casts = [
-        'added_on' => 'datetime',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'date_time' => 'datetime',
     ];
 
     public function bank()
     {
-        return $this->belongsTo(LegacyBank::class, 'bank_id');
+        return $this->belongsTo(Bank::class, 'bank_id');
     }
 }

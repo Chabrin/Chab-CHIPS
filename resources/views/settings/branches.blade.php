@@ -17,7 +17,7 @@
                     </div>
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
-                            <table class="table table-condensed" id="basic-1">
+                            <table class="display" id="branchesTable" style="width:100%;">
                                 <thead>
                                     <tr>
                                         <th>Branch Code</th>
@@ -51,26 +51,29 @@
                     <div class="mb-3">
                         <label for="branch_code" class="form-label">Branch Code <span style="color:red">*</span></label>
                         <input type="text" class="form-control" name="branch_code" id="branch_code" required placeholder="Enter branch code">
+                        <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
                         <label for="branch_name" class="form-label">Branch Name <span style="color:red">*</span></label>
                         <input type="text" class="form-control" name="branch_name" id="branch_name" required placeholder="Enter branch name">
+                        <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
                         <label for="bank_id" class="form-label">Bank <span style="color:red">*</span></label>
                         <select class="form-select" id="bank_id" name="bank_id" required>
                             <option value="">Select bank</option>
                             @foreach($banks as $bank)
-                            <option value="{{ $bank->id }}">{{ $bank->name }} ({{ $bank->bank_code }})</option>
+                            <option value="{{ $bank->id }}">{{ $bank->bank_name }}</option>
                             @endforeach
                         </select>
+                        <div class="invalid-feedback"></div>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                        <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
                             <span class="material-symbols-outlined">close</span>
                             <span class="ms-1">Cancel</span>
                         </button>
-                        <button type="submit" class="btn btn-success d-flex align-items-center" id="saveBranchBtn">
+                        <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveBranchBtn">
                             <span class="material-symbols-outlined">check_circle</span>
                             <span class="ms-1">Save</span>
                         </button>
@@ -82,9 +85,10 @@
 </div>
 @endsection
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(function() {
-        var table = $('#basic-1').DataTable({
+        var table = $('#branchesTable').DataTable({
             processing: true,
             serverSide: false,
             ajax: {
@@ -97,16 +101,18 @@
                 dataSrc: 'branches'
             },
             columns: [{
-                    data: 'branch_code'
+                    data: 'branch_code',
+                    render: data => data || '-'
                 },
                 {
-                    data: 'branch_name'
+                    data: 'branch_name',
+                    render: data => data || '-'
                 },
                 {
                     data: null,
-                    defaultContent: '',
+                    defaultContent: '-',
                     render: function(data, type, row) {
-                        return (row.bank && row.bank.name) ? row.bank.name : '';
+                        return (row.bank && row.bank.bank_name) ? row.bank.bank_name : '-';
                     }
                 },
                 {
@@ -115,15 +121,15 @@
                     searchable: false,
                     render: function(data, type, row) {
                         return '<div class="d-flex flex-row gap-1">' +
-                            '<button class="btn btn-xs btn-light edit-branch d-flex align-items-center" ' +
-                            'data-id="' + row.id + '" data-branch_code="' + (row.branch_code || '') + '" data-branch_name="' + (row.branch_name || '') + '" data-bank_id="' + (row.bank_id || '') + '" style="padding:2px 6px;">' +
+                            '<a href="javascript:void(0)" class="text-primary edit-branch" ' +
+                            'data-id="' + row.id + '" data-branch_code="' + (row.branch_code || '') + '" data-branch_name="' + (row.branch_name || '') + '" data-bank_id="' + (row.bank_id || '') + '" title="Edit">' +
                             '<span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>' +
-                            '</button>' +
-                            '<button class="btn btn-xs btn-danger delete-branch d-flex align-items-center" ' +
-                            'data-id="' + row.id + '" style="padding:2px 6px;">' +
+                            '</a>' +
+                            '<a href="javascript:void(0)" class="text-primary delete-branch" ' +
+                            'data-id="' + row.id + '" data-name="' + (row.branch_name || '') + '" title="Delete">' +
                             '<span class="material-symbols-outlined spin" style="font-size:18px;display:none;">sync</span>' +
                             '<span class="material-symbols-outlined" style="font-size:18px;">delete_sweep</span>' +
-                            '</button>' +
+                            '</a>' +
                             '</div>';
                     }
                 }
@@ -150,6 +156,8 @@
             var $btn = $('#saveBranchBtn');
             var $icon = $btn.find('.material-symbols-outlined');
             var origText = $btn.find('span.ms-1').text();
+            $('.invalid-feedback').text('').hide();
+            $('.form-control, .form-select').removeClass('is-invalid');
             $icon.addClass('spin');
             $btn.find('span.ms-1').text('Processing...');
             $btn.prop('disabled', true);
@@ -175,13 +183,15 @@
                     $icon.removeClass('spin');
                     $btn.find('span.ms-1').text(origText);
                     $btn.prop('disabled', false);
-                    let msg = 'Validation error';
-                    if (xhr.responseJSON && xhr.responseJSON.errors) {
-                        msg = Object.values(xhr.responseJSON.errors).join('<br>');
-                    } else if (xhr.responseJSON && xhr.responseJSON.error) {
-                        msg = xhr.responseJSON.error;
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        $.each(xhr.responseJSON.errors, function(field, messages) {
+                            const input = $(`[name="${field}"]`);
+                            input.addClass('is-invalid');
+                            input.siblings('.invalid-feedback').text(messages[0]).show();
+                        });
+                    } else {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Error saving');
                     }
-                    toastr.error(msg);
                 }
             });
         });
@@ -191,48 +201,60 @@
             $('#branch_code').val($(this).data('branch_code'));
             $('#branch_name').val($(this).data('branch_name'));
             $('#bank_id').val($(this).data('bank_id'));
+            $('.invalid-feedback').text('').hide();
+            $('.form-control, .form-select').removeClass('is-invalid');
             $('#addBranchModal').modal('show');
         });
 
         $(document).on('click', '.delete-branch', function() {
             var $btn = $(this);
-            var $icon = $btn.find('.material-symbols-outlined').first();
-            $icon.show();
-            $btn.find('.material-symbols-outlined').last().hide();
-            $btn.prop('disabled', true);
-            $.ajax({
-                url: "{{ url('/settings/branches/delete') }}/" + $btn.data('id'),
-                type: 'DELETE',
-                data: {
-                    _token: '{{ csrf_token() }}'
-                },
-                success: function(res) {
-                    $icon.hide();
-                    $btn.find('.material-symbols-outlined').last().show();
-                    $btn.prop('disabled', false);
-                    if (res.success) {
-                        toastr.success('Deleted');
-                        table.ajax.reload(null, false);
-                    } else {
-                        toastr.error(res.error || 'Error deleting');
+            var name = $btn.data('name');
+            Swal.fire({
+                title: 'Delete branch?',
+                text: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var $icon = $btn.find('.material-symbols-outlined').first();
+                $icon.show();
+                $btn.find('.material-symbols-outlined').last().hide();
+                $btn.prop('disabled', true);
+                $.ajax({
+                    url: "{{ url('/settings/branches/delete') }}/" + $btn.data('id'),
+                    type: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function(res) {
+                        $icon.hide();
+                        $btn.find('.material-symbols-outlined').last().show();
+                        $btn.prop('disabled', false);
+                        if (res.success) {
+                            toastr.success('Deleted');
+                            table.ajax.reload(null, false);
+                        } else {
+                            toastr.error(res.error || 'Error deleting');
+                        }
+                    },
+                    error: function(xhr) {
+                        $icon.hide();
+                        $btn.find('.material-symbols-outlined').last().show();
+                        $btn.prop('disabled', false);
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Delete error');
                     }
-                },
-                error: function(xhr) {
-                    $icon.hide();
-                    $btn.find('.material-symbols-outlined').last().show();
-                    $btn.prop('disabled', false);
-                    let msg = 'Delete error';
-                    if (xhr.responseJSON && xhr.responseJSON.error) {
-                        msg = xhr.responseJSON.error;
-                    }
-                    toastr.error(msg);
-                }
+                });
             });
         });
 
         $('#addBranchModal').on('hidden.bs.modal', function() {
             $('#branchForm')[0].reset();
             $('#branchId').val('');
+            $('.invalid-feedback').text('').hide();
+            $('.form-control, .form-select').removeClass('is-invalid');
         });
     });
 </script>

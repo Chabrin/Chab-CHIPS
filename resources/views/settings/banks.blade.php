@@ -17,12 +17,11 @@
                     </div>
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
-                            <table class="display" id="banksTable">
+                            <table class="display" id="banksTable" style="width:100%;">
                                 <thead>
                                     <tr>
-                                        <th>Bank Code</th>
-                                        <th>Name</th>
-                                        <th>SWIFT Code</th>
+                                        <th>Bank Name</th>
+                                        <th>Address</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -48,23 +47,21 @@
                 <form id="bankForm">
                     <input type="hidden" name="id" id="bankId">
                     <div class="mb-3">
-                        <label for="bank_code" class="form-label">Bank Code <span style="color:red">*</span></label>
-                        <input type="text" class="form-control" name="bank_code" id="bank_code" required placeholder="Enter bank code">
+                        <label for="bank_name" class="form-label">Bank Name <span style="color:red">*</span></label>
+                        <input type="text" class="form-control" name="bank_name" id="bank_name" required placeholder="Enter bank name">
+                        <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
-                        <label for="name" class="form-label">Name <span style="color:red">*</span></label>
-                        <input type="text" class="form-control" name="name" id="name" required placeholder="Enter bank name">
-                    </div>
-                    <div class="mb-3">
-                        <label for="swift_code" class="form-label">SWIFT Code</label>
-                        <input type="text" class="form-control" name="swift_code" id="swift_code" placeholder="Enter SWIFT code">
+                        <label for="address" class="form-label">Address</label>
+                        <input type="text" class="form-control" name="address" id="address" placeholder="Enter bank address">
+                        <div class="invalid-feedback"></div>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                        <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
                             <span class="material-symbols-outlined">close</span>
                             <span class="ms-1">Cancel</span>
                         </button>
-                        <button type="submit" class="btn btn-success d-flex align-items-center" id="saveBankBtn">
+                        <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveBankBtn">
                             <span class="material-symbols-outlined">check_circle</span>
                             <span class="ms-1">Save</span>
                         </button>
@@ -76,6 +73,7 @@
 </div>
 @endsection
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(function() {
         var table = $('#banksTable').DataTable({
@@ -91,14 +89,12 @@
                 dataSrc: 'banks'
             },
             columns: [{
-                    data: 'bank_code'
+                    data: 'bank_name',
+                    render: data => data || '-'
                 },
                 {
-                    data: 'name'
-                },
-                {
-                    data: 'swift_code',
-                    defaultContent: ''
+                    data: 'address',
+                    render: data => data || '-'
                 },
                 {
                     data: null,
@@ -106,15 +102,15 @@
                     searchable: false,
                     render: function(data, type, row) {
                         return '<div class="d-flex flex-row gap-1">' +
-                            '<button class="btn btn-xs btn-light edit-bank d-flex align-items-center" ' +
-                            'data-id="' + row.id + '" data-bank_code="' + (row.bank_code || '') + '" data-name="' + (row.name || '') + '" data-swift_code="' + (row.swift_code || '') + '" style="padding:2px 6px;">' +
+                            '<a href="javascript:void(0)" class="text-primary edit-bank" ' +
+                            'data-id="' + row.id + '" data-bank_name="' + (row.bank_name || '') + '" data-address="' + (row.address || '') + '" title="Edit">' +
                             '<span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>' +
-                            '</button>' +
-                            '<button class="btn btn-xs btn-danger delete-bank d-flex align-items-center" ' +
-                            'data-id="' + row.id + '" style="padding:2px 6px;">' +
+                            '</a>' +
+                            '<a href="javascript:void(0)" class="text-primary delete-bank" ' +
+                            'data-id="' + row.id + '" data-name="' + (row.bank_name || '') + '" title="Delete">' +
                             '<span class="material-symbols-outlined spin" style="font-size:18px;display:none;">sync</span>' +
                             '<span class="material-symbols-outlined" style="font-size:18px;">delete_sweep</span>' +
-                            '</button>' +
+                            '</a>' +
                             '</div>';
                     }
                 }
@@ -137,6 +133,8 @@
             var $btn = $('#saveBankBtn');
             var $icon = $btn.find('.material-symbols-outlined');
             var origText = $btn.find('span.ms-1').text();
+            $('.invalid-feedback').text('').hide();
+            $('.form-control').removeClass('is-invalid');
             $icon.addClass('spin');
             $btn.find('span.ms-1').text('Processing...');
             $btn.prop('disabled', true);
@@ -162,64 +160,77 @@
                     $icon.removeClass('spin');
                     $btn.find('span.ms-1').text(origText);
                     $btn.prop('disabled', false);
-                    let msg = 'Validation error';
-                    if (xhr.responseJSON && xhr.responseJSON.errors) {
-                        msg = Object.values(xhr.responseJSON.errors).join('\n');
-                    } else if (xhr.responseJSON && xhr.responseJSON.error) {
-                        msg = xhr.responseJSON.error;
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        $.each(xhr.responseJSON.errors, function(field, messages) {
+                            const input = $(`[name="${field}"]`);
+                            input.addClass('is-invalid');
+                            input.siblings('.invalid-feedback').text(messages[0]).show();
+                        });
+                    } else {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Error saving');
                     }
-                    toastr.error(msg);
                 }
             });
         });
 
         $(document).on('click', '.edit-bank', function() {
             $('#bankId').val($(this).data('id'));
-            $('#bank_code').val($(this).data('bank_code'));
-            $('#name').val($(this).data('name'));
-            $('#swift_code').val($(this).data('swift_code'));
+            $('#bank_name').val($(this).data('bank_name'));
+            $('#address').val($(this).data('address'));
+            $('.invalid-feedback').text('').hide();
+            $('.form-control').removeClass('is-invalid');
             $('#addBankModal').modal('show');
         });
 
         $(document).on('click', '.delete-bank', function() {
             var $btn = $(this);
-            var $icon = $btn.find('.material-symbols-outlined').first();
-            $icon.show();
-            $btn.find('.material-symbols-outlined').last().hide();
-            $btn.prop('disabled', true);
-            $.ajax({
-                url: "{{ url('/settings/banks/delete') }}/" + $btn.data('id'),
-                type: 'DELETE',
-                data: {
-                    _token: '{{ csrf_token() }}'
-                },
-                success: function(res) {
-                    $icon.hide();
-                    $btn.find('.material-symbols-outlined').last().show();
-                    $btn.prop('disabled', false);
-                    if (res.success) {
-                        toastr.success('Deleted');
-                        table.ajax.reload(null, false);
-                    } else {
-                        toastr.error(res.error || 'Error deleting');
+            var name = $btn.data('name');
+            Swal.fire({
+                title: 'Delete bank?',
+                text: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var $icon = $btn.find('.material-symbols-outlined').first();
+                $icon.show();
+                $btn.find('.material-symbols-outlined').last().hide();
+                $btn.prop('disabled', true);
+                $.ajax({
+                    url: "{{ url('/settings/banks/delete') }}/" + $btn.data('id'),
+                    type: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function(res) {
+                        $icon.hide();
+                        $btn.find('.material-symbols-outlined').last().show();
+                        $btn.prop('disabled', false);
+                        if (res.success) {
+                            toastr.success('Deleted');
+                            table.ajax.reload(null, false);
+                        } else {
+                            toastr.error(res.error || 'Error deleting');
+                        }
+                    },
+                    error: function(xhr) {
+                        $icon.hide();
+                        $btn.find('.material-symbols-outlined').last().show();
+                        $btn.prop('disabled', false);
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Delete error');
                     }
-                },
-                error: function(xhr) {
-                    $icon.hide();
-                    $btn.find('.material-symbols-outlined').last().show();
-                    $btn.prop('disabled', false);
-                    let msg = 'Delete error';
-                    if (xhr.responseJSON && xhr.responseJSON.error) {
-                        msg = xhr.responseJSON.error;
-                    }
-                    toastr.error(msg);
-                }
+                });
             });
         });
 
         $('#addBankModal').on('hidden.bs.modal', function() {
             $('#bankForm')[0].reset();
             $('#bankId').val('');
+            $('.invalid-feedback').text('').hide();
+            $('.form-control').removeClass('is-invalid');
         });
     });
 </script>

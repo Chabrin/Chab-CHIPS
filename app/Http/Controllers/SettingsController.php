@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\LegacyBank;
+use App\Models\Bank;
 use App\Models\Gender;
 use App\Models\Country;
 use App\Models\Currency;
@@ -430,7 +430,7 @@ class SettingsController extends Controller
     public function banksList()
     {
         try {
-            $banks = LegacyBank::all();
+            $banks = Bank::orderBy('bank_name')->get();
             return response()->json(['banks' => $banks]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -442,20 +442,16 @@ class SettingsController extends Controller
     {
         try {
             $validated = $request->validate([
-                'bank_code' => 'required|string|max:50',
-                'name' => 'required|string|max:100',
-                'swift_bic_codes' => 'nullable|string|max:255',
-                'swift_code' => 'nullable|string|max:100',
+                'bank_name' => 'required|string|max:100',
+                'address' => 'nullable|string|max:255',
             ]);
-            $exists = LegacyBank::where('bank_code', $validated['bank_code'])->orWhere('name', $validated['name'])->exists();
-            if ($exists) return response()->json(['success' => false, 'error' => 'Bank with same code or name exists.'], 422);
-            $bank = new LegacyBank();
-            $bank->bank_code = $validated['bank_code'];
-            $bank->name = $validated['name'];
-            $bank->swift_bic_codes = $validated['swift_bic_codes'] ?? null;
-            $bank->swift_code = $validated['swift_code'] ?? null;
-            $bank->added_by = Auth::user()->username ?? 'system';
-            $bank->added_on = now();
+            $exists = Bank::where('bank_name', $validated['bank_name'])->exists();
+            if ($exists) return response()->json(['success' => false, 'error' => 'A bank with that name already exists.'], 422);
+            $bank = new Bank();
+            $bank->bank_name = $validated['bank_name'];
+            $bank->address = $validated['address'] ?? null;
+            $bank->current_status_id = 1;
+            $bank->date_time = now();
             $bank->save();
             return response()->json(['success' => true]);
         } catch (ValidationException $e) {
@@ -470,21 +466,14 @@ class SettingsController extends Controller
     {
         try {
             $validated = $request->validate([
-                'bank_code' => 'required|string|max:50',
-                'name' => 'required|string|max:100',
-                'swift_bic_codes' => 'nullable|string|max:255',
-                'swift_code' => 'nullable|string|max:100',
+                'bank_name' => 'required|string|max:100',
+                'address' => 'nullable|string|max:255',
             ]);
-            $bank = LegacyBank::findOrFail($id);
-            $exists = LegacyBank::where(function ($q) use ($validated) {
-                $q->where('bank_code', $validated['bank_code'])->orWhere('name', $validated['name']);
-            })->where('id', '!=', $id)->exists();
-            if ($exists) return response()->json(['success' => false, 'error' => 'Bank with same code or name exists.'], 422);
-            $bank->bank_code = $validated['bank_code'];
-            $bank->name = $validated['name'];
-            $bank->swift_bic_codes = $validated['swift_bic_codes'] ?? null;
-            $bank->swift_code = $validated['swift_code'] ?? null;
-            $bank->added_by = Auth::user()->username ?? 'system';
+            $bank = Bank::findOrFail($id);
+            $exists = Bank::where('bank_name', $validated['bank_name'])->where('id', '!=', $id)->exists();
+            if ($exists) return response()->json(['success' => false, 'error' => 'A bank with that name already exists.'], 422);
+            $bank->bank_name = $validated['bank_name'];
+            $bank->address = $validated['address'] ?? null;
             $bank->save();
             return response()->json(['success' => true]);
         } catch (ValidationException $e) {
@@ -498,7 +487,7 @@ class SettingsController extends Controller
     public function banksDelete($id)
     {
         try {
-            $bank = LegacyBank::findOrFail($id);
+            $bank = Bank::findOrFail($id);
             $bank->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
@@ -511,7 +500,7 @@ class SettingsController extends Controller
     public function branchesIndex()
     {
         // need banks list for branch modal
-        $banks = LegacyBank::all();
+        $banks = Bank::orderBy('bank_name')->get();
         return view('settings.branches', compact('banks'));
     }
 
@@ -546,7 +535,7 @@ class SettingsController extends Controller
             $validated = $request->validate([
                 'branch_code' => 'required|string|max:50',
                 'branch_name' => 'required|string|max:100',
-                'bank_id' => 'required|integer|exists:banks,id',
+                'bank_id' => 'required|integer|exists:sys_set_banks,id',
             ]);
             // Ensure branch_code is unique per bank (different banks may have same branch_code)
             $exists = BankBranch::where('branch_code', $validated['branch_code'])
@@ -557,8 +546,8 @@ class SettingsController extends Controller
             $b->branch_code = $validated['branch_code'];
             $b->branch_name = $validated['branch_name'];
             $b->bank_id = $validated['bank_id'];
-            $b->added_by = Auth::user()->username ?? 'system';
-            $b->added_on = now();
+            $b->current_status_id = 1;
+            $b->date_time = now();
             $b->save();
             return response()->json(['success' => true]);
         } catch (ValidationException $e) {
@@ -576,7 +565,7 @@ class SettingsController extends Controller
             $validated = $request->validate([
                 'branch_code' => 'required|string|max:50',
                 'branch_name' => 'required|string|max:100',
-                'bank_id' => 'required|integer|exists:banks,id',
+                'bank_id' => 'required|integer|exists:sys_set_banks,id',
             ]);
             $branch = BankBranch::findOrFail($id);
             // Ensure branch_code is unique per bank when updating
@@ -588,7 +577,6 @@ class SettingsController extends Controller
             $branch->branch_code = $validated['branch_code'];
             $branch->branch_name = $validated['branch_name'];
             $branch->bank_id = $validated['bank_id'];
-            $branch->added_by = Auth::user()->username ?? 'system';
             $branch->save();
             return response()->json(['success' => true]);
         } catch (ValidationException $e) {

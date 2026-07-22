@@ -1504,7 +1504,7 @@ class ClientsController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return redirect()->back()->withErrors($e->errors())->withInput();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating client: ' . $e->getMessage());
@@ -1677,7 +1677,7 @@ class ClientsController extends Controller
             'photo' => $photoPath,
             'address_2' => $validated['address_2'] ?? null,
             'address_3' => $validated['address_3'] ?? null,
-            'prefered_messages_language_id' =>  $validated['preferred_language_id'], // Client type
+            'prefered_messages_language_id' => $validated['preferred_language_id'] ?? null,
             'registered_date' => $validated['select_time'] ?? now(),
             'date_time' => $validated['select_time'] ?? now(),
             'current_status_id' => '1',

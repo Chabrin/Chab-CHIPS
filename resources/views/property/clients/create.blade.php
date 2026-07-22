@@ -131,7 +131,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="first_name" class="form-label">First Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('first_name') is-invalid @enderror" id="first_name" name="first_name" value="{{ old('first_name') }}" required>
+                                            <input type="text" class="form-control @error('first_name') is-invalid @enderror" id="first_name" name="first_name" value="{{ old('first_name') }}" placeholder="Enter first name" required>
                                             @error('first_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -139,7 +139,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="middle_name" class="form-label">Middle Name</label>
-                                            <input type="text" class="form-control @error('middle_name') is-invalid @enderror" id="middle_name" name="middle_name" value="{{ old('middle_name') }}">
+                                            <input type="text" class="form-control @error('middle_name') is-invalid @enderror" id="middle_name" name="middle_name" value="{{ old('middle_name') }}" placeholder="Enter middle name">
                                             @error('middle_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -147,7 +147,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="last_name" class="form-label">Last Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('last_name') is-invalid @enderror" id="last_name" name="last_name" value="{{ old('last_name') }}" required>
+                                            <input type="text" class="form-control @error('last_name') is-invalid @enderror" id="last_name" name="last_name" value="{{ old('last_name') }}" placeholder="Enter last name" required>
                                             @error('last_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -450,7 +450,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="national_id" class="form-label">National ID</label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id') }}">
+                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id') }}" placeholder="Enter national ID number">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -458,7 +458,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="passport_number" class="form-label">Passport Number</label>
-                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror" id="passport_number" name="passport_number" value="{{ old('passport_number') }}">
+                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror" id="passport_number" name="passport_number" value="{{ old('passport_number') }}" placeholder="Enter passport number">
                                             @error('passport_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -466,7 +466,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="pin_number" class="form-label">PIN Number</label>
-                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number') }}">
+                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number') }}" placeholder="Enter KRA PIN number">
                                             @error('pin_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -474,7 +474,7 @@
                                 
                                         <div class="col-md-3 mb-3">
                                             <label for="vat_number" class="form-label">VAT Number</label>
-                                            <input type="text" class="form-control @error('vat_number') is-invalid @enderror" id="vat_number" name="vat_number" value="{{ old('vat_number') }}">
+                                            <input type="text" class="form-control @error('vat_number') is-invalid @enderror" id="vat_number" name="vat_number" value="{{ old('vat_number') }}" placeholder="Enter VAT number">
                                             @error('vat_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -496,7 +496,7 @@
                                 
                                         <div class="col-md-4 mb-3">
                                             <label for="email_address" class="form-label">Email Address</label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address') }}">
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address') }}" placeholder="name@example.com">
                                             @error('email_address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -504,7 +504,7 @@
                                 
                                         <div class="col-md-4 mb-3">
                                             <label for="overdraft_penalty" class="form-label">Overdraft Penalty (%)</label>
-                                            <input type="number" step="0.01" class="form-control @error('overdraft_penalty') is-invalid @enderror" id="overdraft_penalty" name="overdraft_penalty" value="{{ old('overdraft_penalty') }}">
+                                            <input type="number" step="0.01" class="form-control @error('overdraft_penalty') is-invalid @enderror" id="overdraft_penalty" name="overdraft_penalty" value="{{ old('overdraft_penalty') }}" placeholder="0.00">
                                             @error('overdraft_penalty')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -517,7 +517,7 @@
                                 
                                         <div class="col-md-12 mb-3">
                                             <label for="address" class="form-label">Primary Address</label>
-                                            <textarea class="form-control @error('address') is-invalid @enderror" id="address" name="address" rows="2">{{ old('address') }}</textarea>
+                                            <textarea class="form-control @error('address') is-invalid @enderror" id="address" name="address" rows="2" placeholder="Enter primary address">{{ old('address') }}</textarea>
                                             @error('address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -525,7 +525,7 @@
                                 
                                         <div class="col-md-6 mb-3">
                                             <label for="address_2" class="form-label">Secondary Address</label>
-                                            <textarea class="form-control @error('address_2') is-invalid @enderror" id="address_2" name="address_2" rows="2">{{ old('address_2') }}</textarea>
+                                            <textarea class="form-control @error('address_2') is-invalid @enderror" id="address_2" name="address_2" rows="2" placeholder="Enter secondary address">{{ old('address_2') }}</textarea>
                                             @error('address_2')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -533,7 +533,7 @@
                                 
                                         <div class="col-md-6 mb-3">
                                             <label for="address_3" class="form-label">Additional Address</label>
-                                            <textarea class="form-control @error('address_3') is-invalid @enderror" id="address_3" name="address_3" rows="2">{{ old('address_3') }}</textarea>
+                                            <textarea class="form-control @error('address_3') is-invalid @enderror" id="address_3" name="address_3" rows="2" placeholder="Enter additional address">{{ old('address_3') }}</textarea>
                                             @error('address_3')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -570,7 +570,7 @@
                                 
                                                 <div class="col-md-5 mb-3">
                                                     <label for="account_name_0" class="form-label">Account Name</label>
-                                                    <input type="text" class="form-control @error('banks.0.account_name') is-invalid @enderror" id="account_name_0" name="banks[0][account_name]" value="{{ old('banks.0.account_name') }}">
+                                                    <input type="text" class="form-control @error('banks.0.account_name') is-invalid @enderror" id="account_name_0" name="banks[0][account_name]" value="{{ old('banks.0.account_name') }}" placeholder="Enter account name">
                                                     @error('banks.0.account_name')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -578,7 +578,7 @@
                                 
                                                 <div class="col-md-5 mb-3">
                                                     <label for="account_number_0" class="form-label">Account Number</label>
-                                                    <input type="text" class="form-control @error('banks.0.account_number') is-invalid @enderror" id="account_number_0" name="banks[0][account_number]" value="{{ old('banks.0.account_number') }}">
+                                                    <input type="text" class="form-control @error('banks.0.account_number') is-invalid @enderror" id="account_number_0" name="banks[0][account_number]" value="{{ old('banks.0.account_number') }}" placeholder="Enter account number">
                                                     @error('banks.0.account_number')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -586,21 +586,21 @@
 
                                                 <div class="col-md-5 mb-3">
                                                     <label for="return_percentage_0" class="form-label">Return Percentage</label>
-                                                    <input type="text" class="form-control @error('banks.0.return_percentage') is-invalid @enderror" id="return_percentage_0" name="banks[0][return_percentage]" value="{{ old('banks.0.return_percentage') }}">
+                                                    <input type="text" class="form-control @error('banks.0.return_percentage') is-invalid @enderror" id="return_percentage_0" name="banks[0][return_percentage]" value="{{ old('banks.0.return_percentage') }}" placeholder="e.g. 10">
                                                     @error('banks.0.return_percentage')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
                                                 </div>
                                 
                                                 <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-danger btn-sm remove-bank" style="display: none;">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-bank" style="display: none;">
                                                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button type="button" class="btn btn-success btn-sm" id="addBank">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addBank">
                                         <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                         Add Another Bank Account
                                     </button>
@@ -613,28 +613,28 @@
                                             <div class="row">
                                                 <div class="col-md-4 mb-3">
                                                     <label for="contact_names_0" class="form-label">Names</label>
-                                                    <input type="text" class="form-control" id="contact_names_0" name="contacts[0][names]" value="{{ old('contacts.0.names') }}">
+                                                    <input type="text" class="form-control" id="contact_names_0" name="contacts[0][names]" value="{{ old('contacts.0.names') }}" placeholder="Enter contact name">
                                                 </div>
                                 
                                                 <div class="col-md-3 mb-3">
                                                     <label for="contact_email_0" class="form-label">Email</label>
-                                                    <input type="email" class="form-control" id="contact_email_0" name="contacts[0][email]" value="{{ old('contacts.0.email') }}">
+                                                    <input type="email" class="form-control" id="contact_email_0" name="contacts[0][email]" value="{{ old('contacts.0.email') }}" placeholder="name@example.com">
                                                 </div>
                                 
                                                 <div class="col-md-3 mb-3">
                                                     <label for="contact_mobile_0" class="form-label">Mobile Number</label>
-                                                    <input type="text" class="form-control" id="contact_mobile_0" name="contacts[0][mobile]" value="{{ old('contacts.0.mobile') }}">
+                                                    <input type="text" class="form-control" id="contact_mobile_0" name="contacts[0][mobile]" value="{{ old('contacts.0.mobile') }}" placeholder="254XXXXXXXXX">
                                                 </div>
                                 
                                                 <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-danger btn-sm remove-contact" style="display: none;">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-contact" style="display: none;">
                                                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button type="button" class="btn btn-success btn-sm" id="addContact">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addContact">
                                         <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                         Add Another Contact
                                     </button>
@@ -663,14 +663,14 @@
                                                 </div>
                                 
                                                 <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-danger btn-sm remove-document" style="display: none;">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-document" style="display: none;">
                                                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button type="button" class="btn btn-success btn-sm" id="addDocument">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addDocument">
                                         <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                         Add Another Document
                                     </button>
@@ -683,7 +683,7 @@
                                             <div class="row">
                                                 <div class="col-md-4 mb-3">
                                                     <label for="nok_first_name_0" class="form-label">First Name</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.first_name') is-invalid @enderror" id="nok_first_name_0" name="next_of_kin[0][first_name]" value="{{ old('next_of_kin.0.first_name') }}">
+                                                    <input type="text" class="form-control @error('next_of_kin.0.first_name') is-invalid @enderror" id="nok_first_name_0" name="next_of_kin[0][first_name]" value="{{ old('next_of_kin.0.first_name') }}" placeholder="Enter first name">
                                                     @error('next_of_kin.0.first_name')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -691,7 +691,7 @@
                                 
                                                 <div class="col-md-4 mb-3">
                                                     <label for="nok_second_name_0" class="form-label">Second Name</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.second_name') is-invalid @enderror" id="nok_second_name_0" name="next_of_kin[0][second_name]" value="{{ old('next_of_kin.0.second_name') }}">
+                                                    <input type="text" class="form-control @error('next_of_kin.0.second_name') is-invalid @enderror" id="nok_second_name_0" name="next_of_kin[0][second_name]" value="{{ old('next_of_kin.0.second_name') }}" placeholder="Enter second name">
                                                     @error('next_of_kin.0.second_name')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -699,7 +699,7 @@
                                 
                                                 <div class="col-md-4 mb-3">
                                                     <label for="nok_last_name_0" class="form-label">Last Name</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.last_name') is-invalid @enderror" id="nok_last_name_0" name="next_of_kin[0][last_name]" value="{{ old('next_of_kin.0.last_name') }}">
+                                                    <input type="text" class="form-control @error('next_of_kin.0.last_name') is-invalid @enderror" id="nok_last_name_0" name="next_of_kin[0][last_name]" value="{{ old('next_of_kin.0.last_name') }}" placeholder="Enter last name">
                                                     @error('next_of_kin.0.last_name')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -707,7 +707,7 @@
                                 
                                                 <div class="col-md-4 mb-3">
                                                     <label for="nok_mobile_0" class="form-label">Mobile Number</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.mobile') is-invalid @enderror" id="nok_mobile_0" name="next_of_kin[0][mobile]" value="{{ old('next_of_kin.0.mobile') }}">
+                                                    <input type="text" class="form-control @error('next_of_kin.0.mobile') is-invalid @enderror" id="nok_mobile_0" name="next_of_kin[0][mobile]" value="{{ old('next_of_kin.0.mobile') }}" placeholder="254XXXXXXXXX">
                                                     @error('next_of_kin.0.mobile')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -715,7 +715,7 @@
                                 
                                                 <div class="col-md-4 mb-3">
                                                     <label for="nok_email_0" class="form-label">Email Address</label>
-                                                    <input type="email" class="form-control @error('next_of_kin.0.email') is-invalid @enderror" id="nok_email_0" name="next_of_kin[0][email]" value="{{ old('next_of_kin.0.email') }}">
+                                                    <input type="email" class="form-control @error('next_of_kin.0.email') is-invalid @enderror" id="nok_email_0" name="next_of_kin[0][email]" value="{{ old('next_of_kin.0.email') }}" placeholder="name@example.com">
                                                     @error('next_of_kin.0.email')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
@@ -738,21 +738,21 @@
                                 
                                                 <div class="col-md-10 mb-3">
                                                     <label for="nok_national_id_0" class="form-label">National ID</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.national_id') is-invalid @enderror" id="nok_national_id_0" name="next_of_kin[0][national_id]" value="{{ old('next_of_kin.0.national_id') }}">
+                                                    <input type="text" class="form-control @error('next_of_kin.0.national_id') is-invalid @enderror" id="nok_national_id_0" name="next_of_kin[0][national_id]" value="{{ old('next_of_kin.0.national_id') }}" placeholder="Enter national ID number">
                                                     @error('next_of_kin.0.national_id')
                                                     <div class="invalid-feedback">{{ $message }}</div>
                                                     @enderror
                                                 </div>
                                 
                                                 <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-danger btn-sm remove-nok" style="display: none;">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-nok" style="display: none;">
                                                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button type="button" class="btn btn-success btn-sm" id="addNextOfKin">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addNextOfKin">
                                         <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                         Add Another Next of Kin
                                     </button>
@@ -771,6 +771,22 @@
     $(document).ready(function() {
         let banksData = [];
         let branchesData = [];
+
+        // Native HTML5 validation can't focus a field inside a hidden (inactive)
+        // Bootstrap tab-pane — the browser just silently aborts the submit with no
+        // visible feedback. Switch to the offending field's tab as soon as it's
+        // flagged invalid, so the browser can focus it and show its error bubble.
+        document.querySelectorAll('#clientCreateForm [required], #clientCreateForm [pattern]').forEach(function(field) {
+            field.addEventListener('invalid', function() {
+                var pane = this.closest('.tab-pane');
+                if (pane && !pane.classList.contains('active')) {
+                    var tabButton = document.getElementById(pane.id + '-tab');
+                    if (tabButton) {
+                        bootstrap.Tab.getOrCreateInstance(tabButton).show();
+                    }
+                }
+            });
+        });
 
         // Handle form submission
         $('#clientCreateForm').on('submit', function() {
@@ -841,19 +857,21 @@
         // Mobile number validation
         $('#mobile_number').on('input', function() {
             let value = $(this).val();
-            // Remove non-numeric characters except at start
+            // Remove non-numeric characters
             value = value.replace(/[^0-9]/g, '');
-            
-            // Ensure it starts with 254
-            if (value.length > 0 && !value.startsWith('254')) {
-                value = '254' + value.replace(/^254/, '');
+
+            // Local format (0712345678) — drop the leading 0 before prefixing 254
+            if (value.startsWith('0')) {
+                value = '254' + value.substring(1);
+            } else if (value.length > 0 && !value.startsWith('254')) {
+                value = '254' + value;
             }
-            
+
             // Limit to 12 characters
             if (value.length > 12) {
                 value = value.substring(0, 12);
             }
-            
+
             $(this).val(value);
         });
 
@@ -877,18 +895,18 @@
                         </div>
                         <div class="col-md-5 mb-3">
                             <label for="account_name_${bankCounter}" class="form-label">Account Name</label>
-                            <input type="text" class="form-control" id="account_name_${bankCounter}" name="banks[${bankCounter}][account_name]">
+                            <input type="text" class="form-control" id="account_name_${bankCounter}" name="banks[${bankCounter}][account_name]" placeholder="Enter account name">
                         </div>
                         <div class="col-md-5 mb-3">
                             <label for="account_number_${bankCounter}" class="form-label">Account Number</label>
-                            <input type="text" class="form-control" id="account_number_${bankCounter}" name="banks[${bankCounter}][account_number]">
+                            <input type="text" class="form-control" id="account_number_${bankCounter}" name="banks[${bankCounter}][account_number]" placeholder="Enter account number">
                         </div>
                         <div class="col-md-5 mb-3">
                             <label for="return_percentage_${bankCounter}" class="form-label">Return Percentage</label>
-                            <input type="text" class="form-control" id="return_percentage_${bankCounter}" name="banks[${bankCounter}][return_percentage]">
+                            <input type="text" class="form-control" id="return_percentage_${bankCounter}" name="banks[${bankCounter}][return_percentage]" placeholder="e.g. 10">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-bank">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-bank">
                                 <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                             </button>
                         </div>
@@ -923,18 +941,18 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label for="contact_names_${contactCounter}" class="form-label">Names</label>
-                            <input type="text" class="form-control" id="contact_names_${contactCounter}" name="contacts[${contactCounter}][names]">
+                            <input type="text" class="form-control" id="contact_names_${contactCounter}" name="contacts[${contactCounter}][names]" placeholder="Enter contact name">
                         </div>
                         <div class="col-md-3 mb-3">
                             <label for="contact_email_${contactCounter}" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="contact_email_${contactCounter}" name="contacts[${contactCounter}][email]">
+                            <input type="email" class="form-control" id="contact_email_${contactCounter}" name="contacts[${contactCounter}][email]" placeholder="name@example.com">
                         </div>
                         <div class="col-md-3 mb-3">
                             <label for="contact_mobile_${contactCounter}" class="form-label">Mobile Number</label>
-                            <input type="text" class="form-control" id="contact_mobile_${contactCounter}" name="contacts[${contactCounter}][mobile]">
+                            <input type="text" class="form-control" id="contact_mobile_${contactCounter}" name="contacts[${contactCounter}][mobile]" placeholder="254XXXXXXXXX">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-contact">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-contact">
                                 <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                             </button>
                         </div>
@@ -979,7 +997,7 @@
                             <input type="file" class="form-control" id="document_file_${documentCounter}" name="documents[${documentCounter}][file]">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-document">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-document">
                                 <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                             </button>
                         </div>
@@ -1010,23 +1028,23 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label for="nok_first_name_${nokCounter}" class="form-label">First Name</label>
-                            <input type="text" class="form-control" id="nok_first_name_${nokCounter}" name="next_of_kin[${nokCounter}][first_name]">
+                            <input type="text" class="form-control" id="nok_first_name_${nokCounter}" name="next_of_kin[${nokCounter}][first_name]" placeholder="Enter first name">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="nok_second_name_${nokCounter}" class="form-label">Second Name</label>
-                            <input type="text" class="form-control" id="nok_second_name_${nokCounter}" name="next_of_kin[${nokCounter}][second_name]">
+                            <input type="text" class="form-control" id="nok_second_name_${nokCounter}" name="next_of_kin[${nokCounter}][second_name]" placeholder="Enter second name">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="nok_last_name_${nokCounter}" class="form-label">Last Name</label>
-                            <input type="text" class="form-control" id="nok_last_name_${nokCounter}" name="next_of_kin[${nokCounter}][last_name]">
+                            <input type="text" class="form-control" id="nok_last_name_${nokCounter}" name="next_of_kin[${nokCounter}][last_name]" placeholder="Enter last name">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="nok_mobile_${nokCounter}" class="form-label">Mobile Number</label>
-                            <input type="text" class="form-control" id="nok_mobile_${nokCounter}" name="next_of_kin[${nokCounter}][mobile]">
+                            <input type="text" class="form-control" id="nok_mobile_${nokCounter}" name="next_of_kin[${nokCounter}][mobile]" placeholder="254XXXXXXXXX">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="nok_email_${nokCounter}" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="nok_email_${nokCounter}" name="next_of_kin[${nokCounter}][email]">
+                            <input type="email" class="form-control" id="nok_email_${nokCounter}" name="next_of_kin[${nokCounter}][email]" placeholder="name@example.com">
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="nok_relation_${nokCounter}" class="form-label">Relation</label>
@@ -1041,10 +1059,10 @@
                         </div>
                         <div class="col-md-10 mb-3">
                             <label for="nok_national_id_${nokCounter}" class="form-label">National ID</label>
-                            <input type="text" class="form-control" id="nok_national_id_${nokCounter}" name="next_of_kin[${nokCounter}][national_id]">
+                            <input type="text" class="form-control" id="nok_national_id_${nokCounter}" name="next_of_kin[${nokCounter}][national_id]" placeholder="Enter national ID number">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-nok">
+                            <button type="button" class="btn btn-outline-primary btn-sm remove-nok">
                                 <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                             </button>
                         </div>
