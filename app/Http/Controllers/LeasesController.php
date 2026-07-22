@@ -632,9 +632,9 @@ class LeasesController extends Controller
                 'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
                 'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
                 'invoicable_items' => 'required|array|min:1',
-                'invoicable_items.*.item' => 'required|exists:sys_pm_invoiceable_items,id',
+                'invoicable_items.*.item' => 'required|exists:sys_set_invoiceable_items,id',
                 'invoicable_items.*.amount' => 'required|numeric|min:0',
-                'invoicable_items.*.cycle' => 'required|in:Monthly,Quarterly,Semi-Annually,Annually,One-Time',
+                'invoicable_items.*.cycle' => 'required|exists:sys_set_invoiceable_items_cycles,id',
                 'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
             ]);
 
@@ -682,10 +682,10 @@ class LeasesController extends Controller
             ]);
 
             // Generate and update reference number after getting the ID
+            $tenant = Client::find($validated['tenant_id']);
             $leaseAgreement->ref_number = $this->generateLeaseReferenceNumber(
-                $property->reference_number,
                 $validated['unit_id'],
-                $leaseAgreement->id
+                $tenant->names ?? ''
             );
             $leaseAgreement->save();
 
@@ -721,12 +721,23 @@ class LeasesController extends Controller
                 ]);
             }
 
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Lease Agreement created successfully with reference: ' . $leaseAgreement->ref_number,
+                    'redirect_url' => route('property.properties.show', Crypt::encrypt($validated['property_id'])),
+                ]);
+            }
+
             return redirect()
                 ->route('property.properties.show', Crypt::encrypt($validated['property_id']))
                 ->with('success', 'Lease Agreement created successfully with reference: ' . $leaseAgreement->ref_number);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            }
             return redirect()
                 ->back()
                 ->withErrors($e->validator)
@@ -735,6 +746,9 @@ class LeasesController extends Controller
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating lease agreement: ' . $e->getMessage());
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'error' => 'Failed to create lease agreement: ' . $e->getMessage()], 500);
+            }
             return redirect()
                 ->back()
                 ->with('error', 'Failed to create lease agreement: ' . $e->getMessage())
@@ -888,22 +902,21 @@ class LeasesController extends Controller
     }
 
     /**
-     * Generate a unique reference number for the lease
-     * Format: {PropertyRef}-{UnitNumber}-L{sequence}
-     * Example: PROP-001-U01-L00025
-     * 
-     * @param string $propertyReference
-     * @param string $unitNumber
-     * @param int $leaseAgreementId
+     * Generate a reference number for the lease, matching the convention already
+     * used throughout the existing data: {UnitCode}-{TenantName}
+     * Example: 138G-16-ZYRON LAURA
+     *
+     * @param int $unitId
+     * @param string|null $tenantName
      * @return string
      */
-    protected function generateLeaseReferenceNumber($propertyReference, $unitNumber, $leaseAgreementId)
+    protected function generateLeaseReferenceNumber($unitId, $tenantName)
     {
-        // Get the unit to access its unit_code
-        $unit = Unit::find($unitNumber);
-        
-        // Format: UnitCode-L00025 (5 digits, zero-padded)
-        return sprintf('%s-L%05d', $unit->unit_code, $leaseAgreementId);
+        $unit = Unit::find($unitId);
+        $unitCode = $unit->unit_code ?? '';
+        $tenantName = trim((string) $tenantName);
+
+        return trim($unitCode . '-' . $tenantName, '-');
     }
 
     /**
@@ -923,7 +936,7 @@ class LeasesController extends Controller
                 \App\Models\LeaseAgreementDocument::create([
                     'parent_id' => $leaseAgreementId,
                     'documents' => $path,
-                    'parans' => json_encode([
+                    'params' => json_encode([
                         'original_name' => $document->getClientOriginalName(),
                         'mime_type' => $document->getMimeType(),
                         'size' => $document->getSize(),

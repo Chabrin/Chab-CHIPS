@@ -50,7 +50,7 @@
                         </div>
                         @endif
 
-                        <form action="#" method="POST" id="leaseAgreementForm" enctype="multipart/form-data">
+                        <form action="{{ route('property.leases.store') }}" method="POST" id="leaseAgreementForm" enctype="multipart/form-data">
                             @csrf
 
                             <!-- Lease Agreements Section -->
@@ -294,8 +294,10 @@
                                 <div class="col-md-4 mb-3">
                                     <label for="escalation_frequency" class="form-label">Escalation Frequency</label>
                                     <select class="form-select @error('escalation_frequency') is-invalid @enderror" id="escalation_frequency" name="escalation_frequency">
-                                        <option value="4">Annually</option>
-                                        <option value="6">Biennially</option>
+                                        <option value="Annually">Annually</option>
+                                        <option value="Semi-Annually">Semi-Annually</option>
+                                        <option value="Quarterly">Quarterly</option>
+                                        <option value="Monthly">Monthly</option>
                                     </select>
                                     @error('escalation_frequency')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -351,11 +353,6 @@
                                                 <label for="cycle_0" class="form-label">Cycle <span class="text-danger">*</span></label>
                                                 <select class="form-select" id="cycle_0" name="invoicable_items[0][cycle]" required>
                                                     <option value="">Please select</option>
-                                                    <option value="4">Annually</option>
-                                                    <option value="5">Daily</option>
-                                                    <option value="2">Monthly</option>
-                                                    <option value="1">One time</option>
-                                                    <option value="3">Quarterly</option>
                                                 </select>
                                             </div>
 
@@ -398,10 +395,94 @@
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
 
-        // Form submission with spinner
+        // Convert a Laravel dot-notation error key (e.g. "invoicable_items.0.item")
+        // into the bracket-notation form field name it corresponds to
+        // (e.g. "invoicable_items[0][item]") so we can locate the actual input.
+        function dotKeyToFieldName(dotted) {
+            var parts = dotted.split('.');
+            return parts[0] + parts.slice(1).map(function(p) { return '[' + p + ']'; }).join('');
+        }
+
+        // Form submission — AJAX, so validation errors never wipe out what was typed
         $('#leaseAgreementForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var $form = $(this);
+            var $btn = $('#saveButton');
+
+            $('#leaseAgreementForm .is-invalid').removeClass('is-invalid');
+            $('#leaseAgreementForm .invalid-feedback').text('');
+
             $('#submitSpinner').removeClass('d-none');
-            $('#saveButton').prop('disabled', true);
+            $btn.prop('disabled', true);
+
+            var formData = new FormData(this);
+
+            $.ajax({
+                url: $form.attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Lease Agreement created successfully');
+                        setTimeout(function() {
+                            window.location.href = res.redirect_url;
+                        }, 800);
+                    } else {
+                        toastr.error(res.error || 'Failed to create lease agreement');
+                        $('#submitSpinner').addClass('d-none');
+                        $btn.prop('disabled', false);
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var errors = xhr.responseJSON.errors;
+                        var $firstInvalid = null;
+                        var unmatched = [];
+
+                        Object.keys(errors).forEach(function(key) {
+                            var fieldName = dotKeyToFieldName(key);
+                            var $field = $('[name="' + fieldName + '"]');
+
+                            if ($field.length && $field.is(':visible')) {
+                                $field.addClass('is-invalid');
+                                var $feedback = $field.nextAll('.invalid-feedback').first();
+                                if (!$feedback.length) {
+                                    $feedback = $field.closest('.mb-3, .col-12, .col-md-4, .col-md-6').find('.invalid-feedback').first();
+                                }
+                                if ($feedback.length) {
+                                    $feedback.text(errors[key][0]);
+                                }
+                                if (!$firstInvalid) {
+                                    $firstInvalid = $field;
+                                }
+                            } else {
+                                // Hidden/backing fields (e.g. client_id, tenant_id driven by the
+                                // search widgets) have no visible input to flag — surface the message directly.
+                                unmatched.push(errors[key][0]);
+                            }
+                        });
+
+                        if ($firstInvalid) {
+                            $('html, body').animate({ scrollTop: $firstInvalid.offset().top - 120 }, 300);
+                        }
+
+                        if (unmatched.length === 0) {
+                            toastr.error('Please correct the highlighted fields');
+                        }
+                        unmatched.forEach(function(msg) {
+                            toastr.error(msg);
+                        });
+                    } else {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to create lease agreement';
+                        toastr.error(msg);
+                    }
+                    $('#submitSpinner').addClass('d-none');
+                    $btn.prop('disabled', false);
+                }
+            });
         });
 
         // Check if client is pre-filled or needs to be searched
@@ -788,9 +869,11 @@
 
 
         let invoiceableItems = []; // Store all invoiceable items
+        let invoiceableCycles = []; // Store all billing cycles
 
-        // Load invoiceable items on page load
+        // Load invoiceable items and cycles on page load
         loadInvoiceableItems();
+        loadInvoiceableCycles();
 
         // Function to load invoiceable items
         function loadInvoiceableItems() {
@@ -813,29 +896,39 @@
             });
         }
 
+        // Function to load billing cycles
+        function loadInvoiceableCycles() {
+            $.ajax({
+                url: "{{ route('property.settings.cycles.data') }}",
+                method: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response && response.length > 0) {
+                        invoiceableCycles = response;
+                        populateCycleSelect('#cycle_0');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading cycles:', xhr.responseText);
+                }
+            });
+        }
+
+        // Function to populate a cycle dropdown
+        function populateCycleSelect(selectId) {
+            $(selectId).empty().append('<option value="">Please select</option>');
+            invoiceableCycles.forEach(function(cycle) {
+                $(selectId).append(`<option value="${cycle.id}">${cycle.text}</option>`);
+            });
+        }
+
         // Function to populate invoiceable items dropdown
         function populateInvoiceableItems(selectId) {
             $(selectId).empty();
             $(selectId).append('<option value="">Please select</option>');
 
-            // Filter items where feature array contains "1", "2", or "3"
-            const filteredItems = invoiceableItems.filter(function(item) {
-                if (!item.feature) return false;
-
-                // Parse feature if it's a string (JSON), otherwise use as-is
-                let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
-
-                // Check if feature array contains "1", "2", or "3"
-                return featureArray.some(function(feature) {
-                    const featureStr = String(feature);
-                    return featureStr === '1' || featureStr === '2' || featureStr === '3';
-                });
-            });
-
-            console.log('Filtered invoiceable items for lease:', filteredItems);
-
-            if (filteredItems.length > 0) {
-                filteredItems.forEach(function(item) {
+            if (invoiceableItems.length > 0) {
+                invoiceableItems.forEach(function(item) {
                     $(selectId).append(`<option value="${item.id}">${item.item_name}</option>`);
                 });
             } else {
@@ -853,17 +946,14 @@
 
             // Generate invoiceable items options
             let itemOptions = '<option value="">Please select</option>';
-            const filteredItems = invoiceableItems.filter(function(item) {
-                if (!item.feature) return false;
-                let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
-                return featureArray.some(function(feature) {
-                    const featureStr = String(feature);
-                    return featureStr === '1' || featureStr === '2' || featureStr === '3';
-                });
+            invoiceableItems.forEach(function(item) {
+                itemOptions += `<option value="${item.id}">${item.item_name}</option>`;
             });
 
-            filteredItems.forEach(function(item) {
-                itemOptions += `<option value="${item.id}">${item.item_name}</option>`;
+            // Generate cycle options
+            let cycleOptions = '<option value="">Please select</option>';
+            invoiceableCycles.forEach(function(cycle) {
+                cycleOptions += `<option value="${cycle.id}">${cycle.text}</option>`;
             });
 
             const itemEntry = `
@@ -884,12 +974,7 @@
                         <div class="col-md-4 mb-3">
                             <label for="cycle_${itemCounter}" class="form-label">Cycle <span class="text-danger">*</span></label>
                             <select class="form-select" id="cycle_${itemCounter}" name="invoicable_items[${itemCounter}][cycle]" required>
-                                <option value="">Please select</option>
-                                <option value="4">Annually</option>
-                                <option value="5">Daily</option>
-                                <option value="2">Monthly</option>
-                                <option value="1">One time</option>
-                                <option value="3">Quarterly</option>
+                                ${cycleOptions}
                             </select>
                         </div>
                         <div class="col-md-3 mb-3">
