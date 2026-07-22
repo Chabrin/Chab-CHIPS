@@ -298,7 +298,7 @@ class PropertySettingsController extends Controller
     {
         try {
             $userId = Auth::id();
-            $query = Zone::select(['id', 'zone_name', 'estates_id']);
+            $query = Zone::select(['id', 'zone_name', 'estates_id', 'zone_manager_id', 'zone_supervisor_id']);
 
             // Non-global users only see zones they have assignments in
             if (!$this->checkGlobalRole($userId)) {
@@ -318,7 +318,8 @@ class PropertySettingsController extends Controller
                 });
             }
 
-            $zones = $query->orderBy('zone_name', 'asc')
+            $zones = $query->with(['zoneManager:id,name', 'zoneSupervisor:id,name'])
+                ->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
                     return [
@@ -326,6 +327,10 @@ class PropertySettingsController extends Controller
                         'encrypted_id' => Crypt::encrypt($zone->id),
                         'zone_name' => $zone->zone_name ?? '-',
                         'estates_id' => $zone->estates_id ?? '-',
+                        'zone_manager_id' => $zone->zone_manager_id,
+                        'zone_manager_name' => $zone->zoneManager->name ?? '-',
+                        'zone_supervisor_id' => $zone->zone_supervisor_id,
+                        'zone_supervisor_name' => $zone->zoneSupervisor->name ?? '-',
                         'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
                         'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
                     ];
@@ -339,17 +344,43 @@ class PropertySettingsController extends Controller
     }
 
     /**
+     * List system users (josya_users) for the zone manager/supervisor selects
+     */
+    public function zonesUsersList()
+    {
+        try {
+            $users = DB::table('josya_users')
+                ->select('id', 'name', 'username')
+                ->orderBy('name')
+                ->get();
+
+            return response()->json(['data' => $users]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading users for zones: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load users'], 500);
+        }
+    }
+
+    /**
      * Store a new zone
      */
     public function storeZone(Request $request)
     {
         try {
+            $request->merge([
+                'zone_manager_id' => $request->zone_manager_id ?: null,
+                'zone_supervisor_id' => $request->zone_supervisor_id ?: null,
+            ]);
+
             $validated = $request->validate([
                 'zone_name' => [
                     'required', 'string', 'max:255',
                     Rule::unique('sys_set_zones', 'zone_name'),
                 ],
                 'estates_id' => 'nullable|integer',
+                'zone_manager_id' => 'nullable|integer|exists:josya_users,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:josya_users,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
@@ -378,12 +409,19 @@ class PropertySettingsController extends Controller
             $id = Crypt::decrypt($encryptedId);
             $zone = Zone::findOrFail($id);
 
+            $request->merge([
+                'zone_manager_id' => $request->zone_manager_id ?: null,
+                'zone_supervisor_id' => $request->zone_supervisor_id ?: null,
+            ]);
+
             $validated = $request->validate([
                 'zone_name' => [
                     'required', 'string', 'max:255',
                     Rule::unique('sys_set_zones', 'zone_name')->ignore($id),
                 ],
                 'estates_id' => 'nullable|integer',
+                'zone_manager_id' => 'nullable|integer|exists:josya_users,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:josya_users,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);

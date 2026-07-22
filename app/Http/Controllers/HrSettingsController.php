@@ -1128,6 +1128,100 @@ class HrSettingsController extends Controller
         }
     }
 
+    /**
+     * Properties with no field officer assigned — the "Unallocated" tab on the
+     * zone assignments report page.
+     */
+    public function unallocatedPropertiesReport()
+    {
+        try {
+            $rows = DB::table('sys_pm_properties as p')
+                ->leftJoin('sys_set_zones as z', 'z.id', '=', 'p.zone_id')
+                ->leftJoin('josya_users as zm', 'zm.id', '=', 'z.zone_manager_id')
+                ->leftJoin('josya_users as zs', 'zs.id', '=', 'z.zone_supervisor_id')
+                ->select(
+                    'p.id',
+                    'p.property_name',
+                    'p.reference_number',
+                    'z.zone_name',
+                    'zm.name as zone_manager_name',
+                    'zs.name as zone_supervisor_name'
+                )
+                ->whereNull('p.field_officer_id')
+                ->orderBy('p.reference_number')
+                ->get();
+
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading unallocated properties: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load unallocated properties'], 500);
+        }
+    }
+
+    /**
+     * Current field officer for a property, plus the zone manager/supervisor of
+     * the property's zone (read strictly from sys_set_zones/josya_users — display
+     * only, not editable from this modal). Used to prefill the Allocate modal.
+     */
+    public function propertyAllocationDetails($id)
+    {
+        try {
+            $row = DB::table('sys_pm_properties as p')
+                ->leftJoin('sys_set_zones as z', 'z.id', '=', 'p.zone_id')
+                ->leftJoin('sys_staff as fo', 'fo.id', '=', 'p.field_officer_id')
+                ->leftJoin('josya_users as zm', 'zm.id', '=', 'z.zone_manager_id')
+                ->leftJoin('josya_users as zs', 'zs.id', '=', 'z.zone_supervisor_id')
+                ->select(
+                    'p.id',
+                    'p.property_name',
+                    'p.reference_number',
+                    'z.zone_name',
+                    'p.field_officer_id',
+                    'fo.full_names as field_officer_name',
+                    'zm.name as zone_manager_name',
+                    'zs.name as zone_supervisor_name'
+                )
+                ->where('p.id', $id)
+                ->first();
+
+            if (!$row) {
+                return response()->json(['error' => 'Property not found'], 404);
+            }
+
+            return response()->json(['data' => $row]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading property allocation details: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load property details'], 500);
+        }
+    }
+
+    /**
+     * Set/change the field officer on a property. Zone manager/supervisor are
+     * zone-level attributes (sys_set_zones) — not editable from here.
+     */
+    public function allocatePropertyZoneRoles(Request $request, $id)
+    {
+        try {
+            $property = Property::withAll()->withInactive()->findOrFail($id);
+
+            $validated = $request->validate([
+                'field_officer_id' => 'required|integer|exists:sys_staff,id',
+            ]);
+
+            $property->update($validated);
+
+            return response()->json(['success' => true, 'message' => 'Property allocated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error allocating property: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to allocate property'], 500);
+        }
+    }
+
     public function assignmentTypesList()
     {
         try {
