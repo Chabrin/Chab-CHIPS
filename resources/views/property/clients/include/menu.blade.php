@@ -14,14 +14,6 @@
     </a>
 </li>
 @endpermission
-@permission('create_units')
-<li>
-    <a class="dropdown-item d-flex align-items-center" href="{{ route('property.units.create', ['client' => Crypt::encrypt($client->id)]) }}">
-        <span class="material-symbols-outlined me-2" style="font-size:18px;">apartment</span>
-        Add Unit
-    </a>
-</li>
-@endpermission
 @permission('create_service_agreements')
 <li>
     <a class="dropdown-item d-flex align-items-center" href="{{ route('service.agreements.create', ['client' => Crypt::encrypt($client->id)]) }}">

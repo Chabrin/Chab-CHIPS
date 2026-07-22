@@ -391,6 +391,7 @@ class InvoicingController extends Controller
 
             $tenants = $tenantsRaw->map(function ($t) use ($unitCodesByTenant) {
                 return [
+                    'id'               => $t->id,
                     'encrypted_id'     => encrypt($t->id),
                     'names'            => $t->names ?? 'N/A',
                     'mobile_number'    => $t->mobile_number,

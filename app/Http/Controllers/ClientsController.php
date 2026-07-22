@@ -949,6 +949,8 @@ class ClientsController extends Controller
         try {
             $propertyId = $request->property_id;
 
+            $canEdit = Auth::user()->hasPermission('update_units');
+
             $units = Unit::with(['property', 'zone'])
                 ->select([
                     'id',
@@ -959,11 +961,18 @@ class ClientsController extends Controller
                     'rent_amount',
                     'property_id',
                     'zone_id',
-                    'occupancy_status_id'
+                    'occupancy_status_id',
+                    'unit_type_id',
+                    'usage_type_id',
+                    'unit_condition_id',
+                    'topology_id',
+                    'category_id',
+                    'vat_able',
+                    'initial_water_meter_reading',
                 ])
                 ->where('property_id', $propertyId)
                 ->get()
-                ->map(function ($unit) {
+                ->map(function ($unit) use ($canEdit) {
                     return [
                         'id' => $unit->id,
                         'encrypted_id' => Crypt::encrypt($unit->id),
@@ -974,7 +983,21 @@ class ClientsController extends Controller
                         'rent_amount' => $unit->rent_amount ? number_format($unit->rent_amount, 2) : '0.00',
                         'property' => $unit->property->property_name ?? '-',
                         'zone' => $unit->zone->zone_name ?? '-',
-                        'occupancy_status' => $unit->occupancy_status_id == '1' ? 'Occupied' : 'Vacant',
+                        'occupancy_status' => $unit->occupancy_status_id == 38 ? 'Occupied' : 'Vacant',
+                        'can_edit' => $canEdit,
+                        // Raw values for pre-filling the edit modal
+                        'unit_name_raw' => $unit->unit_name,
+                        'unit_number_raw' => $unit->unit_number,
+                        'description_raw' => $unit->description,
+                        'rent_amount_raw' => $unit->rent_amount,
+                        'unit_type_id' => $unit->unit_type_id,
+                        'usage_type_id' => $unit->usage_type_id,
+                        'unit_condition_id' => $unit->unit_condition_id,
+                        'topology_id' => $unit->topology_id,
+                        'category_id' => $unit->category_id,
+                        'vat_able' => $unit->vat_able,
+                        'initial_water_meter_reading' => $unit->initial_water_meter_reading,
+                        'occupancy_status_id' => $unit->occupancy_status_id,
                     ];
                 });
 

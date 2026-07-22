@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Unit;
-use App\Models\Client;
 use App\Models\Property;
 use App\Models\UnitDocument;
 use Illuminate\Http\Request;
@@ -16,30 +15,6 @@ use Illuminate\Support\Facades\Storage;
 
 class UnitsController extends Controller
 {
-    /**
-     * Show the form for creating a new unit
-     */
-    public function create(Request $request)
-    {
-        try {
-            $clientId = null;
-            $client = null;
-
-            // If property parameter is provided, decrypt it
-            if ($request->has('client')) {
-                $clientId = Crypt::decrypt($request->client);
-                $client = Client::findOrFail($clientId);
-                $properties = Property::where('client_id', $client->id)->get();
-            }
-            
-            return view('property.properties.units.create', compact('properties', 'client'));
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading unit create form: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to load form');
-        }
-    }
-
     // In PropertyController or appropriate controller
     public function getUnits($propertyId)
     {
@@ -49,7 +24,7 @@ class UnitsController extends Controller
                 ->whereDoesntHave('leaseAgreements') // No leases at all
                 ->orderBy('unit_number')
                 ->get(['id', 'unit_name', 'unit_number', 'current_status_id']);
-            
+
             return response()->json(['units' => $units]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to load units'], 500);
@@ -57,30 +32,61 @@ class UnitsController extends Controller
     }
 
     /**
-     * Show the form for editing a unit
+     * Get non-occupied units for a property, for lease creation (AJAX).
+     *
+     * occupancy_status_id carries two overlapping numbering schemes in the data:
+     *   - Legacy-migrated units: 1 = Occupied, 2 = Vacant, 3 = unclassified (from
+     *     the migration's `CASE WHEN USTATUS=1 THEN 1 WHEN USTATUS=2 THEN 2 ELSE 3 END`)
+     *   - Units created directly in this app: 31 = Vacant, 38 = Occupied
+     * Excluding both "Occupied" values covers units from either origin.
      */
-    public function edit($id)
+    public function getAvailableUnits($propertyId)
     {
-        // try {
-            $unitId = Crypt::decrypt($id);
-            $unit = Unit::with(['property', 'client', 'unit_documents'])->findOrFail($unitId);
-            // dd($unit);
-            $client = $unit->client;
-            $properties = Property::where('client_id', $client->id)->get();
-            
-            return view('property.properties.units.edit', compact('unit', 'properties', 'client'));
-        // } catch (\Exception $e) {
-        //     ErrorDispatcher::dispatch($e);
-        //     Log::error('Error loading unit edit form: ' . $e->getMessage());
-        //     return redirect()->back()->with('error', 'Failed to load form');
-        // }
+        try {
+            $units = Unit::where('property_id', $propertyId)
+                ->whereNotIn('occupancy_status_id', [1, 38])
+                ->orderBy('unit_number')
+                ->get(['id', 'unit_name', 'unit_number', 'unit_code', 'occupancy_status_id']);
+
+            $units = $units->map(function ($unit) {
+                return [
+                    'id' => $unit->id,
+                    'unit_name' => $unit->unit_name,
+                    'unit_number' => $unit->unit_number,
+                    'unit_code' => $unit->unit_code,
+                    'occupancy_status_id' => $unit->occupancy_status_id,
+                    'status' => $this->occupancyStatusLabel($unit->occupancy_status_id),
+                ];
+            });
+
+            return response()->json(['units' => $units]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading available units for property: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load units'], 500);
+        }
+    }
+
+    private function occupancyStatusLabel($statusId)
+    {
+        if (in_array((int) $statusId, [1, 38], true)) {
+            return 'Occupied';
+        }
+        if (in_array((int) $statusId, [2, 31], true)) {
+            return 'Vacant';
+        }
+        return 'Available';
     }
 
     /**
-     * Update the specified unit
+     * Update the specified unit (AJAX only — the edit form is a modal)
      */
     public function update(Request $request, $id)
     {
+        if (!Auth::user()->hasPermission('update_units')) {
+            return response()->json(['success' => false, 'error' => 'Unauthorized'], 403);
+        }
+
         DB::beginTransaction();
         try {
             $unitId = Crypt::decrypt($id);
@@ -100,9 +106,6 @@ class UnitsController extends Controller
                 'rent_amount' => 'nullable|numeric|min:0',
                 'description' => 'nullable|string',
                 'initial_water_meter_reading' => 'nullable|numeric|min:0',
-                'unit_uploads.*' => 'nullable|file|max:5120|mimes:jpg,jpeg,png,pdf,doc,docx',
-                'delete_documents' => 'nullable|array',
-                'delete_documents.*' => 'integer',
             ]);
 
             // Get zone_id from property
@@ -128,55 +131,20 @@ class UnitsController extends Controller
                 'current_status_id' => $validated['occupancy_status_id'] ?? $unit->current_status_id,
             ]);
 
-            // Handle document deletions
-            if (!empty($validated['delete_documents'])) {
-                foreach ($validated['delete_documents'] as $docId) {
-                    $document = UnitDocument::where('id', $docId)
-                        ->where('parent_id', $unit->id)
-                        ->first();
-                    if ($document) {
-                        // Delete physical file
-                        if (Storage::disk('public')->exists($document->unit_uploads)) {
-                            Storage::disk('public')->delete($document->unit_uploads);
-                        }
-                        $document->delete();
-                    }
-                }
-            }
-
-            // Handle new file uploads
-            if ($request->hasFile('unit_uploads')) {
-                foreach ($request->file('unit_uploads') as $file) {
-                    if ($file->isValid()) {
-                        $path = $file->store('units/uploads', 'public');
-                        
-                        UnitDocument::create([
-                            'parent_id' => $unit->id,
-                            'unit_uploads' => $path,
-                            'params' => json_encode([
-                                'original_name' => $file->getClientOriginalName(),
-                                'mime_type' => $file->getMimeType(),
-                                'size' => $file->getSize(),
-                                'uploaded_at' => now()->toDateTimeString(),
-                            ]),
-                        ]);
-                    }
-                }
-            }
-
             DB::commit();
 
-            return redirect()->route('property.properties.show', Crypt::encrypt($validated['property_id']))
-                ->with('success', 'Unit updated successfully');
-
+            return response()->json([
+                'success' => true,
+                'message' => 'Unit updated successfully',
+            ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            return redirect()->back()->withErrors($e->errors())->withInput();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error updating unit: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to update unit: ' . $e->getMessage())->withInput();
+            return response()->json(['success' => false, 'error' => 'Failed to update unit: ' . $e->getMessage()], 500);
         }
     }
 
@@ -185,6 +153,10 @@ class UnitsController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Auth::user()->hasPermission('create_units')) {
+            return response()->json(['success' => false, 'error' => 'Unauthorized'], 403);
+        }
+
         DB::beginTransaction();
         try {
             $validated = $request->validate([
@@ -202,7 +174,6 @@ class UnitsController extends Controller
                 'rent_amount' => 'nullable|numeric|min:0',
                 'description' => 'nullable|string',
                 'initial_water_meter_reading' => 'nullable|numeric|min:0',
-                'unit_uploads.*' => 'nullable|file|max:5120|mimes:jpg,jpeg,png,pdf,doc,docx',
             ]);
 
             // Generate unit code
@@ -217,12 +188,9 @@ class UnitsController extends Controller
             } else {
                 $newNumber = '001';
             }
-            
+
             $unitCode = $property->reference_number . '-U' . $newNumber;
-
-            $property = Property::findOrFail($validated['property_id']);
             $zone_id = $property->zone_id;
-
 
             // Create the unit record
             $unit = Unit::create([
@@ -230,6 +198,7 @@ class UnitsController extends Controller
                 'client_id' => $validated['client_id'],
                 'zone_id' => $zone_id,
                 'unit_code' => $unitCode,
+                'unit_number' => $validated['unit_number'],
                 'unit_type_id' => $validated['unit_type_id'],
                 'usage_type_id' => $validated['usage_type_id'],
                 'unit_condition_id' => $validated['unit_condition_id'],
@@ -246,41 +215,24 @@ class UnitsController extends Controller
                 'current_status_id' => 1, // Pending — awaiting maker-checker approval
             ]);
 
-            // Handle file uploads and save to UnitDocument model
-            if ($request->hasFile('unit_uploads')) {
-                foreach ($request->file('unit_uploads') as $file) {
-                    if ($file->isValid()) {
-                        // Store file in public disk
-                        $path = $file->store('units/uploads', 'public');
-                        
-                        // Create UnitDocument record
-                        UnitDocument::create([
-                            'parent_id' => $unit->id,
-                            'unit_uploads' => $path,
-                            'params' => json_encode([
-                                'original_name' => $file->getClientOriginalName(),
-                                'mime_type' => $file->getMimeType(),
-                                'size' => $file->getSize(),
-                                'uploaded_at' => now()->toDateTimeString(),
-                            ]),
-                        ]);
-                    }
-                }
-            }
-
             DB::commit();
 
-            return redirect()->route('property.properties.show', Crypt::encrypt($validated['property_id']))
-                ->with('success', 'Unit created successfully with code: ' . $unitCode);
-
+            return response()->json([
+                'success' => true,
+                'message' => 'Unit created successfully with code: ' . $unitCode,
+                'unit' => [
+                    'id' => $unit->id,
+                    'unit_code' => $unit->unit_code,
+                ],
+            ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            return redirect()->back()->withErrors($e->errors())->withInput();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating unit: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to create unit: ' . $e->getMessage())->withInput();
+            return response()->json(['success' => false, 'error' => 'Failed to create unit: ' . $e->getMessage()], 500);
         }
     }
 

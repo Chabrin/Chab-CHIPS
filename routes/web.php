@@ -512,17 +512,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/hr/nssf/rates/{id}', [HrSettingsController::class, 'nssfRatesUpdate'])->name('ajax.nssfRates.update');
     Route::delete('/ajax/hr/nssf/rates/{id}', [HrSettingsController::class, 'nssfRatesDelete'])->name('ajax.nssfRates.delete');
 
-    // HR Settings - Zone Assignments
+    // HR Settings - Zone Assignments (simple read-only reports off sys_pm_properties)
     Route::get('/hr/zone/assignments', [HrSettingsController::class, 'zoneAssignmentsIndex'])->name('settings.hr.zone.assignments');
-    Route::get('/hr/zone/assignments/{id}/view', [HrSettingsController::class, 'zoneAssignmentView'])->name('settings.hr.zone.assignments.view');
-    Route::get('/ajax/hr/zone/assignments/list', [HrSettingsController::class, 'zoneAssignmentsList'])->name('ajax.zoneAssignments.list');
-    Route::post('/ajax/hr/zone/assignments', [HrSettingsController::class, 'zoneAssignmentsStore'])->name('ajax.zoneAssignments.store');
-    Route::post('/ajax/hr/zone/assignments/{id}', [HrSettingsController::class, 'zoneAssignmentsUpdate'])->name('ajax.zoneAssignments.update');
-    Route::post('/ajax/hr/zone/assignments/{id}/unassign-property', [HrSettingsController::class, 'zoneAssignmentUnassignProperty'])->name('ajax.zoneAssignments.unassignProperty');
-    Route::delete('/ajax/hr/zone/assignments/{id}', [HrSettingsController::class, 'zoneAssignmentsDelete'])->name('ajax.zoneAssignments.delete');
+    Route::get('/ajax/hr/zone/assignments/field-officers', [HrSettingsController::class, 'fieldOfficersReport'])->name('ajax.zoneAssignments.fieldOfficers');
+    Route::get('/ajax/hr/zone/assignments/zone-managers', [HrSettingsController::class, 'zoneManagersReport'])->name('ajax.zoneAssignments.zoneManagers');
+    Route::get('/ajax/hr/zone/assignments/zone-supervisors', [HrSettingsController::class, 'zoneSupervisorsReport'])->name('ajax.zoneAssignments.zoneSupervisors');
+    Route::get('/ajax/hr/zone/assignments/property-managers', [HrSettingsController::class, 'propertyManagersReport'])->name('ajax.zoneAssignments.propertyManagers');
+    Route::get('/ajax/hr/zone/assignments/staff-properties', [HrSettingsController::class, 'zoneAssignmentStaffProperties'])->name('ajax.zoneAssignments.staffProperties');
 
     Route::get('/ajax/hr/properties/by-zone/{zoneId}', [HrSettingsController::class, 'propertiesByZone'])->name('ajax.properties.byZone');
-    Route::get('/ajax/hr/properties/available-in-zone', [HrSettingsController::class, 'availablePropertiesInZone'])->name('ajax.properties.availableInZone');
     Route::get('/ajax/hr/staff/list', [HrSettingsController::class, 'staffList'])->name('ajax.staff.list');
     Route::get('/ajax/hr/assignment_types/list', [HrSettingsController::class, 'assignmentTypesList'])->name('ajax.assignmentTypes.list');
     Route::get('/ajax/hr/roles/list', [HrSettingsController::class, 'rolesList'])->name('ajax.roles.list');
@@ -987,11 +985,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/client/{clientId}/properties', [App\Http\Controllers\PropertiesController::class, 'getPropertiesByClient'])->name('client.properties');
 
 
-    // Unit routes
-    Route::get('/property/units/create', [UnitsController::class, 'create'])->name('property.units.create');
+    // Unit routes (create/edit are modals on property.properties.show)
     Route::post('/property/units', [UnitsController::class, 'store'])->name('property.units.store');
     Route::get('/property/selection/{propertyId}/units', [UnitsController::class, 'getUnits']);
-    Route::get('/property/units/{id}/edit', [UnitsController::class, 'edit'])->name('property.units.edit');
+    Route::get('/property/{propertyId}/available-units', [UnitsController::class, 'getAvailableUnits'])->name('property.units.available');
     Route::put('/property/units/{id}', [UnitsController::class, 'update'])->name('property.units.update');
     Route::delete('/ajax/units/documents/{id}', [UnitsController::class, 'deleteDocument'])->name('ajax.units.documents.delete');
 

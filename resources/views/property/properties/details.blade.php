@@ -35,10 +35,14 @@
                         <!-- Summary Header -->
                         <div class="d-flex justify-content-between align-items-center mb-4">
                             <div class="mb-3">
-                                <p class="text-muted mb-0" style="font-size: 0.875rem;">
-                                    <strong>Ref #:</strong> {{ $property->reference_number ?? 'N/A' }} |
-                                    <strong>Property ID:</strong> {{ $property->id }} |
-                                    <strong>Client:</strong> {{ $property->client->names ?? '-' }} 
+                                <p class="text-muted mb-0 d-flex align-items-center flex-wrap" style="font-size: 0.875rem;">
+                                    <strong class="me-1">Property Reference:</strong>
+                                    <span id="propRefSummary">{{ $property->reference_number ?? 'N/A' }}</span>
+                                    @if($property->reference_number)
+                                    <span class="material-symbols-outlined copy-icon ms-1 me-2" data-copy="{{ $property->reference_number }}" title="Copy">content_copy</span>
+                                    @endif
+                                    <span class="mx-1">|</span>
+                                    <strong class="ms-1 me-1">Client:</strong> {{ $property->client->names ?? '-' }}
                                 </p>
                             </div>
 
@@ -101,74 +105,80 @@
                         <div class="tab-content" id="propertyTabsContent">
                             <!-- Property Information Tab -->
                             <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
-                                <div class="row g-3">
-                                    <!-- Basic Information Card -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">info</span>
-                                                    Basic Information
-                                                </h6>
+                                <div class="info-panel">
+                                    <div class="info-panel-header">
+                                        <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">home_work</span>
+                                        Property Information
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="info-row">
+                                                <span class="info-label">Property Name</span>
+                                                <span class="info-value">{{ $property->property_name ?? '-' }}</span>
                                             </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Property ID:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->id }}</strong></small></div>
 
-                                                    <div class="col-5"><small class="text-muted">Property Name:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->property_name ?? '-' }}</strong></small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">Reference Number</span>
+                                                <span class="info-value d-flex align-items-center">
+                                                    {{ $property->reference_number ?? '-' }}
+                                                    @if($property->reference_number)
+                                                    <span class="material-symbols-outlined copy-icon ms-2" data-copy="{{ $property->reference_number }}" title="Copy">content_copy</span>
+                                                    @endif
+                                                </span>
+                                            </div>
 
-                                                    <div class="col-5"><small class="text-muted">Reference Number:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->reference_number ?? '-' }}</strong></small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">LR Number</span>
+                                                <span class="info-value">{{ $property->lr_number ?? '-' }}</span>
+                                            </div>
 
-                                                    <div class="col-5"><small class="text-muted">LR Number:</small></div>
-                                                    <div class="col-7"><small>{{ $property->lr_number ?? '-' }}</small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">Acquisition Date</span>
+                                                <span class="info-value">{{ $property->acquisition_date ? $property->acquisition_date->format('d-m-Y') : '-' }}</span>
+                                            </div>
 
-                                                    <div class="col-5"><small class="text-muted">Acquisition Date:</small></div>
-                                                    <div class="col-7"><small>{{ $property->acquisition_date ? $property->acquisition_date->format('d-m-Y') : '-' }}</small></div>
+                                            <div class="info-row">
+                                                <span class="info-label">Owner/Client</span>
+                                                <span class="info-value">{{ $property->client->names ?? '-' }}</span>
+                                            </div>
+                                        </div>
 
-                                                    <div class="col-12 mt-2"><small class="text-muted">Description:</small></div>
-                                                    <div class="col-12"><small>{{ $property->description ?? '-' }}</small></div>
-                                                </div>
+                                        <div class="col-md-6">
+                                            <div class="info-row">
+                                                <span class="info-label">Zone</span>
+                                                <span class="info-value">{{ $property->zone->zone_name ?? '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Zone Area</span>
+                                                <span class="info-value">{{ $property->zoneArea->area_name ?? '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Field Officer</span>
+                                                <span class="info-value">{{ $property->fieldOfficer ? strtoupper($property->fieldOfficer->full_names) : '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Zone Supervisor</span>
+                                                <span class="info-value">{{ $property->zoneSupervisor ? strtoupper($property->zoneSupervisor->full_names) : '-' }}</span>
+                                            </div>
+
+                                            <div class="info-row">
+                                                <span class="info-label">Zone Manager</span>
+                                                <span class="info-value">{{ $property->zoneManager ? strtoupper($property->zoneManager->full_names) : '-' }}</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Location & Management Card -->
-                                    <div class="col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2">
-                                                <h6 class="mb-0" style="font-size: 0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">location_on</span>
-                                                    Location & Management
-                                                </h6>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Owner/Client:</small></div>
-                                                    <div class="col-7"><small><strong>{{ $property->client->names ?? '-' }}</strong></small></div>
+                                    <div class="info-row">
+                                        <span class="info-label">Coordinates</span>
+                                        <span class="info-value">{{ $property->lat_long ?? '-' }}</span>
+                                    </div>
 
-                                                    <div class="col-5"><small class="text-muted">Zone:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zone->zone_name ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone Area:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zoneArea->area_name ?? '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Field Officer:</small></div>
-                                                    <div class="col-7"><small>{{ $property->fieldOfficer ? strtoupper($property->fieldOfficer->full_names) : '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone Supervisor:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zoneSupervisor ? strtoupper($property->zoneSupervisor->full_names) : '-' }}</small></div>
-
-                                                    <div class="col-5"><small class="text-muted">Zone Manager:</small></div>
-                                                    <div class="col-7"><small>{{ $property->zoneManager ? strtoupper($property->zoneManager->full_names) : '-' }}</small></div>
-
-                                                    <div class="col-12 mt-2"><small class="text-muted">Coordinates:</small></div>
-                                                    <div class="col-12"><small>{{ $property->lat_long ?? '-' }}</small></div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="info-row description-row">
+                                        <span class="info-label">Description</span>
+                                        <span class="info-value">{{ $property->description ?? '-' }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -331,6 +341,14 @@
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                     </div>
+                                    <div class="col-auto ms-auto">
+                                        @permission('create_units')
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitBtn">
+                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">add_circle</span>
+                                            Add Unit
+                                        </button>
+                                        @endpermission
+                                    </div>
                                 </div>
                                 <div class="table-responsive custom-scrollbar">
                                     <table id="unitsTable" class="display" style="width:100%;">
@@ -443,6 +461,262 @@
     </div>
 </div>
 
+<!-- Add Unit Modal -->
+<div class="modal fade" id="addUnitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUnitForm">
+                    <input type="hidden" name="property_id" value="{{ $property->id }}">
+                    <input type="hidden" name="client_id" value="{{ $property->client_id }}">
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_name" class="form-label">Unit Name</label>
+                            <input type="text" class="form-control" id="unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_type_id" class="form-label">Unit Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="unit_type_id" name="unit_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Normal</option>
+                                <option value="2">Owner Occupied</option>
+                                <option value="3">Caretaker</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="usage_type_id" class="form-label">Usage Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="usage_type_id" name="usage_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Commercial</option>
+                                <option value="3">Hybrid</option>
+                                <option value="2">Residential</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_condition_id" class="form-label">Unit Condition <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="unit_condition_id" name="unit_condition_id" placeholder="e.g. Good, Fair, Needs repair" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="occupancy_status_id" class="form-label">Occupation Status</label>
+                            <select class="form-select" id="occupancy_status_id" name="occupancy_status_id">
+                                <option value="31" selected>Vacant</option>
+                                <option value="38">Occupied</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="topology_id" class="form-label">Topology</label>
+                            <select class="form-select" id="topology_id" name="topology_id">
+                                <option value="">Please select</option>
+                                <option value="1">Topology 1</option>
+                                <option value="2">Topology 2</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="category_id" class="form-label">Category</label>
+                            <select class="form-select" id="category_id" name="category_id">
+                                <option value="">Please select</option>
+                                <option value="1">For Rent</option>
+                                <option value="2">Other</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="vat_able" class="form-label">VAT</label>
+                            <select class="form-select" id="vat_able" name="vat_able">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="rent_amount" class="form-label">Rent Amount</label>
+                            <input type="number" step="0.01" class="form-control" id="rent_amount" name="rent_amount" placeholder="0.00">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="initial_water_meter_reading" class="form-label">Initial Water Meter Reading</label>
+                            <input type="number" step="0.01" class="form-control" id="initial_water_meter_reading" name="initial_water_meter_reading" placeholder="0">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-12 mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" placeholder="Optional notes about the unit"></textarea>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                            <span class="material-symbols-outlined">close</span>
+                            <span class="ms-1">Cancel</span>
+                        </button>
+                        <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveUnitBtn">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="saveUnitSpinner"></span>
+                            <span class="material-symbols-outlined" id="saveUnitIcon">check_circle</span>
+                            <span class="ms-1" id="saveUnitText">Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Unit Modal -->
+<div class="modal fade" id="editUnitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUnitForm">
+                    <input type="hidden" name="property_id" value="{{ $property->id }}">
+                    <input type="hidden" id="edit_unit_id" name="unit_id">
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="edit_unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_name" class="form-label">Unit Name</label>
+                            <input type="text" class="form-control" id="edit_unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_type_id" class="form-label">Unit Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="edit_unit_type_id" name="unit_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Normal</option>
+                                <option value="2">Owner Occupied</option>
+                                <option value="3">Caretaker</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_usage_type_id" class="form-label">Usage Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="edit_usage_type_id" name="usage_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Commercial</option>
+                                <option value="3">Hybrid</option>
+                                <option value="2">Residential</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_condition_id" class="form-label">Unit Condition <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="edit_unit_condition_id" name="unit_condition_id" placeholder="e.g. Good, Fair, Needs repair" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_occupancy_status_id" class="form-label">Occupation Status</label>
+                            <select class="form-select" id="edit_occupancy_status_id" name="occupancy_status_id">
+                                <option value="31">Vacant</option>
+                                <option value="38">Occupied</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_topology_id" class="form-label">Topology</label>
+                            <select class="form-select" id="edit_topology_id" name="topology_id">
+                                <option value="">Please select</option>
+                                <option value="1">Topology 1</option>
+                                <option value="2">Topology 2</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_category_id" class="form-label">Category</label>
+                            <select class="form-select" id="edit_category_id" name="category_id">
+                                <option value="">Please select</option>
+                                <option value="1">For Rent</option>
+                                <option value="2">Other</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_vat_able" class="form-label">VAT</label>
+                            <select class="form-select" id="edit_vat_able" name="vat_able">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_rent_amount" class="form-label">Rent Amount</label>
+                            <input type="number" step="0.01" class="form-control" id="edit_rent_amount" name="rent_amount" placeholder="0.00">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_initial_water_meter_reading" class="form-label">Initial Water Meter Reading</label>
+                            <input type="number" step="0.01" class="form-control" id="edit_initial_water_meter_reading" name="initial_water_meter_reading" placeholder="0">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-12 mb-3">
+                            <label for="edit_description" class="form-label">Description</label>
+                            <textarea class="form-control" id="edit_description" name="description" rows="3" placeholder="Optional notes about the unit"></textarea>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                            <span class="material-symbols-outlined">close</span>
+                            <span class="ms-1">Cancel</span>
+                        </button>
+                        <button type="submit" class="btn btn-primary d-flex align-items-center" id="updateUnitBtn">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="updateUnitSpinner"></span>
+                            <span class="material-symbols-outlined" id="updateUnitIcon">check_circle</span>
+                            <span class="ms-1" id="updateUnitText">Update</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;
@@ -467,12 +741,101 @@
     .card {
         border: 1px solid #e0e0e0;
     }
+
+    .info-panel {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        background: #fff;
+    }
+
+    .info-panel-header {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .info-row {
+        display: flex;
+        flex-wrap: wrap;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.85rem;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-row.description-row {
+        align-items: flex-start;
+    }
+
+    .info-label {
+        flex: 0 0 45%;
+        max-width: 45%;
+        color: #6b7280;
+    }
+
+    .info-value {
+        flex: 1;
+        min-width: 0;
+        color: #212529;
+        font-weight: 500;
+        word-break: break-word;
+    }
+
+    .copy-icon {
+        cursor: pointer;
+        color: #5aa9e0;
+        font-size: 16px;
+        line-height: 1;
+        transition: color 0.15s ease;
+    }
+
+    .copy-icon:hover {
+        color: #3598db;
+    }
+
+    .copy-icon.copied {
+        color: #3598db;
+    }
 </style>
 <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(function() {
         var unitsTable = null;
         var unitsLoaded = false;
+
+        // Copy-to-clipboard for info fields
+        $(document).on('click', '.copy-icon', function() {
+            var $icon = $(this);
+            var text = $icon.data('copy');
+            if (!text) return;
+
+            function showCopied() {
+                var original = $icon.text();
+                $icon.addClass('copied').text('check');
+                setTimeout(function() {
+                    $icon.removeClass('copied').text(original);
+                }, 1200);
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(String(text)).then(showCopied);
+            } else {
+                var $tmp = $('<textarea>').val(text).appendTo('body').select();
+                document.execCommand('copy');
+                $tmp.remove();
+                showCopied();
+            }
+        });
         
         // format ISO date to dd/mm/yy
         function formatDateShort(dateStr) {
@@ -607,10 +970,13 @@
                     orderable: false,
                     searchable: false,
                     render: function(id, type, row) {
+                        if (!row.can_edit) {
+                            return '';
+                        }
                         return `
-                            <a href="/property/units/${row.encrypted_id}/edit" title="Edit Unit">
+                            <button type="button" class="btn btn-link p-0 edit-unit-btn" title="Edit Unit" data-row='${JSON.stringify(row)}'>
                                 <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
-                            </a>
+                            </button>
                         `;
                     }
                 }
@@ -664,6 +1030,147 @@
                 }
             });
         }
+
+        // ── Add Unit Modal ──────────────────────────────────────────────────────
+        $('#addUnitBtn').on('click', function() {
+            $('#addUnitForm')[0].reset();
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+            $('#addUnitModal').modal('show');
+        });
+
+        $('#addUnitForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var $btn = $('#saveUnitBtn');
+            var $spinner = $('#saveUnitSpinner');
+            var $icon = $('#saveUnitIcon');
+            var $text = $('#saveUnitText');
+
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+            $spinner.removeClass('d-none');
+            $icon.addClass('d-none');
+            $text.text('Saving...');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: "{{ route('property.units.store') }}",
+                type: 'POST',
+                data: $(this).serialize() + '&_token={{ csrf_token() }}',
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Unit added successfully');
+                        $('#addUnitModal').modal('hide');
+                        $('#addUnitForm')[0].reset();
+                        loadUnits($('#propertySelect').val());
+                    } else {
+                        toastr.error(res.error || 'Failed to save unit');
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var errors = xhr.responseJSON.errors;
+                        Object.keys(errors).forEach(function(field) {
+                            var $field = $('#addUnitForm [name="' + field + '"]');
+                            $field.addClass('is-invalid');
+                            $field.siblings('.invalid-feedback').text(errors[field][0]);
+                        });
+                        toastr.error('Please correct the highlighted fields');
+                    } else {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to save unit';
+                        toastr.error(msg);
+                    }
+                },
+                complete: function() {
+                    $spinner.addClass('d-none');
+                    $icon.removeClass('d-none');
+                    $text.text('Save');
+                    $btn.prop('disabled', false);
+                }
+            });
+        });
+
+        $('#addUnitModal').on('hidden.bs.modal', function() {
+            $('#addUnitForm')[0].reset();
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+        });
+
+        // ── Edit Unit Modal ─────────────────────────────────────────────────────
+        $(document).on('click', '.edit-unit-btn', function() {
+            var row = JSON.parse($(this).attr('data-row'));
+
+            $('#editUnitForm .is-invalid').removeClass('is-invalid');
+            $('#edit_unit_id').val(row.encrypted_id);
+            $('#edit_unit_number').val(row.unit_number_raw || '');
+            $('#edit_unit_name').val(row.unit_name_raw || '');
+            $('#edit_unit_type_id').val(row.unit_type_id || '');
+            $('#edit_usage_type_id').val(row.usage_type_id || '');
+            $('#edit_unit_condition_id').val(row.unit_condition_id || '');
+            $('#edit_occupancy_status_id').val(row.occupancy_status_id || '31');
+            $('#edit_topology_id').val(row.topology_id || '');
+            $('#edit_category_id').val(row.category_id || '');
+            $('#edit_vat_able').val(row.vat_able == 1 ? 'Yes' : 'No');
+            $('#edit_rent_amount').val(row.rent_amount_raw || '');
+            $('#edit_initial_water_meter_reading').val(row.initial_water_meter_reading || '');
+            $('#edit_description').val(row.description_raw || '');
+
+            $('#editUnitModal').modal('show');
+        });
+
+        $('#editUnitForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var $btn = $('#updateUnitBtn');
+            var $spinner = $('#updateUnitSpinner');
+            var $icon = $('#updateUnitIcon');
+            var $text = $('#updateUnitText');
+            var unitId = $('#edit_unit_id').val();
+
+            $('#editUnitForm .is-invalid').removeClass('is-invalid');
+            $spinner.removeClass('d-none');
+            $icon.addClass('d-none');
+            $text.text('Updating...');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: "{{ url('/property/units') }}/" + unitId,
+                type: 'PUT',
+                data: $(this).serialize() + '&_token={{ csrf_token() }}',
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Unit updated successfully');
+                        $('#editUnitModal').modal('hide');
+                        loadUnits($('#propertySelect').val());
+                    } else {
+                        toastr.error(res.error || 'Failed to update unit');
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var errors = xhr.responseJSON.errors;
+                        Object.keys(errors).forEach(function(field) {
+                            var $field = $('#editUnitForm [name="' + field + '"]');
+                            $field.addClass('is-invalid');
+                            $field.siblings('.invalid-feedback').text(errors[field][0]);
+                        });
+                        toastr.error('Please correct the highlighted fields');
+                    } else {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to update unit';
+                        toastr.error(msg);
+                    }
+                },
+                complete: function() {
+                    $spinner.addClass('d-none');
+                    $icon.removeClass('d-none');
+                    $text.text('Update');
+                    $btn.prop('disabled', false);
+                }
+            });
+        });
+
+        $('#editUnitModal').on('hidden.bs.modal', function() {
+            $('#editUnitForm')[0].reset();
+            $('#editUnitForm .is-invalid').removeClass('is-invalid');
+        });
 
         // Repairs DataTable for this property
         var repairsTable = $('#property-repairs-table').DataTable({

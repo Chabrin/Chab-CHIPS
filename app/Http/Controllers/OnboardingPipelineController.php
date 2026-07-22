@@ -81,7 +81,14 @@ class OnboardingPipelineController extends Controller
                         'type' => 'links',
                         'links' => [
                             $this->buildLink('Add SLA', 'create_service_agreements', 'service.agreements.create', $property->client_id),
-                            $this->buildLink('Add Unit', 'create_units', 'property.units.create', $property->client_id),
+                            [
+                                'label' => 'Add Unit',
+                                'has_permission' => Auth::user()->hasPermission('create_units'),
+                                // Unit creation is a modal on the property details page (Units tab)
+                                'url' => Auth::user()->hasPermission('create_units')
+                                    ? route('property.properties.show', Crypt::encrypt($property->id))
+                                    : null,
+                            ],
                         ],
                     ]
                     : $this->statusStep($property->current_status_id);

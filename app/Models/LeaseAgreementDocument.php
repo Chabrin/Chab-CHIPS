@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 class LeaseAgreementDocument extends Model
 {
      protected $table = 'sys_pm_lease_agreements_repeat_documents';
+    public $timestamps = false;
 
     protected $fillable = [
         'parent_id',
         'documents',
-        'parans',
+        'params',
     ];
 
     public function leaseAgreement()

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class LeaseAgreementInvoiceableItem extends Model
 {
     protected $table = 'sys_pm_lease_agreements_27_repeat';
+    public $timestamps = false;
 
     protected $fillable = [
         'parent_id',
