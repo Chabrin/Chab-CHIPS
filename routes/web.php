@@ -976,11 +976,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/client/{clientId}/properties', [App\Http\Controllers\PropertiesController::class, 'getPropertiesByClient'])->name('client.properties');
 
 
-    // Unit routes
-    Route::get('/property/units/create', [UnitsController::class, 'create'])->name('property.units.create');
+    // Unit routes (create/edit are modals on property.properties.show)
     Route::post('/property/units', [UnitsController::class, 'store'])->name('property.units.store');
     Route::get('/property/selection/{propertyId}/units', [UnitsController::class, 'getUnits']);
-    Route::get('/property/units/{id}/edit', [UnitsController::class, 'edit'])->name('property.units.edit');
     Route::put('/property/units/{id}', [UnitsController::class, 'update'])->name('property.units.update');
     Route::delete('/ajax/units/documents/{id}', [UnitsController::class, 'deleteDocument'])->name('ajax.units.documents.delete');
 

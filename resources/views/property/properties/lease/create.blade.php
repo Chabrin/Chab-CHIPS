@@ -1,5 +1,23 @@
 @extends('layouts.main')
 @section('content')
+<style>
+    .btn-outline-primary.date-filter-radio {
+        color: #3598db;
+        border-color: #3598db;
+    }
+
+    .btn-outline-primary.date-filter-radio:hover {
+        color: #fff;
+        background-color: #3598db;
+        border-color: #3598db;
+    }
+
+    .btn-check:checked+.btn-outline-primary.date-filter-radio {
+        color: #fff;
+        background-color: #3598db;
+        border-color: #3598db;
+    }
+</style>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
@@ -41,38 +59,127 @@
                                     <h6 class="text-muted border-bottom pb-2">Lease Agreements</h6>
                                 </div>
 
+                                @if($client)
                                 <div class="col-md-4 mb-3">
                                     <label for="client_name" class="form-label">Client/Landlord <span class="text-danger">*</span></label>
-                                    @if($client)
-                                        <!-- Pre-filled client (coming from client details page) -->
-                                        <div class="input-group">
-                                            <input type="text" class="form-control @error('client_name') is-invalid @enderror" id="client_name" name="client_name" value="{{ $client->names }}" required readonly>
-                                            <input type="hidden" id="client_id" name="client_id" value="{{ $client->id }}">
-                                            @error('client_name')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                    @else
-                                        <!-- Client search dropdown (when no client is pre-selected) -->
-                                        <select class="form-select @error('client_id') is-invalid @enderror" id="client_search" name="client_id" required>
-                                            <option value="">Search for a client...</option>
-                                        </select>
-                                        @error('client_id')
+                                    <!-- Pre-filled client (coming from client details page) -->
+                                    <div class="input-group">
+                                        <input type="text" class="form-control @error('client_name') is-invalid @enderror" id="client_name" name="client_name" value="{{ $client->names }}" required readonly>
+                                        <input type="hidden" id="client_id" name="client_id" value="{{ $client->id }}">
+                                        @error('client_name')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
-                                        <small class="text-muted">Type at least 2 characters to search</small>
-                                    @endif
+                                    </div>
                                 </div>
 
                                 <div class="col-md-4 mb-3">
                                     <label for="property_id" class="form-label">Property <span class="text-danger">*</span></label>
                                     <select class="form-select @error('property_id') is-invalid @enderror" id="property_id" name="property_id" required>
-                                        <option value="">{{ $client ? 'Loading properties...' : 'Select a client first' }}</option>
+                                        <option value="">Loading properties...</option>
                                     </select>
                                     @error('property_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
+                                @else
+                                <div class="col-12 mb-3">
+                                    <!-- Search Mode Toggle -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-12">
+                                            <label class="form-label d-block">Search By <span class="text-danger">*</span></label>
+                                            <div class="btn-group" role="group" aria-label="Search mode">
+                                                <input type="radio" class="btn-check" name="search_mode" id="mode_property" value="property" checked autocomplete="off">
+                                                <label class="btn btn-outline-primary date-filter-radio" for="mode_property">
+                                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">apartment</span>
+                                                    Property
+                                                </label>
+                                                <input type="radio" class="btn-check" name="search_mode" id="mode_landlord" value="landlord" autocomplete="off">
+                                                <label class="btn btn-outline-primary date-filter-radio" for="mode_landlord">
+                                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span>
+                                                    Landlord
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <input type="hidden" id="client_id" name="client_id" value="{{ old('client_id') }}">
+                                    @error('client_id')
+                                    <div class="text-danger small mb-2">{{ $message }}</div>
+                                    @enderror
+
+                                    <!-- MODE: Search by Property -->
+                                    <div id="property_mode_section">
+                                        <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="property_search_input" class="form-label mb-1">Search Property</label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control form-control-sm" id="property_search_input" placeholder="-- Search --">
+                                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_property_btn">
+                                                        <span class="material-symbols-outlined" id="search_property_icon" style="font-size:18px;">search</span>
+                                                        <span class="spinner-border spinner-border-sm" role="status" id="search_property_spinner" style="display:none;"></span>
+                                                    </button>
+                                                </div>
+                                                <small class="text-muted">Search by property name or reference</small>
+                                            </div>
+                                            <div class="col-md-6" id="property_select_slot_property"></div>
+                                        </div>
+                                        <div class="row mb-2" id="property_landlord_wrap" style="display:none;">
+                                            <div class="col-md-6">
+                                                <label for="property_landlord_select" class="form-label mb-1">Select Landlord <span class="text-danger">*</span></label>
+                                                <select class="form-select form-select-sm" id="property_landlord_select" disabled>
+                                                    <option value="">-- Select Property First --</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- MODE: Search by Landlord -->
+                                    <div id="landlord_mode_section" style="display:none;">
+                                        <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="landlord_search_input" class="form-label mb-1">Search Landlord</label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control form-control-sm" id="landlord_search_input" placeholder="-- Search --">
+                                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_landlord_btn">
+                                                        <span class="material-symbols-outlined" id="search_landlord_icon" style="font-size:18px;">search</span>
+                                                        <span class="spinner-border spinner-border-sm" role="status" id="search_landlord_spinner" style="display:none;"></span>
+                                                    </button>
+                                                </div>
+                                                <small class="text-muted">Search by name, reference, phone, email or ID number</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="landlord_direct_select" class="form-label mb-1">Select Landlord <span class="text-danger">*</span></label>
+                                                <select class="form-select form-select-sm" id="landlord_direct_select" disabled>
+                                                    <option value="">-- Search First --</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-md-6" id="property_select_slot_landlord"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Selected details (shared) -->
+                                    <div class="row mb-3">
+                                        <div class="col-12">
+                                            <small class="text-muted">
+                                                <strong>Selected Landlord:</strong> <span id="selected_client_name">-</span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Canonical Property field — JS relocates this into whichever mode's slot is active -->
+                                <div class="col-md-6 d-none" id="property_field_wrapper">
+                                    <label for="property_id" class="form-label mb-1">Select Property <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm @error('property_id') is-invalid @enderror" id="property_id" name="property_id" required disabled>
+                                        <option value="">-- Search First --</option>
+                                    </select>
+                                    @error('property_id')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                                @endif
 
                                 <div class="col-md-4 mb-3">
                                     <label for="sla_ref" class="form-label">SLA Ref <span class="text-danger">*</span></label>
@@ -184,7 +291,7 @@
                                     <div class="input-group">
                                         <input type="file" class="form-control @error('documents') is-invalid @enderror" 
                                                id="documents" name="documents[]" multiple accept=".pdf,.doc,.docx">
-                                        <button type="button" class="btn btn-outline-secondary" id="addFilesBtn">
+                                        <button type="button" class="btn btn-outline-primary" id="addFilesBtn">
                                             <span class="material-symbols-outlined" style="font-size:18px;">add</span>
                                             Add files
                                         </button>
@@ -202,7 +309,7 @@
                                 </div>
 
                                 <div class="col-12 mb-3">
-                                    <button type="button" class="btn btn-success btn-sm d-flex align-items-center" id="addInvoicableItem">
+                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addInvoicableItem">
                                         <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
                                         Add Item
                                     </button>
@@ -245,7 +352,7 @@
                                             </div>
 
                                             <div class="d-flex gap-1">
-                                                <button type="button" class="btn btn-success btn-sm add-item-inline d-none">
+                                                <button type="button" class="btn btn-primary btn-sm add-item-inline d-none">
                                                     <span class="material-symbols-outlined" style="font-size:16px;">add</span>
                                                 </button>
                                                 <button type="button" class="btn btn-light btn-sm remove-invoicable-item d-none">
@@ -289,49 +396,196 @@
                 loadProperties(clientId);
             }
         @else
-            // No client pre-filled, initialize search dropdown
-            $('#client_search').select2({
-                placeholder: 'Search for a client/landlord...',
-                allowClear: true,
-                width: '100%',
-                minimumInputLength: 2,
-                ajax: {
-                    url: "{{ route('ajax.clients.list') }}",
-                    dataType: 'json',
-                    delay: 250,
-                    data: function(params) {
-                        return {
-                            client_type: 'Landlord',
-                            search: params.term
-                        };
-                    },
-                    processResults: function(response) {
-                        return {
-                            results: response.data.map(function(client) {
-                                return {
-                                    id: client.id,
-                                    text: `${client.names} (${client.reference_number})`
-                                };
-                            })
-                        };
-                    },
-                    cache: true
+            // No client pre-filled — dual search widget (Property / Landlord), reusing
+            // the exact same AJAX endpoints as /landlord/account/statement
+            function resetClientSelection() {
+                $('#client_id').val('');
+                $('#selected_client_name').text('-');
+                $('#property_id').html('<option value="">-- Search First --</option>').prop('disabled', true);
+                $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
+                $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
+                $('#tenant_name').val('');
+                $('#tenant_id').val('');
+                $('#property_landlord_wrap').hide();
+                $('#property_landlord_select').html('<option value="">-- Select Property First --</option>').prop('disabled', true);
+            }
+
+            // Move the canonical Property field into whichever mode's slot is active,
+            // so it always sits beside that mode's search box (exact account-statement layout)
+            function placePropertyField(mode) {
+                var $wrapper = $('#property_field_wrapper').removeClass('d-none');
+                if (mode === 'property') {
+                    $wrapper.appendTo('#property_select_slot_property');
+                } else {
+                    $wrapper.appendTo('#property_select_slot_landlord');
+                }
+            }
+            placePropertyField('property');
+
+            // Search mode toggle
+            $('input[name="search_mode"]').on('change', function() {
+                var mode = $(this).val();
+                resetClientSelection();
+                placePropertyField(mode);
+                if (mode === 'property') {
+                    $('#property_mode_section').show();
+                    $('#landlord_mode_section').hide();
+                } else {
+                    $('#property_mode_section').hide();
+                    $('#landlord_mode_section').show();
                 }
             });
-            
-            // When client is selected from search, load their properties
-            $('#client_search').on('change', function() {
-                const selectedClientId = $(this).val();
-                
-                if (selectedClientId) {
-                    loadProperties(selectedClientId);
+
+            // ── Search by Property ──────────────────────────────────
+            $('#search_property_btn').on('click', function() {
+                const searchTerm = $('#property_search_input').val().trim();
+                if (searchTerm.length < 2) {
+                    toastr.warning('Please enter at least 2 characters to search');
+                    return;
+                }
+
+                $('#search_property_icon').hide();
+                $('#search_property_spinner').show();
+                $('#search_property_btn').prop('disabled', true);
+
+                $.ajax({
+                    url: '/ajax/landlord/properties',
+                    method: 'GET',
+                    data: { search: searchTerm },
+                    success: function(response) {
+                        if (response.success && response.properties && response.properties.length > 0) {
+                            $('#property_id').empty().append('<option value="">-- Select Property --</option>');
+                            $.each(response.properties, function(index, prop) {
+                                $('#property_id').append(`<option value="${prop.id}">${prop.property_name} - ${prop.reference_number || ''}</option>`);
+                            });
+                            $('#property_id').prop('disabled', false);
+                            toastr.success(`Found ${response.properties.length} property(ies)`);
+                        } else {
+                            toastr.info('No properties found');
+                            $('#property_id').empty().append('<option value="">-- No Results --</option>').prop('disabled', true);
+                        }
+                    },
+                    error: function() {
+                        toastr.error('Error searching properties');
+                    },
+                    complete: function() {
+                        $('#search_property_icon').show();
+                        $('#search_property_spinner').hide();
+                        $('#search_property_btn').prop('disabled', false);
+                    }
+                });
+            });
+
+            $('#property_search_input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $('#search_property_btn').click();
+                }
+            });
+
+            // Resolve the landlord for the selected property
+            function loadLandlordForProperty(propertyId) {
+                $('#property_landlord_wrap').show();
+                $('#property_landlord_select').html('<option value="">Loading...</option>').prop('disabled', true);
+
+                $.ajax({
+                    url: '/ajax/landlord/landlords-by-property',
+                    method: 'GET',
+                    data: { property_id: propertyId },
+                    success: function(response) {
+                        $('#property_landlord_select').empty().append('<option value="">-- Select Landlord --</option>');
+                        if (response.success && response.landlords && response.landlords.length > 0) {
+                            $.each(response.landlords, function(i, l) {
+                                $('#property_landlord_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
+                            });
+                            $('#property_landlord_select').prop('disabled', false);
+
+                            if (response.landlords.length === 1) {
+                                $('#property_landlord_select').val(response.landlords[0].id).trigger('change');
+                            }
+                        } else {
+                            toastr.warning('No landlord found for this property');
+                            $('#property_landlord_select').prop('disabled', true);
+                        }
+                    },
+                    error: function() {
+                        toastr.error('Error loading landlord for property');
+                    }
+                });
+            }
+
+            $('#property_landlord_select').on('change', function() {
+                const landlordId = $(this).val();
+                const landlordText = $(this).find(':selected').text();
+                if (landlordId) {
+                    $('#client_id').val(landlordId);
+                    $('#selected_client_name').text(landlordText);
                 } else {
-                    // Reset dependent fields
-                    $('#property_id').html('<option value="">Select a client first</option>').prop('disabled', true);
-                    $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
-                    $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
-                    $('#tenant_name').val('');
-                    $('#tenant_id').val('');
+                    $('#client_id').val('');
+                    $('#selected_client_name').text('-');
+                }
+            });
+
+            // ── Search by Landlord ──────────────────────────────────
+            $('#search_landlord_btn').on('click', function() {
+                const searchTerm = $('#landlord_search_input').val().trim();
+                if (searchTerm.length < 2) {
+                    toastr.warning('Please enter at least 2 characters to search');
+                    return;
+                }
+
+                $('#search_landlord_icon').hide();
+                $('#search_landlord_spinner').show();
+                $('#search_landlord_btn').prop('disabled', true);
+
+                $.ajax({
+                    url: '/ajax/landlord/search-landlords',
+                    method: 'GET',
+                    data: { search: searchTerm },
+                    success: function(response) {
+                        $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');
+                        if (response.success && response.landlords && response.landlords.length > 0) {
+                            $.each(response.landlords, function(i, l) {
+                                $('#landlord_direct_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
+                            });
+                            $('#landlord_direct_select').prop('disabled', false);
+                            toastr.success('Found ' + response.landlords.length + ' landlord(s)');
+                        } else {
+                            toastr.info('No landlords found');
+                            $('#landlord_direct_select').prop('disabled', true);
+                        }
+                    },
+                    error: function() {
+                        toastr.error('Error searching landlords');
+                    },
+                    complete: function() {
+                        $('#search_landlord_icon').show();
+                        $('#search_landlord_spinner').hide();
+                        $('#search_landlord_btn').prop('disabled', false);
+                    }
+                });
+            });
+
+            $('#landlord_search_input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $('#search_landlord_btn').click();
+                }
+            });
+
+            // When landlord selected directly, load their properties
+            $('#landlord_direct_select').on('change', function() {
+                const landlordId = $(this).val();
+                const landlordText = $(this).find(':selected').text();
+
+                if (landlordId) {
+                    $('#client_id').val(landlordId);
+                    $('#selected_client_name').text(landlordText);
+                    loadProperties(landlordId);
+                } else {
+                    $('#client_id').val('');
+                    $('#selected_client_name').text('-');
+                    $('#property_id').html('<option value="">-- Select Landlord First --</option>').prop('disabled', true);
                 }
             });
         @endif
@@ -368,10 +622,15 @@
         // Load SLA and Units when property is selected
         $('#property_id').on('change', function() {
             const propertyId = $(this).val();
-            
+
             if (propertyId) {
                 loadSLAForProperty(propertyId);
                 loadUnitsForProperty(propertyId);
+                @if(!$client)
+                if ($('input[name="search_mode"]:checked').val() === 'property') {
+                    loadLandlordForProperty(propertyId);
+                }
+                @endif
             } else {
                 // Reset dependent fields
                 $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', false);
@@ -478,116 +737,6 @@
                 }
             });
         }
-
-        // Client Search Modal
-        $('#searchClientBtn').on('click', function() {
-            $('#clientSearchModal').modal('show');
-        });
-
-        $('#clientSearchInput').on('keyup', function() {
-            let searchTerm = $(this).val();
-            if (searchTerm.length > 2) {
-                // AJAX search for clients
-                $.ajax({
-                    url: '/api/clients/search',
-                    method: 'GET',
-                    data: { term: searchTerm },
-                    success: function(response) {
-                        let resultsHtml = '<div class="list-group">';
-                        response.clients.forEach(function(client) {
-                            resultsHtml += `
-                                <a href="#" class="list-group-item list-group-item-action select-client" 
-                                   data-client-id="${client.id}" 
-                                   data-client-name="${client.full_name}">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <h6 class="mb-1">${client.full_name}</h6>
-                                        <small>${client.client_number}</small>
-                                    </div>
-                                    <p class="mb-1">${client.email || ''}</p>
-                                    <small>${client.phone || ''}</small>
-                                </a>
-                            `;
-                        });
-                        resultsHtml += '</div>';
-                        $('#clientSearchResults').html(resultsHtml);
-                    }
-                });
-            }
-        });
-
-        $(document).on('click', '.select-client', function(e) {
-            e.preventDefault();
-            let clientId = $(this).data('client-id');
-            let clientName = $(this).data('client-name');
-            $('#client_id').val(clientId);
-            $('#client_name').val(clientName);
-            $('#clientSearchModal').modal('hide');
-        });
-
-        // Tenant Search Modal
-        $('#searchTenantBtn').on('click', function() {
-            $('#tenantSearchModal').modal('show');
-        });
-
-        $('#tenantSearchInput').on('keyup', function() {
-            let searchTerm = $(this).val();
-            if (searchTerm.length > 2) {
-                // AJAX search for tenants
-                $.ajax({
-                    url: '/api/tenants/search',
-                    method: 'GET',
-                    data: { term: searchTerm },
-                    success: function(response) {
-                        let resultsHtml = '<div class="list-group">';
-                        response.tenants.forEach(function(tenant) {
-                            resultsHtml += `
-                                <a href="#" class="list-group-item list-group-item-action select-tenant" 
-                                   data-tenant-id="${tenant.id}" 
-                                   data-tenant-name="${tenant.full_name}">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <h6 class="mb-1">${tenant.full_name}</h6>
-                                        <small>${tenant.tenant_number}</small>
-                                    </div>
-                                    <p class="mb-1">${tenant.email || ''}</p>
-                                    <small>${tenant.phone || ''}</small>
-                                </a>
-                            `;
-                        });
-                        resultsHtml += '</div>';
-                        $('#tenantSearchResults').html(resultsHtml);
-                    }
-                });
-            }
-        });
-
-        $(document).on('click', '.select-tenant', function(e) {
-            e.preventDefault();
-            let tenantId = $(this).data('tenant-id');
-            let tenantName = $(this).data('tenant-name');
-            $('#tenant_id').val(tenantId);
-            $('#tenant_name').val(tenantName);
-            $('#tenantSearchModal').modal('hide');
-        });
-
-        // Edit Client Button
-        $('#editClientBtn').on('click', function() {
-            let clientId = $('#client_id').val();
-            if (clientId) {
-                window.location.href = '/clients/' + clientId + '/edit';
-            } else {
-                alert('Please select a client first');
-            }
-        });
-
-        // Edit Tenant Button
-        $('#editTenantBtn').on('click', function() {
-            let tenantId = $('#tenant_id').val();
-            if (tenantId) {
-                window.location.href = '/tenants/' + tenantId + '/edit';
-            } else {
-                alert('Please select a tenant first');
-            }
-        });
 
         let invoiceableItems = []; // Store all invoiceable items
 

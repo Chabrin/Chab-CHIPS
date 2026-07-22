@@ -331,6 +331,14 @@
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                     </div>
+                                    <div class="col-auto ms-auto">
+                                        @permission('create_units')
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitBtn">
+                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">add_circle</span>
+                                            Add Unit
+                                        </button>
+                                        @endpermission
+                                    </div>
                                 </div>
                                 <div class="table-responsive custom-scrollbar">
                                     <table id="unitsTable" class="display" style="width:100%;">
@@ -438,6 +446,262 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Unit Modal -->
+<div class="modal fade" id="addUnitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUnitForm">
+                    <input type="hidden" name="property_id" value="{{ $property->id }}">
+                    <input type="hidden" name="client_id" value="{{ $property->client_id }}">
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_name" class="form-label">Unit Name</label>
+                            <input type="text" class="form-control" id="unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_type_id" class="form-label">Unit Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="unit_type_id" name="unit_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Normal</option>
+                                <option value="2">Owner Occupied</option>
+                                <option value="3">Caretaker</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="usage_type_id" class="form-label">Usage Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="usage_type_id" name="usage_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Commercial</option>
+                                <option value="3">Hybrid</option>
+                                <option value="2">Residential</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="unit_condition_id" class="form-label">Unit Condition <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="unit_condition_id" name="unit_condition_id" placeholder="e.g. Good, Fair, Needs repair" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="occupancy_status_id" class="form-label">Occupation Status</label>
+                            <select class="form-select" id="occupancy_status_id" name="occupancy_status_id">
+                                <option value="31" selected>Vacant</option>
+                                <option value="38">Occupied</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="topology_id" class="form-label">Topology</label>
+                            <select class="form-select" id="topology_id" name="topology_id">
+                                <option value="">Please select</option>
+                                <option value="1">Topology 1</option>
+                                <option value="2">Topology 2</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="category_id" class="form-label">Category</label>
+                            <select class="form-select" id="category_id" name="category_id">
+                                <option value="">Please select</option>
+                                <option value="1">For Rent</option>
+                                <option value="2">Other</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="vat_able" class="form-label">VAT</label>
+                            <select class="form-select" id="vat_able" name="vat_able">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="rent_amount" class="form-label">Rent Amount</label>
+                            <input type="number" step="0.01" class="form-control" id="rent_amount" name="rent_amount" placeholder="0.00">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="initial_water_meter_reading" class="form-label">Initial Water Meter Reading</label>
+                            <input type="number" step="0.01" class="form-control" id="initial_water_meter_reading" name="initial_water_meter_reading" placeholder="0">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-12 mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" placeholder="Optional notes about the unit"></textarea>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                            <span class="material-symbols-outlined">close</span>
+                            <span class="ms-1">Cancel</span>
+                        </button>
+                        <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveUnitBtn">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="saveUnitSpinner"></span>
+                            <span class="material-symbols-outlined" id="saveUnitIcon">check_circle</span>
+                            <span class="ms-1" id="saveUnitText">Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Unit Modal -->
+<div class="modal fade" id="editUnitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUnitForm">
+                    <input type="hidden" name="property_id" value="{{ $property->id }}">
+                    <input type="hidden" id="edit_unit_id" name="unit_id">
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="edit_unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_name" class="form-label">Unit Name</label>
+                            <input type="text" class="form-control" id="edit_unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_type_id" class="form-label">Unit Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="edit_unit_type_id" name="unit_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Normal</option>
+                                <option value="2">Owner Occupied</option>
+                                <option value="3">Caretaker</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_usage_type_id" class="form-label">Usage Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="edit_usage_type_id" name="usage_type_id" required>
+                                <option value="">Please select</option>
+                                <option value="1">Commercial</option>
+                                <option value="3">Hybrid</option>
+                                <option value="2">Residential</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_unit_condition_id" class="form-label">Unit Condition <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="edit_unit_condition_id" name="unit_condition_id" placeholder="e.g. Good, Fair, Needs repair" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_occupancy_status_id" class="form-label">Occupation Status</label>
+                            <select class="form-select" id="edit_occupancy_status_id" name="occupancy_status_id">
+                                <option value="31">Vacant</option>
+                                <option value="38">Occupied</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_topology_id" class="form-label">Topology</label>
+                            <select class="form-select" id="edit_topology_id" name="topology_id">
+                                <option value="">Please select</option>
+                                <option value="1">Topology 1</option>
+                                <option value="2">Topology 2</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_category_id" class="form-label">Category</label>
+                            <select class="form-select" id="edit_category_id" name="category_id">
+                                <option value="">Please select</option>
+                                <option value="1">For Rent</option>
+                                <option value="2">Other</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_vat_able" class="form-label">VAT</label>
+                            <select class="form-select" id="edit_vat_able" name="vat_able">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_rent_amount" class="form-label">Rent Amount</label>
+                            <input type="number" step="0.01" class="form-control" id="edit_rent_amount" name="rent_amount" placeholder="0.00">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_initial_water_meter_reading" class="form-label">Initial Water Meter Reading</label>
+                            <input type="number" step="0.01" class="form-control" id="edit_initial_water_meter_reading" name="initial_water_meter_reading" placeholder="0">
+                            <div class="invalid-feedback"></div>
+                        </div>
+
+                        <div class="col-md-12 mb-3">
+                            <label for="edit_description" class="form-label">Description</label>
+                            <textarea class="form-control" id="edit_description" name="description" rows="3" placeholder="Optional notes about the unit"></textarea>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                            <span class="material-symbols-outlined">close</span>
+                            <span class="ms-1">Cancel</span>
+                        </button>
+                        <button type="submit" class="btn btn-primary d-flex align-items-center" id="updateUnitBtn">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="updateUnitSpinner"></span>
+                            <span class="material-symbols-outlined" id="updateUnitIcon">check_circle</span>
+                            <span class="ms-1" id="updateUnitText">Update</span>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -607,10 +871,13 @@
                     orderable: false,
                     searchable: false,
                     render: function(id, type, row) {
+                        if (!row.can_edit) {
+                            return '';
+                        }
                         return `
-                            <a href="/property/units/${row.encrypted_id}/edit" title="Edit Unit">
+                            <button type="button" class="btn btn-link p-0 edit-unit-btn" title="Edit Unit" data-row='${JSON.stringify(row)}'>
                                 <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
-                            </a>
+                            </button>
                         `;
                     }
                 }
@@ -664,6 +931,147 @@
                 }
             });
         }
+
+        // ── Add Unit Modal ──────────────────────────────────────────────────────
+        $('#addUnitBtn').on('click', function() {
+            $('#addUnitForm')[0].reset();
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+            $('#addUnitModal').modal('show');
+        });
+
+        $('#addUnitForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var $btn = $('#saveUnitBtn');
+            var $spinner = $('#saveUnitSpinner');
+            var $icon = $('#saveUnitIcon');
+            var $text = $('#saveUnitText');
+
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+            $spinner.removeClass('d-none');
+            $icon.addClass('d-none');
+            $text.text('Saving...');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: "{{ route('property.units.store') }}",
+                type: 'POST',
+                data: $(this).serialize() + '&_token={{ csrf_token() }}',
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Unit added successfully');
+                        $('#addUnitModal').modal('hide');
+                        $('#addUnitForm')[0].reset();
+                        loadUnits($('#propertySelect').val());
+                    } else {
+                        toastr.error(res.error || 'Failed to save unit');
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var errors = xhr.responseJSON.errors;
+                        Object.keys(errors).forEach(function(field) {
+                            var $field = $('#addUnitForm [name="' + field + '"]');
+                            $field.addClass('is-invalid');
+                            $field.siblings('.invalid-feedback').text(errors[field][0]);
+                        });
+                        toastr.error('Please correct the highlighted fields');
+                    } else {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to save unit';
+                        toastr.error(msg);
+                    }
+                },
+                complete: function() {
+                    $spinner.addClass('d-none');
+                    $icon.removeClass('d-none');
+                    $text.text('Save');
+                    $btn.prop('disabled', false);
+                }
+            });
+        });
+
+        $('#addUnitModal').on('hidden.bs.modal', function() {
+            $('#addUnitForm')[0].reset();
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+        });
+
+        // ── Edit Unit Modal ─────────────────────────────────────────────────────
+        $(document).on('click', '.edit-unit-btn', function() {
+            var row = JSON.parse($(this).attr('data-row'));
+
+            $('#editUnitForm .is-invalid').removeClass('is-invalid');
+            $('#edit_unit_id').val(row.encrypted_id);
+            $('#edit_unit_number').val(row.unit_number_raw || '');
+            $('#edit_unit_name').val(row.unit_name_raw || '');
+            $('#edit_unit_type_id').val(row.unit_type_id || '');
+            $('#edit_usage_type_id').val(row.usage_type_id || '');
+            $('#edit_unit_condition_id').val(row.unit_condition_id || '');
+            $('#edit_occupancy_status_id').val(row.occupancy_status_id || '31');
+            $('#edit_topology_id').val(row.topology_id || '');
+            $('#edit_category_id').val(row.category_id || '');
+            $('#edit_vat_able').val(row.vat_able == 1 ? 'Yes' : 'No');
+            $('#edit_rent_amount').val(row.rent_amount_raw || '');
+            $('#edit_initial_water_meter_reading').val(row.initial_water_meter_reading || '');
+            $('#edit_description').val(row.description_raw || '');
+
+            $('#editUnitModal').modal('show');
+        });
+
+        $('#editUnitForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var $btn = $('#updateUnitBtn');
+            var $spinner = $('#updateUnitSpinner');
+            var $icon = $('#updateUnitIcon');
+            var $text = $('#updateUnitText');
+            var unitId = $('#edit_unit_id').val();
+
+            $('#editUnitForm .is-invalid').removeClass('is-invalid');
+            $spinner.removeClass('d-none');
+            $icon.addClass('d-none');
+            $text.text('Updating...');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: "{{ url('/property/units') }}/" + unitId,
+                type: 'PUT',
+                data: $(this).serialize() + '&_token={{ csrf_token() }}',
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Unit updated successfully');
+                        $('#editUnitModal').modal('hide');
+                        loadUnits($('#propertySelect').val());
+                    } else {
+                        toastr.error(res.error || 'Failed to update unit');
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var errors = xhr.responseJSON.errors;
+                        Object.keys(errors).forEach(function(field) {
+                            var $field = $('#editUnitForm [name="' + field + '"]');
+                            $field.addClass('is-invalid');
+                            $field.siblings('.invalid-feedback').text(errors[field][0]);
+                        });
+                        toastr.error('Please correct the highlighted fields');
+                    } else {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to update unit';
+                        toastr.error(msg);
+                    }
+                },
+                complete: function() {
+                    $spinner.addClass('d-none');
+                    $icon.removeClass('d-none');
+                    $text.text('Update');
+                    $btn.prop('disabled', false);
+                }
+            });
+        });
+
+        $('#editUnitModal').on('hidden.bs.modal', function() {
+            $('#editUnitForm')[0].reset();
+            $('#editUnitForm .is-invalid').removeClass('is-invalid');
+        });
 
         // Repairs DataTable for this property
         var repairsTable = $('#property-repairs-table').DataTable({

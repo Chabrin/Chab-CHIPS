@@ -131,3 +131,10 @@ INSERT INTO sys_set_invoiceable_items
      '2022-09-04 02:03:57.000', '2025-02-24 15:41:54.000', '1', 
      '{"update_cache_list":1}',
     NULL, 0, '', NULL, NULL, '', 0);
+
+
+########## CONSTRAINTS ###########33
+
+ALTER TABLE cb_payment_vouchers_headers_new
+ADD CONSTRAINT uq_cb_payment_vouchers_headers_new_voucher_number
+UNIQUE (voucher_number);
