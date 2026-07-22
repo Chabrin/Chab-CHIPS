@@ -48,7 +48,7 @@ class InspectionsController extends Controller
     {
         try {
             $properties = Property::where('zone_id', $zoneId)
-                ->where('current_status_id', 5) // Only active properties
+                ->where('current_status_id', 2) // Only active properties
                 ->orderBy('property_name')
                 ->get(['id', 'property_name', 'reference_number', 'description']);
             
@@ -63,30 +63,71 @@ class InspectionsController extends Controller
     /**
      * Get units for a specific property (AJAX)
      */
+    // public function getUnitsByProperty($propertyId)
+    // {
+    //     try {
+    //         $units = Unit::where('property_id', $propertyId)
+    //             ->where('occupancy_status_id', 31) // Only vacant units
+    //             ->orderBy('unit_number')
+    //             ->get(['id', 'unit_name', 'unit_number', 'unit_code', 'occupancy_status_id']);
+            
+    //         // Add status name to response
+    //         $units = $units->map(function($unit) {
+    //             return [
+    //                 'id' => $unit->id,
+    //                 'unit_name' => $unit->unit_name,
+    //                 'unit_number' => $unit->unit_number,
+    //                 'unit_code' => $unit->unit_code,
+    //                 'occupancy_status_id' => $unit->occupancy_status_id,
+    //                 'status' => $this->getOccupancyStatusName($unit->occupancy_status_id),
+    //             ];
+    //         });
+            
+    //         return response()->json(['units' => $units]);
+    //     } catch (\Exception $e) {
+    //         ErrorDispatcher::dispatch($e);
+    //         Log::error('Error loading units for property: ' . $e->getMessage());
+    //         return response()->json(['error' => 'Failed to load units'], 500);
+    //     }
+    // }
+
     public function getUnitsByProperty($propertyId)
     {
         try {
-            $units = Unit::where('property_id', $propertyId)
-                ->where('occupancy_status_id', 31) // Only vacant units
-                ->orderBy('unit_number')
-                ->get(['id', 'unit_name', 'unit_number', 'unit_code', 'occupancy_status_id']);
-            
-            // Add status name to response
-            $units = $units->map(function($unit) {
-                return [
-                    'id' => $unit->id,
-                    'unit_name' => $unit->unit_name,
-                    'unit_number' => $unit->unit_number,
-                    'unit_code' => $unit->unit_code,
-                    'occupancy_status_id' => $unit->occupancy_status_id,
-                    'status' => $this->getOccupancyStatusName($unit->occupancy_status_id),
-                ];
-            });
-            
+
+            $units = Unit::with(['property', 'zone'])
+                ->select([
+                    'id',
+                    'unit_code',
+                    'unit_name',
+                    'unit_number',
+                    'description',
+                    'rent_amount',
+                    'property_id',
+                    'zone_id',
+                    'occupancy_status_id'
+                ])
+                ->where('property_id', $propertyId)
+                ->get()
+                ->map(function ($unit) {
+                    return [
+                        'id' => $unit->id,
+                        'encrypted_id' => Crypt::encrypt($unit->id),
+                        'unit_code' => $unit->unit_code ?? '-',
+                        'unit_name' => $unit->unit_name ?? '-',
+                        'unit_number' => $unit->unit_number ?? '-',
+                        'description' => $unit->description ?? '-',
+                        'rent_amount' => $unit->rent_amount ? number_format($unit->rent_amount, 2) : '0.00',
+                        'property' => $unit->property->property_name ?? '-',
+                        'zone' => $unit->zone->zone_name ?? '-',
+                        'status' => $unit->occupancy_status_id == 1 ? 'Occupied' : 'Vacant',
+                    ];
+                });
+                
+
             return response()->json(['units' => $units]);
         } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading units for property: ' . $e->getMessage());
+            Log::error('Error loading units: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load units'], 500);
         }
     }

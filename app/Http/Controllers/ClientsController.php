@@ -974,7 +974,7 @@ class ClientsController extends Controller
                         'rent_amount' => $unit->rent_amount ? number_format($unit->rent_amount, 2) : '0.00',
                         'property' => $unit->property->property_name ?? '-',
                         'zone' => $unit->zone->zone_name ?? '-',
-                        'occupancy_status' => $unit->occupancy_status_id == 1 ? 'Occupied' : 'Vacant',
+                        'occupancy_status' => $unit->occupancy_status_id == '1' ? 'Occupied' : 'Vacant',
                     ];
                 });
 
