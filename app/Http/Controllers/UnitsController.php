@@ -24,11 +24,58 @@ class UnitsController extends Controller
                 ->whereDoesntHave('leaseAgreements') // No leases at all
                 ->orderBy('unit_number')
                 ->get(['id', 'unit_name', 'unit_number', 'current_status_id']);
-            
+
             return response()->json(['units' => $units]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to load units'], 500);
         }
+    }
+
+    /**
+     * Get non-occupied units for a property, for lease creation (AJAX).
+     *
+     * occupancy_status_id carries two overlapping numbering schemes in the data:
+     *   - Legacy-migrated units: 1 = Occupied, 2 = Vacant, 3 = unclassified (from
+     *     the migration's `CASE WHEN USTATUS=1 THEN 1 WHEN USTATUS=2 THEN 2 ELSE 3 END`)
+     *   - Units created directly in this app: 31 = Vacant, 38 = Occupied
+     * Excluding both "Occupied" values covers units from either origin.
+     */
+    public function getAvailableUnits($propertyId)
+    {
+        try {
+            $units = Unit::where('property_id', $propertyId)
+                ->whereNotIn('occupancy_status_id', [1, 38])
+                ->orderBy('unit_number')
+                ->get(['id', 'unit_name', 'unit_number', 'unit_code', 'occupancy_status_id']);
+
+            $units = $units->map(function ($unit) {
+                return [
+                    'id' => $unit->id,
+                    'unit_name' => $unit->unit_name,
+                    'unit_number' => $unit->unit_number,
+                    'unit_code' => $unit->unit_code,
+                    'occupancy_status_id' => $unit->occupancy_status_id,
+                    'status' => $this->occupancyStatusLabel($unit->occupancy_status_id),
+                ];
+            });
+
+            return response()->json(['units' => $units]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading available units for property: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load units'], 500);
+        }
+    }
+
+    private function occupancyStatusLabel($statusId)
+    {
+        if (in_array((int) $statusId, [1, 38], true)) {
+            return 'Occupied';
+        }
+        if (in_array((int) $statusId, [2, 31], true)) {
+            return 'Vacant';
+        }
+        return 'Available';
     }
 
     /**

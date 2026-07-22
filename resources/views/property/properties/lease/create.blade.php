@@ -201,15 +201,33 @@
                                     @enderror
                                 </div>
 
-                                <div class="col-md-4 mb-3">
-                                    <label for="tenant_id" class="form-label">Tenant <span class="text-danger">*</span></label>
-                                    <select class="form-select @error('tenant_id') is-invalid @enderror" id="tenant_id" name="tenant_id" required>
-                                        <option value="">Select a unit to auto-fill, or search for a tenant...</option>
-                                    </select>
-                                    @error('tenant_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                    <small class="text-muted">Auto-fills from the selected unit's current tenant — search to pick a different one.</small>
+                                <div class="col-12 mb-3">
+                                    <div class="row mb-2">
+                                        <div class="col-md-6">
+                                            <label for="tenant_search_input" class="form-label mb-1">Search Tenant</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control form-control-sm" id="tenant_search_input" placeholder="-- Search --">
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_tenant_btn">
+                                                    <span class="material-symbols-outlined" id="search_tenant_icon" style="font-size:18px;">search</span>
+                                                    <span class="spinner-border spinner-border-sm" role="status" id="search_tenant_spinner" style="display:none;"></span>
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">Search by name, email, ID, phone or reference</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="tenant_id" class="form-label mb-1">Select Tenant <span class="text-danger">*</span></label>
+                                            <select class="form-select form-select-sm @error('tenant_id') is-invalid @enderror" id="tenant_id" name="tenant_id" disabled required>
+                                                <option value="">-- Search First --</option>
+                                            </select>
+                                            @error('tenant_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                    <div id="tenant_existing_lease_note" class="alert alert-light-danger py-2 px-3 mb-0" style="display:none; font-size: 0.85rem;">
+                                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span>
+                                        <span id="tenant_existing_lease_text"></span>
+                                    </div>
                                 </div>
 
                                 <div class="col-md-4 mb-3">
@@ -402,8 +420,8 @@
             $('#property_id').html('<option value="">-- Search First --</option>').prop('disabled', true);
             $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
             $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
-            $('#tenant_name').val('');
-            $('#tenant_id').val('');
+            $('#tenant_id').html('<option value="">-- Search First --</option>').prop('disabled', true);
+            $('#tenant_existing_lease_note').hide();
             $('#property_landlord_wrap').hide();
             $('#property_landlord_select').html('<option value="">-- Select Property First --</option>').prop('disabled', true);
         }
@@ -594,55 +612,69 @@
         });
         @endif
 
-        // Tenant search dropdown — auto-fills from the selected unit's current tenant
-        // (see loadTenantForUnit below), but can also be searched/overridden manually.
-        // Reuses the same ajax.clients.list endpoint as the client search above, filtered
-        // to tenants instead of landlords.
-        $('#tenant_id').select2({
-            placeholder: 'Select a unit to auto-fill, or search for a tenant...',
-            allowClear: true,
-            width: '100%',
-            minimumInputLength: 2,
-            ajax: {
-                url: "{{ route('ajax.clients.list') }}",
-                dataType: 'json',
-                delay: 250,
-                data: function(params) {
-                    return {
-                        client_type: 'Tenant',
-                        search: params.term
-                    };
+        // ── Search Tenant — reusing the exact same endpoint as /tenants/statements ──
+        $('#search_tenant_btn').on('click', function() {
+            var searchTerm = $('#tenant_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                toastr.warning('Please enter at least 2 characters to search');
+                return;
+            }
+
+            $('#tenant_existing_lease_note').hide();
+            $('#search_tenant_icon').hide();
+            $('#search_tenant_spinner').show();
+            $('#search_tenant_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/statements/search-tenants',
+                method: 'GET',
+                data: { search: searchTerm },
+                success: function(response) {
+                    $('#tenant_id').empty().append('<option value="">-- Select Tenant --</option>');
+                    if (response.success && response.tenants && response.tenants.length > 0) {
+                        $.each(response.tenants, function(i, t) {
+                            var roomCodes = (t.unit_codes && t.unit_codes.length) ? ' [' + t.unit_codes.join(', ') + ']' : '';
+                            $('#tenant_id').append(
+                                '<option value="' + t.id + '" data-unit-codes="' + (t.unit_codes || []).join(',') + '">' +
+                                (t.names || '') + ' - ' + (t.reference_number || '') + roomCodes +
+                                '</option>'
+                            );
+                        });
+                        $('#tenant_id').prop('disabled', false);
+                        toastr.success('Found ' + response.tenants.length + ' tenant(s)');
+                    } else {
+                        toastr.info('No tenants found matching your search. Try a different name, phone, email, ID or reference number.');
+                        $('#tenant_id').html('<option value="">-- No Results --</option>').prop('disabled', true);
+                    }
                 },
-                processResults: function(response) {
-                    return {
-                        results: response.data.map(function(tenant) {
-                            return {
-                                id: tenant.id,
-                                text: `${tenant.names} (${tenant.reference_number})`
-                            };
-                        })
-                    };
+                error: function() {
+                    toastr.error('Error searching tenants');
                 },
-                cache: true
+                complete: function() {
+                    $('#search_tenant_icon').show();
+                    $('#search_tenant_spinner').hide();
+                    $('#search_tenant_btn').prop('disabled', false);
+                }
+            });
+        });
+
+        $('#tenant_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_tenant_btn').click();
             }
         });
 
-        // Set (or clear) the tenant select2's selection, injecting a matching <option>
-        // first since select2 can't display a value with no corresponding option element.
-        function setTenantSelection(id, text) {
-            if (!id) {
-                clearTenantSelection();
-                return;
+        // Friendly heads-up if the selected tenant already has other lease(s) on record
+        $('#tenant_id').on('change', function() {
+            var codes = $(this).find(':selected').data('unit-codes');
+            if (codes) {
+                $('#tenant_existing_lease_text').text('Already has a lease on: ' + codes);
+                $('#tenant_existing_lease_note').show();
+            } else {
+                $('#tenant_existing_lease_note').hide();
             }
-            if ($('#tenant_id').find(`option[value="${id}"]`).length === 0) {
-                $('#tenant_id').append(new Option(text, id, true, true));
-            }
-            $('#tenant_id').val(id).trigger('change');
-        }
-
-        function clearTenantSelection() {
-            $('#tenant_id').val(null).trigger('change');
-        }
+        });
 
         // Function to load properties for the client
         function loadProperties(clientId) {
@@ -689,7 +721,6 @@
                 // Reset dependent fields
                 $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', false);
                 $('#unit_id').html('<option value="">Please select</option>').prop('disabled', false);
-                clearTenantSelection();
             }
         });
 
@@ -727,7 +758,7 @@
             $('#unit_id').html('<option value="">Loading units...</option>').prop('disabled', true);
 
             $.ajax({
-                url: `/property/${propertyId}/units`,
+                url: `/property/${propertyId}/available-units`,
                 method: 'GET',
                 dataType: 'json',
                 success: function(response) {
@@ -737,7 +768,11 @@
 
                     if (response.units && response.units.length > 0) {
                         response.units.forEach(function(unit) {
-                            $('#unit_id').append(`<option value="${unit.id}">${unit.unit_name || unit.unit_number}</option>`);
+                            let label = unit.unit_name || unit.unit_number;
+                            if (unit.status) {
+                                label += ' (' + unit.status + ')';
+                            }
+                            $('#unit_id').append(`<option value="${unit.id}">${label}</option>`);
                         });
                     } else {
                         $('#unit_id').append('<option value="">No units found for this property</option>');
@@ -751,40 +786,6 @@
             });
         }
 
-        // Load tenant when unit is selected
-        $('#unit_id').on('change', function() {
-            const unitId = $(this).val();
-            const propertyId = $('#property_id').val();
-
-            if (unitId && propertyId) {
-                loadTenantForUnit(propertyId, unitId);
-            } else {
-                clearTenantSelection();
-            }
-        });
-
-        // Function to load tenant for the selected unit
-        function loadTenantForUnit(propertyId, unitId) {
-            $.ajax({
-                url: `/property/${propertyId}/unit/${unitId}/tenant`,
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Tenant loaded:', response);
-
-                    if (response.tenant) {
-                        setTenantSelection(response.tenant.id, response.tenant.full_name || response.tenant.name);
-                    } else {
-                        clearTenantSelection();
-                        console.log('No tenant found for this unit');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading tenant:', xhr.responseText);
-                    clearTenantSelection();
-                }
-            });
-        }
 
         let invoiceableItems = []; // Store all invoiceable items
 
