@@ -44,12 +44,22 @@ class Property extends Model
                 return;
             }
 
-            $query->whereExists(function ($sub) use ($staffId) {
-                $sub->selectRaw('1')
-                    ->from('sys_pm_zones_assignments')
-                    ->whereColumn('sys_pm_zones_assignments.property_id', 'sys_pm_properties.id')
-                    ->where('sys_pm_zones_assignments.staff_id', $staffId)
-                    ->where('sys_pm_zones_assignments.current_status_id', 1);
+            // Visible if directly assigned on the property (sys_pm_properties, staff-based)
+            // or assigned as the manager/supervisor of the property's zone (sys_set_zones,
+            // josya_users-based) — assignment no longer flows through sys_pm_zones_assignments.
+            $query->where(function ($q) use ($staffId, $userId) {
+                $q->where('sys_pm_properties.field_officer_id', $staffId)
+                    ->orWhere('sys_pm_properties.zone_manager_id', $staffId)
+                    ->orWhere('sys_pm_properties.zone_supervisor_id', $staffId)
+                    ->orWhereExists(function ($sub) use ($userId) {
+                        $sub->selectRaw('1')
+                            ->from('sys_set_zones as z')
+                            ->whereColumn('z.id', 'sys_pm_properties.zone_id')
+                            ->where(function ($zq) use ($userId) {
+                                $zq->where('z.zone_manager_id', $userId)
+                                    ->orWhere('z.zone_supervisor_id', $userId);
+                            });
+                    });
             });
         });
 
