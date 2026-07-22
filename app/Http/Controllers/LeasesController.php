@@ -174,6 +174,7 @@ class LeasesController extends Controller
                     'date_start',
                     'date_end',
                     'current_status_id',
+                    'lease_status',
                     'years',
                     'auto_renewal',
                     'escalation_rate',
@@ -206,6 +207,7 @@ class LeasesController extends Controller
                         'is_expiring' => $isExpiring,
                         'is_expired' => $isExpired,
                         'current_status_id' => $lease->current_status_id,
+                        'lease_status' => $lease->lease_status,
                         'years' => $lease->years,
                         'auto_renewal' => $lease->auto_renewal,
                         'contract_sent_at' => $lease->contract_sent_at,
@@ -741,8 +743,121 @@ class LeasesController extends Controller
     }
 
     /**
+     * Show the form for editing an existing lease agreement's terms.
+     */
+    public function edit($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $lease = LeaseAgreement::with([
+                'tenant:id,names',
+                'property:id,property_name',
+                'unit:id,unit_code,unit_number',
+                'client:id,names',
+            ])->findOrFail($id);
+
+            return view('property.properties.lease.edit', compact('lease'));
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading lease edit form: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load lease for editing');
+        }
+    }
+
+    /**
+     * Update an existing lease agreement's terms. Structural fields (tenant, property,
+     * unit, client, SLA) are intentionally not editable here — reassigning those goes
+     * through the Tenant Movement flow instead, not a plain edit.
+     */
+    public function update(Request $request, $id)
+    {
+        DB::beginTransaction();
+        try {
+            $lease = LeaseAgreement::findOrFail($id);
+
+            $validated = $request->validate([
+                'date_start' => 'required|date',
+                'years' => 'required|integer|min:1|max:10',
+                'auto_renewal' => 'required|in:Yes,No',
+                'escalation_rate' => 'required|numeric|min:0|max:100',
+                'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
+            ]);
+
+            $startDate = new \DateTime($validated['date_start']);
+            $endDate = clone $startDate;
+            $endDate->modify('+' . $validated['years'] . ' years');
+
+            $lease->update([
+                'date_start' => $validated['date_start'],
+                'date_end' => $endDate->format('Y-m-d'),
+                'years' => $validated['years'],
+                'auto_renewal' => $validated['auto_renewal'],
+                'escalation_rate' => $validated['escalation_rate'],
+                'escalation_frequency' => $validated['escalation_frequency'],
+            ]);
+
+            DB::commit();
+
+            Log::info('Lease Agreement updated', ['lease_id' => $lease->id, 'updated_by' => Auth::id()]);
+
+            return redirect()
+                ->route('property.leases.index')
+                ->with('success', 'Lease Agreement updated successfully.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return redirect()->back()->withErrors($e->validator)->withInput();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating lease agreement: ' . $e->getMessage());
+            return redirect()
+                ->back()
+                ->with('error', 'Failed to update lease agreement: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
+     * Cancel a single lease agreement — ends it before its natural expiry and frees
+     * the unit. Reuses the current_status_id/lease_status convention already used by
+     * TenantExitController's lease termination, with a distinct lease_status string
+     * ("Cancelled") so it stays distinguishable from an exit-driven termination.
+     */
+    public function cancel(Request $request, $id)
+    {
+        DB::beginTransaction();
+        try {
+            $lease = LeaseAgreement::findOrFail($id);
+
+            if ($lease->lease_status !== 'Active') {
+                DB::rollBack();
+                return response()->json(['success' => false, 'error' => 'Only an active lease can be cancelled.'], 422);
+            }
+
+            $lease->current_status_id = 2; // matches TenantExitController's "lease no longer active" convention
+            $lease->lease_status = 'Cancelled';
+            $lease->save();
+
+            if ($lease->unit_id) {
+                Unit::where('id', $lease->unit_id)->update(['occupancy_status_id' => 31]); // Vacant
+            }
+
+            DB::commit();
+
+            Log::info('Lease Agreement cancelled', ['lease_id' => $lease->id, 'cancelled_by' => Auth::id()]);
+
+            return response()->json(['success' => true, 'message' => 'Lease cancelled successfully.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error cancelling lease agreement: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to cancel lease'], 500);
+        }
+    }
+
+    /**
      * Store Invoiceable Items for the lease
-     * 
+     *
      * @param int $leaseAgreementId
      * @param array $invoiceableItems
      */

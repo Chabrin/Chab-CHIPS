@@ -17,6 +17,18 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        <div class="alert alert-info d-flex align-items-start gap-2 mb-3" role="alert">
+                            <span class="material-symbols-outlined">info</span>
+                            <div>
+                                A newly created incident report starts as <strong>Pending</strong> and must be
+                                confirmed before its case can proceed to the next steps — that's why a Pending
+                                case's number and view action are disabled below.
+                                @permission('update_discipline_records')
+                                    Confirm pending cases at
+                                    <a href="{{ route('workflow.approvals.confirmations') }}">Maker-Checker Confirmations</a>.
+                                @endpermission
+                            </div>
+                        </div>
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="discipline-cases-table">
                                 <thead>

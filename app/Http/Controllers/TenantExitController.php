@@ -30,6 +30,8 @@ use Illuminate\Support\Facades\Storage;
 
 class TenantExitController extends Controller
 {
+    use \App\Traits\TenantExitSettlementCalculatorTrait;
+
     // ─────────────────────────────────────────────────────────────────────────
     //  PAGE ENTRY
     // ─────────────────────────────────────────────────────────────────────────
@@ -278,7 +280,9 @@ class TenantExitController extends Controller
                         'property_name' => $d->property->property_name ?? '-',
                         'unit_name'     => $d->unit->unit_name ?? $d->unit->unit_code ?? '-',
                         'amount'        => number_format($d->amount, 2),
-                        'date_received' => $d->date_received ? date('d-m-Y', strtotime($d->date_received)) : '-',
+                        // date_received doesn't exist on sys_pm_deposits — deposit_date does
+                        'date_received' => $d->deposit_date ? $d->deposit_date->format('d-m-Y') : '-',
+                        'held_by'       => $d->held_by ?? 'Not specified',
                     ])
                     ->toArray();
             }
@@ -1607,64 +1611,11 @@ class TenantExitController extends Controller
 
         try {
             $exit = TenantExit::with('inspection')->findOrFail($request->exit_id);
+            $otherDeductions = (float) $request->input('other_deductions', 0);
 
-            // Deposit on record
-            $depositOnRecord = Deposit::where('tenant_id', $exit->tenant_id)->sum('amount');
+            $result = $this->computeTenantExitSettlement($exit, $otherDeductions);
 
-            // Arrears: closing balance from transactions (positive = DR balance = tenant owes us)
-            $transactions = \App\Models\TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
-                ->where('current_status_id', 1)->get();
-            $balance = 0;
-            foreach ($transactions as $txn) {
-                $balance += abs($txn->credit_amount ?? 0) - abs($txn->debit_amount ?? 0);
-            }
-            $arrearsAmount = $balance < 0 ? abs($balance) : 0; // DR balance
-
-            // Inspection costs
-            $inspectionDamage = $exit->inspection?->damage_amount ?? 0;
-            $cleaningCost     = $exit->inspection?->cleaning_cost ?? 0;
-
-            // Deposit-as-rent applied
-            $depositAsRentApplied = $exit->deposit_as_rent ? ($exit->deposit_as_rent_amount ?? 0) : 0;
-
-            // Other deductions (from request override if passed)
-            $otherDeductions = $request->input('other_deductions', 0);
-
-            // Settlement balance: positive = we owe tenant; negative = tenant owes us
-            $settlementBalance = $depositOnRecord
-                - $arrearsAmount
-                - $inspectionDamage
-                - $cleaningCost
-                - $depositAsRentApplied
-                - $otherDeductions;
-
-            if ($settlementBalance > 0.005) {
-                $settlementType = 'Refund to Tenant';
-            } elseif ($settlementBalance < -0.005) {
-                $settlementType = 'Invoice to Tenant';
-            } else {
-                $settlementType    = 'Zero Balance';
-                $settlementBalance = 0;
-            }
-
-            // Residual hold = deposit that remains after rent credit (for repair coverage)
-            $unit         = Unit::find($exit->unit_id);
-            $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
-            $residualHold = $exit->deposit_as_rent ? max(0, $depositOnRecord - $depositAsRentApplied) : 0;
-
-            return response()->json([
-                'success'                 => true,
-                'deposit_on_record'       => round($depositOnRecord, 2),
-                'monthly_rent'            => round($monthlyRent, 2),
-                'residual_hold'           => round($residualHold, 2),
-                'arrears_amount'          => round($arrearsAmount, 2),
-                'inspection_damage'       => round($inspectionDamage, 2),
-                'cleaning_cost'           => round($cleaningCost, 2),
-                'deposit_as_rent_applied' => round($depositAsRentApplied, 2),
-                'other_deductions'        => round($otherDeductions, 2),
-                'settlement_balance'      => round(abs($settlementBalance), 2),
-                'settlement_type'         => $settlementType,
-            ]);
+            return response()->json(array_merge(['success' => true], $result));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('TenantExit: getSettlementPreview — ' . $e->getMessage());
@@ -1680,181 +1631,67 @@ class TenantExitController extends Controller
      */
     public function saveSettlement(Request $request): \Illuminate\Http\JsonResponse
     {
+        // Only exit_id and genuinely free-form/manual fields are accepted from the client.
+        // deposit_on_record/arrears_amount/inspection_damage/cleaning_cost/
+        // deposit_as_rent_applied/settlement_balance/settlement_type are NOT — those are
+        // always derived server-side below via computeTenantExitSettlement(), so a
+        // tampered or replayed request can no longer inject an arbitrary payout amount.
         $validated = $request->validate([
             'exit_id'                  => 'required|integer|exists:cb_tenant_exits,id',
-            'tenant_id'                => 'required|integer',
-            'deposit_on_record'        => 'required|numeric|min:0',
-            'arrears_amount'           => 'required|numeric|min:0',
-            'inspection_damage'        => 'required|numeric|min:0',
-            'cleaning_cost'            => 'required|numeric|min:0',
-            'deposit_as_rent_applied'  => 'required|numeric|min:0',
             'other_deductions'         => 'nullable|numeric|min:0',
             'other_deductions_notes'   => 'nullable|string|max:1000',
-            'settlement_balance'       => 'required|numeric',
-            'settlement_type'          => 'required|in:Refund to Tenant,Invoice to Tenant,Zero Balance',
             'notes'                    => 'nullable|string|max:2000',
         ]);
 
-        DB::beginTransaction();
         try {
             $exit = TenantExit::findOrFail($validated['exit_id']);
 
-            // 1. Persist the settlement record
+            if ($exit->current_status_id === 2) {
+                return response()->json(['success' => false, 'message' => 'This tenant exit has already been finalised.'], 409);
+            }
+
+            // A Pending or already-Approved settlement blocks a new submission (idempotency —
+            // stops a double-click/retry from queuing a second refund). A Rejected settlement
+            // does NOT block resubmission — that's the correction path for the maker.
+            $existing = TenantExitSettlement::where('exit_id', $validated['exit_id'])
+                ->whereIn('current_status_id', [1, 5])
+                ->first();
+            if ($existing) {
+                $statusLabel = $existing->current_status_id === 5 ? 'already been approved' : 'already awaiting approval';
+                return response()->json(['success' => false, 'message' => "A settlement for this exit has {$statusLabel}."], 409);
+            }
+
+            $otherDeductions = (float) ($validated['other_deductions'] ?? 0);
+            $computed = $this->computeTenantExitSettlement($exit, $otherDeductions);
+
+            // Record the settlement request only — nothing here moves money, terminates the
+            // lease, or unlinks the tenant. Those side effects only happen once a *different*
+            // user approves this via /maker-checker/confirmations
+            // (PropertyConfirmationController::applyTenantExitSettlementApproval()), and that
+            // approval step re-derives these same figures fresh rather than trusting this
+            // stored row either.
             $settlement = TenantExitSettlement::updateOrCreate(
                 ['exit_id' => $validated['exit_id']],
-                array_merge($validated, [
-                    'other_deductions' => $validated['other_deductions'] ?? 0,
-                    'settled_by'       => Auth::id(),
-                    'settled_at'       => now(),
+                array_merge($computed, [
+                    'tenant_id'              => $exit->tenant_id,
+                    'other_deductions_notes' => $validated['other_deductions_notes'] ?? null,
+                    'notes'                  => $validated['notes'] ?? null,
+                    'settled_by'             => Auth::id(),
+                    'settled_at'             => now(),
+                    'current_status_id'      => 1, // Pending approval
+                    'approved_by'            => null,
+                    'approved_at'            => null,
+                    'rejection_reason'       => null,
                 ])
             );
 
-            $refNum = 'EXIT-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
-
-            // 2. Post ledger entries and create invoices based on settlement type
-            if ($validated['settlement_type'] === 'Refund to Tenant' && $validated['settlement_balance'] > 0.005) {
-                // CR entry — reducing tenant balance (credit to tenant)
-                TenantAccountTransaction::create([
-                    'date_time'         => now(),
-                    'narration'         => 'Exit deposit settlement — refund to tenant',
-                    'dr_cr'             => 'CR',
-                    'debit_amount'      => 0,
-                    'credit_amount'     => $validated['settlement_balance'],
-                    'receipt_number'    => $refNum,
-                    'tenant_id'         => $validated['tenant_id'],
-                    'property_id'       => $exit->property_id,
-                    'unit_id'           => $exit->unit_id,
-                    'current_status_id' => 1,
-                    'entry_by'          => Auth::id(),
-                ]);
-
-                TenantExitDepositRefund::create([
-                    'exit_id'       => $validated['exit_id'],
-                    'tenant_id'     => $validated['tenant_id'],
-                    'refund_amount' => $validated['settlement_balance'],
-                    'refund_notes'  => $validated['notes'] ?? 'Exit settlement refund',
-                    'refunded_by'   => Auth::id(),
-                    'refunded_at'   => now(),
-                ]);
-
-            } elseif ($validated['settlement_type'] === 'Invoice to Tenant' && $validated['settlement_balance'] > 0.005) {
-                // DR entry + invoice — tenant owes the balance
-                $invoice = DebtorInvoice::create([
-                    'date_time'         => now(),
-                    'date_due'          => now()->addDays(30),
-                    'debtor_type_id'    => 2,
-                    'tenant_id'         => $validated['tenant_id'],
-                    'property_id'       => $exit->property_id,
-                    'unit_id'           => $exit->unit_id,
-                    'reference_number'  => $refNum,
-                    'narration'         => 'Exit settlement — balance due after deposit deductions',
-                    'total_amount'      => $validated['settlement_balance'],
-                    'current_balance'   => $validated['settlement_balance'],
-                    'current_status_id' => 1,
-                    'created_by'        => Auth::id(),
-                    'created_date'      => now(),
-                ]);
-
-                TenantAccountTransaction::create([
-                    'date_time'         => now(),
-                    'narration'         => 'Exit settlement — amount due from tenant after deposit deductions',
-                    'dr_cr'             => 'DR',
-                    'debit_amount'      => $validated['settlement_balance'],
-                    'credit_amount'     => 0,
-                    'invoice_number'    => $refNum,
-                    'invoice_id'        => $invoice->id,
-                    'tenant_id'         => $validated['tenant_id'],
-                    'property_id'       => $exit->property_id,
-                    'unit_id'           => $exit->unit_id,
-                    'current_status_id' => 1,
-                    'entry_by'          => Auth::id(),
-                ]);
-            }
-
-            // 3. If deposit-as-rent was applied and there's a shortfall, generate the shortfall invoice
-            if ($exit->deposit_as_rent && ($exit->deposit_as_rent_amount ?? 0) > 0) {
-                $unit         = Unit::find($exit->unit_id);
-                $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
-                $depositTotal = (float) Deposit::where('tenant_id', $validated['tenant_id'])->sum('amount');
-                $shortfall    = max(0, $monthlyRent - $depositTotal);
-
-                if ($shortfall > 0.005) {
-                    $sfRefNum = 'EXIT-SF-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
-                    $sfInvoice = DebtorInvoice::create([
-                        'date_time'         => now(),
-                        'date_due'          => now()->addDays(14),
-                        'debtor_type_id'    => 2,
-                        'tenant_id'         => $validated['tenant_id'],
-                        'property_id'       => $exit->property_id,
-                        'unit_id'           => $exit->unit_id,
-                        'reference_number'  => $sfRefNum,
-                        'narration'         => 'Final rent shortfall — deposit partially applied, balance due',
-                        'total_amount'      => $shortfall,
-                        'current_balance'   => $shortfall,
-                        'current_status_id' => 1,
-                        'created_by'        => Auth::id(),
-                        'created_date'      => now(),
-                    ]);
-
-                    TenantAccountTransaction::create([
-                        'date_time'         => now(),
-                        'narration'         => 'Exit — final rent shortfall (deposit applied to rent, balance owed)',
-                        'dr_cr'             => 'DR',
-                        'debit_amount'      => $shortfall,
-                        'credit_amount'     => 0,
-                        'invoice_number'    => $sfRefNum,
-                        'invoice_id'        => $sfInvoice->id,
-                        'tenant_id'         => $validated['tenant_id'],
-                        'property_id'       => $exit->property_id,
-                        'unit_id'           => $exit->unit_id,
-                        'current_status_id' => 1,
-                        'entry_by'          => Auth::id(),
-                    ]);
-                }
-            }
-
-            // 4. Record how the deposit was split (ARREARS and REPAIRS portions)
-            $arrearsAmt = (float) ($validated['arrears_amount'] ?? 0);
-            $repairsAmt = (float) ($validated['inspection_damage'] ?? 0) + (float) ($validated['cleaning_cost'] ?? 0);
-            if ($arrearsAmt > 0.005) {
-                DepositApplication::updateOrCreate(
-                    ['exit_id' => $exit->id, 'type' => 'ARREARS'],
-                    ['tenant_id' => $validated['tenant_id'], 'amount' => $arrearsAmt]
-                );
-            }
-            if ($repairsAmt > 0.005) {
-                DepositApplication::updateOrCreate(
-                    ['exit_id' => $exit->id, 'type' => 'REPAIRS'],
-                    ['tenant_id' => $validated['tenant_id'], 'amount' => $repairsAmt]
-                );
-            }
-
-            // 5. Finalise the lease (Vacating → Terminated) and clear tenant links
-            LeaseAgreement::where('tenant_id', $validated['tenant_id'])
-                ->where('lease_status', 'Vacating')
-                ->update([
-                    'lease_status'      => 'Terminated',
-                    'current_status_id' => 2,
-                ]);
-
-            $tenant = Client::find($validated['tenant_id']);
-            if ($tenant) {
-                $tenant->update(['unit_id' => null, 'property_id' => null]);
-            }
-
-            // 6. Mark exit fully completed
-            TenantExit::where('id', $validated['exit_id'])->update([
-                'current_status_id' => 2,
-                'final_notes'       => $validated['notes'] ?? null,
-                'finalised_by'      => Auth::id(),
-                'finalised_at'      => now(),
-                'updated_by'        => Auth::id(),
+            return response()->json([
+                'success'       => true,
+                'message'       => 'Settlement submitted for approval. A different user must approve it before the refund/invoice is applied and the exit is finalised.',
+                'settlement_id' => $settlement->id,
+                'computed'      => $computed,
             ]);
-
-            DB::commit();
-            return response()->json(['success' => true, 'message' => 'Settlement finalised. Lease terminated and accounting cycle closed.', 'settlement_id' => $settlement->id]);
         } catch (\Exception $e) {
-            DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('TenantExit: saveSettlement — ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to save settlement'], 500);

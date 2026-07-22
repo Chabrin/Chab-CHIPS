@@ -199,8 +199,11 @@ class SLAController extends Controller
                 }
             }
 
-            // Get property to retrieve zone_id
-            $property = Property::findOrFail($validated['property_id']);
+            // Get property to retrieve zone_id. Bypass the zone-assignment scope here —
+            // property_id was already validated as existing above (unscoped `exists` rule),
+            // so re-fetching with the restrictive scope would wrongly 404 a property that
+            // has no sys_pm_zones_assignments row (a known data gap on some properties).
+            $property = Property::withoutGlobalScope('user_properties')->findOrFail($validated['property_id']);
             Log::info('Property found for SLA creation: ' . $property->id);
 
             // Determine VAT value based on vat_able selection
@@ -549,8 +552,11 @@ class SLAController extends Controller
                 }
             }
     
-            // Get property to retrieve zone_id
-            $property = Property::findOrFail($validated['property_id']);
+            // Get property to retrieve zone_id. Bypass the zone-assignment scope here —
+            // property_id was already validated as existing above (unscoped `exists` rule),
+            // so re-fetching with the restrictive scope would wrongly 404 a property that
+            // has no sys_pm_zones_assignments row (a known data gap on some properties).
+            $property = Property::withoutGlobalScope('user_properties')->findOrFail($validated['property_id']);
     
             // Determine VAT value based on vat_able selection
             $vatValue = 'No';

@@ -13,7 +13,7 @@
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
                                 <span>Save</span>
                             </button>
-                            <a href="#" class="btn btn-light btn-sm d-flex align-items-center">
+                            <a href="{{ route('property.recoveries.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
                             </a>
@@ -32,7 +32,7 @@
                         </div>
                         @endif
 
-                        <form action="" method="POST" id="recoveryForm" enctype="multipart/form-data">
+                        <form action="{{ route('property.recoveries.store') }}" method="POST" id="recoveryForm" enctype="multipart/form-data">
                             @csrf
 
                             <!-- Recoveries Section -->
@@ -43,13 +43,13 @@
 
                                 <div class="col-md-3 mb-3">
                                     <label for="type" class="form-label">Type <span class="text-danger">*</span></label>
-                                    <select class="form-select @error('type') is-invalid @enderror" id="type" name="type" required>
+                                    <select class="form-select @error('type_id') is-invalid @enderror" id="type" name="type_id" required>
                                         <option value="">Please select</option>
                                         @foreach($transaction_types as $type)
-                                            <option value="{{ $type->id }}" {{ old('type') == $type->id ? 'selected' : '' }}>{{ $type->type_name }}</option>
+                                            <option value="{{ $type->id }}" {{ old('type_id') == $type->id ? 'selected' : '' }}>{{ $type->type_name }}</option>
                                         @endforeach
                                     </select>
-                                    @error('type')
+                                    @error('type_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                     
@@ -144,23 +144,23 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="offset_invoice" class="form-label">Offset Invoice <span class="text-danger">*</span></label>
-                                    <select class="form-select @error('offset_invoice') is-invalid @enderror" id="offset_invoice" name="offset_invoice" required>
+                                    <label for="offset_invoice" class="form-label">Offset Invoice</label>
+                                    <select class="form-select @error('offset_invoice_id') is-invalid @enderror" id="offset_invoice" name="offset_invoice_id">
                                         <option value="">Please select</option>
-                                        
+
                                     </select>
-                                    @error('offset_invoice')
+                                    @error('offset_invoice_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="commissionable" class="form-label">Commissionable</label>
-                                    <select class="form-select @error('commissionable') is-invalid @enderror" id="commissionable" name="commissionable">
-                                        <option value="No" {{ old('commissionable') == 'No' ? 'selected' : 'selected' }}>No</option>
-                                        <option value="Yes" {{ old('commissionable') == 'Yes' ? 'selected' : '' }}>Yes</option>
+                                    <label for="commissionable" class="form-label">Commissionable <span class="text-danger">*</span></label>
+                                    <select class="form-select @error('commisionable') is-invalid @enderror" id="commissionable" name="commisionable" required>
+                                        <option value="No" {{ old('commisionable') == 'No' ? 'selected' : 'selected' }}>No</option>
+                                        <option value="Yes" {{ old('commisionable') == 'Yes' ? 'selected' : '' }}>Yes</option>
                                     </select>
-                                    @error('commissionable')
+                                    @error('commisionable')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
@@ -187,15 +187,15 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="return_type" class="form-label">Return Type <span class="text-danger">*</span></label>
-                                    <select class="form-select @error('return_type') is-invalid @enderror" id="return_type" name="return_type" required>
+                                    <label for="return_type" class="form-label">Return Type</label>
+                                    <select class="form-select @error('return_type_id') is-invalid @enderror" id="return_type" name="return_type_id">
                                         <option value="">Please select</option>
-                                        <option value="Main return" {{ old('return_type') == 'Main return' ? 'selected' : 'selected' }}>Main return</option>
-                                        <option value="Sub return" {{ old('return_type') == 'Sub return' ? 'selected' : '' }}>Sub return</option>
-                                        <option value="Commission return" {{ old('return_type') == 'Commission return' ? 'selected' : '' }}>Commission return</option>
-                                        <option value="Other" {{ old('return_type') == 'Other' ? 'selected' : '' }}>Other</option>
+                                        <option value="Main return" {{ old('return_type_id') == 'Main return' ? 'selected' : 'selected' }}>Main return</option>
+                                        <option value="Sub return" {{ old('return_type_id') == 'Sub return' ? 'selected' : '' }}>Sub return</option>
+                                        <option value="Commission return" {{ old('return_type_id') == 'Commission return' ? 'selected' : '' }}>Commission return</option>
+                                        <option value="Other" {{ old('return_type_id') == 'Other' ? 'selected' : '' }}>Other</option>
                                     </select>
-                                    @error('return_type')
+                                    @error('return_type_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>

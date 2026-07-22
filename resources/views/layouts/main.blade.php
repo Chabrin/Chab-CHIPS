@@ -358,6 +358,16 @@
         };
     </script>
 
+    {{-- Auto-surface session flash messages app-wide, via the toastr shim above.
+         Individual pages no longer need their own session('success')/session('error')
+         alert block — this is the single place that renders them now. --}}
+    @if(session('success'))
+    <script>document.addEventListener('DOMContentLoaded', function() { toastr.success(@json(session('success'))); });</script>
+    @endif
+    @if(session('error'))
+    <script>document.addEventListener('DOMContentLoaded', function() { toastr.error(@json(session('error'))); });</script>
+    @endif
+
     <script>
         // Handle hamburger menu collapse with responsive behavior
         (function() {

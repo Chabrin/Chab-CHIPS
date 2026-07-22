@@ -49,8 +49,12 @@ class ClientsController extends Controller
     public function getCLients(Request $request)
     {
         try {
-            $baseQuery = Client::clients();
-            $query = Client::clients()->select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
+            // Honor the client_type param (Landlord vs Tenant) instead of always returning landlords.
+            $clientType = $request->input('client_type');
+            $typeScope = strcasecmp((string) $clientType, 'Tenant') === 0 ? 'tenants' : 'clients';
+
+            $baseQuery = Client::{$typeScope}();
+            $query = Client::{$typeScope}()->select(['id', 'names', 'mobile_number', 'national_id', 'reference_number', 'email_address', 'registered_date']);
             $user = Auth::user();
 
             if (!$user) {
@@ -85,11 +89,16 @@ class ClientsController extends Controller
                 foreach ($tokens as $token) {
                     $query->where(function ($q) use ($token) {
                         $q->where('names', 'ILIKE', "%{$token}%")
-                            ->orWhere('id', $token)
                             ->orWhere('reference_number', 'ILIKE', "%{$token}%")
                             ->orWhere('mobile_number', 'ILIKE', "%{$token}%")
                             ->orWhere('email_address', 'ILIKE', "%{$token}%");
-                            
+
+                        // "id" is an integer column — comparing it against a non-numeric
+                        // search term (e.g. any name search) throws a fatal type error on
+                        // Postgres, which was silently swallowing every text search here.
+                        if (is_numeric($token)) {
+                            $q->orWhere('id', $token);
+                        }
                     });
                 }
             }
@@ -122,7 +131,13 @@ class ClientsController extends Controller
                     if ($field === 'registered_date') {
                         $query->whereRaw("CAST({$field} AS TEXT) ILIKE ?", ["%{$colSearch}%"]);
                     } elseif ($field === 'id') {
-                        $query->where($field, $colSearch);
+                        // "id" is an integer column — comparing it against non-numeric input
+                        // throws a fatal type error on Postgres instead of just matching nothing.
+                        if (is_numeric($colSearch)) {
+                            $query->where($field, $colSearch);
+                        } else {
+                            $query->whereRaw('1 = 0');
+                        }
                     } else {
                         $query->where($field, 'ILIKE', "%{$colSearch}%");
                     }
@@ -284,7 +299,13 @@ class ClientsController extends Controller
                     if ($field === 'registered_date') {
                         $query->whereRaw("CAST({$field} AS TEXT) ILIKE ?", ["%{$colSearch}%"]);
                     } elseif ($field === 'id') {
-                        $query->where($field, $colSearch);
+                        // "id" is an integer column — comparing it against non-numeric input
+                        // throws a fatal type error on Postgres instead of just matching nothing.
+                        if (is_numeric($colSearch)) {
+                            $query->where($field, $colSearch);
+                        } else {
+                            $query->whereRaw('1 = 0');
+                        }
                     } else {
                         $query->where($field, 'ILIKE', "%{$colSearch}%");
                     }
@@ -1216,6 +1237,15 @@ class ClientsController extends Controller
                     DB::raw('CASE WHEN cb_tenant_exits.id IS NOT NULL THEN 1 ELSE 0 END as is_exited')
                 );
 
+            // Exclude tenants whose assigned property has been explicitly deactivated,
+            // but keep tenants with no property_id at all visible — a left-joined-but
+            // unmatched row has sys_pm_properties.active as NULL, so the whereNull half
+            // of this orWhere is what re-includes those rows correctly.
+            $query->where(function ($q) {
+                $q->whereNull('sys_pm_clients.property_id')
+                  ->orWhere('sys_pm_properties.active', 1);
+            });
+
             if ($status === 'active') {
                 $query->whereNull('cb_tenant_exits.id');
             } elseif ($status === 'exited') {
@@ -1373,9 +1403,18 @@ class ClientsController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $tenant = Client::with(['property', 'unit.zone', 'deposits'])
+            $tenant = Client::with([
+                    // Bypass the zone-assignment scope on this eager load — the tenant record
+                    // was already confirmed accessible above, so their own assigned property
+                    // shouldn't disappear just because sys_pm_zones_assignments has no row for
+                    // it (a real data gap that otherwise silently nulls this relation).
+                    'property' => fn ($query) => $query->withoutGlobalScope('user_properties'),
+                    'unit.zone',
+                    'deposits',
+                ])
                 ->tenants()
                 ->findOrFail($id);
+
             return view('property.tenants.details', compact('tenant'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);

@@ -202,16 +202,14 @@
                                 </div>
 
                                 <div class="col-md-4 mb-3">
-                                    <label for="tenant_name" class="form-label">Tenant <span class="text-danger">*</span></label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control @error('tenant_name') is-invalid @enderror" 
-                                               id="tenant_name" name="tenant_name" 
-                                               value="{{ old('tenant_name') }}" required readonly>
-                                        <input type="hidden" id="tenant_id" name="tenant_id" value="{{ old('tenant_id') }}">
-                                        @error('tenant_name')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
+                                    <label for="tenant_id" class="form-label">Tenant <span class="text-danger">*</span></label>
+                                    <select class="form-select @error('tenant_id') is-invalid @enderror" id="tenant_id" name="tenant_id" required>
+                                        <option value="">Select a unit to auto-fill, or search for a tenant...</option>
+                                    </select>
+                                    @error('tenant_id')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                    <small class="text-muted">Auto-fills from the selected unit's current tenant — search to pick a different one.</small>
                                 </div>
 
                                 <div class="col-md-4 mb-3">
@@ -226,9 +224,9 @@
 
                                 <div class="col-md-4 mb-3">
                                     <label for="date_start" class="form-label">Date Start <span class="text-danger">*</span></label>
-                                    <input type="date" class="form-control @error('date_start') is-invalid @enderror" 
-                                           id="date_start" name="date_start" 
-                                           value="{{ old('date_start') }}" required>
+                                    <input type="date" class="form-control @error('date_start') is-invalid @enderror"
+                                        id="date_start" name="date_start"
+                                        value="{{ old('date_start') }}" required>
                                     @error('date_start')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -267,9 +265,9 @@
 
                                 <div class="col-md-4 mb-3">
                                     <label for="escalation_rate" class="form-label">Escalation Rate <span class="text-danger">*</span></label>
-                                    <input type="number" step="0.01" class="form-control @error('escalation_rate') is-invalid @enderror" 
-                                           id="escalation_rate" name="escalation_rate" 
-                                           value="{{ old('escalation_rate', '7.5') }}" required>
+                                    <input type="number" step="0.01" class="form-control @error('escalation_rate') is-invalid @enderror"
+                                        id="escalation_rate" name="escalation_rate"
+                                        value="{{ old('escalation_rate', '7.5') }}" required>
                                     @error('escalation_rate')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -289,8 +287,8 @@
                                 <div class="col-md-4 mb-3">
                                     <label for="documents" class="form-label">Documents</label>
                                     <div class="input-group">
-                                        <input type="file" class="form-control @error('documents') is-invalid @enderror" 
-                                               id="documents" name="documents[]" multiple accept=".pdf,.doc,.docx">
+                                        <input type="file" class="form-control @error('documents') is-invalid @enderror"
+                                            id="documents" name="documents[]" multiple accept=".pdf,.doc,.docx">
                                         <button type="button" class="btn btn-outline-primary" id="addFilesBtn">
                                             <span class="material-symbols-outlined" style="font-size:18px;">add</span>
                                             Add files
@@ -326,9 +324,9 @@
 
                                             <div class="col-md-4 mb-3">
                                                 <label for="amount_0" class="form-label">Amount <span class="text-danger">*</span></label>
-                                                <input type="number" step="0.01" class="form-control" 
-                                                       id="amount_0" name="invoicable_items[0][amount]" 
-                                                       value="0.00" required>
+                                                <input type="number" step="0.01" class="form-control"
+                                                    id="amount_0" name="invoicable_items[0][amount]"
+                                                    value="0.00" required>
                                             </div>
 
                                             <div class="col-md-4 mb-3">
@@ -378,7 +376,7 @@
     $(document).ready(function() {
         // Initialize tooltips
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
 
@@ -390,210 +388,266 @@
 
         // Check if client is pre-filled or needs to be searched
         @if($client)
-            // Client is pre-filled, load properties immediately
-            const clientId = $('#client_id').val();
-            if (clientId) {
-                loadProperties(clientId);
-            }
+        // Client is pre-filled, load properties immediately
+        const clientId = $('#client_id').val();
+        if (clientId) {
+            loadProperties(clientId);
+        }
         @else
-            // No client pre-filled — dual search widget (Property / Landlord), reusing
-            // the exact same AJAX endpoints as /landlord/account/statement
-            function resetClientSelection() {
+        // No client pre-filled — dual search widget (Property / Landlord), reusing
+        // the exact same AJAX endpoints as /landlord/account/statement
+        function resetClientSelection() {
+            $('#client_id').val('');
+            $('#selected_client_name').text('-');
+            $('#property_id').html('<option value="">-- Search First --</option>').prop('disabled', true);
+            $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
+            $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
+            $('#tenant_name').val('');
+            $('#tenant_id').val('');
+            $('#property_landlord_wrap').hide();
+            $('#property_landlord_select').html('<option value="">-- Select Property First --</option>').prop('disabled', true);
+        }
+
+        // Move the canonical Property field into whichever mode's slot is active,
+        // so it always sits beside that mode's search box (exact account-statement layout)
+        function placePropertyField(mode) {
+            var $wrapper = $('#property_field_wrapper').removeClass('d-none');
+            if (mode === 'property') {
+                $wrapper.appendTo('#property_select_slot_property');
+            } else {
+                $wrapper.appendTo('#property_select_slot_landlord');
+            }
+        }
+        placePropertyField('property');
+
+        // Search mode toggle
+        $('input[name="search_mode"]').on('change', function() {
+            var mode = $(this).val();
+            resetClientSelection();
+            placePropertyField(mode);
+            if (mode === 'property') {
+                $('#property_mode_section').show();
+                $('#landlord_mode_section').hide();
+            } else {
+                $('#property_mode_section').hide();
+                $('#landlord_mode_section').show();
+            }
+        });
+
+        // ── Search by Property ──────────────────────────────────
+        $('#search_property_btn').on('click', function() {
+            const searchTerm = $('#property_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                toastr.warning('Please enter at least 2 characters to search');
+                return;
+            }
+
+            $('#search_property_icon').hide();
+            $('#search_property_spinner').show();
+            $('#search_property_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/landlord/properties',
+                method: 'GET',
+                data: {
+                    search: searchTerm
+                },
+                success: function(response) {
+                    if (response.success && response.properties && response.properties.length > 0) {
+                        $('#property_id').empty().append('<option value="">-- Select Property --</option>');
+                        $.each(response.properties, function(index, prop) {
+                            $('#property_id').append(`<option value="${prop.id}">${prop.property_name} - ${prop.reference_number || ''}</option>`);
+                        });
+                        $('#property_id').prop('disabled', false);
+                        toastr.success(`Found ${response.properties.length} property(ies)`);
+                    } else {
+                        toastr.info('No properties found');
+                        $('#property_id').empty().append('<option value="">-- No Results --</option>').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error searching properties');
+                },
+                complete: function() {
+                    $('#search_property_icon').show();
+                    $('#search_property_spinner').hide();
+                    $('#search_property_btn').prop('disabled', false);
+                }
+            });
+        });
+
+        $('#property_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_property_btn').click();
+            }
+        });
+
+        // Resolve the landlord for the selected property
+        function loadLandlordForProperty(propertyId) {
+            $('#property_landlord_wrap').show();
+            $('#property_landlord_select').html('<option value="">Loading...</option>').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/landlord/landlords-by-property',
+                method: 'GET',
+                data: {
+                    property_id: propertyId
+                },
+                success: function(response) {
+                    $('#property_landlord_select').empty().append('<option value="">-- Select Landlord --</option>');
+                    if (response.success && response.landlords && response.landlords.length > 0) {
+                        $.each(response.landlords, function(i, l) {
+                            $('#property_landlord_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
+                        });
+                        $('#property_landlord_select').prop('disabled', false);
+
+                        if (response.landlords.length === 1) {
+                            $('#property_landlord_select').val(response.landlords[0].id).trigger('change');
+                        }
+                    } else {
+                        toastr.warning('No landlord found for this property');
+                        $('#property_landlord_select').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error loading landlord for property');
+                }
+            });
+        }
+
+        $('#property_landlord_select').on('change', function() {
+            const landlordId = $(this).val();
+            const landlordText = $(this).find(':selected').text();
+            if (landlordId) {
+                $('#client_id').val(landlordId);
+                $('#selected_client_name').text(landlordText);
+            } else {
                 $('#client_id').val('');
                 $('#selected_client_name').text('-');
-                $('#property_id').html('<option value="">-- Search First --</option>').prop('disabled', true);
-                $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
-                $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
-                $('#tenant_name').val('');
-                $('#tenant_id').val('');
-                $('#property_landlord_wrap').hide();
-                $('#property_landlord_select').html('<option value="">-- Select Property First --</option>').prop('disabled', true);
+            }
+        });
+
+        // ── Search by Landlord ──────────────────────────────────
+        $('#search_landlord_btn').on('click', function() {
+            const searchTerm = $('#landlord_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                toastr.warning('Please enter at least 2 characters to search');
+                return;
             }
 
-            // Move the canonical Property field into whichever mode's slot is active,
-            // so it always sits beside that mode's search box (exact account-statement layout)
-            function placePropertyField(mode) {
-                var $wrapper = $('#property_field_wrapper').removeClass('d-none');
-                if (mode === 'property') {
-                    $wrapper.appendTo('#property_select_slot_property');
-                } else {
-                    $wrapper.appendTo('#property_select_slot_landlord');
+            $('#search_landlord_icon').hide();
+            $('#search_landlord_spinner').show();
+            $('#search_landlord_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/landlord/search-landlords',
+                method: 'GET',
+                data: {
+                    search: searchTerm
+                },
+                success: function(response) {
+                    $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');
+                    if (response.success && response.landlords && response.landlords.length > 0) {
+                        $.each(response.landlords, function(i, l) {
+                            $('#landlord_direct_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
+                        });
+                        $('#landlord_direct_select').prop('disabled', false);
+                        toastr.success('Found ' + response.landlords.length + ' landlord(s)');
+                    } else {
+                        toastr.info('No landlords found');
+                        $('#landlord_direct_select').prop('disabled', true);
+                    }
+                },
+                error: function() {
+                    toastr.error('Error searching landlords');
+                },
+                complete: function() {
+                    $('#search_landlord_icon').show();
+                    $('#search_landlord_spinner').hide();
+                    $('#search_landlord_btn').prop('disabled', false);
                 }
+            });
+        });
+
+        $('#landlord_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_landlord_btn').click();
             }
-            placePropertyField('property');
+        });
 
-            // Search mode toggle
-            $('input[name="search_mode"]').on('change', function() {
-                var mode = $(this).val();
-                resetClientSelection();
-                placePropertyField(mode);
-                if (mode === 'property') {
-                    $('#property_mode_section').show();
-                    $('#landlord_mode_section').hide();
-                } else {
-                    $('#property_mode_section').hide();
-                    $('#landlord_mode_section').show();
-                }
-            });
+        // When landlord selected directly, load their properties
+        $('#landlord_direct_select').on('change', function() {
+            const landlordId = $(this).val();
+            const landlordText = $(this).find(':selected').text();
 
-            // ── Search by Property ──────────────────────────────────
-            $('#search_property_btn').on('click', function() {
-                const searchTerm = $('#property_search_input').val().trim();
-                if (searchTerm.length < 2) {
-                    toastr.warning('Please enter at least 2 characters to search');
-                    return;
-                }
-
-                $('#search_property_icon').hide();
-                $('#search_property_spinner').show();
-                $('#search_property_btn').prop('disabled', true);
-
-                $.ajax({
-                    url: '/ajax/landlord/properties',
-                    method: 'GET',
-                    data: { search: searchTerm },
-                    success: function(response) {
-                        if (response.success && response.properties && response.properties.length > 0) {
-                            $('#property_id').empty().append('<option value="">-- Select Property --</option>');
-                            $.each(response.properties, function(index, prop) {
-                                $('#property_id').append(`<option value="${prop.id}">${prop.property_name} - ${prop.reference_number || ''}</option>`);
-                            });
-                            $('#property_id').prop('disabled', false);
-                            toastr.success(`Found ${response.properties.length} property(ies)`);
-                        } else {
-                            toastr.info('No properties found');
-                            $('#property_id').empty().append('<option value="">-- No Results --</option>').prop('disabled', true);
-                        }
-                    },
-                    error: function() {
-                        toastr.error('Error searching properties');
-                    },
-                    complete: function() {
-                        $('#search_property_icon').show();
-                        $('#search_property_spinner').hide();
-                        $('#search_property_btn').prop('disabled', false);
-                    }
-                });
-            });
-
-            $('#property_search_input').on('keypress', function(e) {
-                if (e.which === 13) {
-                    e.preventDefault();
-                    $('#search_property_btn').click();
-                }
-            });
-
-            // Resolve the landlord for the selected property
-            function loadLandlordForProperty(propertyId) {
-                $('#property_landlord_wrap').show();
-                $('#property_landlord_select').html('<option value="">Loading...</option>').prop('disabled', true);
-
-                $.ajax({
-                    url: '/ajax/landlord/landlords-by-property',
-                    method: 'GET',
-                    data: { property_id: propertyId },
-                    success: function(response) {
-                        $('#property_landlord_select').empty().append('<option value="">-- Select Landlord --</option>');
-                        if (response.success && response.landlords && response.landlords.length > 0) {
-                            $.each(response.landlords, function(i, l) {
-                                $('#property_landlord_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
-                            });
-                            $('#property_landlord_select').prop('disabled', false);
-
-                            if (response.landlords.length === 1) {
-                                $('#property_landlord_select').val(response.landlords[0].id).trigger('change');
-                            }
-                        } else {
-                            toastr.warning('No landlord found for this property');
-                            $('#property_landlord_select').prop('disabled', true);
-                        }
-                    },
-                    error: function() {
-                        toastr.error('Error loading landlord for property');
-                    }
-                });
+            if (landlordId) {
+                $('#client_id').val(landlordId);
+                $('#selected_client_name').text(landlordText);
+                loadProperties(landlordId);
+            } else {
+                $('#client_id').val('');
+                $('#selected_client_name').text('-');
+                $('#property_id').html('<option value="">-- Select Landlord First --</option>').prop('disabled', true);
             }
-
-            $('#property_landlord_select').on('change', function() {
-                const landlordId = $(this).val();
-                const landlordText = $(this).find(':selected').text();
-                if (landlordId) {
-                    $('#client_id').val(landlordId);
-                    $('#selected_client_name').text(landlordText);
-                } else {
-                    $('#client_id').val('');
-                    $('#selected_client_name').text('-');
-                }
-            });
-
-            // ── Search by Landlord ──────────────────────────────────
-            $('#search_landlord_btn').on('click', function() {
-                const searchTerm = $('#landlord_search_input').val().trim();
-                if (searchTerm.length < 2) {
-                    toastr.warning('Please enter at least 2 characters to search');
-                    return;
-                }
-
-                $('#search_landlord_icon').hide();
-                $('#search_landlord_spinner').show();
-                $('#search_landlord_btn').prop('disabled', true);
-
-                $.ajax({
-                    url: '/ajax/landlord/search-landlords',
-                    method: 'GET',
-                    data: { search: searchTerm },
-                    success: function(response) {
-                        $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');
-                        if (response.success && response.landlords && response.landlords.length > 0) {
-                            $.each(response.landlords, function(i, l) {
-                                $('#landlord_direct_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
-                            });
-                            $('#landlord_direct_select').prop('disabled', false);
-                            toastr.success('Found ' + response.landlords.length + ' landlord(s)');
-                        } else {
-                            toastr.info('No landlords found');
-                            $('#landlord_direct_select').prop('disabled', true);
-                        }
-                    },
-                    error: function() {
-                        toastr.error('Error searching landlords');
-                    },
-                    complete: function() {
-                        $('#search_landlord_icon').show();
-                        $('#search_landlord_spinner').hide();
-                        $('#search_landlord_btn').prop('disabled', false);
-                    }
-                });
-            });
-
-            $('#landlord_search_input').on('keypress', function(e) {
-                if (e.which === 13) {
-                    e.preventDefault();
-                    $('#search_landlord_btn').click();
-                }
-            });
-
-            // When landlord selected directly, load their properties
-            $('#landlord_direct_select').on('change', function() {
-                const landlordId = $(this).val();
-                const landlordText = $(this).find(':selected').text();
-
-                if (landlordId) {
-                    $('#client_id').val(landlordId);
-                    $('#selected_client_name').text(landlordText);
-                    loadProperties(landlordId);
-                } else {
-                    $('#client_id').val('');
-                    $('#selected_client_name').text('-');
-                    $('#property_id').html('<option value="">-- Select Landlord First --</option>').prop('disabled', true);
-                }
-            });
+        });
         @endif
+
+        // Tenant search dropdown — auto-fills from the selected unit's current tenant
+        // (see loadTenantForUnit below), but can also be searched/overridden manually.
+        // Reuses the same ajax.clients.list endpoint as the client search above, filtered
+        // to tenants instead of landlords.
+        $('#tenant_id').select2({
+            placeholder: 'Select a unit to auto-fill, or search for a tenant...',
+            allowClear: true,
+            width: '100%',
+            minimumInputLength: 2,
+            ajax: {
+                url: "{{ route('ajax.clients.list') }}",
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return {
+                        client_type: 'Tenant',
+                        search: params.term
+                    };
+                },
+                processResults: function(response) {
+                    return {
+                        results: response.data.map(function(tenant) {
+                            return {
+                                id: tenant.id,
+                                text: `${tenant.names} (${tenant.reference_number})`
+                            };
+                        })
+                    };
+                },
+                cache: true
+            }
+        });
+
+        // Set (or clear) the tenant select2's selection, injecting a matching <option>
+        // first since select2 can't display a value with no corresponding option element.
+        function setTenantSelection(id, text) {
+            if (!id) {
+                clearTenantSelection();
+                return;
+            }
+            if ($('#tenant_id').find(`option[value="${id}"]`).length === 0) {
+                $('#tenant_id').append(new Option(text, id, true, true));
+            }
+            $('#tenant_id').val(id).trigger('change');
+        }
+
+        function clearTenantSelection() {
+            $('#tenant_id').val(null).trigger('change');
+        }
 
         // Function to load properties for the client
         function loadProperties(clientId) {
             $('#property_id').html('<option value="">Loading properties...</option>').prop('disabled', true);
-            
+
             $.ajax({
                 url: `/client/${clientId}/properties`,
                 method: 'GET',
@@ -602,7 +656,7 @@
                     console.log('Properties loaded:', response);
                     $('#property_id').empty().prop('disabled', false);
                     $('#property_id').append('<option value="">Please select</option>');
-                    
+
                     if (response.properties && response.properties.length > 0) {
                         response.properties.forEach(function(property) {
                             $('#property_id').append(`<option value="${property.id}">${property.property_name}</option>`);
@@ -635,15 +689,14 @@
                 // Reset dependent fields
                 $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', false);
                 $('#unit_id').html('<option value="">Please select</option>').prop('disabled', false);
-                $('#tenant_name').val('');
-                $('#tenant_id').val('');
+                clearTenantSelection();
             }
         });
 
         // Function to load SLA for the selected property
         function loadSLAForProperty(propertyId) {
             $('#sla_ref').html('<option value="">Loading SLA...</option>').prop('disabled', true);
-            
+
             $.ajax({
                 url: `/property/${propertyId}/sla`,
                 method: 'GET',
@@ -652,7 +705,7 @@
                     console.log('SLA loaded:', response);
                     $('#sla_ref').empty().prop('disabled', false);
                     $('#sla_ref').append('<option value="">Please select</option>');
-                    
+
                     if (response.sla && response.sla.length > 0) {
                         response.sla.forEach(function(sla) {
                             $('#sla_ref').append(`<option value="${sla.id}">${sla.sla_reference || sla.reference_number}</option>`);
@@ -672,7 +725,7 @@
         // Function to load units for the selected property
         function loadUnitsForProperty(propertyId) {
             $('#unit_id').html('<option value="">Loading units...</option>').prop('disabled', true);
-            
+
             $.ajax({
                 url: `/property/${propertyId}/units`,
                 method: 'GET',
@@ -681,7 +734,7 @@
                     console.log('Units loaded:', response);
                     $('#unit_id').empty().prop('disabled', false);
                     $('#unit_id').append('<option value="">Please select</option>');
-                    
+
                     if (response.units && response.units.length > 0) {
                         response.units.forEach(function(unit) {
                             $('#unit_id').append(`<option value="${unit.id}">${unit.unit_name || unit.unit_number}</option>`);
@@ -702,13 +755,11 @@
         $('#unit_id').on('change', function() {
             const unitId = $(this).val();
             const propertyId = $('#property_id').val();
-            
+
             if (unitId && propertyId) {
                 loadTenantForUnit(propertyId, unitId);
             } else {
-                // Reset tenant field
-                $('#tenant_name').val('');
-                $('#tenant_id').val('');
+                clearTenantSelection();
             }
         });
 
@@ -720,20 +771,17 @@
                 dataType: 'json',
                 success: function(response) {
                     console.log('Tenant loaded:', response);
-                    
+
                     if (response.tenant) {
-                        $('#tenant_id').val(response.tenant.id);
-                        $('#tenant_name').val(response.tenant.full_name || response.tenant.name);
+                        setTenantSelection(response.tenant.id, response.tenant.full_name || response.tenant.name);
                     } else {
-                        $('#tenant_name').val('');
-                        $('#tenant_id').val('');
+                        clearTenantSelection();
                         console.log('No tenant found for this unit');
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Error loading tenant:', xhr.responseText);
-                    $('#tenant_name').val('');
-                    $('#tenant_id').val('');
+                    clearTenantSelection();
                 }
             });
         }
@@ -753,7 +801,7 @@
                     console.log('Invoiceable items loaded:', response);
                     if (response.items && response.items.length > 0) {
                         invoiceableItems = response.items;
-                        
+
                         // Populate the first dropdown
                         populateInvoiceableItems('#item_0');
                     }
@@ -768,23 +816,23 @@
         function populateInvoiceableItems(selectId) {
             $(selectId).empty();
             $(selectId).append('<option value="">Please select</option>');
-            
+
             // Filter items where feature array contains "1", "2", or "3"
             const filteredItems = invoiceableItems.filter(function(item) {
                 if (!item.feature) return false;
-                
+
                 // Parse feature if it's a string (JSON), otherwise use as-is
                 let featureArray = typeof item.feature === 'string' ? JSON.parse(item.feature) : item.feature;
-                
+
                 // Check if feature array contains "1", "2", or "3"
                 return featureArray.some(function(feature) {
                     const featureStr = String(feature);
                     return featureStr === '1' || featureStr === '2' || featureStr === '3';
                 });
             });
-            
+
             console.log('Filtered invoiceable items for lease:', filteredItems);
-            
+
             if (filteredItems.length > 0) {
                 filteredItems.forEach(function(item) {
                     $(selectId).append(`<option value="${item.id}">${item.item_name}</option>`);
@@ -812,7 +860,7 @@
                     return featureStr === '1' || featureStr === '2' || featureStr === '3';
                 });
             });
-            
+
             filteredItems.forEach(function(item) {
                 itemOptions += `<option value="${item.id}">${item.item_name}</option>`;
             });
@@ -898,7 +946,7 @@
         $('#date_start, #years').on('change', function() {
             let startDate = $('#date_start').val();
             let years = $('#years').val();
-            
+
             if (startDate && years) {
                 let start = new Date(startDate);
                 start.setFullYear(start.getFullYear() + parseInt(years));

@@ -7,14 +7,20 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Property Listings</h5>
-                        @permission('create_properties')
                         <div class="ms-auto d-flex gap-2">
+                            @permission('update_properties')
+                            <a href="{{ route('property.activation.index') }}" class="btn btn-outline-secondary btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">toggle_on</span>
+                                <span class="ms-1">Manage Activation</span>
+                            </a>
+                            @endpermission
+                            @permission('create_properties')
                             <a href="{{ route('property.properties.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">add_circle</span>
                                 <span class="ms-1">Add Property</span>
                             </a>
+                            @endpermission
                         </div>
-                        @endpermission
                     </div>
                     <div class="card-body">
                         @if(session('success'))

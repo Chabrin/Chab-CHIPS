@@ -1342,6 +1342,7 @@ class InvoicingController extends Controller
                         'date_time' => $deposit->date_time ? $deposit->date_time->format('d-m-Y') : '-',
                         'amount' => number_format($deposit->amount, 2),
                         'payment_mode' => $deposit->payment_mode ?? '-',
+                        'held_by' => $deposit->held_by ?? 'Not specified',
                         'narration' => $deposit->narration ?? '-'
                     ];
                 })

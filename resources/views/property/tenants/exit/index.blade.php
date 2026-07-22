@@ -1390,6 +1390,11 @@ function updateProcessBadges(state) {
         $('#p1BannerBadge').text('Process 1: Completed').css('background','#27ae60');
         $('#p2StatusBadge').text('Completed').css('background','#27ae60');
         $('#p2BannerBadge').text('Process 2: Completed').css('background','#27ae60');
+    } else if (state === 'p2-pending-approval') {
+        $('#p1StatusBadge').text('Completed').css('background','#27ae60');
+        $('#p1BannerBadge').text('Process 1: Completed').css('background','#27ae60');
+        $('#p2StatusBadge').text('Pending Approval').css('background','#f59e0b');
+        $('#p2BannerBadge').text('Process 2: Pending Approval').css('background','#f59e0b');
     }
 }
 
@@ -1409,19 +1414,41 @@ function unlockProcess2(data, er) {
         }
     }
 
-    // P2 completion: check settlement record (settled_at), NOT a non-existent column
+    // P2 completion: check settlement record (settled_at), NOT a non-existent column.
+    // current_status_id: 1 = Pending approval, 5 = Approved (actually finalised), 41 = Rejected.
     const settlement = er.settlement || data.settlement || null;
     if (settlement && settlement.settled_at) {
-        updateProcessBadges('p2-done');
+        const stStatus = settlement.current_status_id;
+        const typeLabel = settlement.settlement_type || '';
+        const bal = parseFloat(settlement.settlement_balance || 0).toLocaleString('en', {minimumFractionDigits:2});
+
         $('#p2Chk-finalise').removeClass('d-none');
         $('#settlementDoneView').removeClass('d-none');
         $('#finaliseSettlementForm').addClass('d-none');
-        const typeLabel = settlement.settlement_type || '';
-        const bal = parseFloat(settlement.settlement_balance || 0).toLocaleString('en', {minimumFractionDigits:2});
-        $('#settlDoneSummary').html(
-            'Outcome: <strong>' + typeLabel + '</strong> &mdash; KES ' + bal +
-            ' &mdash; Finalised on ' + (settlement.settled_at || '')
-        );
+
+        if (stStatus === 5) {
+            updateProcessBadges('p2-done');
+            $('#settlDoneSummary').html(
+                'Outcome: <strong>' + typeLabel + '</strong> &mdash; KES ' + bal +
+                ' &mdash; Approved on ' + (settlement.approved_at || '')
+            );
+        } else if (stStatus === 41) {
+            updateProcessBadges('p2-pending-approval');
+            $('#settlDoneSummary').html(
+                'Outcome: <strong>' + typeLabel + '</strong> &mdash; KES ' + bal +
+                ' &mdash; <strong class="text-danger">Rejected</strong>' +
+                (settlement.rejection_reason ? ': ' + settlement.rejection_reason : '') +
+                '. Submit a corrected settlement to try again.'
+            );
+            $('#finaliseSettlementForm').removeClass('d-none');
+            $('#settlementDoneView').addClass('d-none');
+        } else {
+            updateProcessBadges('p2-pending-approval');
+            $('#settlDoneSummary').html(
+                'Outcome (pending approval): <strong>' + typeLabel + '</strong> &mdash; KES ' + bal +
+                '. A different user must approve this at Maker-Checker Confirmations before it is applied.'
+            );
+        }
         // Mark settlement computation tab as done too
         $('#p2Chk-settlement').removeClass('d-none');
         switchP2Tab('finalise');
@@ -1459,13 +1486,16 @@ function renderP2Deposits(deposits) {
         return;
     }
     let total = 0;
-    let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-1"><thead class="table-light"><tr><th>Reference</th><th>Property</th><th>Unit</th><th>Date Received</th><th class="text-end">Amount (KES)</th></tr></thead><tbody>';
+    let html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-1"><thead class="table-light"><tr><th>Reference</th><th>Property</th><th>Unit</th><th>Date Received</th><th>Held By</th><th class="text-end">Amount (KES)</th></tr></thead><tbody>';
     deposits.forEach(d => {
         const amt = parseFloat((d.amount + '').replace(/,/g,''));
         total += isNaN(amt) ? 0 : amt;
-        html += `<tr><td>${d.reference}</td><td>${d.property_name}</td><td>${d.unit_name}</td><td>${d.date_received}</td><td class="text-end fw-semibold">${d.amount}</td></tr>`;
+        const heldByBadge = d.held_by === 'Company' ? '<span class="badge bg-success">Chabrin</span>'
+            : d.held_by === 'Landlord' ? '<span class="badge bg-warning text-dark">Landlord</span>'
+            : '<span class="badge bg-secondary">Not specified</span>';
+        html += `<tr><td>${d.reference}</td><td>${d.property_name}</td><td>${d.unit_name}</td><td>${d.date_received}</td><td>${heldByBadge}</td><td class="text-end fw-semibold">${d.amount}</td></tr>`;
     });
-    html += `<tr class="table-light fw-bold"><td colspan="4" class="text-end">Total Deposit Held</td><td class="text-end">KES ${total.toLocaleString('en',{minimumFractionDigits:2})}</td></tr>`;
+    html += `<tr class="table-light fw-bold"><td colspan="5" class="text-end">Total Deposit Held</td><td class="text-end">KES ${total.toLocaleString('en',{minimumFractionDigits:2})}</td></tr>`;
     html += '</tbody></table></div>';
     $('#p2DepositsTable').html(html);
 }
@@ -1968,20 +1998,21 @@ $('#settlementForm').on('submit', function (e) {
         headers: {'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')},
         success: res => {
             if (res.success) {
-                toastr.success(res.message || 'Settlement finalised.');
-                updateProcessBadges('p2-done');
+                toastr.success(res.message || 'Settlement submitted for approval.');
+                updateProcessBadges('p2-pending-approval');
                 $('#p2Chk-finalise, #p2Chk-settlement').removeClass('d-none');
                 $('#settlementDoneView').removeClass('d-none');
                 $('#finaliseSettlementForm').addClass('d-none');
                 const stType = data.settlement_type || $('#hiddenSettlType').val();
                 const stBal  = data.settlement_balance || $('#hiddenSettlBalance').val();
                 $('#settlDoneSummary').html(
-                    'Outcome: <strong>' + stType + '</strong> &mdash; KES ' +
-                    parseFloat(stBal).toLocaleString('en', {minimumFractionDigits:2})
+                    'Outcome (pending approval): <strong>' + stType + '</strong> &mdash; KES ' +
+                    parseFloat(stBal).toLocaleString('en', {minimumFractionDigits:2}) +
+                    '. A different user must approve this at Maker-Checker Confirmations before the refund/invoice is applied and the exit is finalised.'
                 );
-            } else toastr.error(res.message || 'Failed to finalise settlement.');
+            } else toastr.error(res.message || 'Failed to submit settlement.');
         },
-        error: () => toastr.error('Failed to finalise settlement.')
+        error: () => toastr.error('Failed to submit settlement.')
     });
 });
 

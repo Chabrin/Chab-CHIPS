@@ -8,6 +8,7 @@ use App\Models\DebtorInvoice;
 use App\Models\InvoiceWorkflow;
 use App\Services\TenantBalanceService;
 use App\Traits\HasWorkflowStatuses;
+use App\Traits\TenantExitSettlementCalculatorTrait;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Crypt;
 class PropertyConfirmationController extends Controller
 {
     use HasWorkflowStatuses;
+    use TenantExitSettlementCalculatorTrait;
 
     public function index()
     {
@@ -31,6 +33,7 @@ class PropertyConfirmationController extends Controller
             ['permission' => 'update_tenant_movements', 'label' => 'Tenant Movements'],
             ['permission' => 'update_tenant_blacklist', 'label' => 'Tenant Blacklist'],
             ['permission' => 'update_repair_requests', 'label' => 'Repairs & Maintenance'],
+            ['permission' => 'update_tenant_exit_settlements', 'label' => 'Tenant Exit Settlements'],
         ];
 
 
@@ -65,6 +68,7 @@ class PropertyConfirmationController extends Controller
             'Tenant Movements' => \App\Models\TenantMovement::class,
             'Tenant Blacklist' => \App\Models\TenantBlacklist::class,
             'Repairs & Maintenance' => \App\Models\RepairRequest::class,
+            'Tenant Exit Settlements' => \App\Models\TenantExitSettlement::class,
         ];
         return $map[$section] ?? '';
     }
@@ -422,6 +426,33 @@ class PropertyConfirmationController extends Controller
                         ];
                     });
                 break;
+
+            case 'Tenant Exit Settlements':
+                $base = \App\Models\TenantExitSettlement::where('current_status_id', 1); // Pending
+                if ($search !== '') {
+                    $base->where(function ($q) use ($search) {
+                        $q->whereHas('exit.tenant', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"))
+                            ->orWhereHas('exit.property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"));
+                    });
+                }
+                $recordsTotal = (clone $base)->count();
+                $records = $base->with(['exit.tenant', 'exit.property', 'settledBy'])
+                    ->orderBy('settled_at', 'desc')
+                    ->skip($start)->take($length)
+                    ->get()
+                    ->map(function ($settlement) {
+                        return [
+                            'id' => $settlement->id,
+                            'encrypted_id' => Crypt::encrypt($settlement->id),
+                            'tenant' => $settlement->exit->tenant->names ?? '-',
+                            'property' => $settlement->exit->property->property_name ?? '-',
+                            'settlement_type' => $settlement->settlement_type ?? '-',
+                            'settlement_balance' => number_format($settlement->settlement_balance ?? 0, 2),
+                            'submitted_by' => $settlement->settledBy->name ?? '-',
+                            'submitted_at' => $settlement->settled_at ? $settlement->settled_at->format('d-m-Y H:i') : '-',
+                        ];
+                    });
+                break;
         }
 
         return response()->json([
@@ -526,6 +557,16 @@ class PropertyConfirmationController extends Controller
                     $record->current_status_id = 5; // Approved
                     $newStatus = 5;
                     $record->save();
+                    break;
+
+                case 'Tenant Exit Settlements':
+                    $record = \App\Models\TenantExitSettlement::findOrFail($id);
+                    if ((int) $record->settled_by === (int) Auth::id()) {
+                        return response()->json(['success' => false, 'error' => 'A different user must approve this settlement — you cannot approve your own submission.'], 422);
+                    }
+                    $previousStatus = $record->current_status_id;
+                    $newStatus = 5;
+                    $this->applyTenantExitSettlementApproval($record);
                     break;
 
                 default:
@@ -633,6 +674,182 @@ class PropertyConfirmationController extends Controller
         });
     }
 
+    /**
+     * Apply a Tenant Exit Settlement approval: post the ledger entries/refund/invoice
+     * implied by the settlement type, split the deposit into ARREARS/REPAIRS records,
+     * terminate the lease, unlink the tenant from their unit/property, and mark the
+     * exit fully completed. This is exactly the side-effect work that used to run
+     * unconditionally inside TenantExitController::saveSettlement() — it now only runs
+     * once a *different* user approves the settlement (self-approval is blocked in
+     * approve()/bulkApprove() before this is ever called). Wrapped in a transaction so
+     * a failure partway through can't leave a half-applied settlement. Shared by both
+     * single and bulk approval so the two can never drift apart.
+     */
+    private function applyTenantExitSettlementApproval(\App\Models\TenantExitSettlement $settlement): void
+    {
+        DB::transaction(function () use ($settlement) {
+            $exit = \App\Models\TenantExit::findOrFail($settlement->exit_id);
+            $refNum = 'EXIT-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
+
+            // Recompute fresh from the tenant's current ledger/deposit/inspection data rather
+            // than trusting the figures stored at submission time — the tenant's balance could
+            // have changed in the time between submission and this approval (a payment posted,
+            // an invoice raised, etc.), and this is the point where money actually moves, so
+            // it must reflect reality now, not a possibly-stale snapshot. other_deductions is
+            // the one manual figure carried through unchanged, since it's not derivable from
+            // any table.
+            $fresh = $this->computeTenantExitSettlement($exit, (float) $settlement->other_deductions);
+            $settlement->fill($fresh);
+
+            if ($settlement->settlement_type === 'Refund to Tenant' && $settlement->settlement_balance > 0.005) {
+                \App\Models\TenantAccountTransaction::create([
+                    'date_time'         => now(),
+                    'narration'         => 'Exit deposit settlement — refund to tenant',
+                    'dr_cr'             => 'CR',
+                    'debit_amount'      => 0,
+                    'credit_amount'     => $settlement->settlement_balance,
+                    // receipt_number on sys_pm_tenants_accounts_trans is numeric, not text
+                    // (confirmed against live schema — same issue already fixed once this
+                    // session for the deposit-capture ledger write); entry_ref is the
+                    // correct free-text reference column.
+                    'entry_ref'         => $refNum,
+                    'tenant_id'         => $settlement->tenant_id,
+                    'property_id'       => $exit->property_id,
+                    'unit_id'           => $exit->unit_id,
+                    'current_status_id' => 1,
+                    'entry_by'          => Auth::id(),
+                ]);
+
+                \App\Models\TenantExitDepositRefund::create([
+                    'exit_id'       => $settlement->exit_id,
+                    'tenant_id'     => $settlement->tenant_id,
+                    'refund_amount' => $settlement->settlement_balance,
+                    'refund_notes'  => $settlement->notes ?? 'Exit settlement refund',
+                    'refunded_by'   => Auth::id(),
+                    'refunded_at'   => now(),
+                ]);
+
+            } elseif ($settlement->settlement_type === 'Invoice to Tenant' && $settlement->settlement_balance > 0.005) {
+                $invoice = DebtorInvoice::create([
+                    'date_time'         => now(),
+                    'date_due'          => now()->addDays(30),
+                    'debtor_type_id'    => 2,
+                    'tenant_id'         => $settlement->tenant_id,
+                    'property_id'       => $exit->property_id,
+                    'unit_id'           => $exit->unit_id,
+                    'reference_number'  => $refNum,
+                    'narration'         => 'Exit settlement — balance due after deposit deductions',
+                    'total_amount'      => $settlement->settlement_balance,
+                    'current_balance'   => $settlement->settlement_balance,
+                    'current_status_id' => 1,
+                    'created_by'        => Auth::id(),
+                    'created_date'      => now(),
+                ]);
+
+                \App\Models\TenantAccountTransaction::create([
+                    'date_time'         => now(),
+                    'narration'         => 'Exit settlement — amount due from tenant after deposit deductions',
+                    'dr_cr'             => 'DR',
+                    'debit_amount'      => $settlement->settlement_balance,
+                    'credit_amount'     => 0,
+                    'invoice_number'    => $refNum,
+                    'invoice_id'        => $invoice->id,
+                    'tenant_id'         => $settlement->tenant_id,
+                    'property_id'       => $exit->property_id,
+                    'unit_id'           => $exit->unit_id,
+                    'current_status_id' => 1,
+                    'entry_by'          => Auth::id(),
+                ]);
+            }
+
+            // Shortfall invoice for deposit-as-rent
+            if ($exit->deposit_as_rent && ($exit->deposit_as_rent_amount ?? 0) > 0) {
+                $unit         = \App\Models\Unit::find($exit->unit_id);
+                $monthlyRent  = (float) ($unit?->rent_amount ?? 0);
+                $depositTotal = (float) \App\Models\Deposit::where('tenant_id', $settlement->tenant_id)->sum('amount');
+                $shortfall    = max(0, $monthlyRent - $depositTotal);
+
+                if ($shortfall > 0.005) {
+                    $sfRefNum = 'EXIT-SF-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
+                    $sfInvoice = DebtorInvoice::create([
+                        'date_time'         => now(),
+                        'date_due'          => now()->addDays(14),
+                        'debtor_type_id'    => 2,
+                        'tenant_id'         => $settlement->tenant_id,
+                        'property_id'       => $exit->property_id,
+                        'unit_id'           => $exit->unit_id,
+                        'reference_number'  => $sfRefNum,
+                        'narration'         => 'Final rent shortfall — deposit partially applied, balance due',
+                        'total_amount'      => $shortfall,
+                        'current_balance'   => $shortfall,
+                        'current_status_id' => 1,
+                        'created_by'        => Auth::id(),
+                        'created_date'      => now(),
+                    ]);
+
+                    \App\Models\TenantAccountTransaction::create([
+                        'date_time'         => now(),
+                        'narration'         => 'Exit — final rent shortfall (deposit applied to rent, balance owed)',
+                        'dr_cr'             => 'DR',
+                        'debit_amount'      => $shortfall,
+                        'credit_amount'     => 0,
+                        'invoice_number'    => $sfRefNum,
+                        'invoice_id'        => $sfInvoice->id,
+                        'tenant_id'         => $settlement->tenant_id,
+                        'property_id'       => $exit->property_id,
+                        'unit_id'           => $exit->unit_id,
+                        'current_status_id' => 1,
+                        'entry_by'          => Auth::id(),
+                    ]);
+                }
+            }
+
+            // Record how the deposit was split (ARREARS and REPAIRS portions)
+            $arrearsAmt = (float) $settlement->arrears_amount;
+            $repairsAmt = (float) $settlement->inspection_damage + (float) $settlement->cleaning_cost;
+            if ($arrearsAmt > 0.005) {
+                \App\Models\DepositApplication::updateOrCreate(
+                    ['exit_id' => $exit->id, 'type' => 'ARREARS'],
+                    ['tenant_id' => $settlement->tenant_id, 'amount' => $arrearsAmt]
+                );
+            }
+            if ($repairsAmt > 0.005) {
+                \App\Models\DepositApplication::updateOrCreate(
+                    ['exit_id' => $exit->id, 'type' => 'REPAIRS'],
+                    ['tenant_id' => $settlement->tenant_id, 'amount' => $repairsAmt]
+                );
+            }
+
+            // Finalise the lease (Vacating → Terminated) and clear tenant links
+            \App\Models\LeaseAgreement::where('tenant_id', $settlement->tenant_id)
+                ->where('lease_status', 'Vacating')
+                ->update([
+                    'lease_status'      => 'Terminated',
+                    'current_status_id' => 2,
+                ]);
+
+            $tenant = \App\Models\Client::find($settlement->tenant_id);
+            if ($tenant) {
+                $tenant->update(['unit_id' => null, 'property_id' => null]);
+            }
+
+            // Mark exit fully completed
+            $exit->update([
+                'current_status_id' => 2,
+                'final_notes'       => $settlement->notes ?? null,
+                'finalised_by'      => Auth::id(),
+                'finalised_at'      => now(),
+                'updated_by'        => Auth::id(),
+            ]);
+
+            // Mark the settlement itself Approved
+            $settlement->current_status_id = 5;
+            $settlement->approved_by = Auth::id();
+            $settlement->approved_at = now();
+            $settlement->save();
+        });
+    }
+
     public function reject(Request $request, $id)
     {
         $section = $request->input('section');
@@ -731,6 +948,15 @@ class PropertyConfirmationController extends Controller
                     $record->save();
                     break;
 
+                case 'Tenant Exit Settlements':
+                    $record = \App\Models\TenantExitSettlement::findOrFail($id);
+                    $previousStatus = $record->current_status_id;
+                    $record->current_status_id = 41; // Rejected
+                    $record->rejection_reason = $rejectionReason;
+                    $newStatus = 41;
+                    $record->save();
+                    break;
+
                 default:
                     return response()->json(['success' => false, 'error' => 'Unknown confirmation section.'], 422);
             }
@@ -753,7 +979,8 @@ class PropertyConfirmationController extends Controller
     {
         $ids = $request->input('ids', []);
         $section = $request->input('section');
-        
+        $skipped = [];
+
         try {
             switch ($section) {
                 case 'Clients':
@@ -803,6 +1030,17 @@ class PropertyConfirmationController extends Controller
                     \App\Models\RepairRequest::whereIn('id', $ids)->update(['current_status_id' => 5]);
                     break;
 
+                case 'Tenant Exit Settlements':
+                    $settlements = \App\Models\TenantExitSettlement::whereIn('id', $ids)->get();
+                    foreach ($settlements as $settlement) {
+                        if ((int) $settlement->settled_by === (int) Auth::id()) {
+                            $skipped[] = $settlement->id . ' (same user submitted and approved)';
+                            continue;
+                        }
+                        $this->applyTenantExitSettlementApproval($settlement);
+                    }
+                    break;
+
                 default:
                     return response()->json(['success' => false, 'error' => 'Unknown confirmation section.'], 422);
             }
@@ -810,10 +1048,16 @@ class PropertyConfirmationController extends Controller
             $this->logConfirmation($section, 'bulk approve', $ids, null, [
                 'records_count' => count($ids),
                 'new_status_id' => 5,
-                'action_type' => 'bulk_approval'
+                'action_type' => 'bulk_approval',
+                'skipped' => $skipped ?: null,
             ]);
 
-            return response()->json(['success' => true, 'message' => 'Records approved successfully']);
+            $message = 'Records approved successfully';
+            if (!empty($skipped)) {
+                $message .= '. Skipped (self-approval not allowed): ' . implode(', ', $skipped);
+            }
+
+            return response()->json(['success' => true, 'message' => $message]);
         } catch (\Exception $e) {
             Log::error('Error bulk approving records: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to approve records'], 500);
@@ -870,6 +1114,13 @@ class PropertyConfirmationController extends Controller
 
                 case 'Repairs & Maintenance':
                     \App\Models\RepairRequest::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                    break;
+
+                case 'Tenant Exit Settlements':
+                    \App\Models\TenantExitSettlement::whereIn('id', $ids)->update([
+                        'current_status_id' => 41,
+                        'rejection_reason' => $rejectionReason,
+                    ]);
                     break;
 
                 default:

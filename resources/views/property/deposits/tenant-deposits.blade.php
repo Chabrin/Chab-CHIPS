@@ -41,6 +41,7 @@
                                         <th>Tenant</th>
                                         <th>Property</th>
                                         <th>Unit</th>
+                                        <th>Held By</th>
                                         <th>Amount</th>
                                     </tr>
                                 </thead>
@@ -169,6 +170,14 @@
                 },
                 {
                     data: 'unit_name'
+                },
+                {
+                    data: 'held_by',
+                    render: function(data) {
+                        if (data === 'Company') return '<span class="badge bg-success">Chabrin</span>';
+                        if (data === 'Landlord') return '<span class="badge bg-warning text-dark">Landlord</span>';
+                        return '<span class="badge bg-secondary">Not specified</span>';
+                    }
                 },
                 {
                     data: 'amount',

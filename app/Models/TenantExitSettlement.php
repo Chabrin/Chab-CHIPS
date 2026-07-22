@@ -24,6 +24,10 @@ class TenantExitSettlement extends Model
         'notes',
         'settled_by',
         'settled_at',
+        'current_status_id',
+        'approved_by',
+        'approved_at',
+        'rejection_reason',
     ];
 
     protected $casts = [
@@ -35,6 +39,7 @@ class TenantExitSettlement extends Model
         'other_deductions'        => 'decimal:2',
         'settlement_balance'      => 'decimal:2',
         'settled_at'              => 'datetime',
+        'approved_at'             => 'datetime',
     ];
 
     public function exit(): BelongsTo
@@ -45,5 +50,10 @@ class TenantExitSettlement extends Model
     public function settledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'settled_by');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 }

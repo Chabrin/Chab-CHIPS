@@ -694,6 +694,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/leases/store', [App\Http\Controllers\LeasesController::class, 'store'])->name('property.leases.store');
     Route::get('/property/leases/{encryptedId}/view-signed-contract', [App\Http\Controllers\LeasesController::class, 'viewSignedContract'])->name('property.leases.view-signed-contract');
     Route::post('/property/leases/{id}/send-contract', [App\Http\Controllers\LeasesController::class, 'sendContract'])->name('property.leases.send-contract');
+    Route::get('/property/leases/{encryptedId}/edit', [App\Http\Controllers\LeasesController::class, 'edit'])->name('property.leases.edit');
+    Route::put('/property/leases/{id}', [App\Http\Controllers\LeasesController::class, 'update'])->name('property.leases.update');
+    Route::post('/property/leases/{id}/cancel', [App\Http\Controllers\LeasesController::class, 'cancel'])->name('property.leases.cancel');
     Route::get('/tenants/lease/create', [App\Http\Controllers\LeasesController::class, 'create'])->name('tenant.lease.create');
 
     // Lease Contract Template Management
@@ -894,6 +897,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Property edit routes
     Route::get('/property/properties/{encryptedId}/edit', [PropertiesController::class, 'edit'])->name('property.properties.edit');
     Route::put('/property/properties/{encryptedId}', [PropertiesController::class, 'update'])->name('property.properties.update');
+
+    // Property Activation Management (mass activate/deactivate)
+    Route::get('/property/activation', [App\Http\Controllers\PropertyActivationController::class, 'index'])->name('property.activation.index');
+    Route::get('/property/activation/data', [App\Http\Controllers\PropertyActivationController::class, 'getData'])->name('property.activation.data');
+    Route::post('/property/activation/preview', [App\Http\Controllers\PropertyActivationController::class, 'preview'])->name('property.activation.preview');
+    Route::post('/property/activation/activate', [App\Http\Controllers\PropertyActivationController::class, 'activate'])->name('property.activation.activate');
+    Route::post('/property/activation/deactivate', [App\Http\Controllers\PropertyActivationController::class, 'deactivate'])->name('property.activation.deactivate');
+
     // Property Settings
     Route::get('/property/settings/items', [App\Http\Controllers\PropertySettingsController::class, 'index'])->name('property.settings.index');
 
@@ -1083,9 +1094,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/recoveries', [RecoveryController::class, 'index'])->name('property.recoveries.index');
     Route::get('/ajax/property/recoveries/list', [RecoveryController::class, 'list'])->name('ajax.property.recoveries.list');
     Route::get('/property/recovery/create', [RecoveryController::class, 'create'])->name('property.recovery.create');
+    Route::post('/property/recovery', [RecoveryController::class, 'store'])->name('property.recoveries.store');
     Route::get('/property/recovery/{encryptedId}', [RecoveryController::class, 'show'])->name('property.recoveries.show');
     Route::get('/property/recovery/{encryptedId}/edit', [RecoveryController::class, 'edit'])->name('property.recoveries.edit');
     Route::put('/property/recovery/{encryptedId}', [RecoveryController::class, 'update'])->name('property.recoveries.update');
+
+    // Recovery → Landlord Account posting (manual bulk action, decoupled from automatic returns processing)
+    Route::get('/property/recoveries/landlord-posting', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'index'])->name('property.recoveries.landlord-posting.index');
+    Route::get('/property/recoveries/landlord-posting/data', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'getData'])->name('property.recoveries.landlord-posting.data');
+    Route::post('/property/recoveries/landlord-posting/post', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'post'])->name('property.recoveries.landlord-posting.post');
 
     // Property Confirmations
     Route::get('/property/confirmations', [PropertyConfirmationController::class, 'index'])->name('property.confirmations.index');
