@@ -62,39 +62,86 @@ class InvoicingController extends Controller
     public function searchInvoiceItems(Request $request)
     {
         try {
-            $query = DebtorInvoice::with(['tenant', 'property', 'unit', 'lease'])
-                ->tenantInvoices();
-            //Log Query
-            Log::info('Initial invoice items query: ' . $query->toSql());
+            $hasDateFrom = $request->filled('date_from');
+            $hasDateTo = $request->filled('date_to');
 
-            Log::info('Searching invoice items with filters: ' . json_encode($request->all()));
-            //Log count of total items before filters
-            $totalCount = $query->count();
-            Log::info('Total invoice items before filters: ' . $totalCount);
+            // A date search must be a bounded range — reject anything open-ended or
+            // wider than 30 days rather than let it fall through to an unbounded
+            // scan of a 795k+ row table.
+            if ($hasDateFrom || $hasDateTo) {
+                if (!$hasDateFrom || !$hasDateTo) {
+                    return $this->invoiceItemsRejection($request, 'Please provide both a start and end date to search.');
+                }
 
-            // Apply filters
-            if ($request->filled('status_id')) {
-                $query->where('current_status_id', $request->status_id);
+                $dateFrom = \Carbon\Carbon::parse($request->date_from)->startOfDay();
+                $dateTo = \Carbon\Carbon::parse($request->date_to)->startOfDay();
+
+                if ($dateTo->lt($dateFrom)) {
+                    return $this->invoiceItemsRejection($request, 'Date To cannot be earlier than Date From.');
+                }
+
+                if ($dateFrom->diffInDays($dateTo) > 30) {
+                    return $this->invoiceItemsRejection($request, 'Date range cannot exceed 30 days. Please narrow your search.');
+                }
             }
 
-            if ($request->filled('date_from')) {
+            $baseQuery = DebtorInvoice::tenantInvoices();
+            $recordsTotal = (clone $baseQuery)->count();
+
+            $query = clone $baseQuery;
+
+            // Apply filters
+            if ($hasDateFrom) {
                 $query->whereDate('date_time', '>=', $request->date_from);
             }
 
-            if ($request->filled('date_to')) {
+            if ($hasDateTo) {
                 $query->whereDate('date_time', '<=', $request->date_to);
             }
 
-            // Limit to 100 if no filters applied
-            if (!$request->filled('status_id') && !$request->filled('date_from') && !$request->filled('date_to')) {
-                $query->limit(100);
+            // No date range given — this isn't a bounded search, it's the default
+            // browse view, so cap it to the 100 most recent instead of paging
+            // through the entire table.
+            if (!$hasDateFrom && !$hasDateTo) {
+                $recentIds = (clone $query)->orderBy('date_time', 'desc')->limit(100)->pluck('id');
+                $query->whereIn('id', $recentIds);
+                $recordsTotal = $recentIds->count();
             }
 
-            $invoices = $query->orderBy('date_time', 'desc')->get();
+            $recordsFiltered = (clone $query)->count();
+
+            $columns = [
+                1 => 'date_time',
+                2 => 'reference_number',
+                6 => 'total_amount',
+                7 => 'current_status_id',
+            ];
+            $orderIndex = (int) data_get($request->all(), 'order.0.column', 1);
+            $orderBy = $columns[$orderIndex] ?? 'date_time';
+            $orderDir = strtolower((string) data_get($request->all(), 'order.0.dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+            $start = max((int) $request->input('start', 0), 0);
+            $length = (int) $request->input('length', 25);
+            if ($length <= 0) {
+                $length = 25;
+            }
+            $length = min($length, 100);
+
+            // Only the current page needs the relations eager-loaded — the table
+            // has 795k+ rows, so loading/serializing every filtered match at once
+            // (the previous behaviour) could exhaust memory/time and break the
+            // DataTables ajax call with no useful error.
+            $invoices = $query->with(['tenant', 'property', 'unit'])
+                ->orderBy($orderBy, $orderDir)
+                ->skip($start)
+                ->take($length)
+                ->get();
 
             return response()->json([
-                'success' => true,
-                'invoices' => $invoices->map(function ($invoice) {
+                'draw' => (int) $request->input('draw', 1),
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $invoices->map(function ($invoice) {
                     return [
                         'id' => $invoice->id,
                         'date_time' => $invoice->date_time ? $invoice->date_time->format('d-m-Y') : '-',
@@ -112,7 +159,7 @@ class InvoicingController extends Controller
                     ];
                 })
             ]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error searching invoice items: ' . $e->getMessage());
             return response()->json([
@@ -120,6 +167,23 @@ class InvoicingController extends Controller
                 'message' => 'Failed to search invoice items'
             ], 500);
         }
+    }
+
+    /**
+     * A DataTables-shaped empty response carrying a rejection message — kept as
+     * HTTP 200 with an empty result set so DataTables renders it normally instead
+     * of surfacing its own generic "Ajax error" popup; the frontend reads `error`
+     * and shows it via toastr.
+     */
+    private function invoiceItemsRejection(Request $request, string $message)
+    {
+        return response()->json([
+            'draw' => (int) $request->input('draw', 1),
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+            'error' => $message,
+        ]);
     }
 
     /**

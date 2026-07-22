@@ -15,23 +15,14 @@
                     <div class="card-body">
                         <!-- Filters -->
                         <div class="row mb-3">
-                            <div class="col-md-2">
-                                <label for="status_filter" class="form-label">Status</label>
-                                <select class="form-select form-select-sm" id="status_filter" name="status_filter">
-                                    <option value="">All Statuses</option>
-                                    <option value="1">Pending</option>
-                                    <option value="6">Partially Paid</option>
-                                    <option value="8">Approved</option>
-                                    <option value="9">Fully Paid</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label for="date_from" class="form-label">Date From</label>
                                 <input type="date" class="form-control form-control-sm" id="date_from" name="date_from">
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label for="date_to" class="form-label">Date To</label>
                                 <input type="date" class="form-control form-control-sm" id="date_to" name="date_to">
+                                <small class="text-muted">Max 30-day range. Leave blank to view the 100 most recent.</small>
                             </div>
                             <div class="col-md-4 d-flex align-items-end gap-2">
                                 <button type="button" class="btn btn-primary btn-sm" id="filter_btn">
@@ -39,7 +30,7 @@
                                     <span class="material-symbols-outlined" id="filter_icon" style="font-size: 16px; vertical-align: middle;">filter_list</span>
                                     <span class="ms-1">Filter</span>
                                 </button>
-                                <button type="button" class="btn btn-secondary btn-sm" id="clear_btn">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="clear_btn">
                                     <span class="spinner-border spinner-border-sm" role="status" id="clear_spinner" style="display: none;"></span>
                                     <span class="material-symbols-outlined" id="clear_icon" style="font-size: 16px; vertical-align: middle;">clear</span>
                                     <span class="ms-1">Clear</span>
@@ -76,17 +67,21 @@
     $(document).ready(function() {
         var table = $('#invoice-items-table').DataTable({
             processing: true,
-            serverSide: false,
+            serverSide: true,
             ajax: {
                 url: '{{ route("ajax.invoices.items.search") }}',
                 type: 'POST',
                 data: function(d) {
                     d._token = '{{ csrf_token() }}';
-                    d.status_id = $('#status_filter').val();
                     d.date_from = $('#date_from').val();
                     d.date_to = $('#date_to').val();
                 },
-                dataSrc: 'invoices'
+                dataSrc: function(json) {
+                    if (json.error) {
+                        toastr.error(json.error);
+                    }
+                    return json.data || [];
+                }
             },
             columns: [{
                     data: null,
@@ -104,6 +99,7 @@
                 },
                 {
                     data: 'tenant_name',
+                    orderable: false,
                     render: function(data, type, row) {
                         if (row.tenant_encrypted_id) {
                             return '<a href="/tenants/' + row.tenant_encrypted_id + '" target="_blank" class="property-link">' + data + '</a>';
@@ -113,6 +109,7 @@
                 },
                 {
                     data: 'property_name',
+                    orderable: false,
                     render: function(data, type, row) {
                         if (row.property_encrypted_id) {
                             return '<a href="/property/listings/' + row.property_encrypted_id + '" target="_blank" class="property-link">' + data + '</a>';
@@ -121,7 +118,8 @@
                     }
                 },
                 {
-                    data: 'unit_name'
+                    data: 'unit_name',
+                    orderable: false
                 },
                 {
                     data: 'total_amount',
@@ -135,7 +133,7 @@
             paging: true,
             info: true,
             lengthChange: true,
-            searching: true,
+            searching: false,
             ordering: true,
             order: [
                 [1, 'desc']
@@ -144,6 +142,27 @@
 
         // Handle filter button click
         $('#filter_btn').on('click', function() {
+            var dateFrom = $('#date_from').val();
+            var dateTo = $('#date_to').val();
+
+            // Quick client-side check so an obviously-too-wide range doesn't even
+            // need a round trip — the server still enforces this authoritatively.
+            if (dateFrom || dateTo) {
+                if (!dateFrom || !dateTo) {
+                    toastr.error('Please provide both a start and end date to search.');
+                    return;
+                }
+                var days = (new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24);
+                if (days < 0) {
+                    toastr.error('Date To cannot be earlier than Date From.');
+                    return;
+                }
+                if (days > 30) {
+                    toastr.error('Date range cannot exceed 30 days. Please narrow your search.');
+                    return;
+                }
+            }
+
             $('#filter_spinner').show();
             $('#filter_icon').hide();
             $('#filter_btn').prop('disabled', true);
@@ -162,7 +181,6 @@
             $('#clear_btn').prop('disabled', true);
 
             // Reset filters
-            $('#status_filter').val('');
             $('#date_from').val('');
             $('#date_to').val('');
 
