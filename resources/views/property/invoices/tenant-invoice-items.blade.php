@@ -1,4 +1,33 @@
 @extends('layouts.main')
+
+@section('styles')
+<style>
+    /* Custom styling for date filter-field radio buttons */
+    .btn-outline-primary.date-filter-radio {
+        color: #3598db;
+        border-color: #3598db;
+    }
+
+    .btn-outline-primary.date-filter-radio:hover {
+        color: #fff;
+        background-color: #3598db;
+        border-color: #3598db;
+    }
+
+    .btn-check:checked+.btn-outline-primary.date-filter-radio {
+        color: #fff;
+        background-color: #3598db;
+        border-color: #3598db;
+    }
+
+    .invoice-filters-panel {
+        background-color: #f8f9fc;
+        border: 1px solid #e5e9f2;
+        border-radius: 8px;
+    }
+</style>
+@endsection
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -14,28 +43,39 @@
                     </div>
                     <div class="card-body">
                         <!-- Filters -->
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label for="date_from" class="form-label">Date From</label>
-                                <input type="date" class="form-control form-control-sm" id="date_from" name="date_from">
+                        <div class="invoice-filters-panel d-flex flex-wrap align-items-end gap-2 px-2 py-2 mb-3">
+                            <div class="btn-group" role="group" aria-label="Date filter field">
+                                <input type="radio" class="btn-check" name="date_filter_type" id="date_filter_generated" value="date_time" checked autocomplete="off">
+                                <label class="btn btn-outline-primary date-filter-radio btn-sm" for="date_filter_generated">
+                                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">event_available</span>
+                                    Date Generated
+                                </label>
+
+                                <input type="radio" class="btn-check" name="date_filter_type" id="date_filter_due" value="date_due" autocomplete="off">
+                                <label class="btn btn-outline-primary date-filter-radio btn-sm" for="date_filter_due">
+                                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">event_upcoming</span>
+                                    Date Due
+                                </label>
                             </div>
-                            <div class="col-md-4">
-                                <label for="date_to" class="form-label">Date To</label>
-                                <input type="date" class="form-control form-control-sm" id="date_to" name="date_to">
-                                <small class="text-muted">Max 30-day range. Leave blank to view the 100 most recent.</small>
-                            </div>
-                            <div class="col-md-4 d-flex align-items-end gap-2">
-                                <button type="button" class="btn btn-primary btn-sm" id="filter_btn">
-                                    <span class="spinner-border spinner-border-sm" role="status" id="filter_spinner" style="display: none;"></span>
-                                    <span class="material-symbols-outlined" id="filter_icon" style="font-size: 16px; vertical-align: middle;">filter_list</span>
-                                    <span class="ms-1">Filter</span>
-                                </button>
-                                <button type="button" class="btn btn-outline-primary btn-sm" id="clear_btn">
-                                    <span class="spinner-border spinner-border-sm" role="status" id="clear_spinner" style="display: none;"></span>
-                                    <span class="material-symbols-outlined" id="clear_icon" style="font-size: 16px; vertical-align: middle;">clear</span>
-                                    <span class="ms-1">Clear</span>
-                                </button>
-                            </div>
+
+                            <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" style="width:150px;" title="Date From" placeholder="Date From">
+
+                            <span class="text-muted">&ndash;</span>
+
+                            <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" style="width:150px;" title="Date To" placeholder="Date To">
+
+                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="filter_btn">
+                                <span class="spinner-border spinner-border-sm me-1" role="status" id="filter_spinner" style="display: none;"></span>
+                                <span class="material-symbols-outlined" id="filter_icon" style="font-size: 16px; vertical-align: middle;">filter_list</span>
+                                <span class="ms-1">Filter</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" id="clear_btn">
+                                <span class="spinner-border spinner-border-sm me-1" role="status" id="clear_spinner" style="display: none;"></span>
+                                <span class="material-symbols-outlined" id="clear_icon" style="font-size: 16px; vertical-align: middle;">clear</span>
+                                <span class="ms-1">Clear</span>
+                            </button>
+
+                            <small class="text-muted ms-auto">Max 30-day range &middot; blank shows the 100 most recent</small>
                         </div>
 
                         <div class="table-responsive custom-scrollbar">
@@ -73,6 +113,7 @@
                 type: 'POST',
                 data: function(d) {
                     d._token = '{{ csrf_token() }}';
+                    d.date_filter_type = $('input[name="date_filter_type"]:checked').val();
                     d.date_from = $('#date_from').val();
                     d.date_to = $('#date_to').val();
                 },
@@ -181,6 +222,7 @@
             $('#clear_btn').prop('disabled', true);
 
             // Reset filters
+            $('#date_filter_generated').prop('checked', true);
             $('#date_from').val('');
             $('#date_to').val('');
 
