@@ -8,6 +8,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\URL;
 
 class AdvanceApprovalNotification extends Notification implements ShouldQueue
 {
@@ -49,7 +50,11 @@ class AdvanceApprovalNotification extends Notification implements ShouldQueue
 
         $disbursement = $advance->disbursement_date ? $advance->disbursement_date->format('d M Y') : 'N/A';
 
-        $approvalUrl = route('property.advances.approve', ['encryptedId' => $this->encryptedId]);
+        $approvalUrl = URL::temporarySignedRoute(
+            'property.advances.approve',
+            now()->addDays(7),
+            ['encryptedId' => $this->encryptedId]
+        );
 
         $pdfContent = Pdf::loadView('property.advances.schedule-pdf', [
             'advance'  => $advance,
