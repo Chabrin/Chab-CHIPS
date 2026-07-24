@@ -17,9 +17,11 @@ class DisciplineHearingMinutes extends Model
         'proceedings_summary',
         'employee_statement',
         'panel_questions',
+        'panel_recommendation',
         'minute_taker_id',
         'approved_by',
         'approved_at',
+        'signature_attestation',
     ];
 
     protected $casts = [

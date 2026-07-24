@@ -81,6 +81,87 @@
                             </small>
                         </div>
                     </div>
+
+                    @if($case->current_step == 9 && !$case->closure)
+                    <div class="col-md-12 mt-3">
+                        <hr>
+                        <p class="mb-2">If the employee's response resolves the matter, you can close the case now instead of scheduling a hearing.</p>
+                        <button type="button" class="btn btn-outline-success btn-sm" id="toggleCloseAfterResponse">
+                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">task_alt</span>
+                            Close Case (Response Resolves This)
+                        </button>
+
+                        <form id="closeAfterResponseForm" class="mt-3 d-none">
+                            @csrf
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="closure_date_r" class="form-label">Closure Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="closure_date_r" name="closure_date" value="{{ date('Y-m-d') }}" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="closure_reason_r" class="form-label">Closure Reason <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="closure_reason_r" name="closure_reason" required>
+                                        <option value="">Select Closure Reason</option>
+                                        <option value="Resolved">Resolved - All actions completed</option>
+                                        <option value="No Case to Answer">No Case to Answer</option>
+                                        <option value="Settled">Settled - Mutual agreement reached</option>
+                                        <option value="Withdrawn">Withdrawn - Case withdrawn</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label for="closure_notes_r" class="form-label">Closure Notes</label>
+                                    <textarea class="form-control" id="closure_notes_r" name="closure_notes" rows="2" placeholder="Why the response resolves this case..."></textarea>
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-success" id="closeAfterResponseBtn">
+                                        <span class="spinner-border spinner-border-sm me-2 d-none" id="closeAfterResponseSpinner"></span>
+                                        Confirm Close Case
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <script>
+                    $(document).ready(function() {
+                        $('#toggleCloseAfterResponse').on('click', function() {
+                            $('#closeAfterResponseForm').toggleClass('d-none');
+                        });
+
+                        $('#closeAfterResponseForm').on('submit', function(e) {
+                            e.preventDefault();
+                            if (!confirm('Close this case without a hearing? This cannot be undone.')) {
+                                return false;
+                            }
+
+                            var formData = new FormData(this);
+                            var submitButton = $('#closeAfterResponseBtn');
+                            var spinner = $('#closeAfterResponseSpinner');
+                            spinner.removeClass('d-none');
+                            submitButton.prop('disabled', true);
+
+                            $.ajax({
+                                url: '{{ route("discipline.tracker.close.case", $case->id) }}',
+                                type: 'POST',
+                                data: formData,
+                                processData: false,
+                                contentType: false,
+                                success: function(response) {
+                                    if (response.success) {
+                                        toastr.success(response.message);
+                                        window.reloadCasePage();
+                                    }
+                                },
+                                error: function(xhr) {
+                                    spinner.addClass('d-none');
+                                    submitButton.prop('disabled', false);
+                                    toastr.error(xhr.responseJSON?.error || 'Failed to close case');
+                                }
+                            });
+                        });
+                    });
+                    </script>
+                    @endif
                 </div>
             @elseif($case->current_step == 8)
                 <!-- Form Mode -->

@@ -84,6 +84,7 @@ class SelfServiceController extends Controller
                         'deadlineExtensions',
                         'hearings',
                         'outcome',
+                        'appeals',
                     ])->orderBy('date_time', 'desc');
                 },
                 'incidentReports',

@@ -108,6 +108,18 @@ class SendDisciplineNotification implements ShouldQueue
                 }
                 break;
 
+            case 'case_rejected':
+                // Notify the person who reported the incident that it was rejected at registration
+                $reporter = User::find($this->case->createdBy->id);
+                if ($reporter && $reporter->email) {
+                    $recipients[] = [
+                        'user_id' => $reporter->id,
+                        'email' => $reporter->email,
+                        'name' => $reporter->name,
+                    ];
+                }
+                break;
+
             case 'investigator_assigned':
                 // Notify the assigned investigator
                 $investigator = $this->case->investigators()->latest()->first();
@@ -118,6 +130,32 @@ class SendDisciplineNotification implements ShouldQueue
                         'name' => $investigator->investigator->full_names,
                     ];
                 }
+                break;
+
+            case 'investigation_opened':
+                // Notify the employee that an investigation has been opened against them,
+                // so they can respond during the investigation rather than first hearing
+                // about it at the Show Cause stage.
+                if ($this->case->staff && $this->case->staff->email_address) {
+                    $recipients[] = [
+                        'user_id' => $this->case->staff->user_id ?? null,
+                        'email' => $this->case->staff->email_address,
+                        'name' => $this->case->staff->full_names,
+                    ];
+                }
+                break;
+
+            case 'investigation_suspension':
+            case 'suspension_lifted':
+                // Notify the employee and HR of a protective suspension being applied/lifted
+                if ($this->case->staff && $this->case->staff->email_address) {
+                    $recipients[] = [
+                        'user_id' => $this->case->staff->user_id ?? null,
+                        'email' => $this->case->staff->email_address,
+                        'name' => $this->case->staff->full_names,
+                    ];
+                }
+                $recipients = array_merge($recipients, $this->getHRTeam());
                 break;
 
             case 'show_cause_issued':
@@ -154,28 +192,35 @@ class SendDisciplineNotification implements ShouldQueue
                     ];
                 }
 
-                $hearing = $this->case->hearing;
+                // NOTE: DisciplineCase only defines hearings() (plural, HasMany) — there is
+                // no singular hearing() relation/attribute, so `$this->case->hearing` always
+                // resolved to null and this entire block was previously dead code.
+                $hearing = $this->case->hearings()->latest()->first();
                 if ($hearing) {
-                    // Chairperson
+                    // Chairperson — chairperson_id/panel_members are Staff IDs (populated from
+                    // the same /ajax/hr/staff/list picker used for the investigator dropdown),
+                    // and Staff uses email_address, not email.
                     if ($hearing->chairperson) {
                         $recipients[] = [
-                            'user_id' => $hearing->chairperson->id,
-                            'email' => $hearing->chairperson->email,
-                            'name' => $hearing->chairperson->name,
+                            'user_id' => $hearing->chairperson->user_id ?? null,
+                            'email' => $hearing->chairperson->email_address,
+                            'name' => $hearing->chairperson->full_names,
                         ];
                     }
 
                     // Panel members
                     if ($hearing->panel_members) {
-                        $panelIds = json_decode($hearing->panel_members, true);
+                        $panelIds = is_array($hearing->panel_members)
+                            ? $hearing->panel_members
+                            : json_decode($hearing->panel_members, true);
                         if (is_array($panelIds)) {
-                            foreach ($panelIds as $userId) {
-                                $user = User::find($userId);
-                                if ($user && $user->email) {
+                            foreach ($panelIds as $staffId) {
+                                $panelStaff = Staff::find($staffId);
+                                if ($panelStaff && $panelStaff->email_address) {
                                     $recipients[] = [
-                                        'user_id' => $user->id,
-                                        'email' => $user->email,
-                                        'name' => $user->name,
+                                        'user_id' => $panelStaff->user_id ?? null,
+                                        'email' => $panelStaff->email_address,
+                                        'name' => $panelStaff->full_names,
                                     ];
                                 }
                             }
@@ -186,6 +231,22 @@ class SendDisciplineNotification implements ShouldQueue
 
             case 'outcome_decided':
                 // Notify employee
+                if ($this->case->staff && $this->case->staff->email_address) {
+                    $recipients[] = [
+                        'user_id' => $this->case->staff->user_id ?? null,
+                        'email' => $this->case->staff->email_address,
+                        'name' => $this->case->staff->full_names,
+                    ];
+                }
+                break;
+
+            case 'appeal_filed':
+                // Notify HR that an appeal has been filed
+                $recipients = array_merge($recipients, $this->getHRTeam());
+                break;
+
+            case 'appeal_decided':
+                // Notify the employee of the outcome of their appeal
                 if ($this->case->staff && $this->case->staff->email_address) {
                     $recipients[] = [
                         'user_id' => $this->case->staff->user_id ?? null,
@@ -256,6 +317,7 @@ class SendDisciplineNotification implements ShouldQueue
             'incident_reported' => 'discipline_incident_reported',
             'case_registered' => 'discipline_case_registered',
             'investigator_assigned' => 'discipline_investigator_assigned',
+            'investigation_opened' => 'discipline_investigation_opened',
             'show_cause_issued' => 'discipline_show_cause',
             'employee_response_received' => 'discipline_response_received',
             'hearing_scheduled' => 'discipline_hearing_scheduled',
@@ -499,6 +561,7 @@ class SendDisciplineNotification implements ShouldQueue
             'incident_reported' => 'Discipline Incident Reported - Case #' . $this->case->case_number,
             'case_registered' => 'Discipline Case Registered - Case #' . $this->case->case_number,
             'investigator_assigned' => 'You Have Been Assigned as Investigator - Case #' . $this->case->case_number,
+            'investigation_opened' => 'An Investigation Has Been Opened - Case #' . $this->case->case_number,
             'show_cause_issued' => 'Show Cause Notice Issued - Case #' . $this->case->case_number,
             'employee_response_received' => 'Employee Response Received - Case #' . $this->case->case_number,
             'hearing_scheduled' => 'Disciplinary Hearing Scheduled - Case #' . $this->case->case_number,
@@ -515,11 +578,47 @@ class SendDisciplineNotification implements ShouldQueue
      */
     private function getDefaultBody($data)
     {
+        if ($this->notificationType === 'hearing_scheduled') {
+            return $this->getHearingScheduledBody($data);
+        }
+
         $body = "Dear {$data['employee_name']},\n\n";
         $body .= "This is to notify you regarding Discipline Case #{$data['case_number']}.\n\n";
         $body .= "Current Step: {$data['current_step']}\n";
         $body .= "Severity Level: {$data['severity_level']}\n";
         $body .= "Date: {$data['date']}\n\n";
+        $body .= "Please log in to the system for more details.\n\n";
+        $body .= "Best regards,\n";
+        $body .= "Human Resources Department";
+
+        return $body;
+    }
+
+    /**
+     * Default hearing-scheduled notice body — restates the original allegations, informs the
+     * employee of their right to bring a colleague/representative, and links any evidence
+     * files gathered on the case, none of which the previous generic body included.
+     */
+    private function getHearingScheduledBody($data)
+    {
+        $body = "Dear {$data['employee_name']},\n\n";
+        $body .= "You are required to attend a disciplinary hearing regarding Discipline Case #{$data['case_number']}.\n\n";
+        $body .= "Hearing Date: {$data['hearing_date']}\n";
+        $body .= "Hearing Time: {$data['hearing_time']}\n";
+        $body .= "Location: {$data['hearing_location']}\n\n";
+        $body .= "Allegations:\n{$data['allegations']}\n\n";
+        $body .= "You have the right to bring a colleague or representative of your choice to the hearing.\n\n";
+
+        $evidenceLinks = [];
+        foreach ($this->case->evidence as $evidence) {
+            foreach ($evidence->files as $file) {
+                $evidenceLinks[] = $file->file_name . ': ' . asset('storage/' . $file->file_path);
+            }
+        }
+        if (!empty($evidenceLinks)) {
+            $body .= "Evidence gathered during the investigation:\n" . implode("\n", $evidenceLinks) . "\n\n";
+        }
+
         $body .= "Please log in to the system for more details.\n\n";
         $body .= "Best regards,\n";
         $body .= "Human Resources Department";

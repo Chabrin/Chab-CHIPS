@@ -896,7 +896,10 @@ class StaffController extends Controller
                 'contract',
                 'createdBy',
                 'documentTrackers',
-                'elements.element'
+                'elements.element',
+                'disciplineCase',
+                'exitInterview',
+                'finalDues',
             ])->findOrFail($id);
             return view('staff.employee_termination.show', compact('record'));
         } catch (\Exception $e) {

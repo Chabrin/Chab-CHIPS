@@ -375,6 +375,35 @@
                             <textarea class="form-control" name="potential_consequences" id="potential_consequences" rows="3" placeholder="Outline potential consequences..."></textarea>
                         </div>
 
+                        @if($case->evidence->isNotEmpty() || $case->witnessStatements->isNotEmpty())
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">Attach Evidence / Witness Statements Already Gathered</label>
+                            <div class="border rounded p-2" style="max-height:200px; overflow-y:auto;">
+                                @foreach($case->evidence as $evidence)
+                                    @foreach($evidence->files as $file)
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="evidence_file_ids[]" value="{{ $file->id }}" id="evidence_file_{{ $file->id }}">
+                                        <label class="form-check-label" for="evidence_file_{{ $file->id }}">
+                                            {{ $file->file_name }} <span class="text-muted">({{ $evidence->evidence_type }})</span>
+                                        </label>
+                                    </div>
+                                    @endforeach
+                                @endforeach
+                                @foreach($case->witnessStatements as $statement)
+                                    @foreach($statement->documents as $document)
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="witness_document_ids[]" value="{{ $document->id }}" id="witness_document_{{ $document->id }}">
+                                        <label class="form-check-label" for="witness_document_{{ $document->id }}">
+                                            {{ $document->document_name }} <span class="text-muted">(Witness: {{ $statement->witness_name }})</span>
+                                        </label>
+                                    </div>
+                                    @endforeach
+                                @endforeach
+                            </div>
+                            <small class="text-muted">Checked items are copied onto this notice automatically — no need to re-upload them.</small>
+                        </div>
+                        @endif
+
                         <div class="col-md-12 mb-3">
                             <label for="documents" class="form-label">Supporting Documents</label>
                             <input type="file" class="form-control" name="documents[]" id="documents" multiple>
@@ -392,13 +421,14 @@
 
                 <script>
                 $(document).ready(function() {
-                    // Auto-calculate deadline (48 hours from issue date)
+                    // Auto-calculate deadline (48 hours from issue date) and enforce it as a
+                    // real minimum — HR policy requires at least 48 hours, not just a default.
                     $('#issue_date').on('change', function() {
                         let issueDate = new Date($(this).val());
                         if (!isNaN(issueDate)) {
                             issueDate.setHours(issueDate.getHours() + 48);
                             let deadlineStr = issueDate.toISOString().slice(0, 16);
-                            $('#response_deadline').val(deadlineStr);
+                            $('#response_deadline').val(deadlineStr).attr('min', deadlineStr);
                         }
                     });
 

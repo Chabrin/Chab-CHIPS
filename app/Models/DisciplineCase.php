@@ -131,4 +131,19 @@ class DisciplineCase extends Model
     {
         return $this->hasMany(DisciplineDeadlineExtension::class, 'case_id');
     }
+
+    public function suspensions(): HasMany
+    {
+        return $this->hasMany(DisciplineSuspension::class, 'case_id');
+    }
+
+    public function activeSuspension()
+    {
+        return $this->suspensions()->whereNull('lifted_at')->latest('suspended_at')->first();
+    }
+
+    public function appeals(): HasMany
+    {
+        return $this->hasMany(DisciplineAppeal::class, 'case_id');
+    }
 }

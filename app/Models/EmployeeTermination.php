@@ -20,6 +20,8 @@ class EmployeeTermination extends Model
     protected $fillable = [
         'date_time',
         'staff_id',
+        'discipline_case_id',
+        'discipline_outcome_id',
         'contract_id',
         'years_served',
         'pay_per_year',
@@ -58,6 +60,26 @@ class EmployeeTermination extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function disciplineCase()
+    {
+        return $this->belongsTo(DisciplineCase::class, 'discipline_case_id');
+    }
+
+    public function disciplineOutcome()
+    {
+        return $this->belongsTo(DisciplineOutcome::class, 'discipline_outcome_id');
+    }
+
+    public function exitInterview()
+    {
+        return $this->hasOne(ExitInterview::class, 'termination_id');
+    }
+
+    public function finalDues()
+    {
+        return $this->hasOne(FinalDues::class, 'termination_id');
     }
 
 }

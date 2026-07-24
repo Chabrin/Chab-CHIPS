@@ -180,6 +180,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Step 3: Assign Investigator
     Route::post('/discipline/tracker/case/{caseId}/assign-investigator', [DisciplineTrackerController::class, 'assignInvestigator'])->name('discipline.tracker.assign.investigator');
+    Route::post('/discipline/tracker/case/{caseId}/suspend-pending-investigation', [DisciplineTrackerController::class, 'suspendPendingInvestigation'])->name('discipline.tracker.suspend.pending');
+    Route::post('/discipline/tracker/case/{caseId}/lift-suspension', [DisciplineTrackerController::class, 'liftSuspension'])->name('discipline.tracker.lift.suspension');
+    Route::post('/discipline/tracker/case/{caseId}/file-appeal', [DisciplineTrackerController::class, 'fileAppeal'])->name('discipline.tracker.file.appeal');
+    Route::get('/discipline/tracker/appeals', [DisciplineTrackerController::class, 'appealsIndex'])->name('discipline.tracker.appeals.index');
+    Route::post('/discipline/tracker/appeals/{appealId}/decide', [DisciplineTrackerController::class, 'decideAppeal'])->name('discipline.tracker.appeals.decide');
+    Route::get('/discipline/tracker/case/{caseId}/decision-letter', [DisciplineTrackerController::class, 'generateDecisionLetter'])->name('discipline.tracker.decision.letter');
+    Route::get('/discipline/tracker/termination/{terminationId}/certificate-of-service', [DisciplineTrackerController::class, 'generateCertificateOfService'])->name('discipline.tracker.certificate.of.service');
+    Route::post('/discipline/tracker/termination/{terminationId}/exit-interview', [DisciplineTrackerController::class, 'saveExitInterview'])->name('discipline.tracker.exit.interview');
+    Route::post('/discipline/tracker/termination/{terminationId}/final-dues', [DisciplineTrackerController::class, 'saveFinalDues'])->name('discipline.tracker.final.dues');
 
     // Step 4: Upload Evidence
     Route::post('/discipline/tracker/case/{caseId}/upload-evidence', [DisciplineTrackerController::class, 'uploadEvidence'])->name('discipline.tracker.upload.evidence');
@@ -205,6 +214,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Step 10: Record Hearing Minutes
     Route::post('/discipline/tracker/case/{caseId}/record-minutes', [DisciplineTrackerController::class, 'recordHearingMinutes'])->name('discipline.tracker.record.minutes');
+    Route::post('/discipline/tracker/case/{caseId}/approve-minutes', [DisciplineTrackerController::class, 'approveHearingMinutes'])->name('discipline.tracker.approve.minutes');
 
     // Step 11: Save Final Outcome
     Route::post('/discipline/tracker/case/{caseId}/save-outcome', [DisciplineTrackerController::class, 'saveFinalOutcome'])->name('discipline.tracker.save.outcome');

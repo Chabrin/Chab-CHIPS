@@ -50,10 +50,87 @@
                                 <span class="badge badge-light-primary">Step {{ $case->current_step }}: {{ $availableSteps[$case->current_step]['name'] }}</span>
                             </div>
                         </div>
+
+                        @php $activeSuspension = $case->suspensions->whereNull('lifted_at')->sortByDesc('suspended_at')->first(); @endphp
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                @if($activeSuspension)
+                                    <div class="alert alert-danger d-flex align-items-center justify-content-between mb-0">
+                                        <div>
+                                            <span class="material-symbols-outlined" style="vertical-align:middle;">block</span>
+                                            <strong>Employee suspended pending investigation</strong> ({{ $activeSuspension->pay_status }}) —
+                                            since {{ $activeSuspension->suspended_at->format('d M Y, h:i A') }}. Reason: {{ $activeSuspension->reason }}
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-light" id="liftSuspensionBtn">Lift Suspension</button>
+                                    </div>
+                                @elseif($case->investigators->isNotEmpty() && $case->current_step < 11 && !$case->closure)
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="showSuspendFormBtn">
+                                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">block</span>
+                                        Suspend Employee Pending Investigation (Full Pay)
+                                    </button>
+                                    <form id="suspendPendingForm" class="mt-2 d-none">
+                                        @csrf
+                                        <div class="row g-2">
+                                            <div class="col-md-8">
+                                                <textarea class="form-control" name="reason" placeholder="Reason for protective suspension..." required></textarea>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <button type="submit" class="btn btn-danger w-100">Confirm Suspension</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                @endif
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <script>
+        $(document).ready(function() {
+            $('#showSuspendFormBtn').on('click', function() {
+                $('#suspendPendingForm').toggleClass('d-none');
+            });
+
+            $('#suspendPendingForm').on('submit', function(e) {
+                e.preventDefault();
+                if (!confirm('Suspend this employee pending investigation, on full pay?')) return false;
+                $.ajax({
+                    url: "{{ route('discipline.tracker.suspend.pending', $case->id) }}",
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        if (response.success) {
+                            toastr.success(response.message);
+                            window.location.reload();
+                        }
+                    },
+                    error: function(xhr) {
+                        toastr.error(xhr.responseJSON?.error || 'Failed to suspend employee');
+                    }
+                });
+            });
+
+            $('#liftSuspensionBtn').on('click', function() {
+                if (!confirm('Lift this protective suspension?')) return;
+                $.ajax({
+                    url: "{{ route('discipline.tracker.lift.suspension', $case->id) }}",
+                    type: 'POST',
+                    data: { _token: '{{ csrf_token() }}' },
+                    success: function(response) {
+                        if (response.success) {
+                            toastr.success(response.message);
+                            window.location.reload();
+                        }
+                    },
+                    error: function(xhr) {
+                        toastr.error(xhr.responseJSON?.error || 'Failed to lift suspension');
+                    }
+                });
+            });
+        });
+        </script>
 
         <!-- Step Overview -->
         <div class="row mb-3">
