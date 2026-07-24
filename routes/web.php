@@ -519,6 +519,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/zone/assignments/zone-supervisors', [HrSettingsController::class, 'zoneSupervisorsReport'])->name('ajax.zoneAssignments.zoneSupervisors');
     Route::get('/ajax/hr/zone/assignments/property-managers', [HrSettingsController::class, 'propertyManagersReport'])->name('ajax.zoneAssignments.propertyManagers');
     Route::get('/ajax/hr/zone/assignments/staff-properties', [HrSettingsController::class, 'zoneAssignmentStaffProperties'])->name('ajax.zoneAssignments.staffProperties');
+    Route::get('/ajax/hr/zone/assignments/unallocated', [HrSettingsController::class, 'unallocatedPropertiesReport'])->name('ajax.zoneAssignments.unallocated');
+    Route::get('/ajax/hr/zone/assignments/property-details/{id}', [HrSettingsController::class, 'propertyAllocationDetails'])->name('ajax.zoneAssignments.propertyDetails');
+    Route::post('/ajax/hr/zone/assignments/allocate/{id}', [HrSettingsController::class, 'allocatePropertyZoneRoles'])->name('ajax.zoneAssignments.allocate');
 
     Route::get('/ajax/hr/properties/by-zone/{zoneId}', [HrSettingsController::class, 'propertiesByZone'])->name('ajax.properties.byZone');
     Route::get('/ajax/hr/staff/list', [HrSettingsController::class, 'staffList'])->name('ajax.staff.list');
@@ -924,6 +927,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Zones Routes
     Route::get('/property/settings/zones', [App\Http\Controllers\PropertySettingsController::class, 'zonesIndex'])->name('property.settings.zones.index');
     Route::get('/property/settings/zones/data', [App\Http\Controllers\PropertySettingsController::class, 'getZones'])->name('property.settings.zones.data');
+    Route::get('/property/settings/zones/users', [App\Http\Controllers\PropertySettingsController::class, 'zonesUsersList'])->name('property.settings.zones.users');
     Route::post('/property/settings/zones', [App\Http\Controllers\PropertySettingsController::class, 'storeZone'])->name('property.settings.zones.store');
     Route::post('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateZone'])->name('property.settings.zones.update');
     Route::delete('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteZone'])->name('property.settings.zones.delete');

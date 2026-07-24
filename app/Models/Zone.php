@@ -22,6 +22,8 @@ class Zone extends Model
         'current_status_id',
         'date_time',
         'zone_name',
+        'zone_manager_id',
+        'zone_supervisor_id',
     ];
 
     protected $casts = [
@@ -37,6 +39,16 @@ class Zone extends Model
     public function zone_areas()
     {
         return $this->hasMany(ZoneArea::class, 'zone_id');
+    }
+
+    public function zoneManager()
+    {
+        return $this->belongsTo(User::class, 'zone_manager_id');
+    }
+
+    public function zoneSupervisor()
+    {
+        return $this->belongsTo(User::class, 'zone_supervisor_id');
     }
 
 }

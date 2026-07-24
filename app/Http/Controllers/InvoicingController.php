@@ -62,42 +62,95 @@ class InvoicingController extends Controller
     public function searchInvoiceItems(Request $request)
     {
         try {
-            $query = DebtorInvoice::with(['tenant', 'property', 'unit', 'lease'])
-                ->tenantInvoices();
-            //Log Query
-            Log::info('Initial invoice items query: ' . $query->toSql());
+            $hasDateFrom = $request->filled('date_from');
+            $hasDateTo = $request->filled('date_to');
 
-            Log::info('Searching invoice items with filters: ' . json_encode($request->all()));
-            //Log count of total items before filters
-            $totalCount = $query->count();
-            Log::info('Total invoice items before filters: ' . $totalCount);
+            // Which date column the range filters against — whitelisted against
+            // anything else the client might send.
+            $dateFilterType = $request->input('date_filter_type');
+            $dateColumn = in_array($dateFilterType, ['date_time', 'date_due'], true) ? $dateFilterType : 'date_time';
+
+            // A date search must be a bounded range — reject anything open-ended or
+            // wider than 30 days rather than let it fall through to an unbounded
+            // scan of a 795k+ row table.
+            if ($hasDateFrom || $hasDateTo) {
+                if (!$hasDateFrom || !$hasDateTo) {
+                    return $this->invoiceItemsRejection($request, 'Please provide both a start and end date to search.');
+                }
+
+                $dateFrom = \Carbon\Carbon::parse($request->date_from)->startOfDay();
+                $dateTo = \Carbon\Carbon::parse($request->date_to)->startOfDay();
+
+                if ($dateTo->lt($dateFrom)) {
+                    return $this->invoiceItemsRejection($request, 'Date To cannot be earlier than Date From.');
+                }
+
+                if ($dateFrom->diffInDays($dateTo) > 30) {
+                    return $this->invoiceItemsRejection($request, 'Date range cannot exceed 30 days. Please narrow your search.');
+                }
+            }
+
+            $baseQuery = DebtorInvoice::tenantInvoices();
+            $recordsTotal = (clone $baseQuery)->count();
+
+            $query = clone $baseQuery;
 
             // Apply filters
-            if ($request->filled('status_id')) {
-                $query->where('current_status_id', $request->status_id);
+            if ($hasDateFrom) {
+                $query->whereDate($dateColumn, '>=', $request->date_from);
             }
 
-            if ($request->filled('date_from')) {
-                $query->whereDate('date_time', '>=', $request->date_from);
+            if ($hasDateTo) {
+                $query->whereDate($dateColumn, '<=', $request->date_to);
             }
 
-            if ($request->filled('date_to')) {
-                $query->whereDate('date_time', '<=', $request->date_to);
+            // No date range given — this isn't a bounded search, it's the default
+            // browse view, so cap it to the 100 most recent instead of paging
+            // through the entire table.
+            if (!$hasDateFrom && !$hasDateTo) {
+                $recentIds = (clone $query)->orderBy('date_time', 'desc')->limit(100)->pluck('id');
+                $query->whereIn('id', $recentIds);
+                $recordsTotal = $recentIds->count();
             }
 
-            // Limit to 100 if no filters applied
-            if (!$request->filled('status_id') && !$request->filled('date_from') && !$request->filled('date_to')) {
-                $query->limit(100);
-            }
+            $recordsFiltered = (clone $query)->count();
 
-            $invoices = $query->orderBy('date_time', 'desc')->get();
+            $columns = [
+                1 => 'date_time',
+                2 => 'reference_number',
+                6 => 'total_amount',
+                7 => 'current_status_id',
+            ];
+            $orderIndex = (int) data_get($request->all(), 'order.0.column', 1);
+            $orderBy = $columns[$orderIndex] ?? 'date_time';
+            $orderDir = strtolower((string) data_get($request->all(), 'order.0.dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+            $start = max((int) $request->input('start', 0), 0);
+            $length = (int) $request->input('length', 25);
+            if ($length <= 0) {
+                $length = 25;
+            }
+            $length = min($length, 100);
+
+            // Only the current page needs the relations eager-loaded — the table
+            // has 795k+ rows, so loading/serializing every filtered match at once
+            // (the previous behaviour) could exhaust memory/time and break the
+            // DataTables ajax call with no useful error.
+            $invoices = $query->with(['tenant', 'property', 'unit'])
+                ->orderBy($orderBy, $orderDir)
+                ->skip($start)
+                ->take($length)
+                ->get();
 
             return response()->json([
-                'success' => true,
-                'invoices' => $invoices->map(function ($invoice) {
+                'draw' => (int) $request->input('draw', 1),
+                'recordsTotal' => $recordsTotal,
+                'recordsFiltered' => $recordsFiltered,
+                'data' => $invoices->map(function ($invoice) {
                     return [
                         'id' => $invoice->id,
                         'date_time' => $invoice->date_time ? $invoice->date_time->format('d-m-Y') : '-',
+                        'date_due' => $invoice->date_due ? $invoice->date_due->format('d-m-Y') : '-',
                         'reference_number' => $invoice->reference_number ?? '-',
                         'tenant_name' => $invoice->tenant->names ?? '-',
                         'tenant_encrypted_id' => $invoice->tenant ? $invoice->tenant->encrypted_id : null,
@@ -112,7 +165,7 @@ class InvoicingController extends Controller
                     ];
                 })
             ]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error searching invoice items: ' . $e->getMessage());
             return response()->json([
@@ -120,6 +173,23 @@ class InvoicingController extends Controller
                 'message' => 'Failed to search invoice items'
             ], 500);
         }
+    }
+
+    /**
+     * A DataTables-shaped empty response carrying a rejection message — kept as
+     * HTTP 200 with an empty result set so DataTables renders it normally instead
+     * of surfacing its own generic "Ajax error" popup; the frontend reads `error`
+     * and shows it via toastr.
+     */
+    private function invoiceItemsRejection(Request $request, string $message)
+    {
+        return response()->json([
+            'draw' => (int) $request->input('draw', 1),
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+            'error' => $message,
+        ]);
     }
 
     /**
@@ -1559,6 +1629,7 @@ class InvoicingController extends Controller
                     sla_id,
                     created_by,
                     reference_number,
+                    batch_number,
                     narration,
                     debtor_type_id,
                     total_amount,
@@ -1605,6 +1676,7 @@ class InvoicingController extends Controller
                         '-',
                         l.id
                     ) AS reference_number,
+                    ? AS batch_number,
                     CONCAT('Tenant Invoice - ', i.item_name) AS narration,
                     2 AS debtor_type_id,
                     u.rent_amount AS total_amount,
@@ -1708,6 +1780,35 @@ class InvoicingController extends Controller
             DB::beginTransaction();
 
             try {
+                // Minute-precision batch identifier shared by every invoice this run
+                // creates — replaces matching by created_by + a time window (fragile:
+                // two runs close together, or a slow query, could bleed into each
+                // other). Checked manually against existing batches; on the rare
+                // collision (two runs within the same minute) a 2-digit disambiguator
+                // is appended.
+                $batchNumber = now()->format('YmdHi');
+                $suffix = 0;
+                while (DB::table('sys_pm_generated_invoice_months')->where('batch_number', $batchNumber)->exists()) {
+                    $suffix++;
+                    if ($suffix > 99) {
+                        throw new \RuntimeException('Could not generate a unique batch number, please try again.');
+                    }
+                    $batchNumber = now()->format('YmdHi') . sprintf('%02d', $suffix);
+                }
+
+                // Create the tracking row first as a placeholder, filled in once
+                // generation actually succeeds. Since this is inside the same
+                // transaction as everything below, a failure anywhere rolls this
+                // back too — it never lingers as a stale/incomplete record.
+                $trackingId = DB::table('sys_pm_generated_invoice_months')->insertGetId([
+                    'month_year' => $billingMonth,
+                    'batch_number' => $batchNumber,
+                    'invoice_count' => 0,
+                    'generated_by' => Auth::id(),
+                    'generated_at' => now(),
+                    'notes' => 'Generation in progress',
+                ]);
+
                 // Execute the invoice generation query
                 $insertedRows = DB::insert($sql, [
                     $billingDateFormatted,              // date_due
@@ -1715,6 +1816,7 @@ class InvoicingController extends Controller
                     $billingDateFormatted,              // for reference year (YYYY)
                     $billingDateFormatted,              // for reference month number (M)
                     $billingDateFormatted,              // for reference month name (Month YYYY)
+                    $batchNumber,                        // batch_number
                     $vatOnCommRate,                      // vat_on_commission rate (first)
                     $vatOnCommRate,                      // vat_on_commission rate (second)
                 ]);
@@ -1767,26 +1869,24 @@ class InvoicingController extends Controller
                         inv.zone_manager_id,
                         1                               AS current_status_id
                     FROM sys_pm_debtors_invoices inv
-                    WHERE inv.created_by = ?
-                      AND inv.created_at >= NOW() - INTERVAL '10 seconds'
+                    WHERE inv.batch_number = ?
                 ";
 
-                DB::statement($drSql, [Auth::id()]);
+                DB::statement($drSql, [$batchNumber]);
 
-                // Get count of inserted records
+                // Get count of inserted records — exact match on batch_number now,
+                // not a fuzzy created_by + time-window guess.
                 $generatedCount = DB::table('sys_pm_debtors_invoices')
-                    ->where('created_by', Auth::id())
-                    ->where('date_time', '>=', DB::raw("NOW() - INTERVAL '5 seconds'"))
+                    ->where('batch_number', $batchNumber)
                     ->count();
 
-                // Save the generated month to the tracking table
-                DB::table('sys_pm_generated_invoice_months')->insert([
-                    'month_year' => $billingMonth,
-                    'invoice_count' => $generatedCount,
-                    'generated_by' => Auth::id(),
-                    'generated_at' => now(),
-                    'notes' => "Generated {$generatedCount} invoices"
-                ]);
+                // Fill in the tracking row created above with the final outcome.
+                DB::table('sys_pm_generated_invoice_months')
+                    ->where('id', $trackingId)
+                    ->update([
+                        'invoice_count' => $generatedCount,
+                        'notes' => "Generated {$generatedCount} invoices",
+                    ]);
 
                 DB::commit();
 
