@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\ConfirmationLog;
 use App\Models\DebtorInvoice;
-use App\Models\InvoiceWorkflow;
-use App\Services\TenantBalanceService;
 use App\Traits\HasWorkflowStatuses;
 use App\Traits\TenantExitSettlementCalculatorTrait;
 use Illuminate\Support\Facades\DB;
@@ -636,40 +634,40 @@ class PropertyConfirmationController extends Controller
                 }
             }
 
-            // Carry-forward invoice — only if flagged and tenant is in arrears
-            if ($record->move_with_balance && $record->tenant_id && $record->new_lease_id) {
-                $balanceData = TenantBalanceService::getBalance((int) $record->tenant_id);
-                if ($balanceData['is_in_arrears']) {
-                    $arrearAmount = abs($balanceData['balance']);
-                    $cfRef = 'CF-' . date('Ymd') . '-' . str_pad(DebtorInvoice::tenantInvoices()->count() + 1, 5, '0', STR_PAD_LEFT);
-                    $cfInvoice = DebtorInvoice::create([
-                        'date_time'         => now(),
-                        'date_due'          => now()->toDateString(),
-                        'debtor_type_id'    => 2,
-                        'tenant_id'         => $record->tenant_id,
-                        'lease_id'          => $record->new_lease_id,
-                        'unit_id'           => $record->unit_to_id,
-                        'property_id'       => $record->property_id,
-                        'client_id'         => $record->client_id,
-                        'zone_id'           => $record->zone_id,
-                        'sla_id'            => $record->sla_id,
-                        'reference_number'  => $cfRef,
-                        'narration'         => 'Balance carried forward from Unit ' . ($record->unitFrom->unit_code ?? $record->unit_from_id) . ' — Movement Ref: ' . ($record->reference_number ?? $record->id),
-                        'total_amount'      => $arrearAmount,
-                        'current_balance'   => $arrearAmount,
-                        'current_status_id' => 1,
-                        'created_by'        => Auth::id(),
-                        'created_date'      => now(),
+            // Carry forward the balance — only if flagged. Re-link the tenant's own
+            // not-yet-cleared invoices from the old lease onto the new one, rather than
+            // fabricating a brand-new invoice on top of them: TenantBalanceService sums
+            // a tenant's invoices tenant-wide (not lease-scoped), so a new invoice for
+            // the same arrears amount would double-count it while the old invoices sat
+            // there untouched. Already-Cleared (9) invoices are left on the old lease so
+            // historical reporting for that lease stays accurate.
+            if ($record->move_with_balance && $record->tenant_id && $record->lease_id && $record->new_lease_id) {
+                DebtorInvoice::where('tenant_id', $record->tenant_id)
+                    ->where('lease_id', $record->lease_id)
+                    ->where('current_status_id', '!=', 9)
+                    ->update([
+                        'lease_id'    => $record->new_lease_id,
+                        'unit_id'     => $record->unit_to_id,
+                        'property_id' => $record->property_id,
+                        'zone_id'     => $record->zone_id,
+                        'sla_id'      => $record->sla_id,
                     ]);
-                    InvoiceWorkflow::create([
-                        'parent_id'          => $cfInvoice->id,
-                        'action_by_id'       => Auth::id(),
-                        'action_position_id' => 1,
-                        'action_id'          => 1,
-                        'action_date_time'   => now(),
-                        'remark'             => 'Carry-forward invoice created from Movement ' . ($record->reference_number ?? $record->id),
+            }
+
+            // Move the tenant's deposit(s) with them — unconditional on move_with_balance,
+            // since the deposit is a separate concern from arrears. Deposit rows are tied
+            // to a specific lease_id/unit_id, so without this they'd stay attached to the
+            // old, now-terminated lease forever.
+            if ($record->tenant_id && $record->lease_id && $record->new_lease_id) {
+                \App\Models\Deposit::where('tenant_id', $record->tenant_id)
+                    ->where('lease_id', $record->lease_id)
+                    ->update([
+                        'lease_id'    => $record->new_lease_id,
+                        'unit_id'     => $record->unit_to_id,
+                        'property_id' => $record->property_id,
+                        'zone_id'     => $record->zone_id,
+                        'sla_id'      => $record->sla_id,
                     ]);
-                }
             }
         });
     }

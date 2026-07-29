@@ -17,9 +17,53 @@ use App\Models\InvoiceableItem;
 use App\Models\CompanyBankAccount;
 use App\Models\ReturnSummary;
 use App\Models\Client;
+use App\Models\ChequeLeaf;
+use App\Services\ChequeBookService;
 
 class PaymentVouchersController extends Controller
 {
+    /**
+     * Validate and consume a locked cheque leaf for a voucher line, marking it Used.
+     * A cheque_number with no matching locked leaf is rejected outright — this is
+     * what actually prevents an untracked/duplicate cheque number from being saved
+     * (previously any typed cheque_number was accepted regardless of lock state).
+     * Safe to call once per unique leaf even when several lines share the same
+     * already-locked cheque (tracked via $usedLeafIds so it's only marked Used once).
+     */
+    private function consumeChequeLeaf(?string $chequeNumber, $leafId, ?string $lockToken, array &$usedLeafIds, string $usedFor): void
+    {
+        if (!$chequeNumber) {
+            return;
+        }
+
+        if (!$leafId || !$lockToken) {
+            throw ValidationException::withMessages([
+                'cheque_number' => ['This cheque number is not linked to a locked cheque leaf. Pick a cheque from the cheque book instead of typing one in.'],
+            ]);
+        }
+
+        $leafId = (int) $leafId;
+
+        if (in_array($leafId, $usedLeafIds, true)) {
+            return; // already marked Used earlier in this same request
+        }
+
+        $leaf = ChequeLeaf::find($leafId);
+        if (!$leaf || $leaf->cheque_number !== $chequeNumber) {
+            throw ValidationException::withMessages([
+                'cheque_number' => ['The cheque number does not match the locked cheque leaf — it may have been edited after locking.'],
+            ]);
+        }
+
+        try {
+            app(ChequeBookService::class)->useCheque($leafId, $lockToken, Auth::id(), $usedFor);
+        } catch (\RuntimeException $e) {
+            throw ValidationException::withMessages(['cheque_number' => [$e->getMessage()]]);
+        }
+
+        $usedLeafIds[] = $leafId;
+    }
+
     /**
      * Display the payment vouchers listing page.
      */
@@ -150,6 +194,8 @@ class PaymentVouchersController extends Controller
                 'lines.*.account_number'    => ['nullable', 'string', 'max:100'],
                 'lines.*.account_bank'      => ['nullable', 'string', 'max:255'],
                 'lines.*.cheque_number'     => ['nullable', 'string', 'max:50'],
+                'lines.*.cheque_leaf_id'    => ['nullable', 'integer'],
+                'lines.*.cheque_lock_token' => ['nullable', 'string'],
             ], [
                 'lines.required' => 'Add at least one entry before creating the voucher.',
                 'lines.min'      => 'Add at least one entry before creating the voucher.',
@@ -159,46 +205,59 @@ class PaymentVouchersController extends Controller
             $nextSeq     = $maxSeq + 1;
             $voucherNum  = 'PV' . $validated['year'] . str_pad($validated['month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
             $totalAmount = collect($validated['lines'])->sum('amount');
-
-            $header = PaymentVoucherHeader::create([
-                'voucher_sequence' => $nextSeq,
-                'voucher_number'   => $voucherNum,
-                'year'             => $validated['year'],
-                'month'            => $validated['month'],
-                'voucher_date'     => $validated['voucher_date'],
-                'description'      => $validated['lines'][0]['entry_description'],
-                'vendor_id'        => $validated['vendor_id'] ?: null,
-                'vendor_name'      => $validated['vendor_name'],
-                'vendor_type'      => $validated['vendor_type'],
-                'debit_amount'     => $totalAmount,
-                'credit_amount'    => 0,
-                'entry_count'      => count($validated['lines']),
-                'voucher_status'   => 'Pending',
-                'is_deleted'       => 0,
-                'prepared_by'      => Auth::user()->name,
-                'is_printed'       => 0,
-            ]);
-
             $voucherType = $validated['voucher_type'] ?? 'general_voucher';
-            
-            foreach ($validated['lines'] as $line) {
-                PaymentVoucherLine::create([
-                    'entry_id'          => $header->id,
-                    'voucher_number'    => $voucherNum,
-                    'entry_number'      => $line['entry_number'] ?? null,
-                    'entry_year'        => $validated['year'],
-                    'entry_month'       => $validated['month'],
-                    'account_number'    => $line['account_number'] ?? null,
-                    'account_bank'      => $line['account_bank'] ?? null,
-                    'cheque_number'     => $line['cheque_number'] ?? null,
-                    'voucher_type'      => $voucherType,
-                    'entry_description' => $line['entry_description'],
-                    'payee_name'        => $validated['vendor_name'],
-                    'amount'            => $line['amount'],
-                    'dr_cr'             => 'DR',
-                    'is_approved'       => 'No',
+
+            $header = DB::transaction(function () use ($validated, $voucherNum, $nextSeq, $totalAmount, $voucherType) {
+                $header = PaymentVoucherHeader::create([
+                    'voucher_sequence' => $nextSeq,
+                    'voucher_number'   => $voucherNum,
+                    'year'             => $validated['year'],
+                    'month'            => $validated['month'],
+                    'voucher_date'     => $validated['voucher_date'],
+                    'description'      => $validated['lines'][0]['entry_description'],
+                    'vendor_id'        => $validated['vendor_id'] ?? null,
+                    'vendor_name'      => $validated['vendor_name'],
+                    'vendor_type'      => $validated['vendor_type'],
+                    'debit_amount'     => $totalAmount,
+                    'credit_amount'    => 0,
+                    'entry_count'      => count($validated['lines']),
+                    'voucher_status'   => 'Pending',
+                    'is_deleted'       => 0,
+                    'prepared_by'      => Auth::user()->name,
+                    'is_printed'       => 0,
                 ]);
-            }
+
+                $usedLeafIds = [];
+                foreach ($validated['lines'] as $line) {
+                    $this->consumeChequeLeaf(
+                        $line['cheque_number'] ?? null,
+                        $line['cheque_leaf_id'] ?? null,
+                        $line['cheque_lock_token'] ?? null,
+                        $usedLeafIds,
+                        'Voucher ' . $voucherNum
+                    );
+
+                    PaymentVoucherLine::create([
+                        'entry_id'          => $header->id,
+                        'voucher_number'    => $voucherNum,
+                        'entry_number'      => $line['entry_number'] ?? null,
+                        'entry_year'        => $validated['year'],
+                        'entry_month'       => $validated['month'],
+                        'account_number'    => $line['account_number'] ?? null,
+                        'account_bank'      => $line['account_bank'] ?? null,
+                        'cheque_number'     => $line['cheque_number'] ?? null,
+                        'cheque_leaf_id'    => $line['cheque_leaf_id'] ?? null,
+                        'voucher_type'      => $voucherType,
+                        'entry_description' => $line['entry_description'],
+                        'payee_name'        => $validated['vendor_name'],
+                        'amount'            => $line['amount'],
+                        'dr_cr'             => 'DR',
+                        'is_approved'       => 'No',
+                    ]);
+                }
+
+                return $header;
+            });
 
             return response()->json([
                 'success'        => true,
@@ -243,7 +302,7 @@ class PaymentVouchersController extends Controller
                 'month'            => $validated['month'],
                 'voucher_date'     => $validated['voucher_date'],
                 'description'      => $validated['description'],
-                'vendor_id'        => $validated['vendor_id'] ?: null,
+                'vendor_id'        => $validated['vendor_id'] ?? null,
                 'vendor_name'      => $validated['vendor_name'],
                 'vendor_type'      => $validated['vendor_type'],
                 'debit_amount'     => $validated['debit_amount'],
@@ -283,32 +342,48 @@ class PaymentVouchersController extends Controller
                 'entry_description' => ['required', 'string', 'max:500'],
                 'account_number'    => ['nullable', 'string', 'max:100'],
                 'cheque_number'     => ['nullable', 'string', 'max:50'],
+                'cheque_leaf_id'    => ['nullable', 'integer'],
+                'cheque_lock_token' => ['nullable', 'string'],
                 'amount'            => ['required', 'numeric', 'min:0.01'],
                 'gl_account'        => ['nullable', 'string', 'max:50'],
                 'credit_account'    => ['nullable', 'string', 'max:50'],
             ]);
 
-            $maxEntry  = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)->max('entry_number') ?? 0;
-            $nextEntry = $maxEntry + 1;
+            $line = DB::transaction(function () use ($validated, $voucher) {
+                $usedLeafIds = [];
+                $this->consumeChequeLeaf(
+                    $validated['cheque_number'] ?? null,
+                    $validated['cheque_leaf_id'] ?? null,
+                    $validated['cheque_lock_token'] ?? null,
+                    $usedLeafIds,
+                    'Voucher ' . $voucher->voucher_number
+                );
 
-            $line = PaymentVoucherLine::create([
-                'entry_id'          => $voucher->id,
-                'voucher_number'    => $voucher->voucher_number,
-                'entry_number'      => $nextEntry,
-                'entry_year'        => $voucher->year,
-                'entry_month'       => $voucher->month,
-                'account_number'    => $validated['account_number'] ?? null,
-                'cheque_number'     => $validated['cheque_number'] ?? null,
-                'entry_description' => $validated['entry_description'],
-                'amount'            => $validated['amount'],
-                'gl_account'        => $validated['gl_account'] ?? null,
-                'credit_account'    => $validated['credit_account'] ?? null,
-                'dr_cr'             => 'DR',
-                'is_approved'       => 'No',
-            ]);
+                $maxEntry  = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)->max('entry_number') ?? 0;
+                $nextEntry = $maxEntry + 1;
 
-            $count = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)->count();
-            $voucher->update(['entry_count' => $count]);
+                $line = PaymentVoucherLine::create([
+                    'entry_id'          => $voucher->id,
+                    'voucher_number'    => $voucher->voucher_number,
+                    'entry_number'      => $nextEntry,
+                    'entry_year'        => $voucher->year,
+                    'entry_month'       => $voucher->month,
+                    'account_number'    => $validated['account_number'] ?? null,
+                    'cheque_number'     => $validated['cheque_number'] ?? null,
+                    'cheque_leaf_id'    => $validated['cheque_leaf_id'] ?? null,
+                    'entry_description' => $validated['entry_description'],
+                    'amount'            => $validated['amount'],
+                    'gl_account'        => $validated['gl_account'] ?? null,
+                    'credit_account'    => $validated['credit_account'] ?? null,
+                    'dr_cr'             => 'DR',
+                    'is_approved'       => 'No',
+                ]);
+
+                $count = PaymentVoucherLine::where('voucher_number', $voucher->voucher_number)->count();
+                $voucher->update(['entry_count' => $count]);
+
+                return $line;
+            });
 
             return response()->json([
                 'success' => true,
@@ -521,6 +596,8 @@ class PaymentVouchersController extends Controller
                 'account_number' => 'required|string',
                 'source_account_id' => 'nullable|integer',
                 'cheque_number' => 'nullable|string',
+                'cheque_leaf_id' => 'nullable|integer',
+                'cheque_lock_token' => 'nullable|string',
                 'voucher_date' => 'required|date',
                 'post_year' => 'required|integer',
                 'post_month' => 'required|integer|min:1|max:12',
@@ -529,6 +606,8 @@ class PaymentVouchersController extends Controller
                 'split_entries.*.amount' => 'required|numeric|min:0.01|max:999999',
                 'split_entries.*.source_account_id' => 'required|integer',
                 'split_entries.*.cheque_number' => 'required|string',
+                'split_entries.*.cheque_leaf_id' => 'nullable|integer',
+                'split_entries.*.cheque_lock_token' => 'nullable|string',
             ]);
 
             DB::beginTransaction();
@@ -574,6 +653,8 @@ class PaymentVouchersController extends Controller
                         'source_account_name' => $sourceAccount ? $sourceAccount->account_name : null,
                         'source_bank_name' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
                         'cheque_number' => $split['cheque_number'],
+                        'cheque_leaf_id' => $split['cheque_leaf_id'] ?? null,
+                        'cheque_lock_token' => $split['cheque_lock_token'] ?? null,
                     ];
                 }
             } else {
@@ -586,11 +667,22 @@ class PaymentVouchersController extends Controller
                     'source_account_name' => $sourceAccount ? $sourceAccount->account_name : null,
                     'source_bank_name' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
                     'cheque_number' => $validated['cheque_number'],
+                    'cheque_leaf_id' => $validated['cheque_leaf_id'] ?? null,
+                    'cheque_lock_token' => $validated['cheque_lock_token'] ?? null,
                 ];
             }
-            
+
             // Create line items
+            $usedLeafIds = [];
             foreach ($lineItems as $line) {
+                $this->consumeChequeLeaf(
+                    $line['cheque_number'] ?? null,
+                    $line['cheque_leaf_id'] ?? null,
+                    $line['cheque_lock_token'] ?? null,
+                    $usedLeafIds,
+                    'Voucher ' . $voucherNumber
+                );
+
                 PaymentVoucherLine::create([
                     'voucher_number' => $voucherNumber,
                     'entry_id' => $header->id,
@@ -604,6 +696,7 @@ class PaymentVouchersController extends Controller
                     'account_name' => $validated['account_name'],
                     'account_number' => $validated['account_number'],
                     'cheque_number' => $line['cheque_number'],
+                    'cheque_leaf_id' => $line['cheque_leaf_id'],
                     'amount' => $line['amount'],
                     'dr_cr' => 'DR',
                     'is_approved' => 'No',

@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class ChequeBook extends Model
 {
+    const STATUS_ACTIVE    = 1;
+    const STATUS_EXHAUSTED = 2;
+    const STATUS_CANCELLED = 3;
+
     protected static function boot()
     {
         parent::boot();

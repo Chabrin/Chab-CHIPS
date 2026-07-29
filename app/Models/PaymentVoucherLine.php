@@ -16,6 +16,7 @@ class PaymentVoucherLine extends Model
         'account_number',
         'account_bank',
         'cheque_number',
+        'cheque_leaf_id',
         'cheque_type',
         'voucher_type',
         'property_code',
@@ -53,5 +54,10 @@ class PaymentVoucherLine extends Model
     public function header()
     {
         return $this->belongsTo(PaymentVoucherHeader::class, 'voucher_number', 'voucher_number');
+    }
+
+    public function chequeLeaf()
+    {
+        return $this->belongsTo(ChequeLeaf::class, 'cheque_leaf_id');
     }
 }
