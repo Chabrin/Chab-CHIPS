@@ -1179,6 +1179,7 @@ class PayrollController extends Controller
             'period' => $startDate,
             'period_id' => $periodId,
             'basic_salary' => $payrollData['basic_salary'],
+            'total_earnings' => $payrollData['gross_pay'],
             'tax_payable' => $payrollData['paye'],
             'nhif' => $payrollData['nhif'],
             'nssf' => $payrollData['nssf'],

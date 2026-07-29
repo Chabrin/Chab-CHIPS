@@ -14,18 +14,18 @@
         }
 
         /* ── Header ── */
-        .hdr { display: table; width: 100%; border-bottom: 3px solid #1e40af; padding-bottom: 10px; margin-bottom: 14px; }
+        .hdr { display: table; width: 100%; border-bottom: 3px solid #1d4ed8; padding-bottom: 10px; margin-bottom: 14px; }
         .hdr-left  { display: table-cell; vertical-align: middle; }
         .hdr-right { display: table-cell; vertical-align: middle; text-align: right; }
-        .co-name   { font-size: 18px; font-weight: bold; color: #1e40af; letter-spacing: -0.3px; }
-        .co-sub    { font-size: 9px; color: #64748b; margin-top: 2px; }
-        .slip-label { font-size: 13px; font-weight: bold; color: #1e293b; letter-spacing: 1px; }
-        .slip-period { font-size: 11px; color: #475569; margin-top: 3px; }
+        .co-name   { font-size: 18px; font-weight: bold; color: #1d4ed8; letter-spacing: -0.3px; }
+        .co-sub    { font-size: 9px; color: #94a3b8; margin-top: 2px; }
+        .slip-label { font-size: 13px; font-weight: bold; color: #0f172a; letter-spacing: 1px; }
+        .slip-period { font-size: 11px; color: #64748b; margin-top: 3px; }
 
         /* ── Employee Info ── */
         .info-box { width: 100%; border-collapse: collapse; margin-bottom: 14px;
-                    border: 1px solid #cbd5e1; border-radius: 4px; }
-        .info-box td { padding: 4px 8px; font-size: 10px; border-bottom: 1px solid #e2e8f0; }
+                    border: 1px solid #e2e8f0; border-radius: 6px; }
+        .info-box td { padding: 4px 8px; font-size: 10px; border-bottom: 1px solid #f1f5f9; }
         .info-box tr:last-child td { border-bottom: none; }
         .info-box tr:nth-child(odd) td  { background: #f8fafc; }
         .info-box tr:nth-child(even) td { background: #ffffff; }
@@ -34,11 +34,11 @@
 
         /* ── Main payslip table ── */
         .slip-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        .slip-tbl th, .slip-tbl td { border: 1px solid #cbd5e1; }
+        .slip-tbl th, .slip-tbl td { border: 1px solid #e2e8f0; }
 
-        .sec-hdr { background: #1e40af; color: #fff; font-size: 9px; font-weight: bold;
+        .sec-hdr { background: #1d4ed8; color: #fff; font-size: 9px; font-weight: bold;
                    letter-spacing: 0.6px; padding: 6px 8px; text-transform: uppercase; }
-        .col-hdr { background: #e0e7ff; color: #1e3a8a; font-size: 9px; font-weight: 700;
+        .col-hdr { background: #dbeafe; color: #1e3a8a; font-size: 9px; font-weight: 700;
                    padding: 5px 8px; }
         .col-hdr-r { text-align: right; }
 
@@ -54,10 +54,10 @@
         .tax-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
         .tax-hdr td { background: #0f172a; color: #fff; font-size: 9px; font-weight: bold;
                       letter-spacing: 0.6px; padding: 5px 8px; text-transform: uppercase; }
-        .tax-tbl td { border: 1px solid #cbd5e1; padding: 4px 8px; font-size: 10px; }
+        .tax-tbl td { border: 1px solid #e2e8f0; padding: 4px 8px; font-size: 10px; }
         .tax-tbl tr:nth-child(odd)  td { background: #f8fafc; }
         .tax-tbl tr:nth-child(even) td { background: #fff; }
-        .tax-lbl { color: #475569; width: 27%; }
+        .tax-lbl { color: #64748b; width: 27%; }
         .tax-val { text-align: right; font-weight: 600; color: #0f172a; width: 23%; }
 
         /* ── Net Pay ── */
@@ -202,7 +202,7 @@
         <td class="tax-lbl">Personal Relief</td>
         <td class="tax-val">2,400.00</td>
         <td class="tax-lbl">PAYE Payable</td>
-        <td class="tax-val" style="color:#1e40af;">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
+        <td class="tax-val" style="color:#1d4ed8;">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
     </tr>
 </table>
 
@@ -215,7 +215,7 @@
 </table>
 
 <div class="footer">
-    This is a computer-generated payslip and does not require a signature. &nbsp;|&nbsp; Generated on {{ date('d/m/Y H:i:s') }}
+    This is a computer-generated payslip and does not require a signature.
 </div>
 
 </body>
