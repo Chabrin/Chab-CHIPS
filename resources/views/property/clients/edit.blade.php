@@ -169,6 +169,28 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
+                                            <label for="nationality_id" class="form-label">Nationality</label>
+                                            <select class="form-select @error('nationality_id') is-invalid @enderror" id="nationality_id" name="nationality_id">
+                                                @include('property.clients.partials.nationality-options', ['selectedNationality' => old('nationality_id', $client->nationality_id)])
+                                            </select>
+                                            @error('nationality_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
+                                            <label for="preferred_language_id" class="form-label">Preferred Language</label>
+                                            <select class="form-select @error('preferred_language_id') is-invalid @enderror" id="preferred_language_id" name="preferred_language_id">
+                                                <option value="">Select Language</option>
+                                                <option value="1" {{ old('preferred_language_id', $client->prefered_messages_language_id) == '1' ? 'selected' : '' }}>English</option>
+                                                <option value="2" {{ old('preferred_language_id', $client->prefered_messages_language_id) == '2' ? 'selected' : '' }}>Swahili</option>
+                                            </select>
+                                            @error('preferred_language_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
                                             <label for="national_id" class="form-label">National ID</label>
                                             <input type="text" class="form-control @error('national_id') is-invalid @enderror" 
                                                    id="national_id" name="national_id" 
@@ -221,10 +243,20 @@
 
                                         <div class="col-md-6 mb-3">
                                             <label for="email_address" class="form-label">Email Address</label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" 
-                                                   id="email_address" name="email_address" 
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror"
+                                                   id="email_address" name="email_address"
                                                    value="{{ old('email_address', $client->email_address) }}">
                                             @error('email_address')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
+                                            <label for="overdraft_penalty" class="form-label">Overdraft Penalty (%)</label>
+                                            <input type="number" step="0.01" class="form-control @error('overdraft_penalty') is-invalid @enderror"
+                                                   id="overdraft_penalty" name="overdraft_penalty"
+                                                   value="{{ old('overdraft_penalty', $client->overdraft_penalty) }}" placeholder="0.00">
+                                            @error('overdraft_penalty')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>

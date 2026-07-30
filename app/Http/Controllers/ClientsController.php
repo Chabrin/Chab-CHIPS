@@ -1708,7 +1708,7 @@ class ClientsController extends Controller
                 'branch_id' => $bankData['branch_id'] ?? null,
                 'account_number' => $bankData['account_number'] ?? null,
                 'account_name' => $bankData['account_name'] ?? null,
-                'is_default' => $bankData['is_default'] ?? null,
+                'is_default' => $bankData['is_default'] ?? 0,
                 'added_by' => Auth::id(),
                 'added_on' => now(),
             ]);
