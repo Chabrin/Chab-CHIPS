@@ -78,13 +78,21 @@ class ClientAdvanceController extends Controller
     /**
      * Get all client advances (AJAX)
      */
-    public function getAdvances()
+    public function getAdvances(Request $request)
     {
         try {
-            $advances = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems'])
-                ->orderBy('date_time', 'desc')
+            $canUpdate = Auth::user()->isAbleTo('update_client_advances');
+            $userId = Auth::id();
+
+            $query = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy']);
+
+            if ($request->filled('status_id')) {
+                $query->where('current_status_id', $request->input('status_id'));
+            }
+
+            $advances = $query->orderBy('date_time', 'desc')
                 ->get()
-                ->map(function ($advance) {
+                ->map(function ($advance) use ($canUpdate, $userId) {
                     // Map status IDs to names
                     $statusMap = [
                         1 => 'Pending',
@@ -103,6 +111,8 @@ class ClientAdvanceController extends Controller
                         3 => 'Overpayment Advance',
                     ];
 
+                    $isOwnRequisition = (int) $advance->created_by === (int) $userId;
+
                     return [
                         'id' => $advance->id,
                         'encrypted_id' => Crypt::encrypt($advance->id),
@@ -118,8 +128,12 @@ class ClientAdvanceController extends Controller
                         'status' => $statusMap[$advance->current_status_id] ?? 'Unknown',
                         'status_id' => $advance->current_status_id,
                         'narration' => $advance->narration ?? '-',
-                        'can_update' => Auth::user()->isAbleTo('update_client_advances'),
+                        'created_by_name' => $advance->createdBy->name ?? '-',
+                        'is_own_requisition' => $isOwnRequisition,
+                        'can_update' => $canUpdate,
                         'can_delete' => Auth::user()->isAbleTo('delete_client_advances'),
+                        'can_confirm' => $canUpdate && !$isOwnRequisition && (int) $advance->current_status_id === 1,
+                        'can_post' => $canUpdate && (int) $advance->current_status_id === 5,
                     ];
                 });
             return response()->json(['data' => $advances]);
@@ -187,7 +201,7 @@ class ClientAdvanceController extends Controller
      */
     public function searchClientsAndProperties(Request $request)
     {
-        // try {
+        try {
             Log::info('Searching clients/properties for advance', [
                 'query' => $request->input('q', ''),
                 'user_id' => Auth::id()
@@ -238,11 +252,11 @@ class ClientAdvanceController extends Controller
             $results = $clients->concat($properties)->values();
 
             return response()->json(['results' => $results]);
-        // } catch (\Exception $e) {
-        //     ErrorDispatcher::dispatch($e);
-        //     Log::error('Error searching clients/properties for advance: ' . $e->getMessage());
-        //     return response()->json(['results' => []], 500);
-        // }
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching clients/properties for advance: ' . $e->getMessage());
+            return response()->json(['results' => []], 500);
+        }
     }
 
     /**
@@ -1063,6 +1077,53 @@ class ClientAdvanceController extends Controller
     }
 
     /**
+     * Confirm an advance on behalf of the landlord (internal action: Pending → Approved).
+     * Used when the landlord hasn't responded to the emailed approval link - a staff member
+     * with update_client_advances confirms it instead. Maker-checker: whoever created the
+     * requisition cannot also confirm it. Money doesn't move here - a separate Post action
+     * (postAdvance() below) is required afterward to actually push it to the landlord ledger.
+     */
+    public function confirmAdvance($encryptedId)
+    {
+        try {
+            if (!Auth::user()->isAbleTo('update_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to confirm advances'], 403);
+            }
+
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::findOrFail($id);
+
+            if ((int) $advance->created_by === (int) Auth::id()) {
+                return response()->json(['success' => false, 'message' => 'You cannot confirm an advance you created yourself - a different user must confirm it.'], 422);
+            }
+
+            $updated = ClientAdvance::where('id', $id)
+                ->where('current_status_id', 1)
+                ->update([
+                    'current_status_id' => 5,
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now(),
+                ]);
+
+            if ($updated === 0) {
+                $advance->refresh();
+                return response()->json(['success' => false, 'message' => 'This advance is no longer Pending (' . $this->advanceStatusLabel($advance->current_status_id) . ') - it may have already been confirmed or approved by the landlord.'], 422);
+            }
+
+            Log::info('Advance confirmed internally in lieu of landlord', [
+                'advance_id' => $id,
+                'confirmed_by' => Auth::id(),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Advance confirmed. It can now be posted.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error confirming advance: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to confirm advance'], 500);
+        }
+    }
+
+    /**
      * Post an advance (admin action: Approved → Posted).
      * The status check-and-update is a single atomic conditional query — closes the
      * same double-submission race as the public approval link above.
@@ -1070,6 +1131,10 @@ class ClientAdvanceController extends Controller
     public function postAdvance($encryptedId)
     {
         try {
+            if (!Auth::user()->isAbleTo('update_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to post advances'], 403);
+            }
+
             $id = Crypt::decrypt($encryptedId);
 
             $advance = DB::transaction(function () use ($id) {
