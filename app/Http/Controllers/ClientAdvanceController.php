@@ -179,6 +179,73 @@ class ClientAdvanceController extends Controller
     }
 
     /**
+     * Live search across landlords AND properties for the create-advance screen (AJAX,
+     * called on every keystroke via Select2). Staff who only know a property's name/
+     * reference - not the landlord's name - can find it in the same box; each property
+     * result carries its landlord's client_id so the create screen can auto-select it,
+     * plus its own property_id so the specific property can be pre-selected too.
+     */
+    public function searchClientsAndProperties(Request $request)
+    {
+        // try {
+            Log::info('Searching clients/properties for advance', [
+                'query' => $request->input('q', ''),
+                'user_id' => Auth::id()
+            ]);
+            $term = trim((string) $request->input('q', ''));
+            if ($term === '') {
+                return response()->json(['results' => []]);
+            }
+
+            $clients = Client::where('reference_number', 'LIKE', 'LAN%')
+                ->where(function ($q) use ($term) {
+                    $q->where('names', 'ILIKE', "%{$term}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
+                })
+                ->select(['id', 'names', 'reference_number'])
+                ->orderBy('names', 'asc')
+                ->limit(20)
+                ->get()
+                ->map(function ($client) {
+                    return [
+                        'id' => $client->id,
+                        'text' => ($client->names ?? '-') . ' (' . ($client->reference_number ?? '-') . ')',
+                        'property_id' => null,
+                    ];
+                });
+
+            $properties = Property::whereHas('client', function ($q) {
+                    $q->where('reference_number', 'LIKE', 'LAN%');
+                })
+                ->where('current_status_id', '!=', 0) // Exclude merged/inactive source properties
+                ->where(function ($q) use ($term) {
+                    $q->where('property_name', 'ILIKE', "%{$term}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
+                })
+                ->with('client:id,names,reference_number')
+                ->select(['id', 'reference_number', 'property_name', 'client_id'])
+                ->orderBy('property_name', 'asc')
+                ->limit(20)
+                ->get()
+                ->map(function ($property) {
+                    return [
+                        'id' => $property->client_id,
+                        'text' => $property->reference_number . ' - ' . $property->property_name . ' (Landlord: ' . ($property->client->names ?? '-') . ')',
+                        'property_id' => $property->id,
+                    ];
+                });
+
+            $results = $clients->concat($properties)->values();
+
+            return response()->json(['results' => $results]);
+        // } catch (\Exception $e) {
+        //     ErrorDispatcher::dispatch($e);
+        //     Log::error('Error searching clients/properties for advance: ' . $e->getMessage());
+        //     return response()->json(['results' => []], 500);
+        // }
+    }
+
+    /**
      * Get previous advances for a specific client (AJAX)
      */
     public function getClientPreviousAdvances(Request $request)
@@ -1544,9 +1611,12 @@ class ClientAdvanceController extends Controller
                 $gracePeriodMonths = $disbursement->diffInMonths($principalStart);
             }
 
-            // Grace period - interest only
+            // Grace period - interest only.
+            // The final grace month (immediately before principal start) is intentionally
+            // excluded here: the principal loop's first installment already charges interest
+            // for that same month, so looping the full $gracePeriodMonths would double-charge it.
             $currentDate = $disbursement->copy();
-            for ($i = 0; $i < $gracePeriodMonths; $i++) {
+            for ($i = 0; $i < $gracePeriodMonths - 1; $i++) {
                 $currentDate->addMonth()->startOfMonth();
                 $interest = round(($balance * $interestRate) / 100, 2);
 
