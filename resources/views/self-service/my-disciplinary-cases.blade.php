@@ -210,6 +210,25 @@ use Illuminate\Support\Facades\Crypt;
                                                                 $pendingActions[] = '<span class="badge bg-primary">Hearing: '.$hearingDate.'</span>';
                                                             }
                                                         }
+
+                                                        if($case->outcome) {
+                                                            $existingAppeal = $case->appeals->whereNotIn('status', ['Withdrawn'])->sortByDesc('filed_at')->first();
+                                                            if($existingAppeal) {
+                                                                $appealBadgeClass = $existingAppeal->status === 'Pending' ? 'bg-info' : ($existingAppeal->status === 'Upheld' ? 'bg-success' : 'bg-secondary');
+                                                                $pendingActions[] = '<span class="badge '.$appealBadgeClass.'">Appeal: '.$existingAppeal->status.'</span>';
+                                                            } elseif($case->outcome->appeal_allowed) {
+                                                                $withinWindow = !$case->outcome->appeal_deadline || \Carbon\Carbon::now()->startOfDay()->lte(\Carbon\Carbon::parse($case->outcome->appeal_deadline)->endOfDay());
+                                                                if($withinWindow) {
+                                                                    $deadlineLabel = $case->outcome->appeal_deadline ? \Carbon\Carbon::parse($case->outcome->appeal_deadline)->format('d M Y') : '';
+                                                                    $pendingActions[] = '<button type="button" class="btn btn-sm btn-outline-danger" onclick="openAppealModal(\''.$case->id.'\', \''.$case->case_number.'\')">
+                                                                        <span class="material-symbols-outlined" style="font-size:14px;">gavel</span>
+                                                                        File Appeal'.($deadlineLabel ? ' (by '.$deadlineLabel.')' : '').'
+                                                                    </button>';
+                                                                } else {
+                                                                    $pendingActions[] = '<span class="badge bg-secondary">Appeal Window Closed</span>';
+                                                                }
+                                                            }
+                                                        }
                                                     @endphp
                                                     @if(count($pendingActions))
                                                         {!! implode(' ', $pendingActions) !!}
@@ -474,6 +493,42 @@ use Illuminate\Support\Facades\Crypt;
     </div>
 </div>
 
+<!-- File Appeal Modal -->
+<div class="modal fade" id="fileAppealModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">File an Appeal</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="fileAppealForm">
+                @csrf
+                <input type="hidden" name="case_id" id="appeal_case_id">
+                <div class="modal-body">
+                    <div class="alert alert-info mb-3">
+                        <strong>Case #:</strong> <span id="appeal_case_number"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label for="appeal_grounds" class="form-label">Grounds for Appeal <span class="text-danger">*</span></label>
+                        <textarea class="form-control" name="grounds" id="appeal_grounds" rows="6" required
+                            placeholder="Explain why you believe the decision should be reconsidered..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-danger">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">gavel</span>
+                        Submit Appeal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;
@@ -500,6 +555,12 @@ function openExtensionRequestModal(caseId, caseNumber, currentDeadline) {
     $('#ext_case_number').text(caseNumber);
     $('#ext_current_deadline').text(currentDeadline);
     $('#extensionRequestModal').modal('show');
+}
+
+function openAppealModal(caseId, caseNumber) {
+    $('#appeal_case_id').val(caseId);
+    $('#appeal_case_number').text(caseNumber);
+    $('#fileAppealModal').modal('show');
 }
 
 $(document).ready(function() {
@@ -553,6 +614,27 @@ $(document).ready(function() {
             },
             error: function(xhr) {
                 toastr.error(xhr.responseJSON?.error || 'Failed to submit extension request. Please try again.');
+            }
+        });
+    });
+
+    // Submit Appeal
+    $('#fileAppealForm').on('submit', function(e) {
+        e.preventDefault();
+        let caseId = $('#appeal_case_id').val();
+        $.ajax({
+            url: "{{ url('/discipline/tracker/case') }}/" + caseId + "/file-appeal",
+            type: 'POST',
+            data: $(this).serialize(),
+            success: function(response) {
+                if(response.success) {
+                    $('#fileAppealModal').modal('hide');
+                    toastr.success(response.message);
+                    setTimeout(function() { location.reload(); }, 1500);
+                }
+            },
+            error: function(xhr) {
+                toastr.error(xhr.responseJSON?.error || 'Failed to file appeal. Please try again.');
             }
         });
     });

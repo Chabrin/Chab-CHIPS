@@ -405,17 +405,22 @@ class PropertiesController extends Controller
             $zoneName = strtoupper($zone->zone_name); // Ensure uppercase (e.g., "A")
     
             // Generate reference number with zone suffix (e.g., 145A, 146A)
-            // Find the last property with this zone suffix
+            // Find the last property with this zone suffix - sorted by the NUMERIC part,
+            // not the raw string (string sort would rank "99G" above "100G"-"194G" since
+            // '9' > '1' as a character, silently reusing an already-taken number).
+            // lockForUpdate() (inside this method's existing transaction) also serializes
+            // two people creating a property in the same zone at the same time.
             $lastProperty = Property::where('reference_number', 'LIKE', "%{$zoneName}")
-                ->orderBy('reference_number', 'desc')
+                ->orderByRaw("CAST(SUBSTRING(reference_number FROM '^[0-9]+') AS INTEGER) DESC")
+                ->lockForUpdate()
                 ->first();
-    
+
             if ($lastProperty) {
                 // Extract the numeric part before the zone name
                 // Example: "145A" -> extract "145"
                 $refNumber = $lastProperty->reference_number;
                 preg_match('/(\d+)([A-Z]+)$/', $refNumber, $matches);
-                
+
                 if (!empty($matches)) {
                     $lastNumber = intval($matches[1]);
                     $newNumber = $lastNumber + 1;
@@ -425,8 +430,16 @@ class PropertiesController extends Controller
             } else {
                 $newNumber = 1;
             }
-            
+
             $referenceNumber = $newNumber . $zoneName;
+
+            // Defensive backstop: keep bumping if the computed number is somehow already
+            // taken (e.g. irregular legacy data), so a collision is avoided rather than
+            // two different properties silently ending up with the same reference number.
+            while (Property::where('reference_number', $referenceNumber)->exists()) {
+                $newNumber++;
+                $referenceNumber = $newNumber . $zoneName;
+            }
     
             // Format lat_long as (latitude,longitude):zoom_level
             $latLong = null;

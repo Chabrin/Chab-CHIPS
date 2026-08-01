@@ -2,6 +2,9 @@
 
 namespace App\Traits;
 
+use App\Models\AdvanceSchedule;
+use App\Models\ClientAdvance;
+use App\Models\LandlordAccount;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -134,6 +137,8 @@ trait ReturnsDeductionsTrait
                       WHERE mb.landlord_id = la.client_id
                   )
             ", [$returnYear, $returnMonth, $returnPeriod, $returnYear, $returnMonth]);
+
+            $this->syncAdvanceRecoveryStatus($returnYear, $returnMonth);
         }
 
         Log::info("ReturnsDeductionsTrait: Advance payment DR lines inserted", [
@@ -142,6 +147,56 @@ trait ReturnsDeductionsTrait
         ]);
 
         return $advancesInserted;
+    }
+
+    /**
+     * Propagate this pass's ADVANCE (0009) ledger recoveries back onto the
+     * originating ClientAdvance/AdvanceSchedule rows. insertAdvancePaymentLines()
+     * above only marks the cb_landlord_account row itself recovered — nothing else
+     * in the app ever reads that flag, so without this step an advance's own
+     * balance/schedule never reflects a repayment that already happened.
+     */
+    protected function syncAdvanceRecoveryStatus(int $returnYear, int $returnMonth): void
+    {
+        $recoveredRows = LandlordAccount::where('entry_type_code', '0009')
+            ->where('is_recovered', 1)
+            ->where('recovery_year', $returnYear)
+            ->where('recovery_month', $returnMonth)
+            ->whereNotNull('advance_id')
+            ->get(['id', 'advance_id', 'schedule_id', 'debit_amount']);
+
+        if ($recoveredRows->isEmpty()) {
+            return;
+        }
+
+        foreach ($recoveredRows->groupBy('advance_id') as $advanceId => $rows) {
+            $advance = ClientAdvance::find($advanceId);
+            if (!$advance) {
+                continue;
+            }
+
+            $recoveredAmount = (float) $rows->sum('debit_amount');
+            $newBalance = max(0, (float) $advance->current_balance - $recoveredAmount);
+
+            $advance->current_balance = $newBalance;
+            if ($newBalance <= 0.0) {
+                $advance->current_status_id = 2; // Cleared
+            }
+            $advance->save();
+
+            $scheduleIds = $rows->pluck('schedule_id')->filter()->unique();
+            if ($scheduleIds->isNotEmpty()) {
+                AdvanceSchedule::whereIn('id', $scheduleIds)
+                    ->update(['current_status_id' => 2]); // cleared
+            }
+
+            Log::info('syncAdvanceRecoveryStatus: advance balance reconciled', [
+                'advance_id'       => $advanceId,
+                'recovered_amount' => $recoveredAmount,
+                'new_balance'      => $newBalance,
+                'schedules_cleared' => $scheduleIds->values()->all(),
+            ]);
+        }
     }
 
     /**

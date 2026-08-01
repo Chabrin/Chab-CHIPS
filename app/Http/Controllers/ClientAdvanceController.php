@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\Property;
 use App\Models\InvoiceableItem;
 use App\Models\ChartAccount;
+use App\Models\LandlordAccount;
 use App\Traits\GlPostingTrait;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -77,13 +78,21 @@ class ClientAdvanceController extends Controller
     /**
      * Get all client advances (AJAX)
      */
-    public function getAdvances()
+    public function getAdvances(Request $request)
     {
         try {
-            $advances = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems'])
-                ->orderBy('date_time', 'desc')
+            $canUpdate = Auth::user()->isAbleTo('update_client_advances');
+            $userId = Auth::id();
+
+            $query = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy']);
+
+            if ($request->filled('status_id')) {
+                $query->where('current_status_id', $request->input('status_id'));
+            }
+
+            $advances = $query->orderBy('date_time', 'desc')
                 ->get()
-                ->map(function ($advance) {
+                ->map(function ($advance) use ($canUpdate, $userId) {
                     // Map status IDs to names
                     $statusMap = [
                         1 => 'Pending',
@@ -102,6 +111,8 @@ class ClientAdvanceController extends Controller
                         3 => 'Overpayment Advance',
                     ];
 
+                    $isOwnRequisition = (int) $advance->created_by === (int) $userId;
+
                     return [
                         'id' => $advance->id,
                         'encrypted_id' => Crypt::encrypt($advance->id),
@@ -117,8 +128,12 @@ class ClientAdvanceController extends Controller
                         'status' => $statusMap[$advance->current_status_id] ?? 'Unknown',
                         'status_id' => $advance->current_status_id,
                         'narration' => $advance->narration ?? '-',
-                        'can_update' => Auth::user()->isAbleTo('update_client_advances'),
+                        'created_by_name' => $advance->createdBy->name ?? '-',
+                        'is_own_requisition' => $isOwnRequisition,
+                        'can_update' => $canUpdate,
                         'can_delete' => Auth::user()->isAbleTo('delete_client_advances'),
+                        'can_confirm' => $canUpdate && !$isOwnRequisition && (int) $advance->current_status_id === 1,
+                        'can_post' => $canUpdate && (int) $advance->current_status_id === 5,
                     ];
                 });
             return response()->json(['data' => $advances]);
@@ -174,6 +189,73 @@ class ClientAdvanceController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading client properties: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load client properties'], 500);
+        }
+    }
+
+    /**
+     * Live search across landlords AND properties for the create-advance screen (AJAX,
+     * called on every keystroke via Select2). Staff who only know a property's name/
+     * reference - not the landlord's name - can find it in the same box; each property
+     * result carries its landlord's client_id so the create screen can auto-select it,
+     * plus its own property_id so the specific property can be pre-selected too.
+     */
+    public function searchClientsAndProperties(Request $request)
+    {
+        try {
+            Log::info('Searching clients/properties for advance', [
+                'query' => $request->input('q', ''),
+                'user_id' => Auth::id()
+            ]);
+            $term = trim((string) $request->input('q', ''));
+            if ($term === '') {
+                return response()->json(['results' => []]);
+            }
+
+            $clients = Client::where('reference_number', 'LIKE', 'LAN%')
+                ->where(function ($q) use ($term) {
+                    $q->where('names', 'ILIKE', "%{$term}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
+                })
+                ->select(['id', 'names', 'reference_number'])
+                ->orderBy('names', 'asc')
+                ->limit(20)
+                ->get()
+                ->map(function ($client) {
+                    return [
+                        'id' => $client->id,
+                        'text' => ($client->names ?? '-') . ' (' . ($client->reference_number ?? '-') . ')',
+                        'property_id' => null,
+                    ];
+                });
+
+            $properties = Property::whereHas('client', function ($q) {
+                    $q->where('reference_number', 'LIKE', 'LAN%');
+                })
+                ->where('current_status_id', '!=', 0) // Exclude merged/inactive source properties
+                ->where(function ($q) use ($term) {
+                    $q->where('property_name', 'ILIKE', "%{$term}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
+                })
+                ->with('client:id,names,reference_number')
+                ->select(['id', 'reference_number', 'property_name', 'client_id'])
+                ->orderBy('property_name', 'asc')
+                ->limit(20)
+                ->get()
+                ->map(function ($property) {
+                    return [
+                        'id' => $property->client_id,
+                        'text' => $property->reference_number . ' - ' . $property->property_name . ' (Landlord: ' . ($property->client->names ?? '-') . ')',
+                        'property_id' => $property->id,
+                    ];
+                });
+
+            $results = $clients->concat($properties)->values();
+
+            return response()->json(['results' => $results]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching clients/properties for advance: ' . $e->getMessage());
+            return response()->json(['results' => []], 500);
         }
     }
 
@@ -911,29 +993,64 @@ class ClientAdvanceController extends Controller
     }
 
     /**
-     * Approve an advance — public route, landlord clicks link from email
+     * Show the approval confirmation page — public route, landlord clicks link from email.
+     * GET performs no writes (so email link-scanners/prefetchers can't trigger a payout);
+     * the form on this page POSTs to confirmApproveAdvance() to actually approve.
      */
-    public function approveAdvance($encryptedId)
+    public function approveAdvance(Request $request, $encryptedId)
     {
         try {
             $id = Crypt::decrypt($encryptedId);
             $advance = ClientAdvance::with(['client', 'property'])->findOrFail($id);
 
-            $statusLabels = [
-                2 => 'Cleared', 3 => 'Cancelled', 4 => 'Suspended',
-                5 => 'Already Approved', 6 => 'Already Posted', 8 => 'Rescheduled',
-            ];
-
             if ($advance->current_status_id !== 1) {
-                $statusLabel = $statusLabels[$advance->current_status_id] ?? 'Unknown';
                 return view('property.advances.approved', compact('advance'))
                     ->with('alreadyProcessed', true)
-                    ->with('statusLabel', $statusLabel);
+                    ->with('statusLabel', $this->advanceStatusLabel($advance->current_status_id));
             }
 
-            $advance->update(['current_status_id' => 6]);
+            return view('property.advances.approve-confirm', [
+                'advance'     => $advance,
+                'confirmUrl'  => $request->fullUrl(),
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading advance approval confirmation: ' . $e->getMessage());
+            abort(404);
+        }
+    }
 
-            $this->postToLandlordAccount($advance, $advance->created_by ?? 0);
+    /**
+     * Confirm advance approval — public route, POSTed from the confirmation page above.
+     * The status check-and-update is a single atomic conditional query, so a double
+     * submission (double-click, replay, two tabs) can only ever succeed once.
+     */
+    public function confirmApproveAdvance($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+
+            $advance = DB::transaction(function () use ($id) {
+                $updated = ClientAdvance::where('id', $id)
+                    ->where('current_status_id', 1)
+                    ->update(['current_status_id' => 6]);
+
+                if ($updated === 0) {
+                    return null;
+                }
+
+                $advance = ClientAdvance::with(['client', 'property', 'schedule'])->findOrFail($id);
+                $this->postToLandlordAccount($advance, $advance->created_by ?? 0);
+
+                return $advance;
+            });
+
+            if (!$advance) {
+                $advance = ClientAdvance::with(['client', 'property'])->findOrFail($id);
+                return view('property.advances.approved', compact('advance'))
+                    ->with('alreadyProcessed', true)
+                    ->with('statusLabel', $this->advanceStatusLabel($advance->current_status_id));
+            }
 
             Log::info('Advance approved by landlord', [
                 'advance_id' => $advance->id,
@@ -949,22 +1066,95 @@ class ClientAdvanceController extends Controller
         }
     }
 
+    private function advanceStatusLabel(int $statusId): string
+    {
+        $statusLabels = [
+            1 => 'Pending', 2 => 'Cleared', 3 => 'Cancelled', 4 => 'Suspended',
+            5 => 'Already Approved', 6 => 'Already Posted', 8 => 'Rescheduled',
+        ];
+
+        return $statusLabels[$statusId] ?? 'Unknown';
+    }
+
     /**
-     * Post an advance (admin action: Approved → Posted)
+     * Confirm an advance on behalf of the landlord (internal action: Pending → Approved).
+     * Used when the landlord hasn't responded to the emailed approval link - a staff member
+     * with update_client_advances confirms it instead. Maker-checker: whoever created the
+     * requisition cannot also confirm it. Money doesn't move here - a separate Post action
+     * (postAdvance() below) is required afterward to actually push it to the landlord ledger.
+     */
+    public function confirmAdvance($encryptedId)
+    {
+        try {
+            if (!Auth::user()->isAbleTo('update_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to confirm advances'], 403);
+            }
+
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::findOrFail($id);
+
+            if ((int) $advance->created_by === (int) Auth::id()) {
+                return response()->json(['success' => false, 'message' => 'You cannot confirm an advance you created yourself - a different user must confirm it.'], 422);
+            }
+
+            $updated = ClientAdvance::where('id', $id)
+                ->where('current_status_id', 1)
+                ->update([
+                    'current_status_id' => 5,
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now(),
+                ]);
+
+            if ($updated === 0) {
+                $advance->refresh();
+                return response()->json(['success' => false, 'message' => 'This advance is no longer Pending (' . $this->advanceStatusLabel($advance->current_status_id) . ') - it may have already been confirmed or approved by the landlord.'], 422);
+            }
+
+            Log::info('Advance confirmed internally in lieu of landlord', [
+                'advance_id' => $id,
+                'confirmed_by' => Auth::id(),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Advance confirmed. It can now be posted.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error confirming advance: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to confirm advance'], 500);
+        }
+    }
+
+    /**
+     * Post an advance (admin action: Approved → Posted).
+     * The status check-and-update is a single atomic conditional query — closes the
+     * same double-submission race as the public approval link above.
      */
     public function postAdvance($encryptedId)
     {
         try {
-            $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::with('schedule')->findOrFail($id);
-
-            if ($advance->current_status_id !== 5) {
-                return response()->json(['success' => false, 'message' => 'Advance must be Approved before posting'], 422);
+            if (!Auth::user()->isAbleTo('update_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to post advances'], 403);
             }
 
-            $advance->update(['current_status_id' => 6]);
+            $id = Crypt::decrypt($encryptedId);
 
-            $this->postToLandlordAccount($advance, Auth::id());
+            $advance = DB::transaction(function () use ($id) {
+                $updated = ClientAdvance::where('id', $id)
+                    ->where('current_status_id', 5)
+                    ->update(['current_status_id' => 6]);
+
+                if ($updated === 0) {
+                    return null;
+                }
+
+                $advance = ClientAdvance::with('schedule')->findOrFail($id);
+                $this->postToLandlordAccount($advance, Auth::id());
+
+                return $advance;
+            });
+
+            if (!$advance) {
+                return response()->json(['success' => false, 'message' => 'Advance must be Approved before posting'], 422);
+            }
 
             Log::info('Advance posted by admin', [
                 'advance_id' => $advance->id,
@@ -992,150 +1182,87 @@ class ClientAdvanceController extends Controller
      */
     private function postToLandlordAccount(ClientAdvance $advance, int $userId): void
     {
-        try {
-            $clientId   = $advance->client_id;
-            $propertyId = $advance->property_id;
-            $ref        = $advance->reference_number ?? 'N/A';
+        $clientId   = $advance->client_id;
+        $propertyId = $advance->property_id;
+        $ref        = $advance->reference_number ?? 'N/A';
+        $auditUser  = substr(optional(\App\Models\User::find($userId))->name ?? (string) $userId, 0, 20);
 
-            // Resolve reference codes once via a single query
-            $codes = DB::table('sys_pm_clients as c')
-                ->crossJoin('sys_pm_properties as p')
-                ->where('c.id', $clientId)
-                ->where('p.id', $propertyId)
-                ->select('c.reference_number as landlord_code', 'p.reference_number as property_code')
-                ->first();
+        // Resolve reference codes once via a single query
+        $codes = DB::table('sys_pm_clients as c')
+            ->crossJoin('sys_pm_properties as p')
+            ->where('c.id', $clientId)
+            ->where('p.id', $propertyId)
+            ->select('c.reference_number as landlord_code', 'p.reference_number as property_code')
+            ->first();
 
-            if (!$codes) {
-                Log::error('postToLandlordAccount: could not resolve client/property codes', [
-                    'advance_id'  => $advance->id,
-                    'client_id'   => $clientId,
-                    'property_id' => $propertyId,
-                ]);
-                return;
+        if (!$codes) {
+            throw new \Exception("postToLandlordAccount: could not resolve client/property codes for advance {$advance->id}");
+        }
+
+        // Resolve GL accounts for advance posting (1150 Loans & Advances Receivable / 2297 Clients Expense/Advance/Loans Payable)
+        $glDebitAccountId  = ChartAccount::where('account_code', '1150')->value('id');
+        $glCreditAccountId = ChartAccount::where('account_code', '2297')->value('id');
+
+        // Load schedule if not already eager-loaded
+        $schedule = $advance->relationLoaded('schedule')
+            ? $advance->schedule
+            : $advance->schedule()->orderBy('payment_date')->get();
+
+        $hasSchedule = $schedule->isNotEmpty() && !empty($advance->repayment_months);
+
+        if ($hasSchedule) {
+            // --- Multi-installment: one ledger row per schedule entry ---
+            $disbDate = $advance->disbursement_date instanceof \Carbon\Carbon
+                ? $advance->disbursement_date
+                : \Carbon\Carbon::parse($advance->disbursement_date);
+
+            $rows = [];
+            foreach ($schedule as $idx => $entry) {
+                $payDate     = $entry->payment_date instanceof \Carbon\Carbon
+                    ? $entry->payment_date
+                    : \Carbon\Carbon::parse($entry->payment_date);
+                $installment = round((float) $entry->principal_amount + (float) $entry->interest, 2);
+
+                $label = $idx === 0
+                    ? 'Advance ' . $ref . ' Instalment 1 of ' . $schedule->count() . ' disbursed ' . $disbDate->format('d M Y')
+                    : 'Advance ' . $ref . ' Instalment ' . ($idx + 1) . ' of ' . $schedule->count();
+
+                $rows[] = [
+                    'year'               => $payDate->year,
+                    'month'              => $payDate->month,
+                    'landlord_code'      => $codes->landlord_code,
+                    'landlord_name'      => $advance->client->names ?? null,
+                    'property_code'      => $codes->property_code,
+                    'transaction_number' => $ref . '/' . ($idx + 1),
+                    'entry_type_code'    => '0009',
+                    'entry_description'  => 'ADVANCE',
+                    'entry_particulars'  => $label,
+                    'entry_date'         => now(),
+                    'debit_amount'       => $installment,
+                    'credit_amount'      => 0,
+                    'total_amount'       => $installment,
+                    'gl_account'         => '1150',
+                    'vendor_id'          => $codes->landlord_code,
+                    'audit_user'         => $auditUser,
+                    'is_recovered'       => 0,
+                    'client_id'          => $clientId,
+                    'property_id'        => $propertyId,
+                    'advance_id'         => $advance->id,
+                    'schedule_id'        => $entry->id,
+                ];
             }
 
-            // Fetch current running balance for this client/property
-            $runningBalance = (float) DB::table('cb_landlord_account')
-                ->where('client_id', $clientId)
-                ->where('property_id', $propertyId)
-                ->orderBy('id', 'desc')
-                ->value('balance') ?? 0.0;
+            foreach ($rows as $row) {
+                LandlordAccount::create($row);
 
-            // Resolve GL accounts for advance posting (1150 Loans & Advances Receivable / 2297 Clients Expense/Advance/Loans Payable)
-            $glDebitAccountId  = ChartAccount::where('account_code', '1150')->value('id');
-            $glCreditAccountId = ChartAccount::where('account_code', '2297')->value('id');
-
-            // Load schedule if not already eager-loaded
-            $schedule = $advance->relationLoaded('schedule')
-                ? $advance->schedule
-                : $advance->schedule()->orderBy('payment_date')->get();
-
-            $hasSchedule = $schedule->isNotEmpty() && !empty($advance->repayment_months);
-
-            if ($hasSchedule) {
-                // --- Multi-installment: one ledger row per schedule entry ---
-                $disbDate = $advance->disbursement_date instanceof \Carbon\Carbon
-                    ? $advance->disbursement_date
-                    : \Carbon\Carbon::parse($advance->disbursement_date);
-
-                $rows = [];
-                foreach ($schedule as $idx => $entry) {
-                    $payDate     = $entry->payment_date instanceof \Carbon\Carbon
-                        ? $entry->payment_date
-                        : \Carbon\Carbon::parse($entry->payment_date);
-                    $installment = round((float) $entry->principal_amount + (float) $entry->interest, 2);
-                    $runningBalance -= $installment;
-
-                    $label = $idx === 0
-                        ? 'Advance ' . $ref . ' Instalment 1 of ' . $schedule->count() . ' disbursed ' . $disbDate->format('d M Y')
-                        : 'Advance ' . $ref . ' Instalment ' . ($idx + 1) . ' of ' . $schedule->count();
-
-                    $rows[] = [
-                        'year'              => $payDate->year,
-                        'month'             => $payDate->month,
-                        'landlord_code'     => $codes->landlord_code,
-                        'property_code'     => $codes->property_code,
-                        'entry_type_code'   => '0009',
-                        'entry_description' => 'ADVANCE',
-                        'entry_particulars' => $label,
-                        'entry_date'        => now(),
-                        'debit_amount'      => $installment,
-                        'credit_amount'     => 0,
-                        'balance'           => $runningBalance,
-                        'is_recovered'      => 0,
-                        'client_id'         => $clientId,
-                        'property_id'       => $propertyId,
-                        'server_time'       => now(),
-                        'user_id'           => $userId,
-                    ];
-                }
-
-                foreach ($rows as $row) {
-                    DB::table('cb_landlord_account')->insert($row);
-
-                    // Post matching GL journal for this installment
-                    if ($glDebitAccountId && $glCreditAccountId) {
-                        $this->postGlEntry([
-                            'type'              => 'generic',
-                            'amount'            => $row['debit_amount'],
-                            'date'              => $row['entry_date']->toDateString(),
-                            'reference'         => $ref,
-                            'narration'         => $row['entry_particulars'],
-                            'entered_by'        => $userId,
-                            'debit_account_id'  => $glDebitAccountId,
-                            'credit_account_id' => $glCreditAccountId,
-                        ]);
-                    } else {
-                        Log::warning('postToLandlordAccount: GL accounts 1150/2297 not found — GL posting skipped', [
-                            'advance_id' => $advance->id,
-                        ]);
-                    }
-                }
-
-                Log::info('Advance posted to landlord account (installments)', [
-                    'advance_id'   => $advance->id,
-                    'reference'    => $ref,
-                    'rows'         => count($rows),
-                    'client_id'    => $clientId,
-                    'property_id'  => $propertyId,
-                ]);
-
-            } else {
-                // --- Single row: full total_amount, disbursement month ---
-                $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
-                    ? $advance->disbursement_date
-                    : \Carbon\Carbon::parse($advance->disbursement_date);
-                $totalAmount = (float) $advance->total_amount;
-                $runningBalance -= $totalAmount;
-                $particulars = 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y');
-
-                DB::table('cb_landlord_account')->insert([
-                    'year'              => $disbDate->year,
-                    'month'             => $disbDate->month,
-                    'landlord_code'     => $codes->landlord_code,
-                    'property_code'     => $codes->property_code,
-                    'entry_type_code'   => '0009',
-                    'entry_description' => 'ADVANCE',
-                    'entry_particulars' => $particulars,
-                    'entry_date'        => now(),
-                    'debit_amount'      => $totalAmount,
-                    'credit_amount'     => 0,
-                    'balance'           => $runningBalance,
-                    'is_recovered'      => 0,
-                    'client_id'         => $clientId,
-                    'property_id'       => $propertyId,
-                    'server_time'       => now(),
-                    'user_id'           => $userId,
-                ]);
-
-                // Post matching GL journal
+                // Post matching GL journal for this installment
                 if ($glDebitAccountId && $glCreditAccountId) {
                     $this->postGlEntry([
                         'type'              => 'generic',
-                        'amount'            => $totalAmount,
-                        'date'              => now()->toDateString(),
+                        'amount'            => $row['debit_amount'],
+                        'date'              => $row['entry_date']->toDateString(),
                         'reference'         => $ref,
-                        'narration'         => $particulars,
+                        'narration'         => $row['entry_particulars'],
                         'entered_by'        => $userId,
                         'debit_account_id'  => $glDebitAccountId,
                         'credit_account_id' => $glCreditAccountId,
@@ -1145,22 +1272,73 @@ class ClientAdvanceController extends Controller
                         'advance_id' => $advance->id,
                     ]);
                 }
+            }
 
-                Log::info('Advance posted to landlord account (lump sum)', [
-                    'advance_id'   => $advance->id,
-                    'reference'    => $ref,
-                    'debit_amount' => $totalAmount,
-                    'period'       => $disbDate->year . '/' . str_pad($disbDate->month, 2, '0', STR_PAD_LEFT),
-                    'client_id'    => $clientId,
-                    'property_id'  => $propertyId,
+            Log::info('Advance posted to landlord account (installments)', [
+                'advance_id'   => $advance->id,
+                'reference'    => $ref,
+                'rows'         => count($rows),
+                'client_id'    => $clientId,
+                'property_id'  => $propertyId,
+            ]);
+
+        } else {
+            // --- Single row: full total_amount, disbursement month ---
+            $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
+                ? $advance->disbursement_date
+                : \Carbon\Carbon::parse($advance->disbursement_date);
+            $totalAmount = (float) $advance->total_amount;
+            $particulars = 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y');
+
+            LandlordAccount::create([
+                'year'               => $disbDate->year,
+                'month'              => $disbDate->month,
+                'landlord_code'      => $codes->landlord_code,
+                'landlord_name'      => $advance->client->names ?? null,
+                'property_code'      => $codes->property_code,
+                'transaction_number' => $ref,
+                'entry_type_code'    => '0009',
+                'entry_description'  => 'ADVANCE',
+                'entry_particulars'  => $particulars,
+                'entry_date'         => now(),
+                'debit_amount'       => $totalAmount,
+                'credit_amount'      => 0,
+                'total_amount'       => $totalAmount,
+                'gl_account'         => '1150',
+                'vendor_id'          => $codes->landlord_code,
+                'audit_user'         => $auditUser,
+                'is_recovered'       => 0,
+                'client_id'          => $clientId,
+                'property_id'        => $propertyId,
+                'advance_id'         => $advance->id,
+                'schedule_id'        => null,
+            ]);
+
+            // Post matching GL journal
+            if ($glDebitAccountId && $glCreditAccountId) {
+                $this->postGlEntry([
+                    'type'              => 'generic',
+                    'amount'            => $totalAmount,
+                    'date'              => now()->toDateString(),
+                    'reference'         => $ref,
+                    'narration'         => $particulars,
+                    'entered_by'        => $userId,
+                    'debit_account_id'  => $glDebitAccountId,
+                    'credit_account_id' => $glCreditAccountId,
+                ]);
+            } else {
+                Log::warning('postToLandlordAccount: GL accounts 1150/2297 not found — GL posting skipped', [
+                    'advance_id' => $advance->id,
                 ]);
             }
-        } catch (\Exception $e) {
-            // Log but do not rethrow — the advance is already posted;
-            // a ledger failure should not undo it silently.
-            Log::error('Failed to post advance to landlord account', [
-                'advance_id' => $advance->id,
-                'error'      => $e->getMessage(),
+
+            Log::info('Advance posted to landlord account (lump sum)', [
+                'advance_id'   => $advance->id,
+                'reference'    => $ref,
+                'debit_amount' => $totalAmount,
+                'period'       => $disbDate->year . '/' . str_pad($disbDate->month, 2, '0', STR_PAD_LEFT),
+                'client_id'    => $clientId,
+                'property_id'  => $propertyId,
             ]);
         }
     }
@@ -1498,9 +1676,12 @@ class ClientAdvanceController extends Controller
                 $gracePeriodMonths = $disbursement->diffInMonths($principalStart);
             }
 
-            // Grace period - interest only
+            // Grace period - interest only.
+            // The final grace month (immediately before principal start) is intentionally
+            // excluded here: the principal loop's first installment already charges interest
+            // for that same month, so looping the full $gracePeriodMonths would double-charge it.
             $currentDate = $disbursement->copy();
-            for ($i = 0; $i < $gracePeriodMonths; $i++) {
+            for ($i = 0; $i < $gracePeriodMonths - 1; $i++) {
                 $currentDate->addMonth()->startOfMonth();
                 $interest = round(($balance * $interestRate) / 100, 2);
 

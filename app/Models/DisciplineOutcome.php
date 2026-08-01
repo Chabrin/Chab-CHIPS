@@ -61,4 +61,9 @@ class DisciplineOutcome extends Model
     {
         return $this->hasMany(DisciplineOutcomeDocument::class, 'outcome_id');
     }
+
+    public function appeals(): HasMany
+    {
+        return $this->hasMany(DisciplineAppeal::class, 'outcome_id');
+    }
 }

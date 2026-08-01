@@ -8,6 +8,10 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Discipline Cases Tracker</h4>
                         <div class="ms-auto d-flex gap-2">
+                            <a class="btn btn-outline-danger btn-sm d-flex align-items-center" href="{{ route('discipline.tracker.appeals.index') }}">
+                                <span class="material-symbols-outlined">gavel</span>
+                                <span class="ms-1">Appeals</span>
+                            </a>
                             @permission('create_discipline_records')
                                 <a class="btn btn-primary btn-sm d-flex align-items-center" href="{{ route('discipline.tracker.create.incident') }}">
                                     <span class="material-symbols-outlined">add_circle</span>

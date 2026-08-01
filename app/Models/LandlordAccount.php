@@ -40,6 +40,8 @@ class LandlordAccount extends Model
         'return_code',
         'client_id',
         'property_id',
+        'advance_id',
+        'schedule_id',
     ];
 
     protected $casts = [

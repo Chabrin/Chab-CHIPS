@@ -133,12 +133,17 @@ class ChequeBookService
     }
 
     /**
-     * Mark a cheque as used.
+     * Mark a cheque as used — only if it is currently locked with the given token,
+     * the same atomic compare-and-swap pattern as lockCheque()/releaseCheque(), so a
+     * caller can't mark a leaf used without actually holding its lock.
+     * Throws \RuntimeException if the leaf isn't locked with that token.
      */
-    public function useCheque(int $leafId, int $userId, string $usedFor = ''): void
+    public function useCheque(int $leafId, string $lockToken, int $userId, string $usedFor = ''): void
     {
-        DB::table('sys_fin_cheque_books_261_repeat')
+        $affected = DB::table('sys_fin_cheque_books_261_repeat')
             ->where('id', $leafId)
+            ->where('lock_token', $lockToken)
+            ->where('current_status_id', ChequeLeaf::STATUS_LOCKED)
             ->update([
                 'current_status_id' => ChequeLeaf::STATUS_USED,
                 'used_by_id'        => $userId,
@@ -146,5 +151,38 @@ class ChequeBookService
                 'used_for'          => $usedFor,
                 'lock_token'        => null,
             ]);
+
+        if ($affected === 0) {
+            throw new \RuntimeException('This cheque is not locked with the expected token — it may have expired or been released.');
+        }
+
+        $bookId = DB::table('sys_fin_cheque_books_261_repeat')->where('id', $leafId)->value('parent_id');
+        $this->refreshBookStatus($bookId ? (int) $bookId : null);
+    }
+
+    /**
+     * Keep the book's own status in sync with its leaves, for display/reporting
+     * purposes only — no functional query in this app actually depends on it (the
+     * book-selection dropdown already filters by leaf availability directly), so
+     * this is purely so /finance/cheque-books shows an accurate status rather than
+     * "Active" forever. Flips to Exhausted once no leaf is left Available or Locked.
+     */
+    public function refreshBookStatus(?int $bookId): void
+    {
+        if (!$bookId) {
+            return;
+        }
+
+        $book = ChequeBook::find($bookId);
+        if (!$book || $book->current_status_id === ChequeBook::STATUS_CANCELLED) {
+            return;
+        }
+
+        $hasRemaining = ChequeLeaf::where('parent_id', $bookId)
+            ->whereIn('current_status_id', [ChequeLeaf::STATUS_AVAILABLE, ChequeLeaf::STATUS_LOCKED])
+            ->exists();
+
+        $book->current_status_id = $hasRemaining ? ChequeBook::STATUS_ACTIVE : ChequeBook::STATUS_EXHAUSTED;
+        $book->save();
     }
 }

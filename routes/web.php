@@ -180,6 +180,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Step 3: Assign Investigator
     Route::post('/discipline/tracker/case/{caseId}/assign-investigator', [DisciplineTrackerController::class, 'assignInvestigator'])->name('discipline.tracker.assign.investigator');
+    Route::post('/discipline/tracker/case/{caseId}/suspend-pending-investigation', [DisciplineTrackerController::class, 'suspendPendingInvestigation'])->name('discipline.tracker.suspend.pending');
+    Route::post('/discipline/tracker/case/{caseId}/lift-suspension', [DisciplineTrackerController::class, 'liftSuspension'])->name('discipline.tracker.lift.suspension');
+    Route::post('/discipline/tracker/case/{caseId}/file-appeal', [DisciplineTrackerController::class, 'fileAppeal'])->name('discipline.tracker.file.appeal');
+    Route::get('/discipline/tracker/appeals', [DisciplineTrackerController::class, 'appealsIndex'])->name('discipline.tracker.appeals.index');
+    Route::post('/discipline/tracker/appeals/{appealId}/decide', [DisciplineTrackerController::class, 'decideAppeal'])->name('discipline.tracker.appeals.decide');
+    Route::get('/discipline/tracker/case/{caseId}/decision-letter', [DisciplineTrackerController::class, 'generateDecisionLetter'])->name('discipline.tracker.decision.letter');
+    Route::get('/discipline/tracker/termination/{terminationId}/certificate-of-service', [DisciplineTrackerController::class, 'generateCertificateOfService'])->name('discipline.tracker.certificate.of.service');
+    Route::post('/discipline/tracker/termination/{terminationId}/exit-interview', [DisciplineTrackerController::class, 'saveExitInterview'])->name('discipline.tracker.exit.interview');
+    Route::post('/discipline/tracker/termination/{terminationId}/final-dues', [DisciplineTrackerController::class, 'saveFinalDues'])->name('discipline.tracker.final.dues');
 
     // Step 4: Upload Evidence
     Route::post('/discipline/tracker/case/{caseId}/upload-evidence', [DisciplineTrackerController::class, 'uploadEvidence'])->name('discipline.tracker.upload.evidence');
@@ -205,6 +214,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Step 10: Record Hearing Minutes
     Route::post('/discipline/tracker/case/{caseId}/record-minutes', [DisciplineTrackerController::class, 'recordHearingMinutes'])->name('discipline.tracker.record.minutes');
+    Route::post('/discipline/tracker/case/{caseId}/approve-minutes', [DisciplineTrackerController::class, 'approveHearingMinutes'])->name('discipline.tracker.approve.minutes');
 
     // Step 11: Save Final Outcome
     Route::post('/discipline/tracker/case/{caseId}/save-outcome', [DisciplineTrackerController::class, 'saveFinalOutcome'])->name('discipline.tracker.save.outcome');
@@ -946,13 +956,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Client Advances Routes
     Route::get('/client/advances', [App\Http\Controllers\ClientAdvanceController::class, 'index'])->name('client.advances.index');
-    // Route::get('/client/advances', [App\Http\Controllers\ClientAdvancesController::class, 'index'])->name('client.advances.index');
     Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvanceController::class, 'create'])->name('client.advances.create');
     Route::get('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'show'])->name('property.advances.show');
     Route::get('/property/advances/{encryptedId}/edit', [App\Http\Controllers\ClientAdvanceController::class, 'edit'])->name('property.advances.edit');
     Route::get('/property/data', [App\Http\Controllers\ClientAdvanceController::class, 'getAdvances'])->name('property.advances.data');
     Route::get('/property/advances/clients', [App\Http\Controllers\ClientAdvanceController::class, 'getClients'])->name('property.advances.clients');
     Route::get('/property/advances/client-properties/{clientId}', [App\Http\Controllers\ClientAdvanceController::class, 'getClientProperties'])->name('property.advances.client-properties');
+    Route::get('/property/advances/search', [App\Http\Controllers\ClientAdvanceController::class, 'searchClientsAndProperties'])->name('property.advances.search');
+    Route::get('/ajax/property/advances/search', [App\Http\Controllers\ClientAdvanceController::class, 'searchClientsAndProperties'])->name('property.advances.search');
     Route::get('/property/client-previous', [App\Http\Controllers\ClientAdvanceController::class, 'getClientPreviousAdvances'])->name('property.advances.client-previous');
     Route::get('/property/misc_charges', [App\Http\Controllers\ClientAdvanceController::class, 'getMiscellaneousCharges'])->name('property.advances.misc_charges');
     Route::post('/property/advances/check-eligibility', [App\Http\Controllers\ClientAdvanceController::class, 'checkClientEligibility'])->name('property.advances.check-eligibility');
@@ -963,20 +974,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/advances/{encryptedId}/schedule/pdf', [App\Http\Controllers\ClientAdvanceController::class, 'downloadPdf'])->name('property.advances.schedule.pdf');
     Route::get('/property/advances/{encryptedId}/schedule/excel', [App\Http\Controllers\ClientAdvanceController::class, 'downloadExcel'])->name('property.advances.schedule.excel');
     Route::post('/property/advances/{encryptedId}/schedule/email', [App\Http\Controllers\ClientAdvanceController::class, 'emailSchedule'])->name('property.advances.schedule.email');
+    Route::post('/property/advances/{encryptedId}/confirm', [App\Http\Controllers\ClientAdvanceController::class, 'confirmAdvance'])->name('property.advances.confirm');
     Route::post('/property/advances/{encryptedId}/post', [App\Http\Controllers\ClientAdvanceController::class, 'postAdvance'])->name('property.advances.post');
     Route::get('/property/advances/{encryptedId}/reschedule', [App\Http\Controllers\ClientAdvanceController::class, 'showRescheduleForm'])->name('property.advances.reschedule');
     Route::post('/property/advances/{encryptedId}/reschedule', [App\Http\Controllers\ClientAdvanceController::class, 'processReschedule'])->name('property.advances.reschedule.store');
-
-
-    // Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvancesController::class, 'create'])->name('client.advances.create');
-    // Route::post('/client/advances/store', [App\Http\Controllers\ClientAdvancesController::class, 'store'])->name('client.advances.store');
-    // Route::get('/client/advances/{encryptedId}/details', [App\Http\Controllers\ClientAdvancesController::class, 'show'])->name('client.advances.show');
-    // Route::post('/client/advances/search', [App\Http\Controllers\ClientAdvancesController::class, 'searchAdvances'])->name('client.advances.search');
-    // Route::post('/client/advances/calculate', [App\Http\Controllers\ClientAdvancesController::class, 'calculateAmortization'])->name('client.advances.calculate');
-    // Route::post('/client/advances/{encryptedId}/approve', [App\Http\Controllers\ClientAdvancesController::class, 'approve'])->name('client.advances.approve');
-    // Route::get('/client/advances/{encryptedId}/ajax', [App\Http\Controllers\ClientAdvancesController::class, 'getAdvanceDetails'])->name('client.advances.ajax');
-    // Route::post('/ajax/deposits/search', [App\Http\Controllers\InvoicingController::class, 'searchDeposits'])->name('ajax.deposits.search');
-    // Route::get('/ajax/deposits/details/{id}', [App\Http\Controllers\InvoicingController::class, 'getDepositDetails'])->name('ajax.deposits.details');
 
 
     Route::post('/property/listings', [App\Http\Controllers\PropertiesController::class, 'store'])->name('property.properties.store');
@@ -1204,9 +1205,12 @@ Route::middleware(['throttle:10,1'])->group(function () {
     Route::post('/lease-contract/sign/{token}', [App\Http\Controllers\LeasesController::class, 'submitSignature'])->name('lease.contract.sign.submit');
 });
 
-// Public advance approval route — landlord clicks link from approval email (no auth, rate-limited)
-Route::middleware(['throttle:5,1'])->group(function () {
+// Public advance approval routes — landlord clicks link from approval email (no auth, rate-limited,
+// signature+expiry enforced). GET only renders a confirm page (safe for email link-scanners to
+// prefetch); POST (from that page's form) performs the actual approval.
+Route::middleware(['throttle:5,1', 'signed'])->group(function () {
     Route::get('/advances/approve/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'approveAdvance'])->name('property.advances.approve');
+    Route::post('/advances/approve/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'confirmApproveAdvance'])->name('property.advances.approve.confirm');
 });
 
 

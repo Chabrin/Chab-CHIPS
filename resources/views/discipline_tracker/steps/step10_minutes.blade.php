@@ -104,6 +104,13 @@
                         </div>
                     @endif
 
+                    @if($case->hearings->first()->minutes->panel_recommendation)
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label text-muted">Panel Recommendation</label>
+                            <div class="p-3 bg-primary text-white rounded">{{ $case->hearings->first()->minutes->panel_recommendation }}</div>
+                        </div>
+                    @endif
+
                     @if($case->hearings->first()->documents && count($case->hearings->first()->documents) > 0)
                         <div class="col-md-12 mt-3">
                             <h6>Documents:</h6>
@@ -117,6 +124,57 @@
                             </ul>
                         </div>
                     @endif
+
+                    <div class="col-md-12 mt-3">
+                        <hr>
+                        <h6>Sign-off</h6>
+                        @if($case->hearings->first()->minutes->approved_at)
+                            <div class="alert alert-success">
+                                <span class="material-symbols-outlined" style="vertical-align:middle;">verified</span>
+                                Signed by {{ $case->hearings->first()->minutes->approvedBy->name ?? 'Unknown' }}
+                                on {{ $case->hearings->first()->minutes->approved_at->format('d M Y, h:i A') }}
+                                — "{{ $case->hearings->first()->minutes->signature_attestation }}"
+                            </div>
+                        @else
+                            <div class="alert alert-warning mb-2">
+                                <span class="material-symbols-outlined" style="vertical-align:middle;">pending</span>
+                                These minutes have not been signed yet.
+                            </div>
+                            <form id="approveMinutesForm" class="row g-2">
+                                @csrf
+                                <div class="col-md-8">
+                                    <input type="text" class="form-control" name="signature_attestation" id="signature_attestation" placeholder="Type your full name to attest these minutes are accurate" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <button type="submit" class="btn btn-success w-100" id="approveMinutesBtn">
+                                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">draw</span>
+                                        Approve &amp; Sign
+                                    </button>
+                                </div>
+                            </form>
+                            <script>
+                            $(document).ready(function() {
+                                $('#approveMinutesForm').on('submit', function(e) {
+                                    e.preventDefault();
+                                    $.ajax({
+                                        url: "{{ route('discipline.tracker.approve.minutes', $case->id) }}",
+                                        type: 'POST',
+                                        data: $(this).serialize(),
+                                        success: function(response) {
+                                            if (response.success) {
+                                                toastr.success(response.message);
+                                                window.reloadCasePage();
+                                            }
+                                        },
+                                        error: function(xhr) {
+                                            toastr.error(xhr.responseJSON?.error || 'Failed to approve minutes');
+                                        }
+                                    });
+                                });
+                            });
+                            </script>
+                        @endif
+                    </div>
                 </div>
             @elseif($case->current_step == 10)
                 <!-- Form Mode -->
@@ -124,6 +182,16 @@
                     <form id="recordHearingMinutesForm" enctype="multipart/form-data">
                         @csrf
                         <div class="row">
+                            @if($case->showCauseNotice)
+                            <div class="col-md-12 mb-3">
+                                <h6 class="text-muted">Reading of Allegations</h6>
+                                <div class="p-3 bg-light rounded border">{{ $case->showCauseNotice->allegations }}</div>
+                                <small class="text-muted">Reference only — restated from the Show Cause notice, not editable here.</small>
+                            </div>
+                            @endif
+
+                            <div class="col-md-12"><h6 class="text-muted">Attendance & Representation</h6></div>
+
                             <div class="col-md-6 mb-3">
                                 <label for="start_time" class="form-label">Start Time <span class="text-danger">*</span></label>
                                 <input type="time" class="form-control" name="start_time" id="start_time" required>
@@ -144,11 +212,26 @@
                                 <small class="text-muted">Uncheck if the employee did not attend</small>
                             </div>
 
+                            @if($case->hearings->first()->employee_representative)
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label text-muted">Employee's Representative</label>
+                                <div class="fw-bold">{{ $case->hearings->first()->employee_representative }}</div>
+                            </div>
+                            @endif
+
                             <div class="col-md-12 mb-3">
                                 <label for="attendees" class="form-label">Attendees</label>
                                 <input type="text" class="form-control" name="attendees[]" id="attendees" placeholder="Enter attendee names, comma-separated">
                                 <small class="text-muted">e.g., John Doe, Jane Smith, etc.</small>
                             </div>
+
+                            <div class="col-md-12"><h6 class="text-muted">Employee's Statement</h6></div>
+
+                            <div class="col-md-12 mb-3">
+                                <textarea class="form-control" name="employee_statement" id="employee_statement" rows="4" placeholder="Employee's statement during hearing..."></textarea>
+                            </div>
+
+                            <div class="col-md-12"><h6 class="text-muted">Panel Questions & Deliberation</h6></div>
 
                             <div class="col-md-12 mb-3">
                                 <label for="proceedings_summary" class="form-label">Proceedings Summary <span class="text-danger">*</span></label>
@@ -156,13 +239,14 @@
                             </div>
 
                             <div class="col-md-12 mb-3">
-                                <label for="employee_statement" class="form-label">Employee Statement</label>
-                                <textarea class="form-control" name="employee_statement" id="employee_statement" rows="4" placeholder="Employee's statement during hearing..."></textarea>
-                            </div>
-
-                            <div class="col-md-12 mb-3">
                                 <label for="panel_questions" class="form-label">Panel Questions & Responses</label>
                                 <textarea class="form-control" name="panel_questions" id="panel_questions" rows="4" placeholder="Questions asked and responses..."></textarea>
+                            </div>
+
+                            <div class="col-md-12"><h6 class="text-muted">Panel Recommendation</h6></div>
+
+                            <div class="col-md-12 mb-3">
+                                <textarea class="form-control" name="panel_recommendation" id="panel_recommendation" rows="3" placeholder="The panel's recommendation to be carried forward to the final outcome..."></textarea>
                             </div>
 
                             <div class="col-md-6 mb-3">
@@ -173,6 +257,11 @@
                             <div class="col-md-12 mb-3">
                                 <label for="documents" class="form-label">Documents (Minutes, Recording, etc.)</label>
                                 <input type="file" class="form-control" name="documents[]" id="documents" multiple>
+                            </div>
+
+                            <div class="col-md-12 mb-3">
+                                <label for="signed_copy" class="form-label">Upload Signed Copy (if a hard copy was signed on paper)</label>
+                                <input type="file" class="form-control" name="signed_copy" id="signed_copy">
                             </div>
 
                             <div class="col-md-12">
@@ -195,7 +284,8 @@
                                 let options = '<option value="">Select minute taker</option>';
                                 if (response.staff) {
                                     response.staff.forEach(function(staff) {
-                                        options += `<option value="${staff.user_id || staff.id}">${staff.full_names}</option>`;
+                                        // staff.id, matching DisciplineHearingMinutes::minuteTaker() (belongsTo Staff)
+                                        options += `<option value="${staff.id}">${staff.full_names}</option>`;
                                     });
                                 }
                                 $('#minute_taker_id').html(options).select2({ placeholder: 'Select minute taker', allowClear: true });

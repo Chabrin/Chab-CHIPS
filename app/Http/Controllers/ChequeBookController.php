@@ -309,6 +309,8 @@ class ChequeBookController extends Controller
                     'locked_at'         => null,
                 ]);
 
+            $this->service->refreshBookStatus($leaf->parent_id);
+
             return response()->json(['success' => true]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);

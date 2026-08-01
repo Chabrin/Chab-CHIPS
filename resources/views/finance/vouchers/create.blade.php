@@ -1219,9 +1219,13 @@ $(document).ready(function () {
 
         // Capture cheque info
         const chequeNumber    = currentEntryCheque.cheque_number;
-        const chequeLeafId    = currentEntryCheque.leaf_id;
-        const chequeLockToken = currentEntryCheque.lock_token;
         const isReuse         = currentEntryIsReuse;
+        // On reuse, this entry's own currentEntryCheque.leaf_id/lock_token are null
+        // (no new lock was taken) — the real values live on the donor entry's lock,
+        // tracked in lockedChequesMap. Look those up so every entry that shares a
+        // cheque still carries the same leaf_id/lock_token to the backend.
+        const chequeLeafId    = isReuse ? (lockedChequesMap[chequeNumber]?.leaf_id ?? null) : currentEntryCheque.leaf_id;
+        const chequeLockToken = isReuse ? (lockedChequesMap[chequeNumber]?.lock_token ?? null) : currentEntryCheque.lock_token;
 
         uidCounter++;
         const uid = uidCounter;
@@ -1239,6 +1243,8 @@ $(document).ready(function () {
             payee_bank_key:       payeeBankData.payee_bank_key       || null,
             payee_bank_label:     payeeBankData.payee_bank_label     || null,
             cheque_number:        chequeNumber || null,
+            cheque_leaf_id:       chequeLeafId || null,
+            cheque_lock_token:    chequeLockToken || null,
             is_reuse:             isReuse,
             amount,
         });
@@ -1382,12 +1388,14 @@ $(document).ready(function () {
                 voucher_type:          voucherType,
                 lines: pendingEntries.map(function (e) {
                     return {
-                        entry_number:      e.entry_number,
-                        entry_description: e.description,
-                        account_number:    e.account_number,
-                        account_bank:      e.account_bank,
-                        cheque_number:     e.cheque_number || null,
-                        amount:            e.amount,
+                        entry_number:       e.entry_number,
+                        entry_description:  e.description,
+                        account_number:     e.account_number,
+                        account_bank:       e.account_bank,
+                        cheque_number:      e.cheque_number || null,
+                        cheque_leaf_id:     e.cheque_leaf_id || null,
+                        cheque_lock_token:  e.cheque_lock_token || null,
+                        amount:             e.amount,
                     };
                 }),
             }),
@@ -1750,6 +1758,7 @@ $(document).ready(function () {
                 if (r.success && r.cheque_number) {
                     $('#splitChequeNo').val(r.cheque_number);
                     $('#splitChequeNo').data('leaf-token-id', r.lock_token);
+                    $('#splitChequeNo').data('leaf-id', r.leaf_id);
                 } else {
                     $('#splitChequeMsg').text('No cheque number available');
                 }
@@ -1768,6 +1777,7 @@ $(document).ready(function () {
         var chequeBookId = $('#splitChequeBook').val();
         var chequeNumber = $('#splitChequeNo').val();
         var chequeLeafToken = $('#splitChequeNo').data('leaf-token-id');
+        var chequeLeafId = $('#splitChequeNo').data('leaf-id');
         
         // Validate
         if (!amount || amount <= 0) {
@@ -1798,6 +1808,7 @@ $(document).ready(function () {
                 source_account_name: sourceAccountName,
                 cheque_book_id: chequeBookId,
                 cheque_number: chequeNumber,
+                cheque_leaf_id: chequeLeafId,
                 cheque_leaf_token: chequeLeafToken
             };
         } else {
@@ -1809,6 +1820,7 @@ $(document).ready(function () {
                 source_account_name: sourceAccountName,
                 cheque_book_id: chequeBookId,
                 cheque_number: chequeNumber,
+                cheque_leaf_id: chequeLeafId,
                 cheque_leaf_token: chequeLeafToken
             });
         }
@@ -1824,7 +1836,7 @@ $(document).ready(function () {
         $('#splitAmount').val('');
         $('#splitSourceAccount').val('');
         $('#splitChequeBook').empty().append('<option value="">-- Select cheque book --</option>');
-        $('#splitChequeNo').val('').data('leaf-token-id', '');
+        $('#splitChequeNo').val('').data('leaf-token-id', '').data('leaf-id', '');
         $('#splitChequeMsg').text('');
     });
 
@@ -1888,6 +1900,7 @@ $(document).ready(function () {
                 if (r.success && r.cheque_number) {
                     $('#returnChequeNo').val(r.cheque_number);
                     $('#returnChequeNo').data('leaf-token-id', r.lock_token);
+                    $('#returnChequeNo').data('leaf-id', r.leaf_id);
                     $('#returnChequeMsg').text('');
                 } else {
                     $('#returnChequeMsg').text('No cheque number available.');
@@ -2047,7 +2060,9 @@ $(document).ready(function () {
                 return {
                     amount: e.amount,
                     source_account_id: e.source_account_id,
-                    cheque_number: e.cheque_number
+                    cheque_number: e.cheque_number,
+                    cheque_leaf_id: e.cheque_leaf_id,
+                    cheque_lock_token: e.cheque_leaf_token
                 };
             });
         } else {
@@ -2063,6 +2078,8 @@ $(document).ready(function () {
             
             voucherData.source_account_id = $('#returnSourceAccount').val();
             voucherData.cheque_number = $('#returnChequeNo').val();
+            voucherData.cheque_leaf_id = $('#returnChequeNo').data('leaf-id');
+            voucherData.cheque_lock_token = $('#returnChequeNo').data('leaf-token-id');
         }
         
         $('#createReturnVoucherBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Creating...');

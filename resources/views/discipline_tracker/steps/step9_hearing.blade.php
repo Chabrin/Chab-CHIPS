@@ -129,6 +129,12 @@
                             <small class="text-muted">Hold Ctrl/Cmd to select multiple members</small>
                         </div>
 
+                        <div class="col-md-12 mb-3">
+                            <label for="employee_representative" class="form-label">Employee's Representative</label>
+                            <input type="text" class="form-control" name="employee_representative" id="employee_representative" placeholder="Name of colleague/representative the employee is bringing (if any)">
+                            <small class="text-muted">The employee has the right to bring a colleague or representative to the hearing — record who, if anyone, they've named.</small>
+                        </div>
+
                         <div class="col-md-12">
                             <button type="submit" class="btn btn-primary" id="scheduleHearingBtn">
                                 <span class="spinner-border spinner-border-sm me-2 d-none" id="scheduleHearingSpinner"></span>
@@ -141,6 +147,11 @@
 
                 <script>
                 $(document).ready(function() {
+                    // Staff IDs of everyone already assigned as investigator on this case —
+                    // excluded from the chairperson/panel pickers so the same person can't
+                    // investigate and then sit in judgment on the same case.
+                    const investigatorIds = @json($case->investigators->pluck('investigator_id')->map(fn($id) => (string) $id)->values());
+
                     // Load users for chairperson and panel
                     $.ajax({
                         url: "{{ url('/ajax/hr/staff/list') }}",
@@ -148,11 +159,20 @@
                         success: function(response) {
                             let chairOptions = '<option value="">Select chairperson</option>';
                             let panelOptions = '';
-                            
+
                             if (response.staff) {
                                 response.staff.forEach(function(staff) {
-                                    chairOptions += `<option value="${staff.user_id || staff.id}">${staff.full_names}</option>`;
-                                    panelOptions += `<option value="${staff.user_id || staff.id}">${staff.full_names}</option>`;
+                                    if (investigatorIds.includes(String(staff.id))) {
+                                        return; // skip the case's investigator(s)
+                                    }
+                                    // Use staff.id consistently (matches the investigator picker
+                                    // and how chairperson/panel are looked up elsewhere) — this
+                                    // used to fall back to staff.user_id, which put chairperson_id/
+                                    // panel_members in a different ID space than investigator_id
+                                    // and silently broke both the notification lookup and any
+                                    // investigator/panel conflict check.
+                                    chairOptions += `<option value="${staff.id}">${staff.full_names}</option>`;
+                                    panelOptions += `<option value="${staff.id}">${staff.full_names}</option>`;
                                 });
                             }
                             

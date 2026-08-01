@@ -11,6 +11,8 @@ class DisciplineShowCauseDocument extends Model
         'show_cause_id',
         'document_name',
         'document_path',
+        'source_evidence_file_id',
+        'source_witness_document_id',
     ];
 
     protected $casts = [

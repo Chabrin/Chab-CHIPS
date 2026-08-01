@@ -93,8 +93,9 @@
                                 <div class="col-md-5">
                                     <label class="form-label-sm">Client <span class="text-danger">*</span></label>
                                     <select class="form-select form-select-sm" id="client" name="client_id" required>
-                                        <option value="">Loading...</option>
+                                        <option value=""></option>
                                     </select>
+                                    <small class="text-muted">Type to search - by landlord name, or by property name/reference if you don't know the landlord.</small>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label-sm">Property <span class="text-danger">*</span></label>
@@ -263,15 +264,46 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {
-        // Initialize Select2
-        $('#client, #property, #advanceType, #expenseCategory, #paymentMethod').select2({
+        // Initialize Select2 for the plain dropdowns
+        $('#property, #advanceType, #expenseCategory, #paymentMethod').select2({
             placeholder: 'Select option',
             allowClear: true,
             width: '100%'
         });
 
-        // Load initial data
-        loadClients();
+        // Client field is a live search - hitting the server on every keystroke, matching
+        // either a landlord's name or a property's name/reference. Each result carries a
+        // client_id (the value actually selected) and, for property matches, a property_id.
+        $('#client').select2({
+            placeholder: 'Type to search - landlord name or property name/reference',
+            allowClear: true,
+            width: '100%',
+            minimumInputLength: 1,
+            ajax: {
+                url: '/ajax/property/advances/search',
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return { q: params.term || '' };
+                },
+                processResults: function(response) {
+                    return { results: response.results || [] };
+                },
+                cache: true
+            }
+        });
+
+        // A client picked via a property-name match also carries which specific property
+        // matched, so it can be pre-selected once that landlord's own property list has
+        // loaded. select2:select fires with the full result object (id, text, property_id)
+        // before the underlying <select>'s native change event fires.
+        let pendingPropertySelection = null;
+        $('#client').on('select2:select', function(e) {
+            pendingPropertySelection = e.params.data.property_id || null;
+        });
+        $('#client').on('select2:clear', function() {
+            pendingPropertySelection = null;
+        });
 
         // Cheque charge mapping by expense category
         const chequeCharges = {
@@ -287,34 +319,7 @@
             'security_services': { charge: 100, billed_to: 'Client' }
         };
 
-        // Load Clients
-        function loadClients() {
-            $.ajax({
-                url: '/ajax/clients/list',
-                method: 'GET',
-                success: function(response) {
-                    const select = $('#client');
-                    select.empty().append('<option value="">Select Client</option>');
-                    const clients = response.data || response.clients || [];
-
-                    // Filter LAN clients
-                    const lanClients = clients.filter(c => c.reference_number && c.reference_number.startsWith('LAN'));
-                    lanClients.forEach(function(client) {
-                        select.append(`<option value="${client.id}">${client.names} (${client.reference_number})</option>`);
-                    });
-                    select.trigger('change.select2');
-                },
-                error: function() {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Failed to load clients'
-                    });
-                }
-            });
-        }
-
-        // Client selection - load properties and eligibility
+        // Client (or property-match) selection - load properties and eligibility
         $('#client').on('change', function() {
             const clientId = $(this).val();
             const propertySelect = $('#property');
@@ -336,6 +341,10 @@
                             propertySelect.append(`<option value="${p.id}">${p.reference_number} - ${p.property_name}${mergedTag}</option>`);
                         });
                         propertySelect.prop('disabled', false);
+                    }
+                    if (pendingPropertySelection) {
+                        propertySelect.val(pendingPropertySelection);
+                        pendingPropertySelection = null;
                     }
                     propertySelect.trigger('change.select2');
                 }

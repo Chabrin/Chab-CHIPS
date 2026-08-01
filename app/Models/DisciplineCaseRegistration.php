@@ -14,6 +14,8 @@ class DisciplineCaseRegistration extends Model
         'hr_notes',
         'priority',
         'estimated_closure_date',
+        'decision',
+        'rejection_reason',
         'hr_notified',
         'notification_sent_at',
     ];

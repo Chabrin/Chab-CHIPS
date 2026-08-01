@@ -361,6 +361,7 @@ class HrReportsController extends Controller
                 ->select(
                     'sys_staff.staff_number', 'sys_staff.full_names',
                     'sys_hr_payroll_summary.basic_salary', 'sys_hr_payroll_summary.acting_allowance',
+                    'sys_hr_payroll_summary.total_earnings',
                     'sys_hr_payroll_summary.tax_payable', 'sys_hr_payroll_summary.nssf',
                     'sys_hr_payroll_summary.nhif', 'sys_hr_payroll_summary.housing_levy',
                     'sys_hr_payroll_summary.total_deductions', 'sys_hr_payroll_summary.net_pay',
@@ -372,6 +373,13 @@ class HrReportsController extends Controller
                 ->orderBy('sys_staff.full_names')
                 ->get();
 
+            // total_earnings is only populated for payroll runs processed after the fix that
+            // actually saves it — fall back to the old (basic + acting_allowance) formula for
+            // older records where it's still 0.
+            $grossOf = fn($r) => (float) $r->total_earnings > 0
+                ? (float) $r->total_earnings
+                : (float) $r->basic_salary + (float) $r->acting_allowance;
+
             $data = $records->map(fn($r, $i) => [
                 'no'               => $i + 1,
                 'staff_number'     => $r->staff_number ?? '-',
@@ -379,7 +387,7 @@ class HrReportsController extends Controller
                 'department'       => $r->department_name ?? '-',
                 'basic_salary'     => number_format($r->basic_salary, 2),
                 'allowances'       => number_format($r->acting_allowance, 2),
-                'gross'            => number_format($r->basic_salary + $r->acting_allowance, 2),
+                'gross'            => number_format($grossOf($r), 2),
                 'paye'             => number_format($r->tax_payable, 2),
                 'nssf'             => number_format($r->nssf, 2),
                 'shif'             => number_format($r->nhif, 2),
@@ -391,7 +399,7 @@ class HrReportsController extends Controller
             $totals = [
                 'basic_salary'     => number_format($records->sum('basic_salary'), 2),
                 'allowances'       => number_format($records->sum('acting_allowance'), 2),
-                'gross'            => number_format($records->sum(fn($r) => $r->basic_salary + $r->acting_allowance), 2),
+                'gross'            => number_format($records->sum($grossOf), 2),
                 'paye'             => number_format($records->sum('tax_payable'), 2),
                 'nssf'             => number_format($records->sum('nssf'), 2),
                 'shif'             => number_format($records->sum('nhif'), 2),
@@ -420,6 +428,7 @@ class HrReportsController extends Controller
                 ->select(
                     'sys_staff.staff_number', 'sys_staff.full_names',
                     'sys_hr_payroll_summary.basic_salary', 'sys_hr_payroll_summary.acting_allowance',
+                    'sys_hr_payroll_summary.total_earnings',
                     'sys_hr_payroll_summary.tax_payable', 'sys_hr_payroll_summary.nssf',
                     'sys_hr_payroll_summary.nhif', 'sys_hr_payroll_summary.housing_levy',
                     'sys_hr_payroll_summary.total_deductions', 'sys_hr_payroll_summary.net_pay',
@@ -431,6 +440,13 @@ class HrReportsController extends Controller
                 ->orderBy('sys_staff.full_names')
                 ->get();
 
+            // total_earnings is only populated for payroll runs processed after the fix that
+            // actually saves it — fall back to the old (basic + acting_allowance) formula for
+            // older records where it's still 0.
+            $grossOf = fn($r) => (float) $r->total_earnings > 0
+                ? (float) $r->total_earnings
+                : (float) $r->basic_salary + (float) $r->acting_allowance;
+
             $rows = $records->map(fn($r, $i) => [
                 $i + 1,
                 $r->staff_number ?? '-',
@@ -438,7 +454,7 @@ class HrReportsController extends Controller
                 $r->department_name ?? '-',
                 number_format($r->basic_salary, 2),
                 number_format($r->acting_allowance, 2),
-                number_format($r->basic_salary + $r->acting_allowance, 2),
+                number_format($grossOf($r), 2),
                 number_format($r->tax_payable, 2),
                 number_format($r->nssf, 2),
                 number_format($r->nhif, 2),
@@ -452,7 +468,7 @@ class HrReportsController extends Controller
                 '', 'TOTALS', '', '',
                 number_format($records->sum('basic_salary'), 2),
                 number_format($records->sum('acting_allowance'), 2),
-                number_format($records->sum(fn($r) => $r->basic_salary + $r->acting_allowance), 2),
+                number_format($records->sum($grossOf), 2),
                 number_format($records->sum('tax_payable'), 2),
                 number_format($records->sum('nssf'), 2),
                 number_format($records->sum('nhif'), 2),
@@ -503,7 +519,10 @@ class HrReportsController extends Controller
                     'sys_set_departments.department_name',
                     DB::raw("COUNT(sys_hr_payroll_summary.id) as staff_count"),
                     DB::raw("SUM(sys_hr_payroll_summary.basic_salary) as total_basic"),
-                    DB::raw("SUM(sys_hr_payroll_summary.basic_salary + sys_hr_payroll_summary.acting_allowance) as total_gross"),
+                    // total_earnings is only populated for payroll runs processed after the fix
+                    // that actually saves it — fall back to the old (basic + acting_allowance)
+                    // formula for older records where it's still 0.
+                    DB::raw("SUM(CASE WHEN sys_hr_payroll_summary.total_earnings > 0 THEN sys_hr_payroll_summary.total_earnings ELSE sys_hr_payroll_summary.basic_salary + sys_hr_payroll_summary.acting_allowance END) as total_gross"),
                     DB::raw("SUM(sys_hr_payroll_summary.tax_payable) as total_paye"),
                     DB::raw("SUM(sys_hr_payroll_summary.nssf) as total_nssf"),
                     DB::raw("SUM(sys_hr_payroll_summary.nhif) as total_shif"),
@@ -564,7 +583,10 @@ class HrReportsController extends Controller
                     'sys_set_departments.department_name',
                     DB::raw("COUNT(sys_hr_payroll_summary.id) as staff_count"),
                     DB::raw("SUM(sys_hr_payroll_summary.basic_salary) as total_basic"),
-                    DB::raw("SUM(sys_hr_payroll_summary.basic_salary + sys_hr_payroll_summary.acting_allowance) as total_gross"),
+                    // total_earnings is only populated for payroll runs processed after the fix
+                    // that actually saves it — fall back to the old (basic + acting_allowance)
+                    // formula for older records where it's still 0.
+                    DB::raw("SUM(CASE WHEN sys_hr_payroll_summary.total_earnings > 0 THEN sys_hr_payroll_summary.total_earnings ELSE sys_hr_payroll_summary.basic_salary + sys_hr_payroll_summary.acting_allowance END) as total_gross"),
                     DB::raw("SUM(sys_hr_payroll_summary.tax_payable) as total_paye"),
                     DB::raw("SUM(sys_hr_payroll_summary.nssf) as total_nssf"),
                     DB::raw("SUM(sys_hr_payroll_summary.nhif) as total_shif"),

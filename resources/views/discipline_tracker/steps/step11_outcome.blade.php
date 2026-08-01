@@ -145,12 +145,14 @@
                             <select class="form-select" id="decision" name="decision" required>
                                 <option value="">Select Decision</option>
                                 <option value="No Action">No Action</option>
+                                <option value="Caution">Caution</option>
                                 <option value="Verbal Warning">Verbal Warning</option>
                                 <option value="Written Warning">Written Warning</option>
                                 <option value="Final Warning">Final Warning</option>
                                 <option value="Suspension">Suspension</option>
                                 <option value="Demotion">Demotion</option>
                                 <option value="Dismissal">Dismissal</option>
+                                <option value="Summary Dismissal">Summary Dismissal</option>
                                 <option value="Other">Other</option>
                             </select>
                         </div>
@@ -182,9 +184,9 @@
                         </div>
 
                         <div class="col-12 mb-3">
-                            <label for="reasoning" class="form-label">Reasoning</label>
-                            <textarea class="form-control" id="reasoning" name="reasoning" rows="3" 
-                                      placeholder="Explain the reasoning behind this decision"></textarea>
+                            <label for="reasoning" class="form-label">Reasoning <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="reasoning" name="reasoning" rows="3"
+                                      placeholder="Explain the reasoning behind this decision" required></textarea>
                         </div>
 
                         <div class="col-12 mb-3">

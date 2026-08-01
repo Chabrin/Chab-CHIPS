@@ -42,11 +42,20 @@ use App\Models\DisciplineDeadlineExtension;
 use App\Models\DisciplineInvestigationNote;
 use App\Models\DisciplineShowCauseDocument;
 use App\Models\DisciplineTrainingAssignment;
+use App\Models\DisciplineSuspension;
+use App\Models\DisciplineAppeal;
+use App\Models\EmployeeTermination;
+use App\Models\ExitInterview;
+use App\Models\FinalDues;
+use App\Models\Contract;
+use App\Traits\PdfGenerationTrait;
 use Illuminate\Validation\ValidationException;
 
 
 class DisciplineTrackerController extends Controller
 {
+    use PdfGenerationTrait;
+
     /**
      * Display discipline cases list
      */
@@ -118,6 +127,7 @@ class DisciplineTrackerController extends Controller
                 'incidentReports.reportedBy',          // Changed from incidentReport
                 'registration',                        // Changed from caseRegistration
                 'investigators.investigator',
+                'suspensions',
                 'evidence.files',
                 'witnessStatements.documents',
                 'investigationNotes',
@@ -132,6 +142,7 @@ class DisciplineTrackerController extends Controller
                 'outcome.documents',
                 'outcome.decidedBy',
                 'outcome.approvedBy',
+                'appeals',
                 'trainingAssignments',
                 'historyUpdates',
                 'closure',                             // Changed from caseClosure
@@ -292,21 +303,51 @@ class DisciplineTrackerController extends Controller
             $case = DisciplineCase::findOrFail($id);
 
             $validated = $request->validate([
+                'decision' => 'nullable|in:Proceed,Reject',
                 'hr_notes' => 'nullable|string',
-                'priority' => 'required|in:Low,Medium,High,Critical',
+                'priority' => 'required_if:decision,Proceed|nullable|in:Low,Medium,High,Critical',
                 'estimated_closure_date' => 'nullable|date',
+                'rejection_reason' => 'required_if:decision,Reject|nullable|string',
             ]);
+
+            $decision = $validated['decision'] ?? 'Proceed';
 
             DisciplineCaseRegistration::create([
                 'case_id' => $case->id,
                 'registered_by' => Auth::id(),
                 'registration_date' => now(),
-                'hr_notes' => $validated['hr_notes'],
-                'priority' => $validated['priority'],
-                'estimated_closure_date' => $validated['estimated_closure_date'],
+                'hr_notes' => $validated['hr_notes'] ?? null,
+                'priority' => $validated['priority'] ?? null,
+                'estimated_closure_date' => $validated['estimated_closure_date'] ?? null,
+                'decision' => $decision,
+                'rejection_reason' => $validated['rejection_reason'] ?? null,
                 'hr_notified' => true,
                 'notification_sent_at' => now(),
             ]);
+
+            if ($decision === 'Reject') {
+                DisciplineCaseClosure::create([
+                    'case_id' => $case->id,
+                    'closure_date' => now(),
+                    'closure_reason' => 'No Case to Answer',
+                    'closure_notes' => 'Rejected at registration: ' . $validated['rejection_reason'],
+                    'closed_by' => Auth::id(),
+                ]);
+
+                $case->update([
+                    'current_step' => 14,
+                    'current_status_id' => 42, // Closed
+                    'closed_at' => now(),
+                    'closed_by' => Auth::id(),
+                ]);
+
+                $this->logActivity($case->id, 2, 'Case Rejected', 'Case rejected at registration: ' . $validated['rejection_reason']);
+                $this->sendStepNotification($case, 2, 'case_rejected');
+
+                DB::commit();
+
+                return response()->json(['success' => true, 'message' => 'Case rejected and closed']);
+            }
 
             // Update case step
             $case->update(['current_step' => 3]);
@@ -355,8 +396,8 @@ class DisciplineTrackerController extends Controller
                 'investigator_id' => $validated['investigator_id'],
                 'assigned_by' => Auth::id(),
                 'assigned_at' => now(),
-                'investigation_start_date' => $validated['investigation_start_date'],
-                'investigation_deadline' => $validated['investigation_deadline'],
+                'investigation_start_date' => $validated['investigation_start_date'] ?? null,
+                'investigation_deadline' => $validated['investigation_deadline'] ?? null,
                 'status' => 'Assigned',
             ]);
 
@@ -366,8 +407,11 @@ class DisciplineTrackerController extends Controller
             // Log activity
             $this->logActivity($case->id, 3, 'Step Completed', 'Investigator assigned');
 
-            // Send notification to investigator
+            // Send notification to investigator, and separately inform the employee
+            // that an investigation has been opened (previously they were only told
+            // much later, at the Show Cause stage).
             $this->sendStepNotification($case, 3, 'investigator_assigned');
+            $this->sendStepNotification($case, 3, 'investigation_opened');
 
             DB::commit();
 
@@ -384,6 +428,98 @@ class DisciplineTrackerController extends Controller
                 Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to assign investigator'], 500);
+        }
+    }
+
+    /**
+     * Suspend an employee on full pay as a protective measure during an investigation —
+     * distinct from "Suspension" as a final disciplinary decision (Step 11). Available once
+     * an investigation is underway and there's no already-active protective suspension.
+     */
+    public function suspendPendingInvestigation(Request $request, $caseId)
+    {
+        DB::beginTransaction();
+        try {
+            $case = DisciplineCase::findOrFail($caseId);
+
+            if ($case->activeSuspension()) {
+                return response()->json(['error' => 'This case already has an active protective suspension'], 422);
+            }
+
+            $validated = $request->validate([
+                'reason' => 'required|string',
+                'pay_status' => 'nullable|string|max:50',
+            ]);
+
+            DisciplineSuspension::create([
+                'case_id' => $case->id,
+                'suspended_by' => Auth::id(),
+                'suspended_at' => now(),
+                'reason' => $validated['reason'],
+                'pay_status' => $validated['pay_status'] ?? 'Full Pay',
+            ]);
+
+            $this->logActivity($case->id, $case->current_step, 'Protective Suspension', 'Employee suspended pending investigation');
+            $this->sendStepNotification($case, $case->current_step, 'investigation_suspension');
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Employee suspended pending investigation']);
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to suspend employee'], 500);
+        }
+    }
+
+    /**
+     * Lift an active protective suspension.
+     */
+    public function liftSuspension(Request $request, $caseId)
+    {
+        DB::beginTransaction();
+        try {
+            $case = DisciplineCase::findOrFail($caseId);
+            $suspension = $case->activeSuspension();
+
+            if (!$suspension) {
+                return response()->json(['error' => 'There is no active protective suspension on this case'], 422);
+            }
+
+            $validated = $request->validate([
+                'notes' => 'nullable|string',
+            ]);
+
+            $suspension->update([
+                'lifted_by' => Auth::id(),
+                'lifted_at' => now(),
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            $this->logActivity($case->id, $case->current_step, 'Suspension Lifted', 'Protective suspension lifted');
+            $this->sendStepNotification($case, $case->current_step, 'suspension_lifted');
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Suspension lifted']);
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to lift suspension'], 500);
         }
     }
 
@@ -586,11 +722,25 @@ class DisciplineTrackerController extends Controller
             $validated = $request->validate([
                 'notice_number' => 'nullable|string|max:50',
                 'issue_date' => 'required|date',
-                'response_deadline' => 'required|date|after:issue_date',
+                'response_deadline' => [
+                    'required',
+                    'date',
+                    'after:issue_date',
+                    function ($attribute, $value, $fail) use ($request) {
+                        $minDeadline = \Carbon\Carbon::parse($request->input('issue_date'))->addHours(48);
+                        if (\Carbon\Carbon::parse($value)->lt($minDeadline)) {
+                            $fail('The response deadline must be at least 48 hours after the issue date.');
+                        }
+                    },
+                ],
                 'allegations' => 'required|string',
                 'potential_consequences' => 'nullable|string',
                 'delivered_method' => 'required|in:Hand Delivery,Email,Registered Mail,Courier',
                 'documents.*' => 'nullable|file|max:10240',
+                'evidence_file_ids' => 'nullable|array',
+                'evidence_file_ids.*' => 'integer|exists:discipline_evidence_files,id',
+                'witness_document_ids' => 'nullable|array',
+                'witness_document_ids.*' => 'integer|exists:discipline_witness_documents,id',
             ]);
 
             // Auto-generate notice number if not provided
@@ -616,7 +766,7 @@ class DisciplineTrackerController extends Controller
                 'issue_date' => $validated['issue_date'],
                 'response_deadline' => $validated['response_deadline'],
                 'allegations' => $validated['allegations'],
-                'potential_consequences' => $validated['potential_consequences'],
+                'potential_consequences' => $validated['potential_consequences'] ?? null,
                 'issued_by' => Auth::id(),
                 'delivered_method' => $validated['delivered_method'],
             ]);
@@ -625,11 +775,53 @@ class DisciplineTrackerController extends Controller
             if ($request->hasFile('documents')) {
                 foreach ($request->file('documents') as $file) {
                     $path = $file->store('discipline/show_cause/' . $case->id, 'public');
-                    
+
                     DisciplineShowCauseDocument::create([
                         'show_cause_id' => $showCause->id,
                         'document_name' => $file->getClientOriginalName(),
                         'document_path' => $path,
+                    ]);
+                }
+            }
+
+            // Carry through evidence/witness statement files already gathered during the
+            // investigation, rather than requiring them to be re-uploaded here. Files are
+            // physically copied into the show-cause storage path (not just referenced) so the
+            // notice's attachments remain intact even if the original evidence is later edited.
+            if (!empty($validated['evidence_file_ids'])) {
+                $evidenceFiles = DisciplineEvidenceFile::whereIn('id', $validated['evidence_file_ids'])
+                    ->whereHas('evidence', function ($q) use ($case) {
+                        $q->where('case_id', $case->id);
+                    })->get();
+
+                foreach ($evidenceFiles as $evidenceFile) {
+                    $newPath = 'discipline/show_cause/' . $case->id . '/' . basename($evidenceFile->file_path);
+                    Storage::disk('public')->copy($evidenceFile->file_path, $newPath);
+
+                    DisciplineShowCauseDocument::create([
+                        'show_cause_id' => $showCause->id,
+                        'document_name' => $evidenceFile->file_name,
+                        'document_path' => $newPath,
+                        'source_evidence_file_id' => $evidenceFile->id,
+                    ]);
+                }
+            }
+
+            if (!empty($validated['witness_document_ids'])) {
+                $witnessDocuments = DisciplineWitnessDocument::whereIn('id', $validated['witness_document_ids'])
+                    ->whereHas('witnessStatement', function ($q) use ($case) {
+                        $q->where('case_id', $case->id);
+                    })->get();
+
+                foreach ($witnessDocuments as $witnessDocument) {
+                    $newPath = 'discipline/show_cause/' . $case->id . '/' . basename($witnessDocument->document_path);
+                    Storage::disk('public')->copy($witnessDocument->document_path, $newPath);
+
+                    DisciplineShowCauseDocument::create([
+                        'show_cause_id' => $showCause->id,
+                        'document_name' => $witnessDocument->document_name,
+                        'document_path' => $newPath,
+                        'source_witness_document_id' => $witnessDocument->id,
                     ]);
                 }
             }
@@ -670,12 +862,15 @@ class DisciplineTrackerController extends Controller
         ]);
     
         $case = DisciplineCase::findOrFail($validated['case_id']);
-        
-        // Verify employee is the subject of the case
-        // if ($case->staff_id !== Auth::id()) {
-        //     return response()->json(['error' => 'Unauthorized'], 403);
-        // }
-    
+
+        // Verify the requester is the subject of the case (staff_id is a staff row,
+        // not a user row — resolve the requester's own staff record via UserStaffLink,
+        // the same way SelfServiceController does, rather than comparing to Auth::id()).
+        $staffLink = \App\Models\UserStaffLink::where('user_id', Auth::id())->first();
+        if (!$staffLink || $case->staff_id !== $staffLink->staff_id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         // Check if there's already a pending request
         $existingRequest = DisciplineDeadlineExtension::where('case_id', $case->id)
             ->where('requested_by', Auth::id())
@@ -925,8 +1120,8 @@ class DisciplineTrackerController extends Controller
                 'case_id' => $case->id,
                 'response_date' => $validated['response_date'],
                 'response_text' => $validated['response_text'],
-                'admits_allegations' => $validated['admits_allegations'],
-                'mitigating_circumstances' => $validated['mitigating_circumstances'],
+                'admits_allegations' => $validated['admits_allegations'] ?? null,
+                'mitigating_circumstances' => $validated['mitigating_circumstances'] ?? null,
                 'submitted_by' => Auth::id(),
                 'received_by' => Auth::id(),
                 'received_at' => now(),
@@ -987,15 +1182,34 @@ class DisciplineTrackerController extends Controller
                 'hearing_type' => 'required|in:Preliminary,Full Hearing,Appeal',
                 'chairperson_id' => 'nullable',
                 'panel_members' => 'nullable|array',
+                'employee_representative' => 'nullable|string|max:255',
             ]);
+
+            // Conflict of interest: the investigator on this case cannot also sit on the
+            // hearing panel/chair it.
+            $investigatorIds = DisciplineInvestigator::where('case_id', $case->id)
+                ->pluck('investigator_id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+            $panelIds = array_map('strval', $validated['panel_members'] ?? []);
+            $proposedIds = array_filter(array_merge(
+                [(string) ($validated['chairperson_id'] ?? '')],
+                $panelIds
+            ));
+            if (array_intersect($investigatorIds, $proposedIds)) {
+                throw ValidationException::withMessages([
+                    'chairperson_id' => ['The investigator assigned to this case cannot also serve on the hearing panel.'],
+                ]);
+            }
 
             DisciplineHearing::create([
                 'case_id' => $case->id,
                 'hearing_date' => $validated['hearing_date'],
-                'hearing_location' => $validated['hearing_location'],
+                'hearing_location' => $validated['hearing_location'] ?? null,
                 'hearing_type' => $validated['hearing_type'],
-                'chairperson_id' => $validated['chairperson_id'],
-                'panel_members' => $validated['panel_members'] ? json_encode($validated['panel_members']) : null,
+                'chairperson_id' => $validated['chairperson_id'] ?? null,
+                'panel_members' => !empty($validated['panel_members']) ? json_encode($validated['panel_members']) : null,
+                'employee_representative' => $validated['employee_representative'] ?? null,
                 'scheduled_by' => Auth::id(),
             ]);
 
@@ -1047,20 +1261,23 @@ class DisciplineTrackerController extends Controller
                 'proceedings_summary' => 'required|string',
                 'employee_statement' => 'nullable|string',
                 'panel_questions' => 'nullable|string',
+                'panel_recommendation' => 'nullable|string',
                 'minute_taker_id' => 'nullable',
                 'employee_attended' => 'nullable|boolean',
                 'documents.*' => 'nullable|file|max:10240',
+                'signed_copy' => 'nullable|file|max:10240',
             ]);
-    
+
             $minutes = DisciplineHearingMinutes::create([
                 'hearing_id' => $hearing->id,
-                'attendees' => $validated['attendees'] ? json_encode($validated['attendees']) : null,
+                'attendees' => !empty($validated['attendees']) ? json_encode($validated['attendees']) : null,
                 'start_time' => $validated['start_time'],
-                'end_time' => $validated['end_time'],
+                'end_time' => $validated['end_time'] ?? null,
                 'proceedings_summary' => $validated['proceedings_summary'],
-                'employee_statement' => $validated['employee_statement'],
-                'panel_questions' => $validated['panel_questions'],
-                'minute_taker_id' => $validated['minute_taker_id'],
+                'employee_statement' => $validated['employee_statement'] ?? null,
+                'panel_questions' => $validated['panel_questions'] ?? null,
+                'panel_recommendation' => $validated['panel_recommendation'] ?? null,
+                'minute_taker_id' => $validated['minute_taker_id'] ?? null,
             ]);
     
             // Update hearing record with employee attendance status
@@ -1072,7 +1289,7 @@ class DisciplineTrackerController extends Controller
             if ($request->hasFile('documents')) {
                 foreach ($request->file('documents') as $file) {
                     $path = $file->store('discipline/hearing/' . $case->id, 'public');
-                    
+
                     DisciplineHearingDocument::create([
                         'hearing_id' => $hearing->id,
                         'document_name' => $file->getClientOriginalName(),
@@ -1081,7 +1298,21 @@ class DisciplineTrackerController extends Controller
                     ]);
                 }
             }
-    
+
+            // A signed hard copy is tagged distinctly from the generic documents above so
+            // it's identifiable as the attested record, not just another attachment.
+            if ($request->hasFile('signed_copy')) {
+                $file = $request->file('signed_copy');
+                $path = $file->store('discipline/hearing/' . $case->id, 'public');
+
+                DisciplineHearingDocument::create([
+                    'hearing_id' => $hearing->id,
+                    'document_name' => $file->getClientOriginalName(),
+                    'document_path' => $path,
+                    'document_type' => 'Signed Minutes',
+                ]);
+            }
+
             // Update case step
             $case->update(['current_step' => 11]);
     
@@ -1108,6 +1339,46 @@ class DisciplineTrackerController extends Controller
     }
 
     /**
+     * Approve/sign hearing minutes. This app has no canvas-signature infrastructure
+     * elsewhere, so signing is a typed-name attestation (matching the confirmation-style
+     * conventions already used throughout this codebase) rather than a drawn signature.
+     */
+    public function approveHearingMinutes(Request $request, $caseId)
+    {
+        try {
+            $case = DisciplineCase::findOrFail($caseId);
+            $hearing = $case->hearings()->first();
+
+            if (!$hearing || !$hearing->minutes) {
+                return response()->json(['error' => 'Hearing minutes not found'], 404);
+            }
+
+            $validated = $request->validate([
+                'signature_attestation' => 'required|string|max:255',
+            ]);
+
+            $hearing->minutes->update([
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+                'signature_attestation' => $validated['signature_attestation'],
+            ]);
+
+            $this->logActivity($case->id, 10, 'Minutes Approved', 'Hearing minutes signed/approved by ' . (Auth::user()->name ?? Auth::id()));
+
+            return response()->json(['success' => true, 'message' => 'Minutes approved and signed']);
+        } catch (ValidationException $e) {
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to approve minutes'], 500);
+        }
+    }
+
+    /**
      * Save final outcome (Step 11)
      */
     public function saveFinalOutcome(Request $request, $caseId)
@@ -1118,10 +1389,10 @@ class DisciplineTrackerController extends Controller
             
             $validated = $request->validate([
                 'decision_date' => 'required|date',
-                'decision' => 'required|in:No Action,Verbal Warning,Written Warning,Final Warning,Suspension,Demotion,Dismissal,Other',
+                'decision' => 'required|in:No Action,Caution,Verbal Warning,Written Warning,Final Warning,Suspension,Demotion,Dismissal,Summary Dismissal,Other',
                 'action_taken_id' => 'nullable|exists:action_taken,id',
                 'findings' => 'required|string',
-                'reasoning' => 'nullable|string',
+                'reasoning' => 'required|string',
                 'sanctions' => 'nullable|string',
                 'effective_date' => 'nullable|date',
                 'suspension_days' => 'nullable|integer|min:1',
@@ -1136,16 +1407,16 @@ class DisciplineTrackerController extends Controller
                 'case_id' => $case->id,
                 'decision_date' => $validated['decision_date'],
                 'decision' => $validated['decision'],
-                'action_taken_id' => $validated['action_taken_id'],
+                'action_taken_id' => $validated['action_taken_id'] ?? null,
                 'findings' => $validated['findings'],
                 'reasoning' => $validated['reasoning'],
-                'sanctions' => $validated['sanctions'],
-                'effective_date' => $validated['effective_date'],
-                'suspension_days' => $validated['suspension_days'],
+                'sanctions' => $validated['sanctions'] ?? null,
+                'effective_date' => $validated['effective_date'] ?? null,
+                'suspension_days' => $validated['suspension_days'] ?? null,
                 'appeal_allowed' => $validated['appeal_allowed'] ?? false,
                 'appeal_deadline' => $validated['appeal_deadline'] ?? null,
                 'decided_by' => $validated['decided_by_id'],
-                'approved_by' => $validated['approved_by'],
+                'approved_by' => $validated['approved_by'] ?? null,
             ]);
 
             // Handle document uploads
@@ -1159,6 +1430,14 @@ class DisciplineTrackerController extends Controller
                         'document_path' => $path,
                     ]);
                 }
+            }
+
+            // Dismissal decisions feed into normal HR separation instead of ending here —
+            // auto-create a linked (Pending) termination record so HR completes severance/
+            // final-dues detail in the existing termination screens rather than re-entering
+            // everything from scratch in a disconnected module.
+            if (in_array($validated['decision'], ['Dismissal', 'Summary Dismissal'])) {
+                $this->createLinkedTermination($case, $outcome);
             }
 
             // Update case step
@@ -1345,6 +1624,300 @@ class DisciplineTrackerController extends Controller
                 Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to close case'], 500);
+        }
+    }
+
+    /**
+     * Employee files an appeal against a decided outcome — self-service, gated by
+     * outcome.appeal_allowed and, critically, actually enforces the appeal_deadline
+     * server-side (previously nothing did).
+     */
+    public function fileAppeal(Request $request, $caseId)
+    {
+        DB::beginTransaction();
+        try {
+            $case = DisciplineCase::findOrFail($caseId);
+            $outcome = $case->outcome;
+
+            if (!$outcome) {
+                return response()->json(['error' => 'This case has no decision to appeal'], 422);
+            }
+
+            if (!$outcome->appeal_allowed) {
+                return response()->json(['error' => 'This decision is not open to appeal'], 422);
+            }
+
+            if ($outcome->appeal_deadline && now()->startOfDay()->gt(\Carbon\Carbon::parse($outcome->appeal_deadline)->endOfDay())) {
+                return response()->json(['error' => 'The appeal window (7 days) for this decision has closed'], 422);
+            }
+
+            $existing = DisciplineAppeal::where('outcome_id', $outcome->id)
+                ->where('status', '!=', 'Withdrawn')
+                ->first();
+            if ($existing) {
+                return response()->json(['error' => 'An appeal has already been filed for this decision'], 422);
+            }
+
+            // Only the employee themselves may appeal their own case.
+            $staffLink = \App\Models\UserStaffLink::where('user_id', Auth::id())->first();
+            if (!$staffLink || $case->staff_id !== $staffLink->staff_id) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $validated = $request->validate([
+                'grounds' => 'required|string',
+            ]);
+
+            DisciplineAppeal::create([
+                'case_id' => $case->id,
+                'outcome_id' => $outcome->id,
+                'filed_by' => Auth::id(),
+                'filed_at' => now(),
+                'grounds' => $validated['grounds'],
+                'status' => 'Pending',
+            ]);
+
+            $this->logActivity($case->id, $case->current_step, 'Appeal Filed', 'Employee filed an appeal against the decision');
+            $this->sendStepNotification($case, $case->current_step, 'appeal_filed');
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Appeal filed successfully']);
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to file appeal'], 500);
+        }
+    }
+
+    /**
+     * HR review screen — list pending appeals.
+     */
+    public function appealsIndex()
+    {
+        $appeals = DisciplineAppeal::with(['case.staff', 'outcome', 'filedBy'])
+            ->orderBy('filed_at', 'desc')
+            ->get();
+
+        return view('discipline_tracker.appeals.index', compact('appeals'));
+    }
+
+    /**
+     * HR decides an appeal: uphold the original decision, overturn it, or modify it.
+     */
+    public function decideAppeal(Request $request, $appealId)
+    {
+        DB::beginTransaction();
+        try {
+            $appeal = DisciplineAppeal::findOrFail($appealId);
+
+            if ($appeal->status !== 'Pending') {
+                return response()->json(['error' => 'This appeal has already been decided'], 422);
+            }
+
+            $validated = $request->validate([
+                'decision_action' => 'required|in:Uphold Original Decision,Overturn Decision,Modify Decision',
+                'review_notes' => 'required|string',
+            ]);
+
+            $newStatus = $validated['decision_action'] === 'Uphold Original Decision' ? 'Rejected' : 'Upheld';
+
+            $appeal->update([
+                'status' => $newStatus,
+                'reviewed_by' => Auth::id(),
+                'reviewed_at' => now(),
+                'review_notes' => $validated['review_notes'],
+                'decision_action' => $validated['decision_action'],
+            ]);
+
+            $this->logActivity($appeal->case_id, $appeal->case->current_step, 'Appeal Decided', $validated['decision_action'] . ': ' . $validated['review_notes']);
+            $this->sendStepNotification($appeal->case, $appeal->case->current_step, 'appeal_decided');
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Appeal decision recorded']);
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to record appeal decision'], 500);
+        }
+    }
+
+    /**
+     * Auto-create a (Pending) EmployeeTermination linked back to this discipline case/outcome,
+     * so a Dismissal decision actually feeds into the normal HR separation process instead of
+     * requiring HR to re-enter everything from scratch in the unrelated termination module.
+     * Best-effort: pre-fills what's knowable from the staff's latest contract; HR still reviews
+     * and completes severance/final-dues detail via the existing termination screens.
+     */
+    private function createLinkedTermination(DisciplineCase $case, DisciplineOutcome $outcome): void
+    {
+        $contract = Contract::where('staff_id', $case->staff_id)->latest('date_start')->first();
+
+        if (!$contract) {
+            Log::warning('createLinkedTermination: no contract found for staff, skipping auto-linked termination', [
+                'case_id' => $case->id,
+                'staff_id' => $case->staff_id,
+            ]);
+            return;
+        }
+
+        $yearsServed = $contract->date_start ? abs(now()->diffInYears($contract->date_start)) : 0;
+
+        EmployeeTermination::create([
+            'date_time' => now(),
+            'staff_id' => $case->staff_id,
+            'discipline_case_id' => $case->id,
+            'discipline_outcome_id' => $outcome->id,
+            'contract_id' => $contract->id,
+            'years_served' => $yearsServed,
+            'pay_per_year' => (float) $contract->basic_salary * 12,
+            'severerance_payment' => 0,
+            'termination_reason_id' => 3, // Termination — the only fixed option that fits a disciplinary dismissal
+            'documents' => 'NO',
+            'current_status_id' => 1, // Pending — HR completes severance/final-dues detail
+            'created_by_id' => Auth::id(),
+        ]);
+    }
+
+    /**
+     * Generate the decision/implementation letter for a decided case.
+     */
+    public function generateDecisionLetter($caseId)
+    {
+        $case = DisciplineCase::with(['staff', 'position', 'outcome'])->findOrFail($caseId);
+
+        if (!$case->outcome) {
+            abort(404, 'No decision recorded for this case yet');
+        }
+
+        $pdfContent = $this->generatePdf('discipline_tracker.pdf.decision-letter', [
+            'case' => $case,
+            'outcome' => $case->outcome,
+        ]);
+
+        return response($pdfContent, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Decision_Letter_' . $case->case_number . '.pdf"',
+        ]);
+    }
+
+    /**
+     * Generate a certificate of service once a linked termination is marked Completed.
+     */
+    public function generateCertificateOfService($terminationId)
+    {
+        $termination = EmployeeTermination::with(['staff', 'contract'])->findOrFail($terminationId);
+
+        $pdfContent = $this->generatePdf('discipline_tracker.pdf.certificate-of-service', [
+            'termination' => $termination,
+        ]);
+
+        return response($pdfContent, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Certificate_of_Service_' . ($termination->staff->full_names ?? $termination->id) . '.pdf"',
+        ]);
+    }
+
+    /**
+     * Save (create or update) the exit interview for a termination record.
+     */
+    public function saveExitInterview(Request $request, $terminationId)
+    {
+        try {
+            $termination = EmployeeTermination::findOrFail($terminationId);
+
+            $validated = $request->validate([
+                'reason_confirmation' => 'nullable|string',
+                'feedback' => 'nullable|string',
+                'assets_returned' => 'nullable|boolean',
+                'assets_notes' => 'nullable|string',
+                'would_recommend_rating' => 'nullable|integer|min:1|max:5',
+            ]);
+
+            ExitInterview::updateOrCreate(
+                ['termination_id' => $termination->id],
+                array_merge($validated, [
+                    'conducted_by' => Auth::id(),
+                    'conducted_at' => now(),
+                ])
+            );
+
+            return response()->json(['success' => true, 'message' => 'Exit interview recorded']);
+        } catch (ValidationException $e) {
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to save exit interview'], 500);
+        }
+    }
+
+    /**
+     * Save (create or update) the itemized final-dues settlement for a termination record.
+     * Amounts are HR-entered (unpaid salary, leave payout, other earnings, deductions,
+     * severance) — the total is computed here rather than trusting a client-submitted total.
+     */
+    public function saveFinalDues(Request $request, $terminationId)
+    {
+        try {
+            $termination = EmployeeTermination::findOrFail($terminationId);
+
+            $validated = $request->validate([
+                'unpaid_salary' => 'nullable|numeric|min:0',
+                'leave_payout' => 'nullable|numeric|min:0',
+                'other_earnings' => 'nullable|numeric|min:0',
+                'deductions' => 'nullable|numeric|min:0',
+                'severance_payment' => 'nullable|numeric|min:0',
+                'notes' => 'nullable|string',
+            ]);
+
+            $total = (float) ($validated['unpaid_salary'] ?? 0)
+                + (float) ($validated['leave_payout'] ?? 0)
+                + (float) ($validated['other_earnings'] ?? 0)
+                - (float) ($validated['deductions'] ?? 0)
+                + (float) ($validated['severance_payment'] ?? 0);
+
+            FinalDues::updateOrCreate(
+                ['termination_id' => $termination->id],
+                array_merge($validated, [
+                    'total_amount' => $total,
+                    'computed_by' => Auth::id(),
+                    'computed_at' => now(),
+                ])
+            );
+
+            // Keep the termination's own severance field in sync — it's the figure the rest
+            // of the HR termination module (reports, etc.) already reads.
+            $termination->update(['severerance_payment' => $validated['severance_payment'] ?? 0]);
+
+            return response()->json(['success' => true, 'message' => 'Final dues recorded', 'total' => $total]);
+        } catch (ValidationException $e) {
+            return response()->json(['error' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('ErrorDispatcher failed: ' . $ex->getMessage());
+            }
+            return response()->json(['error' => 'Failed to save final dues'], 500);
         }
     }
 

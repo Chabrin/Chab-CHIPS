@@ -17,6 +17,8 @@ class ClientAdvance extends Model
         'requisition_date',
         'narration',
         'created_by',
+        'approved_by',
+        'approved_at',
         'zone_id',
         'client_id',
         'property_id',
@@ -48,6 +50,7 @@ class ClientAdvance extends Model
         'requisition_date' => 'datetime',
         'principal_start_date' => 'datetime',
         'disbursement_date' => 'datetime',
+        'approved_at' => 'datetime',
     ];
 
     public function client()
@@ -58,6 +61,11 @@ class ClientAdvance extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function approvedBy()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function zone()
