@@ -127,99 +127,96 @@
                                 <strong>Client Eligibility:</strong> <span id="eligibilityText"></span>
                             </div>
 
-                            <div id="dynamicSection" class="d-none">
-                                <div class="section-header">Requisition Details</div>
+                            <div class="row g-3">
+                                <div class="col-lg-6">
+                                    <div id="dynamicSection" class="d-none">
+                                        <div class="section-header">Requisition Details</div>
 
-                                <!-- Dates Row -->
-                                <div class="row g-2 mb-2 d-none" id="rowDates">
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Requisition Date <span class="text-danger">*</span></label>
-                                        <input type="date" class="form-control form-control-sm" id="requisitionDate" name="requisition_date" value="{{ date('Y-m-d') }}">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Issued Date <span class="text-danger">*</span></label>
-                                        <input type="date" class="form-control form-control-sm" id="issuedDate" name="disbursement_date" value="{{ date('Y-m-d') }}">
-                                    </div>
-                                </div>
+                                        <!-- Dates Row -->
+                                        <div class="row g-2 mb-2 d-none" id="rowDates">
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Requisition Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control form-control-sm" id="requisitionDate" name="requisition_date" value="{{ date('Y-m-d') }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Issued Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control form-control-sm" id="issuedDate" name="disbursement_date" value="{{ date('Y-m-d') }}">
+                                            </div>
+                                        </div>
 
-                                <!-- Amount Row -->
-                                <div class="row g-2 mb-2 d-none" id="rowAmount">
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Amount <span class="text-danger">*</span></label>
-                                        <input type="number" class="form-control form-control-sm" id="amount" name="amount" step="0.01" min="0">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Percentage (%)</label>
-                                        <input type="number" class="form-control form-control-sm" id="interestRate" name="interest_rate" step="0.01" min="0" value="3">
-                                    </div>
-                                    <div class="col-md-4 d-none" id="interestInfoCol">
-                                        <label class="form-label-sm">Interest Info</label>
-                                        <div class="info-box" id="interestCalcInfo" style="margin-bottom:0; padding:6px 10px;">-</div>
-                                    </div>
-                                </div>
+                                        <!-- Amount Row -->
+                                        <div class="row g-2 mb-2 d-none" id="rowAmount">
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Amount <span class="text-danger">*</span></label>
+                                                <input type="number" class="form-control form-control-sm" id="amount" name="amount" step="0.01" min="0">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Percentage (%)</label>
+                                                <input type="number" class="form-control form-control-sm" id="interestRate" name="interest_rate" step="0.01" min="0" value="3">
+                                            </div>
+                                        </div>
 
-                                <!-- Repayment Row (Type 2 optional, Type 3 required) -->
-                                <div class="row g-2 mb-2 d-none" id="rowRepayment">
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Repayment Months <span class="text-danger repayment-required" style="display:none;">*</span></label>
-                                        <input type="number" class="form-control form-control-sm" id="months" name="repayment_months" min="1" max="360">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Payment Start Date <span class="text-danger repayment-required" style="display:none;">*</span></label>
-                                        <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" value="{{ date('Y-m-d', strtotime('+1 month')) }}">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="info-box" id="repaymentHint" style="margin-top:22px; margin-bottom:0; padding:6px 10px;">
-                                            Optional — enter months to generate a repayment schedule preview.
+                                        <!-- Repayment Row (Type 2 optional, Type 3 required) -->
+                                        <div class="row g-2 mb-2 d-none" id="rowRepayment">
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Repayment Months <span class="text-danger repayment-required" style="display:none;">*</span></label>
+                                                <input type="number" class="form-control form-control-sm" id="months" name="repayment_months" min="1" max="360">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Payment Start Date <span class="text-danger repayment-required" style="display:none;">*</span></label>
+                                                <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" value="{{ date('Y-m-d', strtotime('+1 month')) }}">
+                                            </div>
+                                        </div>
+
+                                        <!-- Cheque Charge for Client Payment & Overpayment -->
+                                        <div class="row g-2 mb-2 d-none" id="rowChequeCharge">
+                                            <div class="col-md-6">
+                                                <label class="form-label-sm">Cheque Processing Charge (KES)</label>
+                                                <input type="number" class="form-control form-control-sm" id="chequeChargeGeneral" name="charge_amount" step="0.01" value="100" readonly>
+                                            </div>
+                                        </div>
+
+                                        <!-- Narration -->
+                                        <div class="row g-2 mb-2 d-none" id="rowNarration">
+                                            <div class="col-md-12">
+                                                <label class="form-label-sm">Narration <span class="text-danger">*</span></label>
+                                                <textarea class="form-control form-control-sm" id="narration" name="narration" rows="2"></textarea>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Cheque Charge for Client Payment & Overpayment -->
-                                <div class="row g-2 mb-2 d-none" id="rowChequeCharge">
-                                    <div class="col-md-4">
-                                        <label class="form-label-sm">Cheque Processing Charge (KES)</label>
-                                        <input type="number" class="form-control form-control-sm" id="chequeChargeGeneral" name="charge_amount" step="0.01" value="100" readonly>
-                                    </div>
-                                </div>
-
-                                <!-- Narration -->
-                                <div class="row g-2 mb-2 d-none" id="rowNarration">
-                                    <div class="col-md-12">
-                                        <label class="form-label-sm">Narration <span class="text-danger">*</span></label>
-                                        <textarea class="form-control form-control-sm" id="narration" name="narration" rows="2"></textarea>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Live Calculation Summary Panel -->
-                            <div id="calcSummaryCard" class="mt-3 p-3" style="display:none; border:1px solid #dee2e6; border-left:4px solid #7366ff; border-radius:4px; background:#fff;">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="fw-semibold" style="font-size:0.875rem;"><i class="fa fa-calculator me-2 text-primary"></i>Advance Calculation Summary</span>
-                                    <small class="text-muted">Updates as you edit</small>
-                                </div>
-                                <div class="row g-3">
-                                    <div class="col-6 col-md-2"><div class="text-muted small mb-1">Principal</div><div class="fw-bold" id="cs_principal">&mdash;</div></div>
-                                    <div class="col-6 col-md-2"><div class="text-muted small mb-1">Percentage</div><div class="fw-bold" id="cs_rate">&mdash;</div></div>
-                                    <div class="col-6 col-md-2"><div class="text-muted small mb-1">Percentage Amount</div><div class="fw-bold text-warning" id="cs_interest">&mdash;</div></div>
-                                    <div class="col-6 col-md-2"><div class="text-muted small mb-1">Charge</div><div class="fw-bold" id="cs_charge">&mdash;</div></div>
-                                    <div class="col-6 col-md-2"><div class="text-muted small mb-1">Total Amount</div><div class="fw-bold text-success" id="cs_total">&mdash;</div></div>
-                                    <div class="col-6 col-md-2 d-none" id="cs_monthly_wrap"><div class="text-muted small mb-1">Avg. Monthly Payment</div><div class="fw-bold text-primary" id="cs_monthly">&mdash;</div></div>
-                                </div>
-                                <div class="mt-2"><small class="text-muted fst-italic" id="cs_basis"></small></div>
-                                <div id="cs_schedule_wrap" class="mt-3" style="display:none;">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="cs_toggle_schedule">
-                                        <i class="fa fa-table me-1"></i>Preview Repayment Schedule
-                                    </button>
-                                    <div id="cs_schedule_table" class="mt-2" style="display:none;">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-bordered text-center mb-0">
-                                                <thead class="table-light">
-                                                    <tr><th>#</th><th>Due Date</th><th>Principal</th><th>Interest</th><th>Payment</th><th>Balance</th></tr>
-                                                </thead>
-                                                <tbody id="cs_schedule_body"></tbody>
-                                                <tfoot id="cs_schedule_foot"></tfoot>
-                                            </table>
+                                <div class="col-lg-6">
+                                    <!-- Live Calculation Summary Panel -->
+                                    <div id="calcSummaryCard" class="p-3 h-100" style="display:none; border:1px solid #dee2e6; border-left:4px solid #7366ff; border-radius:4px; background:#fff;">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-semibold" style="font-size:0.875rem;"><i class="fa fa-calculator me-2"></i>Advance Calculation Summary</span>
+                                            <small class="text-muted">Updates as you edit</small>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-6 col-md-4"><div class="text-muted small mb-1">Principal</div><div class="fw-bold" id="cs_principal">&mdash;</div></div>
+                                            <div class="col-6 col-md-4"><div class="text-muted small mb-1">Percentage</div><div class="fw-bold" id="cs_rate">&mdash;</div></div>
+                                            <div class="col-6 col-md-4"><div class="text-muted small mb-1">Percentage Amount</div><div class="fw-bold" id="cs_interest">&mdash;</div></div>
+                                            <div class="col-6 col-md-4"><div class="text-muted small mb-1">Charge</div><div class="fw-bold" id="cs_charge">&mdash;</div></div>
+                                            <div class="col-6 col-md-4"><div class="text-muted small mb-1">Total Amount</div><div class="fw-bold" id="cs_total">&mdash;</div></div>
+                                            <div class="col-6 col-md-4 d-none" id="cs_monthly_wrap"><div class="text-muted small mb-1">Avg. Monthly Payment</div><div class="fw-bold" id="cs_monthly">&mdash;</div></div>
+                                        </div>
+                                        <div class="mt-2"><small class="text-muted fst-italic" id="cs_basis"></small></div>
+                                        <div id="cs_schedule_wrap" class="mt-3" style="display:none;">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="cs_toggle_schedule">
+                                                <i class="fa fa-table me-1"></i>Preview Repayment Schedule
+                                            </button>
+                                            <div id="cs_schedule_table" class="mt-2" style="display:none;">
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-bordered text-center mb-0">
+                                                        <thead class="table-light">
+                                                            <tr><th>#</th><th>Due Date</th><th>Principal</th><th>Interest</th><th>Payment</th><th>Balance</th></tr>
+                                                        </thead>
+                                                        <tbody id="cs_schedule_body"></tbody>
+                                                        <tfoot id="cs_schedule_foot"></tfoot>
+                                                    </table>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -402,7 +399,6 @@
 
             if (!advanceType || amount <= 0) {
                 $('#calcSummaryCard').hide();
-                $('#interestCalcInfo').html('-');
                 return;
             }
 
@@ -439,7 +435,6 @@
                     totalAmount    = Math.round((totalPrincipal + totalInterest + chargeAmount) * 100) / 100;
                     monthlyPayment = (totalPrincipal + totalInterest) / months;
                     basisText = 'Reducing balance at ' + rate + '% per month over ' + months + ' months.';
-                    $('#interestCalcInfo').html(rate + '% reducing balance over ' + months + ' months &rarr; ' + fmt(interestAmount) + ' total interest');
 
                     var tbody = '', tPrin = 0, tInt = 0, tPay = 0;
                     scheduleRows.forEach(function(row, i) {
@@ -469,16 +464,13 @@
                         if (day2 < 20) {
                             interestAmount = Math.round(amount * rate / 100 * 100) / 100;
                             basisText = 'Issued before 20th (day ' + day2 + ') — full ' + rate + '% rate applied.';
-                            $('#interestCalcInfo').html('Before 20th: ' + rate + '% full = ' + fmt(interestAmount));
                         } else if (day2 <= 25) {
                             interestAmount = Math.round(amount * rate / 100 * (rem2 / lastDay2) * 100) / 100;
                             basisText = 'Issued 20th–25th (day ' + day2 + ') — prorated ' + rem2 + '/' + lastDay2 + ' days.';
-                            $('#interestCalcInfo').html('20th–25th: ' + rate + '% prorated (' + rem2 + '/' + lastDay2 + ' days) = ' + fmt(interestAmount));
                         } else {
                             interestAmount = 0;
                             rateDisplay    = '0% (after 25th)';
                             basisText      = 'Issued after 25th (day ' + day2 + ') — no interest charged.';
-                            $('#interestCalcInfo').html('After 25th: No interest charged');
                         }
                     }
                     totalAmount = Math.round((amount + interestAmount + chargeAmount) * 100) / 100;
@@ -520,7 +512,7 @@
             $('#dynamicSection').removeClass('d-none');
 
             // Hide all dynamic rows
-            $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').addClass('d-none');
+            $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').addClass('d-none');
 
             // Reset required
             $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart, #narration').prop('required', false);
@@ -528,20 +520,18 @@
 
             switch (type) {
                 case '2': // Client Payment Advance
-                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').removeClass('d-none');
+                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').removeClass('d-none');
                     $('#requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
                     $('#months, #paymentStart').prop('required', false);
                     $('.repayment-required').hide();
-                    $('#repaymentHint').text('Optional — enter months to generate a repayment schedule preview.');
                     $('#chequeChargeGeneral').val(100);
                     recalculate();
                     break;
 
                 case '3': // Overpayment Advance
-                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').removeClass('d-none');
+                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').removeClass('d-none');
                     $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart, #narration').prop('required', true);
                     $('.repayment-required').show();
-                    $('#repaymentHint').text('Default: 3 months. Changes require authorization.');
                     $('#months').val($('#months').val() || 3);
                     $('#chequeChargeGeneral').val(100);
                     recalculate();
