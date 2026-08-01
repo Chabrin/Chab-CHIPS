@@ -150,7 +150,6 @@ class InvoicingController extends Controller
                     return [
                         'id' => $invoice->id,
                         'date_time' => $invoice->date_time ? $invoice->date_time->format('d-m-Y') : '-',
-                        'date_due' => $invoice->date_due ? $invoice->date_due->format('d-m-Y') : '-',
                         'reference_number' => $invoice->reference_number ?? '-',
                         'tenant_name' => $invoice->tenant->names ?? '-',
                         'tenant_encrypted_id' => $invoice->tenant ? $invoice->tenant->encrypted_id : null,
@@ -1620,6 +1619,7 @@ class InvoicingController extends Controller
                 INSERT INTO sys_pm_debtors_invoices(
                     date_time,
                     date_due,
+                    returns_period,
                     zone_id,
                     property_id,
                     unit_id,
@@ -1656,6 +1656,7 @@ class InvoicingController extends Controller
                 SELECT
                     NOW() AS date_time,
                     ?::date AS date_due,
+                    ?::date AS returns_period,
                     l.zone_id,
                     l.property_id,
                     l.unit_id,
@@ -1812,6 +1813,7 @@ class InvoicingController extends Controller
                 // Execute the invoice generation query
                 $insertedRows = DB::insert($sql, [
                     $billingDateFormatted,              // date_due
+                    $billingDateFormatted,              // returns_period (same billing month as date_due)
                     Auth::id(),                          // created_by
                     $billingDateFormatted,              // for reference year (YYYY)
                     $billingDateFormatted,              // for reference month number (M)
@@ -1920,6 +1922,7 @@ class InvoicingController extends Controller
                     'message' => 'Error: ' . $e->getMessage()
                 ], 500);
             }
+            
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,

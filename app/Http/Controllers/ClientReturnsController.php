@@ -1512,9 +1512,7 @@ class ClientReturnsController extends Controller
     {
         try {
             $id = decrypt($id);
-
             $return = ReturnSummary::findOrFail($id);
-
             // Fetch all returns for same landlord, property, year, month (including current)
             $allReturns = ReturnSummary::where('landlord_code', $return->landlord_code)
                 ->where('property_code', $return->property_code)
