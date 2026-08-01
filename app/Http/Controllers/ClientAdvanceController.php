@@ -106,7 +106,6 @@ class ClientAdvanceController extends Controller
 
                     // Map advance type IDs to names
                     $typeMap = [
-                        1 => 'Expense Advance',
                         2 => 'Client Payment Advance',
                         3 => 'Overpayment Advance',
                     ];
@@ -193,73 +192,6 @@ class ClientAdvanceController extends Controller
     }
 
     /**
-     * Live search across landlords AND properties for the create-advance screen (AJAX,
-     * called on every keystroke via Select2). Staff who only know a property's name/
-     * reference - not the landlord's name - can find it in the same box; each property
-     * result carries its landlord's client_id so the create screen can auto-select it,
-     * plus its own property_id so the specific property can be pre-selected too.
-     */
-    public function searchClientsAndProperties(Request $request)
-    {
-        try {
-            Log::info('Searching clients/properties for advance', [
-                'query' => $request->input('q', ''),
-                'user_id' => Auth::id()
-            ]);
-            $term = trim((string) $request->input('q', ''));
-            if ($term === '') {
-                return response()->json(['results' => []]);
-            }
-
-            $clients = Client::where('reference_number', 'LIKE', 'LAN%')
-                ->where(function ($q) use ($term) {
-                    $q->where('names', 'ILIKE', "%{$term}%")
-                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
-                })
-                ->select(['id', 'names', 'reference_number'])
-                ->orderBy('names', 'asc')
-                ->limit(20)
-                ->get()
-                ->map(function ($client) {
-                    return [
-                        'id' => $client->id,
-                        'text' => ($client->names ?? '-') . ' (' . ($client->reference_number ?? '-') . ')',
-                        'property_id' => null,
-                    ];
-                });
-
-            $properties = Property::whereHas('client', function ($q) {
-                    $q->where('reference_number', 'LIKE', 'LAN%');
-                })
-                ->where('current_status_id', '!=', 0) // Exclude merged/inactive source properties
-                ->where(function ($q) use ($term) {
-                    $q->where('property_name', 'ILIKE', "%{$term}%")
-                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
-                })
-                ->with('client:id,names,reference_number')
-                ->select(['id', 'reference_number', 'property_name', 'client_id'])
-                ->orderBy('property_name', 'asc')
-                ->limit(20)
-                ->get()
-                ->map(function ($property) {
-                    return [
-                        'id' => $property->client_id,
-                        'text' => $property->reference_number . ' - ' . $property->property_name . ' (Landlord: ' . ($property->client->names ?? '-') . ')',
-                        'property_id' => $property->id,
-                    ];
-                });
-
-            $results = $clients->concat($properties)->values();
-
-            return response()->json(['results' => $results]);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error searching clients/properties for advance: ' . $e->getMessage());
-            return response()->json(['results' => []], 500);
-        }
-    }
-
-    /**
      * Get previous advances for a specific client (AJAX)
      */
     public function getClientPreviousAdvances(Request $request)
@@ -320,7 +252,7 @@ class ClientAdvanceController extends Controller
 
             // Base validation rules
             $rules = [
-                'advance_type_id' => 'required|integer|in:1,2,3',
+                'advance_type_id' => 'required|integer|in:2,3',
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',
                 'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
                 'requisition_date' => 'required|date|before_or_equal:today',
@@ -330,13 +262,7 @@ class ClientAdvanceController extends Controller
             ];
 
             // Type-specific rules
-            if ($advanceTypeId == 1) { // Expense Advance
-                $rules['expense_category'] = 'required|string|in:repairs_maintenance,caretaker_salaries,garbage_collection,electricity_bills,water_bills,printing_photocopying,refund_tenant_deposits,eviction_costs,locking_devices,security_services';
-                $rules['charge_amount'] = 'required|numeric|min:0';
-                $rules['charge_billed_to'] = 'required|string|in:Client,Tenant';
-            } elseif ($advanceTypeId == 2) { // Client Payment Advance
-                $rules['payment_method'] = 'required|string|in:bank_transfer,alternative';
-                $rules['payment_instructions'] = 'nullable|string|max:500';
+            if ($advanceTypeId == 2) { // Client Payment Advance
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
                 $rules['interest_rate'] = 'nullable|numeric|min:0|max:100';
                 $rules['repayment_months'] = 'nullable|integer|min:1|max:360';
@@ -411,17 +337,7 @@ class ClientAdvanceController extends Controller
             $totalAmount = $amount;
             $schedule = [];
 
-            if ($advanceTypeId == 1) {
-                // EXPENSE ADVANCE: No interest, cheque charge auto-set by category
-                $validated['interest_rate'] = 0;
-                $validated['interest_amount'] = 0;
-                $chargeAmount = floatval($validated['charge_amount'] ?? 0);
-                $validated['total_amount'] = $amount + $chargeAmount;
-                $validated['current_balance'] = $validated['total_amount'];
-                $validated['repayment_months'] = null;
-                $validated['principal_start_date'] = null;
-
-            } elseif ($advanceTypeId == 2) {
+            if ($advanceTypeId == 2) {
                 // CLIENT PAYMENT ADVANCE
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
@@ -614,7 +530,7 @@ class ClientAdvanceController extends Controller
 
             // Base validation rules
             $rules = [
-                'advance_type_id' => 'required|integer|in:1,2,3',
+                'advance_type_id' => 'required|integer|in:2,3',
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',
                 'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
                 'requisition_date' => 'required|date',
@@ -624,13 +540,7 @@ class ClientAdvanceController extends Controller
             ];
 
             // Type-specific rules
-            if ($advanceTypeId == 1) { // Expense Advance
-                $rules['expense_category'] = 'required|string|in:repairs_maintenance,caretaker_salaries,garbage_collection,electricity_bills,water_bills,printing_photocopying,refund_tenant_deposits,eviction_costs,locking_devices,security_services';
-                $rules['charge_amount'] = 'required|numeric|min:0';
-                $rules['charge_billed_to'] = 'required|string|in:Client,Tenant';
-            } elseif ($advanceTypeId == 2) { // Client Payment Advance
-                $rules['payment_method'] = 'required|string|in:bank_transfer,alternative';
-                $rules['payment_instructions'] = 'nullable|string|max:500';
+            if ($advanceTypeId == 2) { // Client Payment Advance
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
                 $rules['interest_rate'] = 'nullable|numeric|min:0|max:100';
                 $rules['repayment_months'] = 'nullable|integer|min:1|max:360';
@@ -653,16 +563,7 @@ class ClientAdvanceController extends Controller
             $amount = floatval($validated['amount']);
             $schedule = [];
 
-            if ($advanceTypeId == 1) {
-                // EXPENSE ADVANCE: No interest
-                $validated['interest_rate'] = 0;
-                $validated['interest_amount'] = 0;
-                $chargeAmount = floatval($validated['charge_amount'] ?? 0);
-                $validated['total_amount'] = $amount + $chargeAmount;
-                $validated['repayment_months'] = null;
-                $validated['principal_start_date'] = null;
-
-            } elseif ($advanceTypeId == 2) {
+            if ($advanceTypeId == 2) {
                 // CLIENT PAYMENT ADVANCE
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
@@ -1449,10 +1350,6 @@ class ClientAdvanceController extends Controller
                 'previous_advance_id'  => $oldAdvance->id,
                 'miscallenous_charge_id' => $oldAdvance->miscallenous_charge_id,
                 'charge_amount'        => $oldAdvance->charge_amount,
-                'charge_billed_to'     => $oldAdvance->charge_billed_to,
-                'expense_category'     => $oldAdvance->expense_category,
-                'payment_method'       => $oldAdvance->payment_method,
-                'payment_instructions' => $oldAdvance->payment_instructions,
             ]);
 
             // 4. Create new schedule rows (Type 3 / Overpayment advances)

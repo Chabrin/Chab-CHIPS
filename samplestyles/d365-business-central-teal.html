@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamics 365 Business Central Theme — Teal</title>
+<style>
+/* =====================================================
+   D365 BUSINESS CENTRAL TOKENS — TEAL, MINIMAL COLOR
+   Matches the flat BC look: white surfaces, thin gray
+   dividers, teal used only as accent.
+   ===================================================== */
+:root {
+  /* Chrome */
+  --bc-header:        #161B21;  /* near-black top bar */
+
+  /* Teal accent (the ONLY strong color) */
+  --bc-teal:          #0E8476;  /* links, icons, actions */
+  --bc-teal-hover:    #0B6B60;
+  --bc-teal-press:    #085048;
+  --bc-teal-tile:     #009B8F;  /* cue tiles */
+  --bc-banner:        #C6ECE9;  /* reminder / notification bar */
+  --bc-selected:      #D7F1EE;  /* selected row */
+  --bc-tint:          #EFF9F8;  /* hover tint */
+
+  /* Neutrals — this theme is mostly these */
+  --text:             #333333;
+  --text-soft:        #605E5C;
+  --text-faint:       #8F8D8B;
+  --border:           #D6D4D2;
+  --border-light:     #EBEAE9;
+  --hover:            #F5F5F4;
+  --page:             #FFFFFF;   /* BC pages are white */
+  --page-alt:         #F8F8F7;
+
+  /* Semantic (used sparingly) */
+  --pos: #0E8476;   /* positive numbers = teal, like BC */
+  --neg: #A4262C;   /* negative numbers = red */
+  --warning-bg: #FFF4CE;
+  --error-bg:   #FDE7E9;
+
+  --font: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+  --radius: 2px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Outline SVG icons */
+.i {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none;
+  stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+  flex: none;
+}
+.i-lg { width: 18px; height: 18px; }
+.i-sm { width: 12px; height: 12px; }
+
+/* =====================================================
+   TOP BAR (dark, minimal)
+   ===================================================== */
+.topbar {
+  height: 44px;
+  background: var(--bc-header);
+  color: #fff;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 10px;
+}
+.topbar .waffle {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  cursor: pointer; border-radius: var(--radius);
+  opacity: .9;
+}
+.topbar .waffle:hover { background: rgba(255,255,255,.12); }
+.topbar .brand { font-size: 14px; font-weight: 600; letter-spacing: .2px; }
+.topbar .env {
+  margin-left: auto;
+  font-size: 13px; opacity: .85;
+}
+.topbar-icons { display: flex; gap: 2px; }
+.topbar-icons button {
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  background: transparent; border: none; color: #fff;
+  cursor: pointer; border-radius: var(--radius); opacity: .9;
+}
+.topbar-icons button:hover { background: rgba(255,255,255,.12); }
+.avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--bc-teal-tile); color: #fff;
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+
+/* =====================================================
+   HORIZONTAL NAV (BC role-center style)
+   ===================================================== */
+.mainnav {
+  background: var(--page);
+  border-bottom: 1px solid var(--border-light);
+  padding: 0 20px;
+}
+.mainnav .row1 { display: flex; gap: 4px; height: 40px; align-items: center; }
+.mainnav .row1 a {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  text-decoration: none; padding: 6px 10px; border-radius: var(--radius);
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+}
+.mainnav .row1 a:hover { background: var(--hover); }
+.mainnav .row2 { display: flex; gap: 18px; height: 34px; align-items: center; }
+.mainnav .row2 a {
+  font-size: 13px; color: var(--bc-teal);
+  text-decoration: none; cursor: pointer;
+}
+.mainnav .row2 a:hover { color: var(--bc-teal-press); text-decoration: underline; }
+
+/* =====================================================
+   PAGE HEADER (back arrow + caption)
+   ===================================================== */
+.page-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 20px 10px;
+}
+.back-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--page-alt);
+  border: 1px solid var(--border-light);
+  display: grid; place-items: center;
+  cursor: pointer; color: var(--text);
+}
+.back-btn:hover { background: var(--hover); }
+.page-caption { font-size: 18px; font-weight: 400; color: var(--text); }
+.page-caption .meta { color: var(--text-soft); }
+.page-head .tools { margin-left: auto; display: flex; gap: 4px; }
+.page-head .tools button {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  background: transparent; border: none;
+  color: var(--bc-teal); cursor: pointer; border-radius: var(--radius);
+}
+.page-head .tools button:hover { background: var(--bc-tint); }
+
+/* =====================================================
+   NOTIFICATION BANNER (teal, like the work-date reminder)
+   ===================================================== */
+.banner {
+  margin: 0 20px 12px;
+  background: var(--bc-banner);
+  color: var(--text);
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  border-radius: var(--radius);
+}
+.banner .dismiss { cursor: pointer; color: var(--text-soft); display: grid; place-items: center; }
+.banner .actions { display: flex; gap: 0; align-items: center; margin-left: 16px; }
+.banner .actions a { color: var(--bc-teal-press); font-weight: 600; text-decoration: none; cursor: pointer; }
+.banner .actions a:hover { text-decoration: underline; }
+.banner .actions .sep { color: var(--text-faint); margin: 0 10px; }
+.banner .chev { margin-left: auto; color: var(--text-soft); cursor: pointer; }
+
+/* =====================================================
+   ACTION BAR (flat text actions with teal icons)
+   ===================================================== */
+.action-bar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 20px;
+  background: var(--page-alt);
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+.act {
+  height: 32px; padding: 0 10px;
+  background: transparent; border: none;
+  font-family: var(--font); font-size: 14px;
+  color: var(--text); cursor: pointer;
+  border-radius: var(--radius);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.act .i { color: var(--bc-teal); }
+.act:hover { background: var(--hover); }
+.act.quiet { color: var(--text-soft); }
+.act-divider { width: 1px; height: 18px; background: var(--border); margin: 0 8px; }
+.action-bar .end { margin-left: auto; }
+
+/* =====================================================
+   CONTENT
+   ===================================================== */
+.content { padding: 10px 20px 60px; max-width: 1280px; }
+.part-title {
+  font-size: 17px; font-weight: 600; color: var(--text);
+  padding: 18px 0 10px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 0;
+}
+
+/* =====================================================
+   CUE TILES (teal squares, image 3 style)
+   ===================================================== */
+.cue-group { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 0; }
+.cue {
+  width: 108px; height: 88px;
+  background: var(--bc-teal-tile);
+  color: #fff; cursor: pointer;
+  padding: 8px 10px;
+  display: flex; flex-direction: column;
+  border-radius: var(--radius);
+  transition: filter .1s;
+}
+.cue:hover { filter: brightness(1.07); }
+.cue .cue-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; line-height: 1.25; }
+.cue .cue-value { font-size: 30px; font-weight: 300; margin-top: auto; line-height: 1; }
+.cue .cue-foot { height: 4px; margin: 8px -10px -8px; background: rgba(255,255,255,.25); }
+.cue.flat { background: var(--page-alt); color: var(--text); border: 1px solid var(--border-light); }
+.cue.flat .cue-label { color: var(--text-soft); }
+
+/* KPI row (big numbers with colored underline, image 3 "Activities") */
+.kpis { display: flex; flex-wrap: wrap; gap: 40px; padding: 16px 0; }
+.kpi .kpi-label { font-size: 10.5px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--text-soft); }
+.kpi .kpi-value { font-size: 30px; font-weight: 300; padding: 2px 0 6px; }
+.kpi .kpi-bar { height: 3px; width: 100%; background: var(--bc-teal-tile); }
+.kpi .kpi-bar.red { background: var(--neg); }
+.kpi a { display: inline-block; margin-top: 6px; font-size: 12.5px; color: var(--bc-teal); text-decoration: none; }
+.kpi a:hover { text-decoration: underline; }
+
+/* =====================================================
+   LIST / GRID TABLE (flat BC style)
+   ===================================================== */
+.list-wrap { overflow-x: auto; }
+table.bc-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  background: var(--page);
+}
+.bc-list thead th {
+  position: sticky; top: 0;
+  background: var(--page);
+  text-align: left;
+  font-size: 12.5px; font-weight: 400; color: var(--text-soft);
+  padding: 0 12px; height: 40px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  cursor: pointer; user-select: none;
+}
+.bc-list thead th:hover { color: var(--text); }
+.bc-list thead th .i-sm { color: var(--text-soft); vertical-align: -1px; margin-left: 3px; }
+.bc-list thead th.num, .bc-list td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.bc-list tbody td {
+  padding: 0 12px; height: 40px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text);
+  white-space: nowrap;
+}
+.bc-list tbody tr:hover { background: var(--bc-tint); }
+.bc-list tbody tr.selected { background: var(--bc-selected); }
+.bc-list tbody tr.selected:hover { background: #C9ECE8; }
+
+/* BC record link: teal + underline */
+.bc-list a.rec { color: var(--bc-teal); text-decoration: underline; cursor: pointer; }
+.bc-list a.rec:hover { color: var(--bc-teal-press); }
+.bc-list .drill { color: var(--bc-teal); text-decoration: none; cursor: pointer; }
+.bc-list .drill:hover { text-decoration: underline; }
+
+.bc-list .pos { color: var(--pos); }
+.bc-list .neg { color: var(--neg); }
+
+.bc-list input[type=checkbox] {
+  width: 15px; height: 15px;
+  accent-color: var(--bc-teal);
+  cursor: pointer;
+}
+.col-check { width: 36px; }
+.row-menu {
+  width: 24px; height: 24px;
+  border: none; background: transparent;
+  color: var(--text-soft); cursor: pointer;
+  border-radius: var(--radius);
+  display: inline-grid; place-items: center;
+  visibility: hidden;
+}
+.bc-list tr:hover .row-menu, .bc-list tr.selected .row-menu { visibility: visible; }
+.row-menu:hover { background: var(--hover); }
+
+/* Footer */
+.list-footer {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px;
+  font-size: 12.5px; color: var(--text-soft);
+  border-top: 1px solid var(--border-light);
+}
+.list-footer .pager { margin-left: auto; display: flex; gap: 2px; align-items: center; }
+.pager button {
+  min-width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent;
+  border-radius: var(--radius); cursor: pointer;
+  font-family: var(--font); font-size: 12px; color: var(--text);
+}
+.pager button:hover { background: var(--hover); }
+.pager button.current { color: var(--bc-teal); font-weight: 600; border-bottom: 2px solid var(--bc-teal); border-radius: 0; }
+
+/* =====================================================
+   BUTTONS — mostly quiet; teal only for the primary
+   ===================================================== */
+.btn {
+  font-family: var(--font);
+  font-size: 14px; font-weight: 600;
+  height: 32px; min-width: 76px; padding: 0 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+}
+.btn:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.btn-primary { background: var(--bc-teal); color: #fff; }
+.btn-primary:hover { background: var(--bc-teal-hover); }
+.btn-primary:active { background: var(--bc-teal-press); }
+.btn-standard { background: var(--page); color: var(--text); border-color: var(--border); font-weight: 400; }
+.btn-standard:hover { background: var(--hover); }
+.btn-link { background: transparent; color: var(--bc-teal); font-weight: 400; min-width: auto; }
+.btn-link:hover { color: var(--bc-teal-press); text-decoration: underline; }
+.btn:disabled { background: var(--hover); color: var(--text-faint); border-color: transparent; cursor: not-allowed; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 14px 0; }
+
+/* =====================================================
+   FIELDS (BC form: label left or top, thin underline feel)
+   ===================================================== */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px 40px;
+  padding: 14px 0;
+}
+.field { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; }
+.field label { font-size: 13.5px; color: var(--text-soft); }
+.field input, .field select {
+  width: 100%; height: 30px;
+  font-family: var(--font); font-size: 14px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--border);
+  border-radius: 0;
+  background: transparent; color: var(--text);
+}
+.field input:hover, .field select:hover { border-bottom-color: var(--text-soft); background: var(--page-alt); }
+.field input:focus, .field select:focus {
+  outline: none;
+  border: 1px solid var(--bc-teal);
+  background: var(--page);
+}
+
+/* Swatches */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 14px 0; }
+.swatch { border: 1px solid var(--border-light); border-radius: var(--radius); overflow: hidden; font-size: 11px; }
+.swatch .chip { height: 40px; }
+.swatch .meta { padding: 6px 8px; }
+.swatch .meta b { display: block; font-size: 12px; font-weight: 600; }
+.swatch code { color: var(--text-soft); }
+
+@media (max-width: 760px) {
+  .mainnav .row2 { display: none; }
+  .field { grid-template-columns: 1fr; gap: 2px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Outline icon library -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ic-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></symbol>
+    <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+    <symbol id="ic-bell" viewBox="0 0 24 24"><path d="M18 15.5V11a6 6 0 1 0-12 0v4.5L4.5 18h15L18 15.5z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="ic-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8l1.2 2.6 2.8-.5 1 2.7 2.7 1-.5 2.8 2.6 1.2-1.4 2.5.9 2.7-2.6 1.1-.4 2.9-2.9-.2-1.9 2.2-2.5-1.5-2.5 1.5-1.9-2.2-2.9.2-.4-2.9L2 17.8l.9-2.7L1.5 12.6l2.6-1.2-.5-2.8 2.7-1 1-2.7 2.8.5L12 2.8z" stroke-width="1.2"/></symbol>
+    <symbol id="ic-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.24c-.7.35-1.1.9-1.1 1.66v.6"/><circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="ic-back" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></symbol>
+    <symbol id="ic-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="ic-bookmark" viewBox="0 0 24 24"><path d="M7 3h10v18l-5-4-5 4V3z"/></symbol>
+    <symbol id="ic-popout" viewBox="0 0 24 24"><rect x="4" y="7" width="13" height="13" rx="1"/><path d="M9 4h11v11"/><path d="M20 4l-8 8"/></symbol>
+    <symbol id="ic-expand" viewBox="0 0 24 24"><path d="M4 20l6-6M4 20v-5M4 20h5"/><path d="M20 4l-6 6M20 4v5M20 4h-5"/></symbol>
+    <symbol id="ic-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6.5 7.5V19l-3 2v-8.5L4 5z"/></symbol>
+    <symbol id="ic-listview" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v5h-5"/></symbol>
+    <symbol id="ic-guide" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/><path d="M12.5 8.5L16 12l-3.5 3.5"/></symbol>
+    <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="ic-edit" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></symbol>
+    <symbol id="ic-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+    <symbol id="ic-more" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="ic-chev-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="ic-chev-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="ic-chev-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="ic-chev-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="ic-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
+    <symbol id="ic-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></symbol>
+    <symbol id="ic-save" viewBox="0 0 24 24"><path d="M5 4h11l4 4v12H5z"/><path d="M8 4v5h7V4"/><rect x="8" y="13" width="8" height="7"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></symbol>
+  </defs>
+</svg>
+
+<!-- ===== TOP BAR ===== -->
+<header class="topbar">
+  <div class="waffle" title="App launcher"><svg class="i i-lg"><use href="#ic-grid"/></svg></div>
+  <div class="brand">Dynamics 365 Business Central</div>
+  <div class="env">Sandbox-Development</div>
+  <div class="topbar-icons">
+    <button title="Notifications"><svg class="i i-lg"><use href="#ic-bell"/></svg></button>
+    <button title="Search"><svg class="i i-lg"><use href="#ic-search"/></svg></button>
+    <button title="Settings"><svg class="i i-lg"><use href="#ic-gear"/></svg></button>
+    <button title="Help"><svg class="i i-lg"><use href="#ic-help"/></svg></button>
+  </div>
+  <div class="avatar">MA</div>
+</header>
+
+<!-- ===== HORIZONTAL NAV (role center) ===== -->
+<nav class="mainnav">
+  <div class="row1">
+    <a>Finance <svg class="i i-sm"><use href="#ic-chev-down"/></svg></a>
+    <a>Cash Management <svg class="i i-sm"><use href="#ic-chev-down"/></svg></a>
+    <a>Sales <svg class="i i-sm"><use href="#ic-chev-down"/></svg></a>
+    <a>Purchasing <svg class="i i-sm"><use href="#ic-chev-down"/></svg></a>
+    <a>Setup &amp; Extensions <svg class="i i-sm"><use href="#ic-chev-down"/></svg></a>
+  </div>
+  <div class="row2">
+    <a>Customers</a><a>Vendors</a><a>Items</a><a>Bank Accounts</a><a>Chart of Accounts</a>
+  </div>
+</nav>
+
+<!-- ===== PAGE HEADER ===== -->
+<div class="page-head">
+  <div class="back-btn" title="Back"><svg class="i i-lg"><use href="#ic-back"/></svg></div>
+  <div class="page-caption">Data Administration <span class="meta">| Work Date: 4/1/2021</span></div>
+  <div class="tools">
+    <button title="Bookmark"><svg class="i i-lg"><use href="#ic-bookmark"/></svg></button>
+    <button title="Open in new window"><svg class="i i-lg"><use href="#ic-popout"/></svg></button>
+    <button title="Expand"><svg class="i i-lg"><use href="#ic-expand"/></svg></button>
+  </div>
+</div>
+
+<!-- ===== TEAL NOTIFICATION BANNER ===== -->
+<div class="banner">
+  <span class="dismiss" title="Dismiss"><svg class="i"><use href="#ic-close"/></svg></span>
+  <span>Reminder: your work date is 2020/04/06</span>
+  <span class="actions">
+    <a>Use today</a><span class="sep">|</span><a>Change to…</a><span class="sep">|</span><a>Turn off reminder</a>
+  </span>
+  <span class="chev"><svg class="i"><use href="#ic-chev-down"/></svg></span>
+</div>
+
+<!-- ===== ACTION BAR ===== -->
+<div class="action-bar">
+  <button class="act"><svg class="i"><use href="#ic-guide"/></svg> Data Administration Guide</button>
+  <button class="act"><svg class="i"><use href="#ic-refresh"/></svg> Refresh</button>
+  <button class="act">Page</button>
+  <div class="act-divider"></div>
+  <button class="act">Actions</button>
+  <button class="act">Related</button>
+  <button class="act quiet">Fewer options</button>
+  <button class="act end" title="Filter"><svg class="i"><use href="#ic-filter"/></svg></button>
+</div>
+
+<div class="content">
+
+  <!-- ===== CUE TILES ===== -->
+  <h2 class="part-title">Activities</h2>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">Sales this month</div>
+      <div class="kpi-value">$1,906</div>
+      <div class="kpi-bar"></div>
+      <a>&#8250; See more</a>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Overdue sales invoice amount</div>
+      <div class="kpi-value">$63,890</div>
+      <div class="kpi-bar"></div>
+      <a>&#8250; See more</a>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Overdue purch. invoice amount</div>
+      <div class="kpi-value">$49,422</div>
+      <div class="kpi-bar red"></div>
+      <a>&#8250; See more</a>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Sales invoices — overdue</div>
+      <div class="kpi-value">0</div>
+      <div class="kpi-bar"></div>
+      <a>&#8250; See more</a>
+    </div>
+  </div>
+
+  <div class="cue-group">
+    <div class="cue"><div class="cue-label">Sales Quotes</div><div class="cue-value">2</div><div class="cue-foot"></div></div>
+    <div class="cue"><div class="cue-label">Sales Orders</div><div class="cue-value">4</div><div class="cue-foot"></div></div>
+    <div class="cue"><div class="cue-label">Sales Invoices</div><div class="cue-value">7</div><div class="cue-foot"></div></div>
+    <div class="cue"><div class="cue-label">Purchase Orders</div><div class="cue-value">4</div><div class="cue-foot"></div></div>
+    <div class="cue"><div class="cue-label">Requests to Approve</div><div class="cue-value">0</div><div class="cue-foot"></div></div>
+    <div class="cue"><div class="cue-label">Unprocessed Payments</div><div class="cue-value">1</div><div class="cue-foot"></div></div>
+    <div class="cue flat"><div class="cue-label">Average Coll. Days</div><div class="cue-value">5.8</div></div>
+    <div class="cue"><div class="cue-label">Outstanding Invoices</div><div class="cue-value">13</div><div class="cue-foot"></div></div>
+  </div>
+
+  <!-- ===== LIST TABLE ===== -->
+  <h2 class="part-title">Table Size</h2>
+  <div class="list-wrap">
+    <table class="bc-list">
+      <thead>
+        <tr>
+          <th class="col-check"><input type="checkbox"></th>
+          <th>Table Name</th>
+          <th>Company Name</th>
+          <th class="num">No. of Records</th>
+          <th class="num">Data Size (KB) <svg class="i i-sm"><use href="#ic-arrow-down"/></svg></th>
+          <th class="num">Last Period Size (30D)</th>
+          <th class="num">Growth % (30D)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="selected">
+          <td><input type="checkbox" checked></td>
+          <td><a class="rec">Config. Media Buffer</a> <button class="row-menu"><svg class="i i-sm"><use href="#ic-more"/></svg></button></td>
+          <td>CRONUS IT</td>
+          <td class="num"><a class="drill">52</a></td>
+          <td class="num">2,144</td>
+          <td class="num">2,144</td>
+          <td class="num">0.00</td>
+        </tr>
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><a class="rec">Data Sensitivity</a> <button class="row-menu"><svg class="i i-sm"><use href="#ic-more"/></svg></button></td>
+          <td>(Cross-Company Data)</td>
+          <td class="num"><a class="drill">28,258</a></td>
+          <td class="num">1,464</td>
+          <td class="num">1,464</td>
+          <td class="num">0.00</td>
+        </tr>
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><a class="rec">Intelligent Cloud Status</a> <button class="row-menu"><svg class="i i-sm"><use href="#ic-more"/></svg></button></td>
+          <td>(Cross-Company Data)</td>
+          <td class="num"><a class="drill">2,705</a></td>
+          <td class="num">584</td>
+          <td class="num">584</td>
+          <td class="num">0.00</td>
+        </tr>
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><a class="rec">Sales Invoice Line</a> <button class="row-menu"><svg class="i i-sm"><use href="#ic-more"/></svg></button></td>
+          <td>CRONUS IT</td>
+          <td class="num"><a class="drill">1,742</a></td>
+          <td class="num">512</td>
+          <td class="num">431</td>
+          <td class="num pos">18.79</td>
+        </tr>
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><a class="rec">G/L Entry</a> <button class="row-menu"><svg class="i i-sm"><use href="#ic-more"/></svg></button></td>
+          <td>CRONUS IT</td>
+          <td class="num"><a class="drill">4,391</a></td>
+          <td class="num">488</td>
+          <td class="num">512</td>
+          <td class="num neg">-4.68</td>
+        </tr>
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><a class="rec">Item Ledger Entry</a> <button class="row-menu"><svg class="i i-sm"><use href="#ic-more"/></svg></button></td>
+          <td>CRONUS IT</td>
+          <td class="num"><a class="drill">903</a></td>
+          <td class="num">296</td>
+          <td class="num">296</td>
+          <td class="num">0.00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="list-footer">
+    <span>1 of 6 selected</span>
+    <div class="pager">
+      <button><svg class="i i-sm"><use href="#ic-chev-left"/></svg></button>
+      <button class="current">1</button>
+      <button>2</button>
+      <button>3</button>
+      <button><svg class="i i-sm"><use href="#ic-chev-right"/></svg></button>
+    </div>
+  </div>
+
+  <!-- ===== FIELDS ===== -->
+  <h2 class="part-title">General</h2>
+  <div class="form-grid">
+    <div class="field"><label>Vendor Name</label><input type="text" value="Fabrikam Supplies"></div>
+    <div class="field"><label>Document Date</label><input type="date" value="2021-04-01"></div>
+    <div class="field"><label>Payment Terms</label><select><option>14 DAYS</option><option>30 DAYS</option><option>COD</option></select></div>
+    <div class="field"><label>Currency Code</label><select><option>USD</option><option>EUR</option><option>KES</option></select></div>
+  </div>
+
+  <!-- ===== BUTTONS ===== -->
+  <h2 class="part-title">Buttons</h2>
+  <div class="btn-row">
+    <button class="btn btn-primary"><svg class="i"><use href="#ic-check"/></svg> OK</button>
+    <button class="btn btn-standard">Cancel</button>
+    <button class="btn btn-link"><svg class="i"><use href="#ic-plus"/></svg> New line</button>
+    <button class="btn" disabled>Disabled</button>
+    <button class="act"><svg class="i"><use href="#ic-download"/></svg> Open in Excel</button>
+    <button class="act"><svg class="i"><use href="#ic-edit"/></svg> Edit List</button>
+    <button class="act"><svg class="i"><use href="#ic-trash"/></svg> Delete</button>
+  </div>
+
+  <!-- ===== TOKENS ===== -->
+  <h2 class="part-title">Theme tokens</h2>
+  <div class="swatches">
+    <div class="swatch"><div class="chip" style="background:#161B21"></div><div class="meta"><b>Top bar</b><code>#161B21</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#0E8476"></div><div class="meta"><b>Teal accent</b><code>#0E8476</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#009B8F"></div><div class="meta"><b>Cue tile teal</b><code>#009B8F</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#085048"></div><div class="meta"><b>Teal pressed</b><code>#085048</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#C6ECE9"></div><div class="meta"><b>Banner</b><code>#C6ECE9</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#D7F1EE"></div><div class="meta"><b>Selected row</b><code>#D7F1EE</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#EFF9F8"></div><div class="meta"><b>Hover tint</b><code>#EFF9F8</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#333333"></div><div class="meta"><b>Text</b><code>#333333</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#605E5C"></div><div class="meta"><b>Secondary text</b><code>#605E5C</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#D6D4D2"></div><div class="meta"><b>Header rule</b><code>#D6D4D2</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#EBEAE9"></div><div class="meta"><b>Row divider</b><code>#EBEAE9</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#F8F8F7"></div><div class="meta"><b>Action bar bg</b><code>#F8F8F7</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#A4262C"></div><div class="meta"><b>Negative</b><code>#A4262C</code></div></div>
+  </div>
+
+</div>
+</body>
+</html>

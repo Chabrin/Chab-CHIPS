@@ -82,7 +82,6 @@
                                     <label for="advanceType" class="form-label">Advance Type <span class="text-danger">*</span></label>
                                     <select class="form-select" id="advanceType" name="advance_type_id" required>
                                         <option value="">Select Advance Type</option>
-                                        <option value="1" {{ old('advance_type_id', $advance->advance_type_id) == 1 ? 'selected' : '' }}>Expense Advance</option>
                                         <option value="2" {{ old('advance_type_id', $advance->advance_type_id) == 2 ? 'selected' : '' }}>Client Payment Advance</option>
                                         <option value="3" {{ old('advance_type_id', $advance->advance_type_id) == 3 ? 'selected' : '' }}>Overpayment Advance</option>
                                     </select>
@@ -113,56 +112,6 @@
                             <!-- Requisitions Section -->
                             <div id="requisitionsSection">
                                 <h5 class="border-bottom pb-2 mb-3 mt-4">Requisition Details</h5>
-
-                                <!-- Expense Category (Expense Advance only) -->
-                                <div class="row field-group" id="expenseCategoryGroup" style="display: none;">
-                                    <div class="col-md-4 mb-3">
-                                        <label for="expenseCategory" class="form-label">Expense Category <span class="text-danger">*</span></label>
-                                        <select class="form-select" id="expenseCategory" name="expense_category">
-                                            <option value="">Select Category</option>
-                                            <option value="repairs_maintenance" {{ old('expense_category', $advance->expense_category) == 'repairs_maintenance' ? 'selected' : '' }}>Repairs and Maintenance</option>
-                                            <option value="caretaker_salaries" {{ old('expense_category', $advance->expense_category) == 'caretaker_salaries' ? 'selected' : '' }}>Caretaker Salaries</option>
-                                            <option value="garbage_collection" {{ old('expense_category', $advance->expense_category) == 'garbage_collection' ? 'selected' : '' }}>Garbage Collection</option>
-                                            <option value="electricity_bills" {{ old('expense_category', $advance->expense_category) == 'electricity_bills' ? 'selected' : '' }}>Electricity Bills</option>
-                                            <option value="water_bills" {{ old('expense_category', $advance->expense_category) == 'water_bills' ? 'selected' : '' }}>Water Bills</option>
-                                            <option value="printing_photocopying" {{ old('expense_category', $advance->expense_category) == 'printing_photocopying' ? 'selected' : '' }}>Printing and Photocopying</option>
-                                            <option value="refund_tenant_deposits" {{ old('expense_category', $advance->expense_category) == 'refund_tenant_deposits' ? 'selected' : '' }}>Refund of Tenant Deposits</option>
-                                            <option value="eviction_costs" {{ old('expense_category', $advance->expense_category) == 'eviction_costs' ? 'selected' : '' }}>Eviction Costs</option>
-                                            <option value="locking_devices" {{ old('expense_category', $advance->expense_category) == 'locking_devices' ? 'selected' : '' }}>Locking Devices</option>
-                                            <option value="security_services" {{ old('expense_category', $advance->expense_category) == 'security_services' ? 'selected' : '' }}>Security Services</option>
-                                        </select>
-                                        @error('expense_category')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">Cheque Charge (KES)</label>
-                                        <input type="number" class="form-control" id="chequeChargeExpense" name="charge_amount" step="0.01" value="{{ old('charge_amount', $advance->charge_amount) }}" readonly>
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label class="form-label">Charge Billed To</label>
-                                        <input type="text" class="form-control" id="chargeBilledTo" name="charge_billed_to" value="{{ old('charge_billed_to', $advance->charge_billed_to) }}" readonly>
-                                    </div>
-                                </div>
-
-                                <!-- Payment Method (Client Payment only) -->
-                                <div class="row field-group" id="paymentMethodGroup" style="display: none;">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="paymentMethod" class="form-label">Payment Method <span class="text-danger">*</span></label>
-                                        <select class="form-select" id="paymentMethod" name="payment_method">
-                                            <option value="">Select Method</option>
-                                            <option value="bank_transfer" {{ old('payment_method', $advance->payment_method) == 'bank_transfer' ? 'selected' : '' }}>Direct Bank Transfer</option>
-                                            <option value="alternative" {{ old('payment_method', $advance->payment_method) == 'alternative' ? 'selected' : '' }}>Alternative Payment Instructions</option>
-                                        </select>
-                                        @error('payment_method')
-                                            <div class="invalid-feedback d-block">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                    <div class="col-md-6 mb-3" id="paymentInstructionsGroup" style="display: none;">
-                                        <label class="form-label">Payment Instructions</label>
-                                        <textarea class="form-control" id="paymentInstructions" name="payment_instructions" rows="2">{{ old('payment_instructions', $advance->payment_instructions) }}</textarea>
-                                    </div>
-                                </div>
 
                                 <!-- Dates -->
                                 <div class="row field-group" id="requisitionDateGroup" style="display: none;">
@@ -261,25 +210,11 @@ $(document).ready(function() {
         advance_type_id: {{ $advance->advance_type_id }}
     };
 
-    // Cheque charge mapping by expense category
-    const chequeCharges = {
-        'repairs_maintenance': { charge: 100, billed_to: 'Client' },
-        'caretaker_salaries': { charge: 150, billed_to: 'Client' },
-        'garbage_collection': { charge: 100, billed_to: 'Client' },
-        'electricity_bills': { charge: 100, billed_to: 'Client' },
-        'water_bills': { charge: 100, billed_to: 'Client' },
-        'printing_photocopying': { charge: 100, billed_to: 'Client' },
-        'refund_tenant_deposits': { charge: 150, billed_to: 'Tenant' },
-        'eviction_costs': { charge: 100, billed_to: 'Client' },
-        'locking_devices': { charge: 100, billed_to: 'Client' },
-        'security_services': { charge: 100, billed_to: 'Client' }
-    };
-
     loadClients();
 
     // Initialize Select2
     setTimeout(function() {
-        $('#client, #property, #advanceType, #expenseCategory, #paymentMethod').select2({
+        $('#client, #property, #advanceType').select2({
             allowClear: true,
             width: '100%'
         });
@@ -346,28 +281,6 @@ $(document).ready(function() {
             }
         });
     }
-
-    // Expense Category change - auto-set cheque charge
-    $('#expenseCategory').on('change', function() {
-        const category = $(this).val();
-        if (category && chequeCharges[category]) {
-            $('#chequeChargeExpense').val(chequeCharges[category].charge);
-            $('#chargeBilledTo').val(chequeCharges[category].billed_to);
-        } else {
-            $('#chequeChargeExpense').val('');
-            $('#chargeBilledTo').val('');
-        }
-        recalculate();
-    });
-
-    // Payment Method change
-    $('#paymentMethod').on('change', function() {
-        if ($(this).val() === 'alternative') {
-            $('#paymentInstructionsGroup').show();
-        } else {
-            $('#paymentInstructionsGroup').hide();
-        }
-    });
 
     // ===== LIVE CALCULATION ENGINE =====
 
@@ -439,14 +352,7 @@ $(document).ready(function() {
         var basisText = '', rateDisplay = '0%', monthlyPayment = 0;
         var scheduleRows = [];
 
-        if (advanceType === '1') {
-            chargeAmount = parseFloat($('#chequeChargeExpense').val()) || 0;
-            totalAmount  = Math.round((amount + chargeAmount) * 100) / 100;
-            rateDisplay  = '0%';
-            basisText    = 'Expense Advance — no interest charged. Charge is auto-set by expense category.';
-            $('#cs_monthly_wrap, #cs_schedule_wrap').hide();
-
-        } else if (advanceType === '2') {
+        if (advanceType === '2') {
             var rate2     = parseFloat($('#interestRate').val()) || 3;
             var months2   = parseInt($('#months').val()) || 0;
             var psd2      = $('#paymentStartDate').val();
@@ -584,7 +490,7 @@ $(document).ready(function() {
         $('#cs_basis').text(basisText);
     }
 
-    $('#issuedDate, #amount, #interestRate, #months, #paymentStartDate, #chequeChargeExpense, #chequeChargeGeneral, #paymentStartDate').on('change keyup', recalculate);
+    $('#issuedDate, #amount, #interestRate, #months, #paymentStartDate, #chequeChargeGeneral').on('change keyup', recalculate);
 
     // Handle Advance Type change to show/hide fields
     $('#advanceType').on('change', function() {
@@ -599,28 +505,17 @@ $(document).ready(function() {
         $('.field-group').hide();
 
         // Remove required from conditional fields
-        $('#expenseCategory, #paymentMethod, #requisitionDate, #issuedDate, #amount, #months, #paymentStartDate, #narration').prop('required', false);
+        $('#requisitionDate, #issuedDate, #amount, #months, #paymentStartDate, #narration').prop('required', false);
         $('#interestRate').prop('readonly', false);
 
         switch(advanceType) {
-            case '1': // Expense Advance - No interest
-                $('#expenseCategoryGroup, #requisitionDateGroup, #amountInterestGroup, #narrationGroup').show();
-                $('#expenseCategory, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
-                $('#interestRate').val(0).prop('readonly', true);
-                $('#interestInfoGroup').hide();
-                recalculate();
-                break;
-
             case '2': // Client Payment Advance
-                $('#paymentMethodGroup, #requisitionDateGroup, #amountInterestGroup, #repaymentGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
-                $('#paymentMethod, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
+                $('#requisitionDateGroup, #amountInterestGroup, #repaymentGroup, #chequeChargeGroup, #narrationGroup, #interestInfoGroup').show();
+                $('#requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
                 $('#months, #paymentStartDate').prop('required', false);
                 $('.repayment-required').hide();
                 $('#repaymentHint').text('Optional — enter months to generate a repayment schedule preview.');
                 $('#chequeChargeGeneral').val(100);
-                if ($('#paymentMethod').val() === 'alternative') {
-                    $('#paymentInstructionsGroup').show();
-                }
                 recalculate();
                 break;
 

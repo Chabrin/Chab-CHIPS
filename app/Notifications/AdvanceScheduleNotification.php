@@ -39,7 +39,6 @@ class AdvanceScheduleNotification extends Notification implements ShouldQueue
         $property = $advance->property->property_name ?? 'N/A';
 
         $typeNames = [
-            1 => 'Expense Advance',
             2 => 'Client Payment Advance',
             3 => 'Overpayment Advance',
         ];

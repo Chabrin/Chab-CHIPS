@@ -6,6 +6,19 @@
     --header-height: 42px;
     --accent: #3598db;
     --accent-dark: #217dbb;
+
+    /* D365-style state variants of the existing accent (blue, not the sample's teal) */
+    --accent-hover: #2f8ecf;
+    --accent-press: #217dbb;
+    --accent-tint: #eaf4fc;
+    --accent-selected: #d7ebfa;
+
+    /* Flat, neutral chrome tokens borrowed from the D365 sample — color-agnostic,
+       used to soften borders/dividers/hover states across topbar, cards, inputs. */
+    --d365-border-light: #ebeae9;
+    --d365-text-soft: #605e5c;
+    --d365-page-alt: #f8f8f7;
+    --d365-hover-tint: #f5f5f4;
 }
 
 .material-symbols-outlined {
@@ -83,6 +96,24 @@
     display: flex;
     align-items: center;
     height: var(--header-height);
+}
+
+/* Flat D365-style icon-button treatment for the topbar's hamburger/search/bell —
+   pure hover/sizing rules, no markup changes needed. */
+.mobile-hamburger .toggle-sidebar,
+.serchinput .serchbox,
+.message {
+    border-radius: 4px !important;
+    transition: background-color 0.12s ease !important;
+}
+.mobile-hamburger .toggle-sidebar:hover,
+.serchinput .serchbox:hover,
+.message:hover {
+    background-color: var(--accent-tint) !important;
+}
+.serchinput .search-form input {
+    border: none !important;
+    background: transparent !important;
 }
 
 .nav-menus .material-symbols-outlined {
@@ -376,10 +407,10 @@
 .page-wrapper .page-body-wrapper .page-body,
 .page-wrapper.compact-wrapper .page-body-wrapper .page-body {
     display: block !important;
-    padding: 15px !important;
+    padding: 10px 20px 24px !important;
     margin: 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: 1320px !important;
     box-sizing: border-box !important;
     transition: none !important;
 }
@@ -642,15 +673,16 @@ table.dataTable td .material-symbols-outlined {
 
 /* ---- CARDS ---- */
 .card {
-    border: 1px solid #d1d1d1 !important;
-    border-radius: 10px !important;
+    border: 1px solid var(--d365-border-light) !important;
+    border-radius: 4px !important;
     box-shadow: none !important;
     margin-bottom: 12px !important;
 }
 
 .card .card-header {
-    padding: 6px 12px !important;
-    border-bottom: 1px solid #edebe9 !important;
+    padding: 8px 14px !important;
+    background: transparent !important;
+    border-bottom: 1px solid var(--d365-border-light) !important;
     box-shadow: none !important;
 }
 
@@ -695,8 +727,10 @@ table.dataTable td .material-symbols-outlined {
 .btn {
     display: inline-flex !important;
     align-items: center !important;
+    justify-content: center !important;
     gap: 6px !important;
-    padding: 6px 16px !important;
+    height: 32px !important;
+    padding: 0 16px !important;
     font-size: 14px !important;
     font-family:
         "Segoe UI",
@@ -708,7 +742,7 @@ table.dataTable td .material-symbols-outlined {
     border-radius: 2px !important;
     cursor: pointer !important;
     transition: all 0.15s !important;
-    line-height: 1.5 !important;
+    line-height: 1 !important;
     text-decoration: none !important;
 }
 
@@ -717,7 +751,8 @@ table.dataTable td .material-symbols-outlined {
 }
 
 .btn-sm {
-    padding: 4px 10px !important;
+    height: 28px !important;
+    padding: 0 10px !important;
     font-size: 12px !important;
 }
 
@@ -744,14 +779,25 @@ textarea {
         Roboto,
         "Helvetica Neue",
         sans-serif !important;
-    border: 1px solid #d1d1d1 !important;
-    border-radius: 0 !important;
-    transition: border-color 0.15s !important;
+    border: 1px solid var(--d365-border-light) !important;
+    border-radius: 2px !important;
+    transition:
+        border-color 0.15s,
+        background-color 0.15s !important;
 }
 
 textarea {
     height: auto !important;
     padding: 6px 8px !important;
+}
+
+.form-control:hover,
+.form-select:hover,
+input:hover,
+select:hover,
+textarea:hover {
+    border-color: #c9c7c5 !important;
+    background-color: var(--d365-page-alt) !important;
 }
 
 .form-control:focus,
@@ -761,6 +807,7 @@ select:focus,
 textarea:focus {
     outline: none !important;
     border-color: var(--accent) !important;
+    background-color: #fff !important;
     box-shadow: none !important;
 }
 

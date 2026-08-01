@@ -24,7 +24,6 @@
         table.schedule tr:nth-child(even) { background: #f9f9f9; }
         table.schedule tfoot td { background: #eaf0ff; font-weight: bold; border-top: 2px solid #2c3e50; }
         .type-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; }
-        .type-1 { background: #fff3cd; color: #856404; }
         .type-2 { background: #cfe2ff; color: #084298; }
         .type-3 { background: #d1ecf1; color: #0c5460; }
         .footer { margin-top: 20px; font-size: 9px; color: #aaa; text-align: center; }
@@ -51,9 +50,7 @@
         <td class="val">{{ $advance->property->property_name ?? '—' }}</td>
         <td class="label">Advance Type:</td>
         <td class="val">
-            @if($advance->advance_type_id == 1)
-                <span class="type-badge type-1">Expense Advance</span>
-            @elseif($advance->advance_type_id == 2)
+            @if($advance->advance_type_id == 2)
                 <span class="type-badge type-2">Client Payment Advance</span>
             @else
                 <span class="type-badge type-3">Overpayment Advance</span>

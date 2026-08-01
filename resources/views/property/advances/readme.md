@@ -1,47 +1,17 @@
 Property Management System – Advance Transactions Module
 System Development Notes
+
+Note (August 2026): Expense Advances (formerly advance_type_id=1, with its expense_category/charge_billed_to fields) and the Payment Method field on Client Payment Advances (payment_method/payment_instructions) have been removed from the system, frontend and backend. Only Client Payment Advances and Overpayment Advances remain. Sections below referencing them are kept for historical context only.
+
 1. Advance Types
-The system shall support three categories of advances:
-    1. Expense Advances
+The system supports two categories of advances:
     2. Client Payment Advances
     3. Overpayment Advances
 Each category shall have distinct rules, charges, and interest calculations.
 
-2. Expense Advances
-Description
-These are advances issued to facilitate operational expenses related to property management.
-Eligible Expense Categories
-The system shall allow expense advances for the following:
-    • Repairs and maintenance
-    • Caretaker salaries
-    • Garbage collection
-    • Electricity bills
-    • Water bills
-    • Printing and photocopying
-    • Refund of tenant deposits
-    • Eviction costs
-    • Locking devices
-    • Security services
-Financial Rules
-Interest
-    • No interest shall be charged on expense advances.
-Cheque Processing Charges
-The system shall apply cheque charges as follows:
-Expense Type	Charge
-General expenses	KES 100
-Caretaker salaries	KES 150
-Refund of deposits	KES 150
-Charge Allocation
-    • The applicable cheque charge shall be billed to the client account except from refund of deposit which is billed from the tenant/recipient of the payment.
-
 3. Client Payment Advances
 Description
 These are advances issued directly to property owners (clients) prior to the onset of the rent collection cycle.
-Payment Method
-The system shall support:
-    • Direct transfer to client bank account
-    • Alternative payment instructions as directed by the client
-The system must therefore allow flexible payment instruction configuration.
 
 Interest Calculation Rules
 Interest is charged based on the date the advance is issued.

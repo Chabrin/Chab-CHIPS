@@ -143,9 +143,7 @@
                 {
                     data: 'advance_type',
                     render: function(data) {
-                        if (data === 'Expense Advance') {
-                            return '<span class="badge bg-warning">' + data + '</span>';
-                        } else if (data === 'Client Payment Advance') {
+                        if (data === 'Client Payment Advance') {
                             return '<span class="badge bg-primary">' + data + '</span>';
                         } else if (data === 'Overpayment Advance') {
                             return '<span class="badge bg-info">' + data + '</span>';

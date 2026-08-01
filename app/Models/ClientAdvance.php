@@ -39,10 +39,6 @@ class ClientAdvance extends Model
         'current_balance',
         'one_off',
         'voucher_id',
-        'expense_category',
-        'charge_billed_to',
-        'payment_method',
-        'payment_instructions',
     ];
 
     protected $casts = [

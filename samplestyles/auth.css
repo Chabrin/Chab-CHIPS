@@ -1,0 +1,131 @@
+/* ==========================================================================
+   Auth pages: login, logout, password set/reset.
+   A single centered card — no app shell (no sidenav/topbar) since these
+   render before a session exists.
+   ========================================================================== */
+
+html, body { height: 100%; }
+body.auth-body {
+  font-family: var(--d365-font);
+  background: var(--d365-page-alt);
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--d365-page);
+  border: 1px solid var(--d365-border-light);
+  border-radius: 8px;
+  box-shadow: var(--d365-shadow-sm);
+  padding: 36px 32px;
+}
+
+.auth-brand-logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 26px; }
+.auth-brand-logo .brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--d365-teal-tile);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.auth-brand-logo .brand-icon .i { width: 20px; height: 20px; }
+.auth-brand-logo span { font-size: 15px; font-weight: 600; color: var(--d365-text); }
+
+.auth-card h2 { font-size: 20px; font-weight: 600; margin: 0 0 6px; color: var(--d365-text); text-align: center; }
+.auth-card .auth-sub { font-size: 13.5px; color: var(--d365-text-soft); margin: 0 0 26px; line-height: 1.5; text-align: center; }
+
+.auth-card .f { padding: 9px 0; }
+.auth-card .f label { display: flex; align-items: center; gap: 6px; }
+.auth-card .f label .i { width: 14px; height: 14px; color: var(--d365-text-soft); }
+
+.password-field-wrap { position: relative; }
+.password-field-wrap input { padding-right: 30px !important; }
+.password-toggle {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--d365-text-soft);
+  padding: 4px;
+  display: inline-flex;
+}
+.password-toggle .i { width: 16px; height: 16px; }
+.password-toggle:hover { color: var(--d365-text); }
+
+.auth-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 6px 0 20px;
+  font-size: 13px;
+}
+.auth-remember { display: flex; align-items: center; gap: 6px; color: var(--d365-text-soft); cursor: pointer; }
+.auth-remember input { accent-color: var(--d365-teal); cursor: pointer; }
+.auth-actions-row a { color: var(--d365-teal); }
+.auth-actions-row a:hover { color: var(--d365-teal-press); text-decoration: underline; }
+
+.btn-block { width: 100%; height: 40px; font-size: 14.5px; }
+
+.auth-footer-link { text-align: center; margin-top: 22px; font-size: 13px; color: var(--d365-text-soft); }
+.auth-footer-link a { color: var(--d365-teal); font-weight: 600; }
+.auth-footer-link a:hover { color: var(--d365-teal-press); text-decoration: underline; }
+
+/* ---------------- Password strength / requirements checklist ---------------- */
+.password-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 16px;
+  font-size: 12.5px;
+}
+.password-requirements .req-item { display: flex; align-items: center; gap: 7px; color: var(--d365-text-faint); }
+.password-requirements .req-item .i { width: 14px; height: 14px; flex: none; }
+.password-requirements .req-item.met { color: var(--d365-teal-press); }
+.password-requirements .req-item.met .i { color: var(--d365-teal); }
+
+/* ---------------- Sign-in error banner ---------------- */
+.auth-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--d365-error-bg);
+  color: var(--d365-neg);
+  border-radius: var(--d365-radius);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.auth-error-banner .i { flex: none; width: 16px; height: 16px; }
+
+/* ---------------- Status card (logout / confirmation states) ---------------- */
+.auth-status-card { text-align: center; }
+.auth-status-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--d365-tint);
+  color: var(--d365-teal);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+}
+.auth-status-icon .i { width: 28px; height: 28px; }
+
+@media (max-width: 480px) {
+  .auth-card { padding: 28px 20px; border: none; box-shadow: none; background: transparent; }
+}

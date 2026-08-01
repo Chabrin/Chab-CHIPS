@@ -19,7 +19,6 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
     protected array $schedule;
 
     protected array $typeNames = [
-        1 => 'Expense Advance',
         2 => 'Client Payment Advance',
         3 => 'Overpayment Advance',
     ];

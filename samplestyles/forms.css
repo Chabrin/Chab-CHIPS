@@ -1,0 +1,277 @@
+/* ==========================================================================
+   Onboarding form components: FastTabs, rich field grid, repeatable
+   tables, uploads, consent, signature.
+   ========================================================================== */
+
+/* ---------------- FastTab (collapsible section, BC-style) ---------------- */
+.fasttab { border-bottom: 1px solid var(--d365-border-light); }
+.fasttab-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 2px;
+  cursor: pointer;
+  user-select: none;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--d365-font);
+}
+.fasttab-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1 1 auto;
+  color: var(--d365-text);
+}
+.fasttab-header .fasttab-hint {
+  font-size: 12px;
+  color: var(--d365-text-soft);
+  font-weight: 400;
+}
+.fasttab-header .i {
+  color: var(--d365-text-soft);
+  transition: transform 0.15s ease-in-out;
+}
+.fasttab.collapsed .fasttab-header .i.chev { transform: rotate(-90deg); }
+.fasttab-body { padding: 0 2px 20px; }
+.fasttab.collapsed .fasttab-body { display: none; }
+
+/* ---------------- Static card (single, non-collapsible section) ---------------- */
+.form-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 2px;
+}
+.form-card-header h3 { font-size: 15px; font-weight: 600; margin: 0; color: var(--d365-text); }
+.form-card-header .form-card-hint { font-size: 12px; color: var(--d365-text-soft); font-weight: 400; }
+.form-card-body { padding: 0 2px 20px; }
+
+.subsection-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--d365-teal-press);
+  margin: 18px 0 6px;
+}
+.subsection-title:first-child { margin-top: 4px; }
+
+/* ---------------- Field grid (denser than the BC reference's, for rich forms) ---------------- */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 4px 28px;
+}
+/* Forced 3-up (col-4) layout for compact modals with many fields — auto-fit
+   can round down to 2 columns near its threshold width. */
+.field-grid.field-grid-3 { grid-template-columns: repeat(3, 1fr); gap: 2px 24px; }
+.field-grid.field-grid-3 .f { padding: 5px 0; }
+@media (max-width: 640px) {
+  .field-grid.field-grid-3 { grid-template-columns: 1fr; }
+}
+.f {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 0;
+}
+.f label {
+  font-size: 12.5px;
+  color: var(--d365-text-soft);
+}
+.f label .req { color: var(--d365-neg); }
+.f input[type="text"],
+.f input[type="email"],
+.f input[type="tel"],
+.f input[type="number"],
+.f input[type="date"],
+.f input[type="time"],
+.f input[type="password"],
+.f select,
+.f textarea,
+.setting-control input[type="text"] {
+  height: 32px;
+  font-family: var(--d365-font);
+  font-size: 13.5px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--d365-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--d365-text);
+  width: 100%;
+}
+.f textarea { height: auto; min-height: 64px; padding: 6px 8px; resize: vertical; }
+.f input:hover, .f select:hover, .f textarea:hover, .setting-control input[type="text"]:hover {
+  border-bottom-color: var(--d365-text-soft);
+  background: var(--d365-page-alt);
+}
+.f input:focus, .f select:focus, .f textarea:focus, .setting-control input[type="text"]:focus {
+  outline: none;
+  border: 1px solid var(--d365-teal);
+  background: var(--d365-page);
+}
+/* Neutralize Chrome/Edge's forced yellow autofill background so saved
+   credentials don't visually clash with the underline field style. */
+.f input:-webkit-autofill,
+.f input:-webkit-autofill:hover,
+.f input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--d365-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--d365-page) inset;
+  box-shadow: 0 0 0 1000px var(--d365-page) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+.f.span-2 { grid-column: span 2; }
+.f.span-3 { grid-column: span 3; }
+@media (max-width: 760px) {
+  .f.span-2, .f.span-3 { grid-column: span 1; }
+}
+
+/* Yes/No pill toggle (PEP, FATCA, etc.) */
+.pill-toggle { display: flex; gap: 0; border: 1px solid var(--d365-border); border-radius: var(--d365-radius); width: fit-content; overflow: hidden; }
+.pill-toggle label {
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--d365-text-soft);
+  border-right: 1px solid var(--d365-border);
+}
+.pill-toggle label:last-child { border-right: none; }
+.pill-toggle input { display: none; }
+.pill-toggle input:checked + span { color: #fff; }
+.pill-toggle label:has(input:checked) { background: var(--d365-teal); color: #fff; }
+
+/* ---------------- Repeatable tables (Signatories / UBOs) ---------------- */
+.repeat-table-wrap { margin-top: 6px; }
+table.repeat-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.repeat-table thead th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--d365-text-soft);
+  padding: 0 10px;
+  height: 34px;
+  border-bottom: 1px solid var(--d365-border);
+  white-space: nowrap;
+}
+.repeat-table tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--d365-border-light);
+}
+.repeat-table tbody td input,
+.repeat-table tbody td select {
+  height: 28px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--d365-border);
+  background: transparent;
+  font-family: var(--d365-font);
+  font-size: 13px;
+  padding: 0 4px;
+}
+.repeat-table tbody td input:focus,
+.repeat-table tbody td select:focus { outline: none; border: 1px solid var(--d365-teal); background: var(--d365-page); }
+.repeat-table .col-remove { width: 32px; text-align: center; }
+.repeat-table .remove-row {
+  width: 24px; height: 24px; border: none; background: transparent;
+  color: var(--d365-text-soft); cursor: pointer; border-radius: var(--d365-radius);
+  display: inline-grid; place-items: center;
+}
+.repeat-table .remove-row:hover { background: var(--d365-error-bg); color: var(--d365-neg); }
+
+/* ---------------- Upload field ---------------- */
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 6px 0;
+}
+.upload-field {
+  border: 1px dashed var(--d365-border);
+  border-radius: var(--d365-radius);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--d365-text-soft);
+  font-size: 13px;
+  position: relative;
+  cursor: pointer;
+}
+.upload-field:hover { border-color: var(--d365-teal); background: var(--d365-tint); }
+.upload-field .i { color: var(--d365-teal); flex: none; }
+.upload-field .upload-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.upload-field .upload-title { color: var(--d365-text); font-weight: 600; font-size: 13px; }
+.upload-field .upload-sub { font-size: 11.5px; color: var(--d365-text-faint); }
+.upload-field input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+
+/* ---------------- Consent / declarations ---------------- */
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--d365-text);
+}
+.consent-row input[type="checkbox"] {
+  margin-top: 3px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--d365-teal);
+  cursor: pointer;
+  flex: none;
+}
+.consent-row a { color: var(--d365-teal); }
+.consent-row a:hover { color: var(--d365-teal-press); text-decoration: underline; }
+
+/* ---------------- Signature box ---------------- */
+.signature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  padding: 10px 0;
+}
+.signature-box {
+  border: 1px solid var(--d365-border);
+  border-radius: var(--d365-radius);
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--d365-text-faint);
+  font-size: 12.5px;
+  font-style: italic;
+  background: var(--d365-page-alt);
+}
+.signature-label { font-size: 12.5px; color: var(--d365-text-soft); margin-top: 6px; }
+
+/* ---------------- Sticky form action footer ---------------- */
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--d365-page);
+  border-top: 1px solid var(--d365-border-light);
+  padding: 12px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.form-actions .spacer { flex: 1 1 auto; }
+
+/* Onboarding forms scroll their own action bar with the page instead of
+   pinning it to the viewport bottom. */
+body[data-page="onboarding-individual"] .form-actions,
+body[data-page="onboarding-joint"] .form-actions,
+body[data-page="onboarding-institution"] .form-actions {
+  position: static;
+}
+
+body[data-page="admin-users"] .form-actions { padding: 6px 0; }
+.form-progress { font-size: 12.5px; color: var(--d365-text-soft); }

@@ -1,0 +1,317 @@
+/* ==========================================================================
+   Dynamics 365 Business Central — Teal theme tokens
+   Flat BC look: white surfaces, thin gray dividers, teal used ONLY as accent
+   (chrome bar, icons, links, primary buttons). Mirrors d365-business-central-teal.html.
+   ========================================================================== */
+
+:root {
+    /* Chrome */
+    --d365-header: #161b21; /* near-black top bar */
+
+    /* Teal accent (the ONLY strong color) */
+    --d365-teal: #0e8476;
+    --d365-teal-hover: #0b6b60;
+    --d365-teal-press: #085048;
+    --d365-teal-tile: #009b8f;
+    --d365-banner: #c6ece9;
+    --d365-selected: #d7f1ee;
+    --d365-tint: #eff9f8;
+
+    /* Neutrals — this theme is mostly these */
+    --d365-text: #333333;
+    --d365-text-soft: #605e5c;
+    --d365-text-faint: #8f8d8b;
+    --d365-border: #d6d4d2;
+    --d365-border-light: #ebeae9;
+    --d365-hover: #f5f5f4;
+    --d365-page: #ffffff;
+    --d365-page-alt: #f8f8f7;
+
+    /* Semantic (used sparingly) */
+    --d365-pos: #0e8476;
+    --d365-neg: #a4262c;
+    --d365-warning-bg: #fff4ce;
+    --d365-warning-text: #8a6100;
+    --d365-error-bg: #fde7e9;
+
+    /* Identity tag accents — used sparingly on profile pages only, to break
+     up plain label/value text (ID, email, phone, member type) */
+    --d365-tag-blue: #0a6cbd;
+    --d365-tag-blue-bg: #e7f2fb;
+    --d365-tag-purple: #6b4fbb;
+    --d365-tag-purple-bg: #f1ecfa;
+    --d365-tag-amber: #a15c00;
+    --d365-tag-amber-bg: #fff4e0;
+
+    --d365-font:
+        "Segoe UI", "Segoe UI Web", -apple-system, BlinkMacSystemFont, Roboto,
+        Helvetica, Arial, sans-serif;
+    --d365-radius: 2px;
+    --d365-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+    --d365-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.16);
+
+    /* Bootstrap overrides — only grid/utility classes are used from Bootstrap;
+     component classes (btn, table, badge, card) are our own, defined below. */
+    --bs-body-font-family: var(--d365-font);
+    --bs-body-font-size: 0.875rem;
+    --bs-body-color: var(--d365-text);
+    --bs-body-bg: var(--d365-page);
+    --bs-border-color: var(--d365-border-light);
+}
+
+html,
+body {
+    height: 100%;
+    /* Kill Chromium's default blue tap/click-highlight overlay on buttons
+       and links — this, not the focus box-shadow, was the real source of
+       the blue flash on click. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: var(--d365-font);
+    font-size: 14px;
+    color: var(--d365-text);
+    background: var(--d365-page);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-weight: 600;
+    color: var(--d365-text);
+}
+
+a {
+    text-decoration: none;
+}
+
+/* ---------- Icons ---------- */
+.i {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: none;
+}
+.i-lg {
+    width: 18px;
+    height: 18px;
+}
+.i-sm {
+    width: 12px;
+    height: 12px;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+    font-family: var(--d365-font);
+    font-size: 14px;
+    font-weight: 600;
+    height: 32px;
+    min-width: 76px;
+    padding: 0 16px;
+    border-radius: var(--d365-radius);
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    background: transparent;
+    color: var(--d365-text);
+    line-height: 1;
+}
+.btn,
+.btn:focus,
+.btn:focus-visible,
+.btn-primary:focus,
+.btn-primary:focus-visible,
+.btn-primary:active:focus {
+    /* Bootstrap's own .btn-primary sets a blue focus box-shadow by default
+       (via --bs-btn-focus-shadow-rgb); neutralize it so clicking never
+       flashes blue before our own styles/spinner show. */
+    box-shadow: none;
+}
+.btn:focus-visible {
+    outline: 2px solid var(--d365-text);
+    outline-offset: 1px;
+}
+.btn-sm {
+    height: 28px;
+    min-width: 0;
+    padding: 0 12px;
+    font-size: 13px;
+}
+.btn-primary {
+    background: var(--d365-teal);
+    color: #fff;
+}
+.btn-primary:hover {
+    background: var(--d365-teal-hover);
+    color: #fff;
+}
+.btn-primary:active {
+    background: var(--d365-teal-press);
+}
+
+.btn-standard {
+    background: var(--d365-page);
+    color: var(--d365-text);
+    border-color: var(--d365-border);
+    font-weight: 400;
+}
+.btn-standard:hover {
+    background: var(--d365-hover);
+    color: var(--d365-text);
+}
+
+.btn-link {
+    background: transparent;
+    color: var(--d365-teal);
+    font-weight: 400;
+    min-width: auto;
+}
+.btn-link:hover {
+    color: var(--d365-teal-press);
+    text-decoration: underline;
+}
+
+.btn:disabled {
+    background: var(--d365-hover);
+    color: var(--d365-text-faint);
+    border-color: transparent;
+    cursor: not-allowed;
+}
+.btn i {
+    color: inherit;
+}
+.btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Flat quiet action button (topbar/action-bar style) */
+.act {
+    height: 32px;
+    padding: 0 10px;
+    background: transparent;
+    border: none;
+    font-family: var(--d365-font);
+    font-size: 14px;
+    color: var(--d365-text);
+    cursor: pointer;
+    border-radius: var(--d365-radius);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+.act .i {
+    color: var(--d365-teal);
+}
+.act:hover {
+    background: var(--d365-hover);
+}
+.act.quiet {
+    color: var(--d365-text-soft);
+}
+.act-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--d365-border);
+    margin: 0 8px;
+}
+
+/* ---------- Badges (status labels — minimal, teal-first) ---------- */
+.d365-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 10px;
+    line-height: 1.5;
+}
+.d365-badge-success {
+    background: var(--d365-tint);
+    color: var(--d365-teal-press);
+}
+.d365-badge-info {
+    background: var(--d365-tint);
+    color: var(--d365-teal-press);
+}
+.d365-badge-warning {
+    background: var(--d365-warning-bg);
+    color: var(--d365-warning-text);
+}
+.d365-badge-danger {
+    background: var(--d365-error-bg);
+    color: var(--d365-neg);
+}
+.d365-badge-neutral {
+    background: var(--d365-hover);
+    color: var(--d365-text-soft);
+}
+
+/* ---------- Cards ---------- */
+.d365-card {
+    background: var(--d365-page);
+    border: 1px solid var(--d365-border-light);
+    border-radius: var(--d365-radius);
+}
+
+/* ---------- Form controls ---------- */
+.form-control,
+.form-select {
+    height: 30px;
+    font-family: var(--d365-font);
+    font-size: 14px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-bottom-color: var(--d365-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--d365-text);
+}
+.form-control:hover,
+.form-select:hover {
+    border-bottom-color: var(--d365-text-soft);
+    background: var(--d365-page-alt);
+}
+.form-control:focus,
+.form-select:focus {
+    outline: none;
+    border: 1px solid var(--d365-teal);
+    background: var(--d365-page);
+    box-shadow: none;
+}
+
+/* ---------- Scrollbar ---------- */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--d365-border);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}

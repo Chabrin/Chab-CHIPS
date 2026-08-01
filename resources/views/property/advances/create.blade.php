@@ -85,23 +85,41 @@
                                     <label class="form-label-sm">Advance Type <span class="text-danger">*</span></label>
                                     <select class="form-select form-select-sm" id="advanceType" name="advance_type_id" required>
                                         <option value="">Select Type</option>
-                                        <option value="1">Expense Advance</option>
                                         <option value="2">Client Payment Advance</option>
                                         <option value="3">Overpayment Advance</option>
                                     </select>
                                 </div>
                                 <div class="col-md-5">
-                                    <label class="form-label-sm">Client <span class="text-danger">*</span></label>
-                                    <select class="form-select form-select-sm" id="client" name="client_id" required>
-                                        <option value=""></option>
-                                    </select>
-                                    <small class="text-muted">Type to search - by landlord name, or by property name/reference if you don't know the landlord.</small>
+                                    <label for="landlord_search_input" class="form-label-sm mb-1">Search Landlord</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control form-control-sm" id="landlord_search_input" placeholder="-- Search --">
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_landlord_btn">
+                                            <span class="material-symbols-outlined" id="search_landlord_icon" style="font-size:18px;">search</span>
+                                            <span class="spinner-border spinner-border-sm" role="status" id="search_landlord_spinner" style="display:none;"></span>
+                                        </button>
+                                    </div>
+                                    <small class="text-muted">Search by name, reference, phone, email or ID number</small>
                                 </div>
+                                <div class="col-md-4">
+                                    <label for="landlord_direct_select" class="form-label-sm mb-1">Select Landlord <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm" id="landlord_direct_select" disabled>
+                                        <option value="">-- Search First --</option>
+                                    </select>
+                                    <input type="hidden" id="client_id" name="client_id" value="">
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-2">
                                 <div class="col-md-4">
                                     <label class="form-label-sm">Property <span class="text-danger">*</span></label>
                                     <select class="form-select form-select-sm" id="property" name="property_id" required disabled>
-                                        <option value="">Select client first</option>
+                                        <option value="">Select landlord first</option>
                                     </select>
+                                </div>
+                                <div class="col-md-8 d-flex align-items-end">
+                                    <small class="text-muted">
+                                        <strong>Selected Landlord:</strong> <span id="selected_client_name">-</span>
+                                    </small>
                                 </div>
                             </div>
 
@@ -111,50 +129,6 @@
 
                             <div id="dynamicSection" class="d-none">
                                 <div class="section-header">Requisition Details</div>
-
-                                <!-- Expense Category (Expense Advance only) -->
-                                <div class="row g-2 mb-2 d-none" id="rowExpenseCategory">
-                                    <div class="col-md-6">
-                                        <label class="form-label-sm">Expense Category <span class="text-danger">*</span></label>
-                                        <select class="form-select form-select-sm" id="expenseCategory" name="expense_category">
-                                            <option value="">Select Category</option>
-                                            <option value="repairs_maintenance">Repairs and Maintenance</option>
-                                            <option value="caretaker_salaries">Caretaker Salaries</option>
-                                            <option value="garbage_collection">Garbage Collection</option>
-                                            <option value="electricity_bills">Electricity Bills</option>
-                                            <option value="water_bills">Water Bills</option>
-                                            <option value="printing_photocopying">Printing and Photocopying</option>
-                                            <option value="refund_tenant_deposits">Refund of Tenant Deposits</option>
-                                            <option value="eviction_costs">Eviction Costs</option>
-                                            <option value="locking_devices">Locking Devices</option>
-                                            <option value="security_services">Security Services</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label-sm">Cheque Charge (KES)</label>
-                                        <input type="number" class="form-control form-control-sm" id="chequeCharge" name="charge_amount" step="0.01" readonly>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label-sm">Charge Billed To</label>
-                                        <input type="text" class="form-control form-control-sm" id="chargeBilledTo" name="charge_billed_to" readonly>
-                                    </div>
-                                </div>
-
-                                <!-- Payment Method (Client Payment Advance only) -->
-                                <div class="row g-2 mb-2 d-none" id="rowPaymentMethod">
-                                    <div class="col-md-6">
-                                        <label class="form-label-sm">Payment Method <span class="text-danger">*</span></label>
-                                        <select class="form-select form-select-sm" id="paymentMethod" name="payment_method">
-                                            <option value="">Select Method</option>
-                                            <option value="bank_transfer">Direct Bank Transfer</option>
-                                            <option value="alternative">Alternative Payment Instructions</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6 d-none" id="rowPaymentInstructions">
-                                        <label class="form-label-sm">Payment Instructions</label>
-                                        <textarea class="form-control form-control-sm" id="paymentInstructions" name="payment_instructions" rows="2" placeholder="Enter alternative payment instructions"></textarea>
-                                    </div>
-                                </div>
 
                                 <!-- Dates Row -->
                                 <div class="row g-2 mb-2 d-none" id="rowDates">
@@ -265,69 +239,82 @@
 <script>
     $(document).ready(function() {
         // Initialize Select2 for the plain dropdowns
-        $('#property, #advanceType, #expenseCategory, #paymentMethod').select2({
+        $('#property, #advanceType').select2({
             placeholder: 'Select option',
             allowClear: true,
             width: '100%'
         });
 
-        // Client field is a live search - hitting the server on every keystroke, matching
-        // either a landlord's name or a property's name/reference. Each result carries a
-        // client_id (the value actually selected) and, for property matches, a property_id.
-        $('#client').select2({
-            placeholder: 'Type to search - landlord name or property name/reference',
-            allowClear: true,
-            width: '100%',
-            minimumInputLength: 1,
-            ajax: {
-                url: '/ajax/property/advances/search',
-                dataType: 'json',
-                delay: 250,
-                data: function(params) {
-                    return { q: params.term || '' };
+        function resetClientSelection() {
+            $('#client_id').val('');
+            $('#selected_client_name').text('-');
+            $('#property').html('<option value="">Select landlord first</option>').prop('disabled', true).trigger('change.select2');
+            $('#eligibilityInfo').addClass('d-none');
+        }
+
+        // ── Search Landlord — reusing the exact same endpoint as /tenants/lease/create ──
+        $('#search_landlord_btn').on('click', function() {
+            const searchTerm = $('#landlord_search_input').val().trim();
+            if (searchTerm.length < 2) {
+                Swal.fire({ icon: 'warning', title: 'Enter at least 2 characters to search', confirmButtonColor: '#2196F3' });
+                return;
+            }
+
+            resetClientSelection();
+            $('#search_landlord_icon').hide();
+            $('#search_landlord_spinner').show();
+            $('#search_landlord_btn').prop('disabled', true);
+
+            $.ajax({
+                url: '/ajax/landlord/search-landlords',
+                method: 'GET',
+                data: { search: searchTerm },
+                success: function(response) {
+                    $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');
+                    if (response.success && response.landlords && response.landlords.length > 0) {
+                        $.each(response.landlords, function(i, l) {
+                            $('#landlord_direct_select').append(`<option value="${l.id}">${l.names} - ${l.reference_number || ''}</option>`);
+                        });
+                        $('#landlord_direct_select').prop('disabled', false);
+                    } else {
+                        $('#landlord_direct_select').append('<option value="">-- No Results --</option>').prop('disabled', true);
+                    }
                 },
-                processResults: function(response) {
-                    return { results: response.results || [] };
+                error: function() {
+                    Swal.fire({ icon: 'error', title: 'Error searching landlords', confirmButtonColor: '#2196F3' });
                 },
-                cache: true
+                complete: function() {
+                    $('#search_landlord_icon').show();
+                    $('#search_landlord_spinner').hide();
+                    $('#search_landlord_btn').prop('disabled', false);
+                }
+            });
+        });
+
+        $('#landlord_search_input').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                $('#search_landlord_btn').click();
             }
         });
 
-        // A client picked via a property-name match also carries which specific property
-        // matched, so it can be pre-selected once that landlord's own property list has
-        // loaded. select2:select fires with the full result object (id, text, property_id)
-        // before the underlying <select>'s native change event fires.
-        let pendingPropertySelection = null;
-        $('#client').on('select2:select', function(e) {
-            pendingPropertySelection = e.params.data.property_id || null;
-        });
-        $('#client').on('select2:clear', function() {
-            pendingPropertySelection = null;
-        });
-
-        // Cheque charge mapping by expense category
-        const chequeCharges = {
-            'repairs_maintenance': { charge: 100, billed_to: 'Client' },
-            'caretaker_salaries': { charge: 150, billed_to: 'Client' },
-            'garbage_collection': { charge: 100, billed_to: 'Client' },
-            'electricity_bills': { charge: 100, billed_to: 'Client' },
-            'water_bills': { charge: 100, billed_to: 'Client' },
-            'printing_photocopying': { charge: 100, billed_to: 'Client' },
-            'refund_tenant_deposits': { charge: 150, billed_to: 'Tenant' },
-            'eviction_costs': { charge: 100, billed_to: 'Client' },
-            'locking_devices': { charge: 100, billed_to: 'Client' },
-            'security_services': { charge: 100, billed_to: 'Client' }
-        };
-
-        // Client (or property-match) selection - load properties and eligibility
-        $('#client').on('change', function() {
+        // Landlord selected - load their properties and eligibility
+        $('#landlord_direct_select').on('change', function() {
             const clientId = $(this).val();
+            const landlordText = $(this).find(':selected').text();
             const propertySelect = $('#property');
 
-            propertySelect.empty().append('<option value="">Select client first</option>').prop('disabled', true);
+            propertySelect.html('<option value="">Select landlord first</option>').prop('disabled', true).trigger('change.select2');
             $('#eligibilityInfo').addClass('d-none');
 
-            if (!clientId) return;
+            if (!clientId) {
+                $('#client_id').val('');
+                $('#selected_client_name').text('-');
+                return;
+            }
+
+            $('#client_id').val(clientId);
+            $('#selected_client_name').text(landlordText);
 
             // Load properties (excludes merged/inactive source properties)
             $.ajax({
@@ -341,10 +328,6 @@
                             propertySelect.append(`<option value="${p.id}">${p.reference_number} - ${p.property_name}${mergedTag}</option>`);
                         });
                         propertySelect.prop('disabled', false);
-                    }
-                    if (pendingPropertySelection) {
-                        propertySelect.val(pendingPropertySelection);
-                        pendingPropertySelection = null;
                     }
                     propertySelect.trigger('change.select2');
                 }
@@ -372,27 +355,6 @@
                     }
                 }
             });
-        });
-
-        // Expense Category change - auto-set cheque charge
-        $('#expenseCategory').on('change', function() {
-            const category = $(this).val();
-            if (category && chequeCharges[category]) {
-                $('#chequeCharge').val(chequeCharges[category].charge);
-                $('#chargeBilledTo').val(chequeCharges[category].billed_to);
-            } else {
-                $('#chequeCharge').val('');
-                $('#chargeBilledTo').val('');
-            }
-        });
-
-        // Payment Method change - show/hide instructions
-        $('#paymentMethod').on('change', function() {
-            if ($(this).val() === 'alternative') {
-                $('#rowPaymentInstructions').removeClass('d-none');
-            } else {
-                $('#rowPaymentInstructions').addClass('d-none');
-            }
         });
 
         // ===== LIVE CALCULATION ENGINE =====
@@ -450,14 +412,7 @@
             var basisText = '', rateDisplay = '0%', monthlyPayment = 0;
             var scheduleRows = [];
 
-            if (advanceType === '1') {
-                chargeAmount = parseFloat($('#chequeCharge').val()) || 0;
-                totalAmount  = Math.round((amount + chargeAmount) * 100) / 100;
-                rateDisplay  = '0%';
-                basisText    = 'Expense Advance — no interest charged. Charge is auto-set by expense category.';
-                $('#cs_monthly_wrap, #cs_schedule_wrap').hide();
-
-            } else if (advanceType === '2' || advanceType === '3') {
+            if (advanceType === '2' || advanceType === '3') {
                 var rate     = parseFloat($('#interestRate').val()) || 0;
                 var months   = parseInt($('#months').val()) || 0;
                 var psd      = $('#paymentStart').val();
@@ -540,7 +495,7 @@
             $('#cs_basis').text(basisText);
         }
 
-        $('#issuedDate, #amount, #interestRate, #months, #paymentStart, #chequeCharge, #chequeChargeGeneral').on('change keyup', recalculate);
+        $('#issuedDate, #amount, #interestRate, #months, #paymentStart, #chequeChargeGeneral').on('change keyup', recalculate);
 
         $('#cs_toggle_schedule').on('click', function() {
             $('#cs_schedule_table').toggle();
@@ -565,24 +520,16 @@
             $('#dynamicSection').removeClass('d-none');
 
             // Hide all dynamic rows
-            $('#rowExpenseCategory, #rowPaymentMethod, #rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').addClass('d-none');
+            $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').addClass('d-none');
 
             // Reset required
-            $('#expenseCategory, #paymentMethod, #requisitionDate, #issuedDate, #amount, #months, #paymentStart, #narration').prop('required', false);
+            $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart, #narration').prop('required', false);
             $('#interestRate').val(3).prop('readonly', false);
 
             switch (type) {
-                case '1': // Expense Advance - No interest
-                    $('#rowExpenseCategory, #rowDates, #rowAmount, #rowNarration').removeClass('d-none');
-                    $('#expenseCategory, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
-                    $('#interestRate').val(0).prop('readonly', true);
-                    $('#interestCalcInfo').html('No interest on expense advances');
-                    recalculate();
-                    break;
-
                 case '2': // Client Payment Advance
-                    $('#rowPaymentMethod, #rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').removeClass('d-none');
-                    $('#paymentMethod, #requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
+                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration, #interestInfoCol').removeClass('d-none');
+                    $('#requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
                     $('#months, #paymentStart').prop('required', false);
                     $('.repayment-required').hide();
                     $('#repaymentHint').text('Optional — enter months to generate a repayment schedule preview.');
@@ -605,6 +552,11 @@
         // Submit button
         $('#submitBtn').on('click', function() {
             const form = $('#advanceForm');
+
+            if (!$('#client_id').val()) {
+                Swal.fire({ icon: 'warning', title: 'Please search for and select a landlord', confirmButtonColor: '#2196F3' });
+                return;
+            }
 
             if (!form[0].checkValidity()) {
                 form[0].reportValidity();

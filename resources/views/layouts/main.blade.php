@@ -37,7 +37,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
 
     <!-- Layout overrides -->
-    <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/chabrin-layout.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/chabrin-layout.css') }}?v={{ filemtime(public_path('assets/css/chabrin-layout.css')) }}">
 
     @yield('styles')
 

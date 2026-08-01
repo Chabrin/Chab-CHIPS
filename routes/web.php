@@ -962,8 +962,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/data', [App\Http\Controllers\ClientAdvanceController::class, 'getAdvances'])->name('property.advances.data');
     Route::get('/property/advances/clients', [App\Http\Controllers\ClientAdvanceController::class, 'getClients'])->name('property.advances.clients');
     Route::get('/property/advances/client-properties/{clientId}', [App\Http\Controllers\ClientAdvanceController::class, 'getClientProperties'])->name('property.advances.client-properties');
-    Route::get('/property/advances/search', [App\Http\Controllers\ClientAdvanceController::class, 'searchClientsAndProperties'])->name('property.advances.search');
-    Route::get('/ajax/property/advances/search', [App\Http\Controllers\ClientAdvanceController::class, 'searchClientsAndProperties'])->name('property.advances.search');
     Route::get('/property/client-previous', [App\Http\Controllers\ClientAdvanceController::class, 'getClientPreviousAdvances'])->name('property.advances.client-previous');
     Route::get('/property/misc_charges', [App\Http\Controllers\ClientAdvanceController::class, 'getMiscellaneousCharges'])->name('property.advances.misc_charges');
     Route::post('/property/advances/check-eligibility', [App\Http\Controllers\ClientAdvanceController::class, 'checkClientEligibility'])->name('property.advances.check-eligibility');

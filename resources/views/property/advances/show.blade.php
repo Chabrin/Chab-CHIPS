@@ -147,9 +147,7 @@
                             <div class="col-md-3 mb-2">
                                 <label class="text-muted small">Advance Type</label>
                                 <div class="fw-bold">
-                                    @if($advance->advance_type_id == 1)
-                                    <span class="badge bg-warning">Expense Advance</span>
-                                    @elseif($advance->advance_type_id == 2)
+                                    @if($advance->advance_type_id == 2)
                                     <span class="badge bg-primary">Client Payment Advance</span>
                                     @elseif($advance->advance_type_id == 3)
                                     <span class="badge bg-info">Overpayment Advance</span>
@@ -158,28 +156,6 @@
                                     @endif
                                 </div>
                             </div>
-                            @if($advance->advance_type_id == 1 && $advance->expense_category)
-                            <div class="col-md-3 mb-2">
-                                <label class="text-muted small">Expense Category</label>
-                                <div class="fw-bold">{{ str_replace('_', ' ', ucwords($advance->expense_category, '_')) }}</div>
-                            </div>
-                            <div class="col-md-3 mb-2">
-                                <label class="text-muted small">Charge Billed To</label>
-                                <div class="fw-bold">{{ $advance->charge_billed_to ?? '-' }}</div>
-                            </div>
-                            @endif
-                            @if($advance->advance_type_id == 2)
-                            <div class="col-md-3 mb-2">
-                                <label class="text-muted small">Payment Method</label>
-                                <div class="fw-bold">{{ $advance->payment_method == 'bank_transfer' ? 'Direct Bank Transfer' : ($advance->payment_method == 'alternative' ? 'Alternative Instructions' : '-') }}</div>
-                            </div>
-                            @if($advance->payment_method == 'alternative' && $advance->payment_instructions)
-                            <div class="col-md-6 mb-2">
-                                <label class="text-muted small">Payment Instructions</label>
-                                <div class="fw-bold">{{ $advance->payment_instructions }}</div>
-                            </div>
-                            @endif
-                            @endif
                             <div class="col-md-3 mb-2">
                                 <label class="text-muted small">Status</label>
                                 <div class="fw-bold">

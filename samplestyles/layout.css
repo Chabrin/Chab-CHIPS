@@ -1,0 +1,333 @@
+/* ==========================================================================
+   App shell: topbar + side navigation + content grid
+   ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 44px 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "sidenav content";
+  height: 100vh;
+}
+
+/* ---------------- Topbar (near-black chrome, teal only on avatar) ---------------- */
+.d365-topbar {
+  grid-area: topbar;
+  height: 44px;
+  background: var(--d365-header);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.topbar-icon-btn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: var(--d365-radius);
+  opacity: 0.9;
+  flex: none;
+}
+.topbar-icon-btn:hover { background: rgba(255, 255, 255, 0.12); opacity: 1; }
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  color: #fff;
+}
+
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--d365-teal-tile);
+  color: #fff;
+  border: none;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-family: var(--d365-font);
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+}
+
+/* ---------------- User menu (avatar dropdown) ---------------- */
+.user-menu { position: relative; }
+.user-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 230px;
+  background: var(--d365-page);
+  border: 1px solid var(--d365-border);
+  border-radius: 6px;
+  box-shadow: var(--d365-shadow-md);
+  display: none;
+  overflow: hidden;
+  z-index: 1050;
+}
+.user-menu-panel.show { display: block; }
+.user-menu-header { padding: 12px 14px; border-bottom: 1px solid var(--d365-border-light); }
+.user-menu-name { font-size: 13.5px; font-weight: 600; color: var(--d365-text); }
+.user-menu-email { font-size: 12px; color: var(--d365-text-soft); margin-top: 1px; }
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--d365-text);
+}
+.user-menu-item:hover { background: var(--d365-tint); }
+.user-menu-item .i { width: 16px; height: 16px; color: var(--d365-text-soft); flex: none; }
+.user-menu-item.danger { color: var(--d365-neg); }
+.user-menu-item.danger .i { color: var(--d365-neg); }
+.user-menu-divider { height: 1px; background: var(--d365-border-light); margin: 4px 0; }
+
+/* ---------------- Side navigation ---------------- */
+.d365-sidenav {
+  grid-area: sidenav;
+  width: 208px;
+  background: var(--d365-page);
+  border-right: 1px solid var(--d365-border-light);
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.15s ease-in-out;
+  padding: 4px 0;
+}
+.d365-sidenav.collapsed { width: 44px; }
+
+.nav-section + .nav-section {
+  border-top: 1px solid var(--d365-border-light);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.nav-item,
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--d365-text);
+  white-space: nowrap;
+  position: relative;
+  font-family: var(--d365-font);
+}
+.nav-item:hover,
+.nav-group-toggle:hover {
+  background: var(--d365-tint);
+  color: var(--d365-text);
+}
+.nav-item.active {
+  background: var(--d365-selected);
+  color: var(--d365-teal-press);
+  font-weight: 600;
+}
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--d365-teal);
+}
+.nav-group-toggle.active-group {
+  color: var(--d365-teal-press);
+  font-weight: 600;
+}
+
+.nav-icon {
+  flex: none;
+  color: var(--d365-text-soft);
+}
+.nav-item.active .nav-icon,
+.nav-group-toggle.active-group .nav-icon {
+  color: var(--d365-teal);
+}
+
+.nav-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-caret {
+  flex: none;
+  color: var(--d365-text-faint);
+  transition: transform 0.15s ease-in-out;
+}
+.nav-group-toggle[aria-expanded="true"] .nav-caret { transform: rotate(180deg); }
+
+.nav-group-items {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.18s ease-in-out;
+}
+.nav-group-items.expanded { max-height: 600px; }
+.nav-group-items .nav-item {
+  padding-left: 2.15rem;
+  font-size: 12.5px;
+}
+
+/* Collapsed (icon-only) rail */
+.d365-sidenav.collapsed .nav-label,
+.d365-sidenav.collapsed .nav-caret,
+.d365-sidenav.collapsed .nav-group-items {
+  display: none;
+}
+.d365-sidenav.collapsed .nav-item,
+.d365-sidenav.collapsed .nav-group-toggle {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* ---------------- Content area ---------------- */
+.content-area {
+  grid-area: content;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding-bottom: 2.5rem;
+  /* Positioning context for content-scoped overlays (e.g. page-loading-overlay)
+     so they cover only this pane, not the sidenav. Fixed-position elements
+     (modals) are unaffected — position:relative on an ancestor doesn't
+     change how `position: fixed` descendants behave. */
+  position: relative;
+}
+
+/* Page header (back button + caption + tool icons) */
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px 6px;
+  flex-wrap: wrap;
+}
+.back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--d365-page-alt);
+  border: 1px solid var(--d365-border-light);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--d365-text);
+  flex: none;
+}
+.back-btn:hover { background: var(--d365-hover); }
+.breadcrumb-d365 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--d365-text-soft);
+}
+.breadcrumb-d365 a { color: var(--d365-text-soft); }
+.breadcrumb-d365 a:hover { color: var(--d365-teal-press); }
+.page-caption { font-size: 18px; font-weight: 400; color: var(--d365-text); }
+.page-head-titles { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.page-head .tools { margin-left: auto; display: flex; gap: 2px; }
+.page-head .tools button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--d365-teal);
+  cursor: pointer;
+  border-radius: var(--d365-radius);
+}
+.page-head .tools button:hover { background: var(--d365-tint); }
+
+/* Action bar (flat text actions, teal icons) */
+.action-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 20px;
+  background: var(--d365-page-alt);
+  border-top: 1px solid var(--d365-border-light);
+  border-bottom: 1px solid var(--d365-border-light);
+  flex-wrap: wrap;
+}
+.action-bar .end { margin-left: auto; }
+
+.page-body { padding: 10px 20px 0; max-width: 1320px; }
+.part-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--d365-text);
+  padding: 18px 0 10px;
+  border-bottom: 1px solid var(--d365-border-light);
+  margin-bottom: 0;
+}
+
+/* ---------------- Mobile behavior ---------------- */
+@media (max-width: 991.98px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "content";
+  }
+  .d365-sidenav {
+    position: fixed;
+    top: 44px;
+    left: 0;
+    bottom: 0;
+    z-index: 1040;
+    transform: translateX(-100%);
+    box-shadow: var(--d365-shadow-md);
+    width: 280px;
+  }
+  .d365-sidenav.mobile-open { transform: translateX(0); }
+  .d365-sidenav.collapsed { width: 280px; }
+  .d365-sidenav.collapsed .nav-label,
+  .d365-sidenav.collapsed .nav-caret,
+  .d365-sidenav.collapsed .nav-group-items.expanded {
+    display: revert;
+  }
+  .sidenav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 44px 0 0 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 1035;
+  }
+  .sidenav-backdrop.show { display: block; }
+}

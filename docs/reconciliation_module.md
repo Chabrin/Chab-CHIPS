@@ -43,7 +43,7 @@ Cheque Cut / Bank Transfer
 | `cb_returns_summary` | `ReturnSummary` | `landlord_code`, `property_code`, `return_period`, `approved_status`, `paid_status`, `return_type`, `net_amount`, `return_code` | Find all approved, unpaid returns for the client+period being reconciled |
 | `cb_returns_clients` | `ReturnClient` | `return_code`, `entry_type`, `dr_cr`, `net_amount`, `transaction_ref`, `property_code`, `unit_code`, `tenant_name`, `payable_status` | Every individual transaction line within the return — the raw material for categorisation |
 | `cb_landlord_account` | `LandlordAccount` | `payment_ref`, `entry_type_code`, `vendor_id`, `return_code` | Bridge between advance deduction lines in `cb_returns_clients` and the source `ClientAdvance` record — joined via `transaction_ref = payment_ref` |
-| `sys_pm_clients_advances_requisitions` | `ClientAdvance` | `expense_category`, `narration`, `reference_number`, `advance_type_id` | Provides the human-readable category of each advance (e.g. `water_bills`, `repairs_maintenance`) so deduction lines can be labelled properly |
+| `sys_pm_clients_advances_requisitions` | `ClientAdvance` | `narration`, `reference_number`, `advance_type_id` | Provides advance details so deduction lines can be labelled properly. Note: `expense_category` was dropped in August 2026 (Expense Advance type removed) — see "Advance Deduction Sub-Labelling" below |
 | `sys_pm_service_agreements` | `ServiceAgreement` | `property_id`, `client_d`, `current_status_id` | Links a property to its active SLA, confirming whether any utility billing is configured for that property |
 | `sys_pm_service_agreements_186_repeat` | `ServiceAgreementBillCharge` | `parent_id` (SLA id), `item_id`, `commissionable` | Each row is one utility/billing service the company manages for the landlord under the SLA (water, electricity, garbage, etc.) — identified by `item_id` → `InvoiceableItem.item_name` |
 | `sys_set_invoiceable_items` | `InvoiceableItem` | `item_name`, `is_bill`, `feature` | Provides the display name for utility items (e.g. "Water Bills", "Electricity Bills") and the `is_bill` flag which marks utility-type items |
@@ -76,28 +76,18 @@ Lines where `payable_status = 0` still appear on the statement (so the landlord 
 
 ### Advance Deduction Sub-Labelling
 
+**Note (August 2026):** `expense_category` and the Expense Advance type it belonged to (`advance_type_id=1`) were removed from the system — see `docs/advances_system_doc.md`. Only Client Payment Advances (`advance_type_id=2`) and Overpayment Advances (`advance_type_id=3`) exist now, so this sub-labelling scheme (which was never implemented — this module does not yet exist in the app) should not be built against `expense_category`. Label advance deduction lines by `advance_type_id` and `reference_number` instead.
+
 When a line has `entry_type = 'Advance Payments-From Landlord Acc'`, the `transaction_ref` on the line contains the `payment_ref` value from `cb_landlord_account`. The join chain is:
 
 ```
 cb_returns_clients.transaction_ref
     → cb_landlord_account.payment_ref  (where entry_type_code indicates an advance disbursement)
         → sys_pm_clients_advances_requisitions.id  (via cb_landlord_account.vendor_id or return_code)
-            → ClientAdvance.expense_category
+            → ClientAdvance.advance_type_id
 ```
 
-`expense_category` values and their display labels:
-
-| `expense_category` value | Display Label |
-|---|---|
-| `water_bills` | Water Bills |
-| `electricity_bills` | Electricity Bills |
-| `garbage_collection` | Garbage Collection |
-| `repairs_maintenance` | Repairs & Maintenance |
-| `caretaker_salaries` | Caretaker Salaries |
-| `other` | Other Expense |
-| *(null or unmatched)* | Advance Recovery |
-
-Each advance deduction line is displayed as: **"{Display Label} — {ClientAdvance.reference_number}"** so the landlord can cross-reference the advance that is being recovered.
+Each advance deduction line should be displayed as: **"{Client Payment Advance|Overpayment Advance} — {ClientAdvance.reference_number}"** so the landlord can cross-reference the advance that is being recovered.
 
 ### SLA Utility Indicator
 
@@ -254,8 +244,8 @@ For lines where `entry_type = 'Advance Payments-From Landlord Acc'`:
 - The line's `transaction_ref` field contains the `payment_ref` value from `cb_landlord_account`
 - Query: `SELECT vendor_id FROM cb_landlord_account WHERE payment_ref IN (...)`
 - The `vendor_id` in `cb_landlord_account` for advance entries links to `sys_pm_clients_advances_requisitions.id`
-- Load those `ClientAdvance` records to get `expense_category` and `reference_number`
-- Build map: `[ transaction_ref_value => [ 'label' => 'Water Bills', 'ref' => 'ADV-2026-001' ] ]`
+- Load those `ClientAdvance` records to get `advance_type_id` and `reference_number`
+- Build map: `[ transaction_ref_value => [ 'label' => 'Client Payment Advance', 'ref' => 'ADV-2026-001' ] ]`
 
 **Step 5 — Build SLA utility item map**
 For each `property_code` in `$propertyCodes`:
@@ -622,7 +612,7 @@ When a payment voucher is created for a landlord and the `vendor_id` / `vendor_n
 1. **Migration:** `php artisan migrate` runs without errors. `cb_returns_reconciliations` table exists with all columns and indexes.
 2. **Preview — utility client:** For a client whose SLA includes `ServiceAgreementBillCharge` entries, the preview endpoint returns utility lines in the correct `utility_collections` / `utility_deductions` categories, and the `sla_utilities_by_property` map is populated.
 3. **Preview — rent-only client:** For a client with no `ServiceAgreementBillCharge` entries, no utility sections appear, no errors thrown.
-4. **Advance labelling:** Advance deduction lines correctly show the `expense_category` display label and advance reference number, not just the generic `entry_type` text.
+4. **Advance labelling:** Advance deduction lines correctly show the advance type label and advance reference number, not just the generic `entry_type` text.
 5. **Non-payable rent:** Lines with `payable_status = 0` appear in the withheld section and are excluded from `gross_payable`.
 6. **Duplicate guard:** Attempting to create a second reconciliation for the same `client_id + period` returns a validation error and points to the existing record.
 7. **Confirm guard:** Calling `confirm()` on an already-Confirmed or Voided reconciliation returns an error.

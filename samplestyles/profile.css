@@ -1,0 +1,543 @@
+/* ==========================================================================
+   Customer profile / detail page components: header, stat strip,
+   horizontal detail-tabs, read-only field grid, timeline, customer search.
+   ========================================================================== */
+
+/* ---------------- Profile header ---------------- */
+.profile-header {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 14px 0 10px;
+  flex-wrap: wrap;
+}
+.profile-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--d365-teal-tile);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex: none;
+}
+.avatar-stack { display: flex; flex: none; }
+.avatar-stack .profile-avatar:nth-child(2) { margin-left: -16px; border: 3px solid var(--d365-page); }
+.profile-identity { min-width: 0; }
+
+/* Member-type chip (Individual / Joint / Institution) — sits with the status badges */
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--d365-tint);
+  color: var(--d365-teal-press);
+}
+
+/* Identity chips (ID / email / phone / tax PIN) — small color accents to
+   break up plain label/value text on the Overview tab */
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 14px;
+  padding: 5px 12px 5px 8px;
+}
+.tag-chip .i { width: 14px; height: 14px; }
+.tag-chip,
+.tag-chip-blue,
+.tag-chip-purple,
+.tag-chip-amber,
+.tag-chip-teal {
+  background: var(--d365-tint);
+  color: var(--d365-teal-press);
+}
+
+.tag-chip { position: relative; }
+.profile-identity h1 { font-size: 19px; font-weight: 600; margin: 0 0 3px; color: var(--d365-text); }
+.profile-sub { font-size: 12.5px; color: var(--d365-text-soft); margin-bottom: 8px; }
+.profile-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.profile-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ---------------- Stat strip ---------------- */
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--d365-border-light);
+  border-bottom: 1px solid var(--d365-border-light);
+  margin: 6px 0 10px;
+}
+.stat-tile {
+  padding: 12px 24px 12px 0;
+  margin-right: 24px;
+  border-right: 1px solid var(--d365-border-light);
+}
+.stat-tile:last-child { border-right: none; margin-right: 0; }
+.stat-tile .stat-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--d365-text-soft);
+}
+.stat-tile .stat-value { font-size: 18px; font-weight: 600; color: var(--d365-text); margin-top: 2px; }
+
+/* ---------------- Horizontal detail tabs ---------------- */
+.detail-tabs {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--d365-border);
+  margin-bottom: 4px;
+}
+.detail-tabs button {
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--d365-text-soft);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-family: var(--d365-font);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.detail-tabs button .i { width: 15px; height: 15px; }
+.detail-tabs button:hover { color: var(--d365-text); background: var(--d365-tint); }
+.detail-tabs button.active { color: var(--d365-teal-press); border-bottom-color: var(--d365-teal); }
+
+.tab-pane { display: none; padding-top: 8px; }
+.tab-pane.active { display: block; }
+
+/* ---------------- Read-only detail grid (key/value pairs) ----------------
+   Rendered with Bootstrap's .row/.col-* for responsiveness (col-lg-4,
+   col-sm-6, col-12), .detail-item only supplies the label/value stacking. */
+.detail-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin-bottom: 10px; }
+.detail-item .dt-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--d365-text-soft);
+}
+.detail-item .dt-value { font-size: 13.5px; color: var(--d365-text); }
+
+/* ---------------- Minimal profile sections (Overview tab) ----------------
+   Self-aligning CSS grid instead of Bootstrap's row/col breakpoints — every
+   field lines up cleanly with one consistent gap, no ragged wrapping. */
+.profile-section { padding: 20px 0; }
+.profile-section:first-child { padding-top: 4px; }
+.profile-section + .profile-section { border-top: 1px solid var(--d365-border-light); }
+.profile-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--d365-text-soft);
+  margin-bottom: 16px;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 20px 24px;
+}
+.detail-grid .detail-item { margin-bottom: 0; }
+.detail-grid .detail-item.span-2 { grid-column: span 2; }
+@media (max-width: 640px) {
+  .detail-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
+  .detail-grid .detail-item.span-2 { grid-column: span 2; }
+}
+
+/* Label-left / value-right variant, 3 columns (matches col-lg-4) — used
+   for Personal & Contact Details where rows read like a compact form. */
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 32px;
+}
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--d365-border-light);
+  min-width: 0;
+}
+.kv-row .dt-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--d365-text-soft);
+  flex: none;
+}
+.kv-row .dt-value { font-size: 13.5px; color: var(--d365-text); text-align: right; min-width: 0; }
+@media (max-width: 900px) {
+  .kv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .kv-grid { grid-template-columns: 1fr; }
+}
+
+/* 2-column variant (matches col-lg-6) — opt-in per section via this
+   modifier so the shared 3-column .kv-grid (System Errors detail modal,
+   etc.) is unaffected. */
+.kv-grid.kv-grid-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 120px; }
+@media (max-width: 640px) {
+  .kv-grid.kv-grid-6 { grid-template-columns: 1fr; }
+}
+
+/* Compact Overview tab — individual investor profile only (scoped via
+   body[data-page] so Joint/Institution's own Overview tabs, which share
+   the same .profile-section/.kv-grid/.detail-grid markup, are untouched). */
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .profile-section { padding: 10px 0; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .profile-section:first-child { padding-top: 2px; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .profile-section-title { margin-bottom: 8px; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .kv-row { padding: 5px 0; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .kv-grid.kv-grid-6 { gap: 0 48px; }
+
+/* Companies profile — website link in teal/green, not the browser-default blue. */
+.website-link { color: var(--d365-teal); text-decoration: underline; }
+.website-link:hover { color: var(--d365-teal-press); }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .profile-section-cols { gap: 0 24px; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .profile-section-cols > div + div { padding-left: 24px; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .detail-grid { gap: 12px 16px; }
+body[data-page="customer-individual"] .tab-pane[data-tab="overview"] .detail-item { margin-bottom: 4px; }
+
+/* Two side-by-side halves (col-6/col-6) within one profile-section — used
+   to pair Employment & Source of Income with Compliance & Tax. */
+.profile-section-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 40px;
+}
+.profile-section-cols > div + div {
+  border-left: 1px solid var(--d365-border-light);
+  padding-left: 40px;
+}
+@media (max-width: 780px) {
+  .profile-section-cols { grid-template-columns: 1fr; gap: 24px; }
+  .profile-section-cols > div + div {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--d365-border-light);
+    padding-top: 20px;
+  }
+}
+
+/* ---------------- Activity timeline ---------------- */
+.timeline { position: relative; padding-left: 24px; margin: 4px 0; }
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--d365-border-light);
+}
+.timeline-item { position: relative; padding-bottom: 18px; }
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -24px;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--d365-teal);
+  box-shadow: 0 0 0 3px var(--d365-tint);
+}
+.timeline-item.flag::before { background: var(--d365-neg); box-shadow: 0 0 0 3px var(--d365-error-bg); }
+.timeline-item .tl-time { font-size: 11px; color: var(--d365-text-soft); }
+.timeline-item .tl-title { font-size: 13.5px; font-weight: 600; color: var(--d365-text); margin: 1px 0 2px; }
+.timeline-item .tl-desc { font-size: 12.5px; color: var(--d365-text-soft); }
+
+/* ---------------- KYC status tiles (simple, colored at-a-glance read) ----------------
+   Rendered inside a Bootstrap .row/.col-* (col-lg-4, col-sm-6, col-12); this
+   only styles the tile itself. */
+.kyc-status-tile {
+  border: 1px solid var(--d365-border-light);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.kyc-status-tile .kyc-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.kyc-status-tile .kyc-icon .i { width: 18px; height: 18px; }
+.kyc-status-tile.clear .kyc-icon { background: var(--d365-tint); color: var(--d365-teal); }
+.kyc-status-tile.flag .kyc-icon { background: var(--d365-error-bg); color: var(--d365-neg); }
+.kyc-status-tile .kyc-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: var(--d365-text-soft); }
+.kyc-status-tile .kyc-value { font-size: 14.5px; font-weight: 600; color: var(--d365-text); margin-top: 1px; }
+
+/* ---------------- KYC verification checklist (replaces a dense table) ---------------- */
+.kyc-checklist {
+  border: 1px solid var(--d365-border-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.kyc-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--d365-border-light);
+}
+.kyc-checklist-item:last-child { border-bottom: none; }
+.kyc-checklist-item .kc-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--d365-tint);
+  color: var(--d365-teal);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.kyc-checklist-item .kc-icon .i { width: 13px; height: 13px; }
+.kyc-checklist-item .kc-body { flex: 1 1 auto; min-width: 0; }
+.kyc-checklist-item .kc-title { font-size: 13px; font-weight: 600; color: var(--d365-text); }
+.kyc-checklist-item .kc-meta { font-size: 11.5px; color: var(--d365-text-soft); }
+.kyc-checklist-item .kc-date { font-size: 11.5px; color: var(--d365-text-soft); flex: none; white-space: nowrap; }
+
+/* ---------------- Individual investor search & switch-record control ---------------- */
+.individual-search-bar { margin: 2px 0 16px; }
+.individual-search-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
+.individual-search-row.no-results { grid-template-columns: 1fr; }
+.search-field-group { display: flex; align-items: center; gap: 8px; }
+.search-field-group .search-mini { flex: 1 1 auto; max-width: none; background: var(--d365-page); }
+.search-select-wrap { position: relative; width: 100%; }
+.search-select-wrap select { width: 100%; }
+.search-select-wrap select:disabled { opacity: 0.7; cursor: wait; }
+.search-select-spinner {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border: 2px solid var(--d365-border);
+  border-top-color: var(--d365-teal);
+  border-radius: 50%;
+  animation: table-spin 0.6s linear infinite;
+  pointer-events: none;
+}
+.search-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--d365-text-soft); }
+@media (max-width: 760px) {
+  .individual-search-row { grid-template-columns: 1fr; }
+}
+
+/* ---------------- Content-area loading overlay (investor switch-record navigation) ----------------
+   Scoped to .content-area (position:relative, layout.css) rather than the
+   viewport, so the sidenav stays visible and untouched — it's separately
+   made unclickable via JS while this is shown. */
+.page-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 1000;
+}
+.page-loading-overlay.show { display: flex; }
+.page-loading-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--d365-border);
+  border-top-color: var(--d365-teal);
+  border-radius: 50%;
+  animation: table-spin 0.7s linear infinite;
+}
+.page-loading-text { font-size: 13.5px; font-weight: 600; color: var(--d365-text-soft); }
+
+/* ---------------- Customer Accounts — search-first landing page ----------------
+   No default listing at ~2M rows: this panel is the whole page until a
+   search actually runs. */
+.account-search-panel { padding: 14px 18px; margin-bottom: 14px; }
+.account-search-modes { display: flex; gap: 6px; margin-bottom: 10px; }
+.account-search-mode {
+  background: transparent;
+  border: 1px solid var(--d365-border);
+  padding: 5px 14px;
+  font-family: var(--d365-font);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--d365-text-soft);
+  cursor: pointer;
+  border-radius: 999px;
+}
+.account-search-mode:hover { background: var(--d365-hover); color: var(--d365-text); }
+.account-search-mode.active { background: var(--d365-teal); border-color: var(--d365-teal); color: #fff; }
+.account-search-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; }
+.account-search-left { display: flex; align-items: center; gap: 8px; }
+.account-search-input { flex: 1 1 auto; }
+.account-search-input .search-mini { max-width: none; background: var(--d365-page); }
+.account-search-panel .search-hint { margin-top: 8px; }
+@media (max-width: 760px) {
+  .account-search-row { grid-template-columns: 1fr; }
+}
+
+/* Instant-fill summary card shown after picking a record from the results
+   dropdown — labels are static markup, only the dt-value spans get their
+   textContent set by JS, so there's no per-record re-render. */
+.account-summary-card { padding: 14px 18px; }
+.account-summary-card .profile-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.account-summary-card .profile-section-title { margin-bottom: 0; }
+.account-summary-card .kv-grid.kv-grid-6 { gap: 0 48px; }
+.account-summary-card .kv-row { padding: 5px 0; }
+.account-summary-links { display: flex; align-items: center; gap: 16px; }
+.account-summary-links .btn-link { display: inline-flex; align-items: center; gap: 5px; }
+.btn-link.disabled { color: var(--d365-text-faint); pointer-events: none; cursor: default; }
+
+/* Overall signing mandate display + status on the Institution profile's
+   Signatories tab — a single compact line above the action bar. */
+.mandate-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.mandate-label { color: var(--d365-text-soft); font-weight: 600; }
+.mandate-value-number { font-size: 14px; font-weight: 700; color: var(--d365-text); }
+.mandate-status { margin-left: 4px; }
+
+/* ---------------- Customer search (typeahead, backend TBD) ---------------- */
+.customer-search { position: relative; max-width: 420px; margin: 2px 0 16px; }
+.customer-search .search-mini { max-width: none; background: var(--d365-page); }
+.search-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: var(--d365-page);
+  border: 1px solid var(--d365-border);
+  border-radius: var(--d365-radius);
+  box-shadow: var(--d365-shadow-md);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 20;
+  display: none;
+}
+.search-results.show { display: block; }
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--d365-border-light);
+}
+.search-result-item:last-child { border-bottom: none; }
+.search-result-item:hover { background: var(--d365-tint); }
+.search-result-item .srm-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--d365-teal-tile);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+.search-result-item .srm-body { min-width: 0; }
+.search-result-item .srm-name { font-size: 13px; font-weight: 600; color: var(--d365-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-result-item .srm-meta { font-size: 11.5px; color: var(--d365-text-soft); }
+
+/* ---------------- Login access schedule (allowed days / hours) ---------------- */
+.access-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--d365-tint);
+  border: 1px solid var(--d365-teal-tile);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--d365-teal-press);
+  margin: 2px 0 12px;
+}
+.access-summary .i { color: var(--d365-teal); flex: none; }
+
+/* Compact vertical list — pairs alongside the security list in a col-lg-6 */
+.access-schedule-list { border-top: 1px solid var(--d365-border-light); }
+.day-access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--d365-border-light);
+  font-size: 12.5px;
+}
+.day-access-row .day-name {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--d365-text-soft);
+}
+.day-access-row .day-time { font-weight: 600; color: var(--d365-teal-press); }
+.day-access-row.disabled .day-time { color: var(--d365-text-faint); }
+
+/* ---------------- Security / session list ---------------- */
+.security-list { border: 1px solid var(--d365-border-light); border-radius: 6px; overflow: hidden; }
+.security-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--d365-border-light);
+}
+.security-row:last-child { border-bottom: none; }
+.security-row .sec-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--d365-tint);
+  color: var(--d365-teal);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.security-row .sec-body { flex: 1 1 auto; min-width: 0; }
+.security-row .sec-title { font-size: 13px; font-weight: 600; color: var(--d365-text); }
+.security-row .sec-meta { font-size: 12px; color: var(--d365-text-soft); }
+.search-empty { padding: 14px 12px; font-size: 12.5px; color: var(--d365-text-soft); text-align: center; }

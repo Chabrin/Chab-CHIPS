@@ -2,19 +2,23 @@
 
 **Module:** Property Management → Client Advances  
 **Controller:** `app/Http/Controllers/ClientAdvanceController.php`  
-**Last updated:** April 2026
+**Last updated:** August 2026
+
+---
+
+## Removed: Expense Advance & Payment Method
+
+As of August 2026, the **Expense Advance** type (formerly `advance_type_id = 1`, along with its `expense_category` and `charge_billed_to` fields) and the **Payment Method** field on Client Payment Advances (`payment_method` / `payment_instructions`) were removed from the create/edit forms, backend validation, and the database (see migration `2026_08_01_122006_drop_advance_type_fields_from_client_advances_table`). Only Types 2 (Client Payment) and 3 (Overpayment) remain. References to Type 1 below are kept for historical context only.
 
 ---
 
 ## How the System Works
 
-### The three advance types and what makes them different
+### The two advance types and what makes them different
 
-We built three types because each has a different recovery pattern.
+We support two types because each has a different recovery pattern. (A third type, Expense Advance, and the Payment Method field on Type 2 were removed — see "Removed: Expense Advance & Payment Method" below.)
 
-**Type 1 (Expense)** is the simplest — the agency already paid a bill, so there are no interest calculations and no schedule. The full amount just sits waiting to be swept up by the next return run.
-
-**Type 2 (Client Payment)** can go two ways depending on whether repayment months are specified. Without months, it works like Type 1: one amount, recovered in one return. With months, it behaves more like Type 3 — a full amortization schedule is built and the system posts one ledger entry per installment. The interest calculation on Type 2 without months is time-sensitive: the later in the month the disbursement happens, the less interest is charged (after day 25, none at all).
+**Type 2 (Client Payment)** can go two ways depending on whether repayment months are specified. Without months, it works like a lump sum: one amount, recovered in one return. With months, it behaves more like Type 3 — a full amortization schedule is built and the system posts one ledger entry per installment. The interest calculation on Type 2 without months is time-sensitive: the later in the month the disbursement happens, the less interest is charged (after day 25, none at all).
 
 **Type 3 (Overpayment)** always has a schedule. Repayment months and interest rate are mandatory.
 
@@ -34,7 +38,7 @@ The moment an advance reaches Posted — through either path — the system writ
 
 **For advances with a repayment schedule (Types 2 and 3 with months):** one ledger row is written per installment, each carrying the year and month of that installment's due date. This is deliberate — the returns generation process matches on `year` and `month` when it picks up advance deductions, so if we posted one big row for the full amount it would only ever be deducted once in the first month. Writing one row per installment means each month's return run finds exactly its share and no more.
 
-**For advances without a schedule (Type 1, Type 2 without months):** one row is written for the full amount, dated to the disbursement month.
+**For advances without a schedule (Type 2 without months):** one row is written for the full amount, dated to the disbursement month.
 
 In both cases, `is_recovered = 0` when written. The returns process sets it to `1` after the deduction is included in an approved return — preventing any double-deduction.
 
@@ -90,29 +94,11 @@ Landlord clicks link               OR    Admin clicks "Post Advance"
 
 ## 1. Overview
 
-The Advances module allows the agency to issue funds to a landlord (client) ahead of their returns cycle. The advance is subsequently recovered automatically through monthly returns deductions from the landlord's ledger. The system supports three distinct advance types, each with its own interest calculation logic, repayment structure, and ledger posting behaviour.
+The Advances module allows the agency to issue funds to a landlord (client) ahead of their returns cycle. The advance is subsequently recovered automatically through monthly returns deductions from the landlord's ledger. The system supports two distinct advance types, each with its own interest calculation logic, repayment structure, and ledger posting behaviour.
 
 ---
 
 ## 2. Advance Types
-
-### Type 1 — Expense Advance
-
-The agency pays an operational expense on the landlord's behalf (e.g. repairs, caretaker salaries, garbage collection). The cost is recovered from the next return.
-
-| Field | Behaviour |
-|---|---|
-| Interest | None (0%) |
-| Repayment months | None — single recovery at next returns |
-| Charge amount | Set per expense category |
-| Charge billed to | Client or Tenant |
-| Schedule rows created | No |
-
-**Total amount** = `amount + charge_amount`
-
-**Expense categories:** repairs & maintenance, caretaker salaries, garbage collection, electricity bills, water bills, printing/photocopying, refund tenant deposits, eviction costs, locking devices, security services.
-
----
 
 ### Type 2 — Client Payment Advance
 
@@ -257,7 +243,7 @@ One `cb_landlord_account` row is inserted **per schedule installment**, each tag
 
 **Why per-installment?** `insertAdvancePaymentLines()` in `ReturnsDeductionsTrait` filters by `la.year = returnYear AND la.month = returnMonth`. If only one lump-sum row existed it would be picked up entirely in month 1 — months 2–12 would never see a deduction. Posting one row per installment ensures each month's returns generation picks up exactly its share.
 
-#### Mode 2 — Lump sum (Type 1, Type 2 without months)
+#### Mode 2 — Lump sum (Type 2 without months)
 
 **Condition:** no schedule rows or no `repayment_months`.
 
