@@ -92,7 +92,7 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
         $sheet->setCellValue('B3', $advance->reference_number ?? '—');
         $sheet->getStyle('A3')->getFont()->setBold(true);
         $sheet->setCellValue('D3', 'Landlord:');
-        $sheet->setCellValue('E3', ($advance->client->client_name ?? '—') . ' (' . ($advance->client->reference_number ?? '') . ')');
+        $sheet->setCellValue('E3', ($advance->client->names ?? '—') . ' (' . ($advance->client->reference_number ?? '') . ')');
         $sheet->getStyle('D3')->getFont()->setBold(true);
 
         // Property & type

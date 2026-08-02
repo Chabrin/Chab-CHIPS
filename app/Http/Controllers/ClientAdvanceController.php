@@ -501,6 +501,7 @@ class ClientAdvanceController extends Controller
                 'principal_start_date' => 'required|date',
                 'interest_rate'        => 'required|numeric|min:0|max:100',
                 'amount'               => 'required|numeric|min:1',
+                'repayment_months'     => $advance->advance_type_id == 3 ? 'required|integer|min:1|max:360' : 'nullable',
             ]);
 
             $disbursement  = \Carbon\Carbon::parse($validated['disbursement_date']);
@@ -525,9 +526,9 @@ class ClientAdvanceController extends Controller
                 $totalAmount = round($amount + $interestAmount + $chargeAmount, 2);
 
             } else {
-                // OVERPAYMENT ADVANCE — repayment months are fixed; schedule is rebuilt
-                // around the (possibly changed) amount, rate, and dates.
-                $repaymentMonths = (int) $advance->repayment_months;
+                // OVERPAYMENT ADVANCE — schedule is rebuilt around the (possibly changed)
+                // amount, rate, repayment months, and dates.
+                $repaymentMonths = (int) $validated['repayment_months'];
 
                 $schedule = $this->calculateAmortizationSchedule(
                     $amount, $rate, $repaymentMonths,
@@ -554,6 +555,7 @@ class ClientAdvanceController extends Controller
                 'principal_start_date' => $validated['principal_start_date'],
                 'interest_rate'        => $rate,
                 'amount'               => $amount,
+                'repayment_months'     => $advance->advance_type_id == 3 ? (int) $validated['repayment_months'] : $advance->repayment_months,
                 'interest_amount'      => $interestAmount,
                 'total_amount'         => $totalAmount,
                 'current_balance'      => round($totalAmount - $amountPaid, 2),

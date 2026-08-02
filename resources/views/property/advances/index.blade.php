@@ -100,7 +100,7 @@
     $(document).ready(function() {
         function statusBadge(data) {
             if (data === 'Pending') {
-                return '<span class="badge badge-light-danger">Pending</span>';
+                return '<span class="badge badge-light-warning">Pending</span>';
             } else if (data === 'Approved') {
                 return '<span class="badge badge-light-success">Approved</span>';
             } else if (data === 'Posted' || data === 'Disbursed') {

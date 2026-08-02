@@ -326,33 +326,63 @@
 
 <!-- Edit Advance Modal — only start dates, percentage, and amount are editable -->
 <div class="modal fade" id="editAdvanceModal" tabindex="-1" aria-labelledby="editAdvanceModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog {{ $advance->advance_type_id == 3 ? 'modal-lg' : '' }}">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="editAdvanceModalLabel" style="font-size:1rem;">Edit Advance &mdash; {{ $advance->reference_number ?? '-' }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="editAdvanceForm">
+                <input type="hidden" id="editAdvanceType" value="{{ $advance->advance_type_id }}">
                 <div class="modal-body">
-                    <div class="row g-2 mb-2">
-                        <div class="col-md-6">
-                            <label class="form-label-sm">Disbursement Date <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control form-control-sm" id="editDisbursementDate" name="disbursement_date" value="{{ $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '' }}" required>
+                    <div class="row g-3">
+                        <div class="{{ $advance->advance_type_id == 3 ? 'col-lg-5' : 'col-12' }}">
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Disbursement Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control form-control-sm" id="editDisbursementDate" name="disbursement_date" value="{{ $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '' }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control form-control-sm" id="editPrincipalStartDate" name="principal_start_date" value="{{ $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '' }}" required>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Amount <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control form-control-sm" id="editAmount" name="amount" step="0.01" min="1" value="{{ $advance->amount ?? '' }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Percentage (%) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control form-control-sm" id="editInterestRate" name="interest_rate" step="0.01" min="0" max="100" value="{{ $advance->interest_rate ?? 0 }}" required>
+                                </div>
+                            </div>
+                            @if($advance->advance_type_id == 3)
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Repayment Months <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control form-control-sm" id="editRepaymentMonths" name="repayment_months" min="1" max="360" value="{{ $advance->repayment_months ?? 3 }}" required>
+                                </div>
+                            </div>
+                            @endif
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control form-control-sm" id="editPrincipalStartDate" name="principal_start_date" value="{{ $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '' }}" required>
+
+                        @if($advance->advance_type_id == 3)
+                        <div class="col-lg-7">
+                            <div class="p-2" style="border-radius:4px; background:#f8f9fa;">
+                                <div class="text-muted small mb-1">Repayment Schedule Preview</div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered text-center mb-0 cs-compact-table">
+                                        <thead class="table-light">
+                                            <tr><th>#</th><th>Due Date</th><th>Principal</th><th>Interest</th><th>Payment</th></tr>
+                                        </thead>
+                                        <tbody id="editScheduleBody"></tbody>
+                                        <tfoot id="editScheduleFoot"></tfoot>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="row g-2 mb-2">
-                        <div class="col-md-6">
-                            <label class="form-label-sm">Amount <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control form-control-sm" id="editAmount" name="amount" step="0.01" min="1" value="{{ $advance->amount ?? '' }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label-sm">Percentage (%) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control form-control-sm" id="editInterestRate" name="interest_rate" step="0.01" min="0" max="100" value="{{ $advance->interest_rate ?? 0 }}" required>
-                        </div>
+                        @endif
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -445,23 +475,106 @@
             });
         });
 
-        // Edit advance (start dates, percentage, amount only)
+        // Live repayment-schedule preview inside the Edit modal (Overpayment Advance only)
+        function fmtEdit(n) {
+            return parseFloat(n || 0).toLocaleString('en-KE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        function calcEditAmortization(amount, rate, months, disbursementDate, principalStartDate) {
+            var schedule = [];
+            var balance = amount;
+            var principalPerMonth = amount / months;
+            var disbursement = new Date(disbursementDate);
+            var principalStart = new Date(principalStartDate);
+            var disbYM = disbursement.getFullYear() * 12 + disbursement.getMonth();
+            var startYM = principalStart.getFullYear() * 12 + principalStart.getMonth();
+            var gracePeriodMonths = Math.max(0, startYM - disbYM);
+
+            var currentDate = new Date(disbursement);
+            for (var i = 0; i < gracePeriodMonths - 1; i++) {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                currentDate.setDate(1);
+                var gInterest = Math.round(balance * rate / 100 * 100) / 100;
+                schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: 0, interest: gInterest, total_amount: gInterest });
+            }
+            currentDate = new Date(principalStart);
+            for (var month = 1; month <= months; month++) {
+                if (month > 1) {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                    currentDate.setDate(1);
+                }
+                var pInterest = Math.round(balance * rate / 100 * 100) / 100;
+                var principal = Math.round(principalPerMonth * 100) / 100;
+                if (month === months) principal = Math.round(balance * 100) / 100;
+                balance = Math.round((balance - principal) * 100) / 100;
+                schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: principal, interest: pInterest, total_amount: Math.round((principal + pInterest) * 100) / 100 });
+            }
+
+            // Prorate the first installment's interest based on the disbursement day-of-month (mirrors backend)
+            var dDay = disbursement.getDate();
+            var dLast = new Date(disbursement.getFullYear(), disbursement.getMonth() + 1, 0).getDate();
+            var dRem = dLast - dDay;
+            if (dDay < 25 && schedule.length > 0) {
+                var prorated = Math.round(schedule[0].interest * (dRem / dLast) * 100) / 100;
+                schedule[0].interest = prorated;
+                schedule[0].total_amount = Math.round((schedule[0].principal_amount + prorated) * 100) / 100;
+            }
+
+            return schedule;
+        }
+
+        function renderEditSchedulePreview() {
+            if ($('#editAdvanceType').val() != '3') return;
+
+            var amount = parseFloat($('#editAmount').val()) || 0;
+            var rate = parseFloat($('#editInterestRate').val()) || 0;
+            var months = parseInt($('#editRepaymentMonths').val()) || 0;
+            var disbursementDate = $('#editDisbursementDate').val();
+            var principalStart = $('#editPrincipalStartDate').val();
+
+            if (!amount || !months || !disbursementDate || !principalStart) {
+                $('#editScheduleBody, #editScheduleFoot').html('');
+                return;
+            }
+
+            var schedule = calcEditAmortization(amount, rate, months, disbursementDate, principalStart);
+            var tbody = '', tPrin = 0, tInt = 0, tPay = 0;
+            schedule.forEach(function(row, i) {
+                tPrin += row.principal_amount; tInt += row.interest; tPay += row.total_amount;
+                tbody += '<tr><td>' + (i + 1) + '</td><td>' + row.payment_date + '</td><td>' +
+                    fmtEdit(row.principal_amount) + '</td><td>' + fmtEdit(row.interest) + '</td><td>' + fmtEdit(row.total_amount) + '</td></tr>';
+            });
+            var tfoot = '<tr class="fw-bold table-light"><td colspan="2">Totals</td><td>' +
+                fmtEdit(tPrin) + '</td><td>' + fmtEdit(tInt) + '</td><td>' + fmtEdit(tPay) + '</td></tr>';
+            $('#editScheduleBody').html(tbody);
+            $('#editScheduleFoot').html(tfoot);
+        }
+
+        $('#editAmount, #editInterestRate, #editRepaymentMonths, #editDisbursementDate, #editPrincipalStartDate').on('input change', renderEditSchedulePreview);
+        $('#editAdvanceModal').on('shown.bs.modal', renderEditSchedulePreview);
+
+        // Edit advance (start dates, percentage, amount, and — for Overpayment — repayment months)
         $('#editAdvanceForm').on('submit', function(e) {
             e.preventDefault();
 
             var btn = $('#btnSaveEditAdvance');
             btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Saving...');
 
+            var payload = {
+                _token: csrfToken,
+                disbursement_date: $('#editDisbursementDate').val(),
+                principal_start_date: $('#editPrincipalStartDate').val(),
+                amount: $('#editAmount').val(),
+                interest_rate: $('#editInterestRate').val()
+            };
+            if ($('#editAdvanceType').val() == '3') {
+                payload.repayment_months = $('#editRepaymentMonths').val();
+            }
+
             $.ajax({
                 url: '/property/advances/' + encryptedId,
                 method: 'PUT',
-                data: {
-                    _token: csrfToken,
-                    disbursement_date: $('#editDisbursementDate').val(),
-                    principal_start_date: $('#editPrincipalStartDate').val(),
-                    amount: $('#editAmount').val(),
-                    interest_rate: $('#editInterestRate').val()
-                },
+                data: payload,
                 success: function(response) {
                     $('#editAdvanceModal').modal('hide');
                     Swal.fire({ icon: 'success', title: 'Saved', text: response.message || 'Advance updated successfully', confirmButtonColor: '#3598db' })
