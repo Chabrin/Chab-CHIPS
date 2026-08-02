@@ -88,7 +88,8 @@ class PropertiesController extends Controller
                 ->pluck('target_property_id')
                 ->toArray();
 
-            $properties = Property::where('client_id', $ClientId)
+            $properties = Property::withoutGlobalScope('user_properties')
+                ->where('client_id', $ClientId)
                 ->where('current_status_id', '!=', 0) // Exclude merged/inactive source properties
                 ->select(['id', 'property_name', 'reference_number'])
                 ->orderBy('property_name', 'asc')

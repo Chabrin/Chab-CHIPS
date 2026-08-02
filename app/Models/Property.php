@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Property extends Model
 {
@@ -32,8 +33,11 @@ class Property extends Model
                 ->exists();
 
             if ($isGlobal) {
+                Log::info("User $userId has global access to properties; no property filter applied.");
                 return;
             }
+
+            Log::info("User $userId does not have global access to properties; applying property filter.");
 
             $staffId = DB::table('sys_user_staff_links')
                 ->where('user_id', $userId)

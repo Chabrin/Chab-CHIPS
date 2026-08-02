@@ -11,11 +11,20 @@
         display: block;
     }
 
-    .form-control-sm,
-    .form-select-sm {
+    input.form-control-sm,
+    select.form-select-sm {
         font-size: 0.8125rem;
         padding: 0.3rem 0.5rem;
         height: calc(1.5em + 0.6rem + 2px);
+    }
+
+    #narration.form-control-sm {
+        font-size: 0.8125rem !important;
+        padding: 0.3rem 0.5rem !important;
+        height: auto !important;
+        min-height: calc(1.5em + 0.6rem + 2px) !important;
+        overflow: auto !important;
+        resize: vertical !important;
     }
 
     .info-box {
@@ -38,6 +47,13 @@
 
     .d-none {
         display: none !important;
+    }
+
+    .cs-compact-table th,
+    .cs-compact-table td {
+        padding: 0.25rem 0.4rem;
+        font-size: 0.75rem;
+        white-space: nowrap;
     }
 
     /* Select2 styling to match form controls */
@@ -111,7 +127,9 @@
 
                             <div class="row g-2 mb-2">
                                 <div class="col-md-4">
-                                    <label class="form-label-sm">Property <span class="text-danger">*</span></label>
+                                    <label class="form-label-sm">Property <span class="text-danger">*</span>
+                                        <span class="spinner-border spinner-border-sm text-primary ms-1" role="status" id="property_loading_spinner" style="display:none; width:0.7rem; height:0.7rem; border-width:0.15em;"></span>
+                                    </label>
                                     <select class="form-select form-select-sm" id="property" name="property_id" required disabled>
                                         <option value="">Select landlord first</option>
                                     </select>
@@ -128,7 +146,7 @@
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-lg-6">
+                                <div class="col-lg-5">
                                     <div id="dynamicSection" class="d-none">
                                         <div class="section-header">Requisition Details</div>
 
@@ -156,15 +174,15 @@
                                             </div>
                                         </div>
 
-                                        <!-- Repayment Row (Type 2 optional, Type 3 required) -->
+                                        <!-- Repayment Row (Overpayment Advance only — Client Payment Advance is a one-off payment) -->
                                         <div class="row g-2 mb-2 d-none" id="rowRepayment">
                                             <div class="col-md-6">
-                                                <label class="form-label-sm">Repayment Months <span class="text-danger repayment-required" style="display:none;">*</span></label>
+                                                <label class="form-label-sm">Repayment Months <span class="text-danger">*</span></label>
                                                 <input type="number" class="form-control form-control-sm" id="months" name="repayment_months" min="1" max="360">
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label-sm">Payment Start Date <span class="text-danger repayment-required" style="display:none;">*</span></label>
-                                                <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" value="{{ date('Y-m-d', strtotime('+1 month')) }}">
+                                                <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" min="{{ date('Y-m-d') }}" value="{{ date('Y-m-d', strtotime('+1 month')) }}">
                                             </div>
                                         </div>
 
@@ -179,19 +197,18 @@
                                         <!-- Narration -->
                                         <div class="row g-2 mb-2 d-none" id="rowNarration">
                                             <div class="col-md-12">
-                                                <label class="form-label-sm">Narration <span class="text-danger">*</span></label>
+                                                <label class="form-label-sm">Narration</label>
                                                 <textarea class="form-control form-control-sm" id="narration" name="narration" rows="2"></textarea>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="col-lg-6">
+                                <div class="col-lg-7">
                                     <!-- Live Calculation Summary Panel -->
-                                    <div id="calcSummaryCard" class="p-3 h-100" style="display:none; border:1px solid #dee2e6; border-left:4px solid #7366ff; border-radius:4px; background:#fff;">
+                                    <div id="calcSummaryCard" class="p-3 h-100" style="border-radius:4px; background:#fff;">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                             <span class="fw-semibold" style="font-size:0.875rem;"><i class="fa fa-calculator me-2"></i>Advance Calculation Summary</span>
-                                            <small class="text-muted">Updates as you edit</small>
                                         </div>
                                         <div class="row g-3">
                                             <div class="col-6 col-md-4"><div class="text-muted small mb-1">Principal</div><div class="fw-bold" id="cs_principal">&mdash;</div></div>
@@ -203,14 +220,12 @@
                                         </div>
                                         <div class="mt-2"><small class="text-muted fst-italic" id="cs_basis"></small></div>
                                         <div id="cs_schedule_wrap" class="mt-3" style="display:none;">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" id="cs_toggle_schedule">
-                                                <i class="fa fa-table me-1"></i>Preview Repayment Schedule
-                                            </button>
-                                            <div id="cs_schedule_table" class="mt-2" style="display:none;">
+                                            <div class="text-muted small mb-1">Repayment Schedule</div>
+                                            <div id="cs_schedule_table">
                                                 <div class="table-responsive">
-                                                    <table class="table table-sm table-bordered text-center mb-0">
+                                                    <table class="table table-sm table-bordered text-center mb-0 cs-compact-table">
                                                         <thead class="table-light">
-                                                            <tr><th>#</th><th>Due Date</th><th>Principal</th><th>Interest</th><th>Payment</th><th>Balance</th></tr>
+                                                            <tr><th>#</th><th>Due Date</th><th>Principal</th><th>Interest</th><th>Payment</th></tr>
                                                         </thead>
                                                         <tbody id="cs_schedule_body"></tbody>
                                                         <tfoot id="cs_schedule_foot"></tfoot>
@@ -241,6 +256,9 @@
             allowClear: true,
             width: '100%'
         });
+
+        // Captured before any type-switch clears it, so Overpayment can restore a sensible default
+        var defaultPaymentStart = $('#paymentStart').val();
 
         function resetClientSelection() {
             $('#client_id').val('');
@@ -314,6 +332,8 @@
             $('#selected_client_name').text(landlordText);
 
             // Load properties (excludes merged/inactive source properties)
+            $('#property_loading_spinner').show();
+            propertySelect.html('<option value="">Loading properties...</option>').trigger('change.select2');
             $.ajax({
                 url: `/client/${clientId}/properties`,
                 method: 'GET',
@@ -325,8 +345,16 @@
                             propertySelect.append(`<option value="${p.id}">${p.reference_number} - ${p.property_name}${mergedTag}</option>`);
                         });
                         propertySelect.prop('disabled', false);
+                    } else {
+                        propertySelect.html('<option value="">No properties found</option>');
                     }
                     propertySelect.trigger('change.select2');
+                },
+                error: function() {
+                    propertySelect.html('<option value="">Failed to load properties</option>').trigger('change.select2');
+                },
+                complete: function() {
+                    $('#property_loading_spinner').hide();
                 }
             });
 
@@ -371,15 +399,17 @@
             var gracePeriodMonths = Math.max(0, startYM - disbYM);
 
             var currentDate = new Date(disbursement);
-            for (var i = 0; i < gracePeriodMonths; i++) {
+            for (var i = 0; i < gracePeriodMonths - 1; i++) {
                 currentDate.setMonth(currentDate.getMonth() + 1);
                 currentDate.setDate(1);
                 var gInterest = Math.round(balance * rate / 100 * 100) / 100;
                 schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: 0, interest: gInterest, total_amount: gInterest, loan_balance: balance });
             }
+            // Principal repayment schedule — the first installment always falls exactly
+            // on the chosen Payment Start Date; only later installments roll to the next month.
             currentDate = new Date(principalStart);
             for (var month = 1; month <= months; month++) {
-                if (month > 1 || gracePeriodMonths === 0) {
+                if (month > 1) {
                     currentDate.setMonth(currentDate.getMonth() + 1);
                     currentDate.setDate(1);
                 }
@@ -392,17 +422,21 @@
             return schedule;
         }
 
+        function resetCalcSummary() {
+            $('#cs_principal, #cs_rate, #cs_interest, #cs_charge, #cs_total, #cs_monthly').html('&mdash;');
+            $('#cs_basis').text('');
+            $('#cs_monthly_wrap, #cs_schedule_wrap').hide();
+        }
+
         function recalculate() {
             var advanceType  = $('#advanceType').val();
             var issuedDate   = $('#issuedDate').val();
             var amount       = parseFloat($('#amount').val()) || 0;
 
             if (!advanceType || amount <= 0) {
-                $('#calcSummaryCard').hide();
+                resetCalcSummary();
                 return;
             }
-
-            $('#calcSummaryCard').show();
 
             var interestAmount = 0, chargeAmount = 0, totalAmount = 0;
             var basisText = '', rateDisplay = '0%', monthlyPayment = 0;
@@ -415,7 +449,8 @@
                 chargeAmount = parseFloat($('#chequeChargeGeneral').val()) || 100;
                 rateDisplay  = rate + '%';
 
-                if (months > 0 && issuedDate && psd) {
+                // Repayment schedule (amortization) only applies to Overpayment Advance (type 3)
+                if (advanceType === '3' && months > 0 && issuedDate && psd) {
                     // Reducing balance amortization
                     scheduleRows = calcAmortization(amount, rate, months, issuedDate, psd);
 
@@ -441,10 +476,10 @@
                         tPrin += row.principal_amount; tInt += row.interest; tPay += row.total_amount;
                         tbody += '<tr><td>' + (i+1) + '</td><td>' + row.payment_date + '</td><td>' +
                             fmt(row.principal_amount) + '</td><td>' + fmt(row.interest) + '</td><td>' +
-                            fmt(row.total_amount) + '</td><td>' + fmt(row.loan_balance) + '</td></tr>';
+                            fmt(row.total_amount) + '</td></tr>';
                     });
                     var tfoot = '<tr class="fw-bold table-light"><td colspan="2">Totals</td><td>' +
-                        fmt(tPrin) + '</td><td>' + fmt(tInt) + '</td><td>' + fmt(tPay) + '</td><td>KSh 0.00</td></tr>';
+                        fmt(tPrin) + '</td><td>' + fmt(tInt) + '</td><td>' + fmt(tPay) + '</td></tr>';
                     $('#cs_schedule_body').html(tbody);
                     $('#cs_schedule_foot').html(tfoot);
                     $('#cs_monthly_wrap').show();
@@ -489,23 +524,13 @@
 
         $('#issuedDate, #amount, #interestRate, #months, #paymentStart, #chequeChargeGeneral').on('change keyup', recalculate);
 
-        $('#cs_toggle_schedule').on('click', function() {
-            $('#cs_schedule_table').toggle();
-            var showing = $('#cs_schedule_table').is(':visible');
-            $(this).html(showing ? '<i class="fa fa-table me-1"></i>Hide Schedule' : '<i class="fa fa-table me-1"></i>Preview Repayment Schedule');
-        });
-
         // Advance Type change - show/hide fields
         $('#advanceType').on('change', function() {
             const type = $(this).val();
 
             if (!type) {
                 $('#dynamicSection').addClass('d-none');
-                $('#calcSummaryCard').hide();
-                $('#cs_principal, #cs_rate, #cs_interest, #cs_charge, #cs_total, #cs_monthly').html('&mdash;');
-                $('#cs_basis').text('');
-                $('#cs_monthly_wrap, #cs_schedule_wrap').hide();
-                $('#cs_schedule_table').hide();
+                resetCalcSummary();
                 return;
             }
 
@@ -515,24 +540,23 @@
             $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').addClass('d-none');
 
             // Reset required
-            $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart, #narration').prop('required', false);
+            $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart').prop('required', false);
             $('#interestRate').val(3).prop('readonly', false);
 
             switch (type) {
-                case '2': // Client Payment Advance
-                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').removeClass('d-none');
-                    $('#requisitionDate, #issuedDate, #amount, #narration').prop('required', true);
-                    $('#months, #paymentStart').prop('required', false);
-                    $('.repayment-required').hide();
+                case '2': // Client Payment Advance — one-off payment, no repayment schedule
+                    $('#rowDates, #rowAmount, #rowChequeCharge, #rowNarration').removeClass('d-none');
+                    $('#requisitionDate, #issuedDate, #amount').prop('required', true);
+                    $('#months, #paymentStart').val('');
                     $('#chequeChargeGeneral').val(100);
                     recalculate();
                     break;
 
                 case '3': // Overpayment Advance
                     $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').removeClass('d-none');
-                    $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart, #narration').prop('required', true);
-                    $('.repayment-required').show();
+                    $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart').prop('required', true);
                     $('#months').val($('#months').val() || 3);
+                    $('#paymentStart').val($('#paymentStart').val() || defaultPaymentStart);
                     $('#chequeChargeGeneral').val(100);
                     recalculate();
                     break;

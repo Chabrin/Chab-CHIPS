@@ -258,15 +258,13 @@ class ClientAdvanceController extends Controller
                 'requisition_date' => 'required|date|before_or_equal:today',
                 'disbursement_date' => 'required|date|after_or_equal:requisition_date',
                 'amount' => 'required|numeric|min:1',
-                'narration' => 'required|string|min:5|max:500',
+                'narration' => 'nullable|string|max:500',
             ];
 
             // Type-specific rules
-            if ($advanceTypeId == 2) { // Client Payment Advance
+            if ($advanceTypeId == 2) { // Client Payment Advance — one-off payment, no repayment schedule
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
                 $rules['interest_rate'] = 'nullable|numeric|min:0|max:100';
-                $rules['repayment_months'] = 'nullable|integer|min:1|max:360';
-                $rules['principal_start_date'] = 'nullable|date';
             } elseif ($advanceTypeId == 3) { // Overpayment Advance
                 $rules['repayment_months'] = 'required|integer|min:1|max:360';
                 $rules['principal_start_date'] = 'required|date|after:disbursement_date';
@@ -338,46 +336,26 @@ class ClientAdvanceController extends Controller
             $schedule = [];
 
             if ($advanceTypeId == 2) {
-                // CLIENT PAYMENT ADVANCE
+                // CLIENT PAYMENT ADVANCE — one-off payment, no repayment schedule.
+                // Interest is a single day-of-month charge; nothing to amortize.
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
                 $remainingDays = $daysInMonth - $day;
                 $rate = floatval($validated['interest_rate'] ?? 0);
                 $chargeAmount = floatval($validated['charge_amount'] ?? 100);
-                $repaymentMonths = !empty($validated['repayment_months']) ? intval($validated['repayment_months']) : null;
-                $principalStartDate = $validated['principal_start_date'] ?? null;
 
-                if ($repaymentMonths && $principalStartDate) {
-                    // Reducing balance amortization when months are provided
-                    $schedule = $this->calculateAmortizationSchedule(
-                        $amount, $rate, $repaymentMonths,
-                        $validated['disbursement_date'], $principalStartDate
-                    );
-                    if ($day < 25 && !empty($schedule)) {
-                        $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
-                        $schedule[0]['interest'] = $proratedFirst;
-                        $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
-                    }
-                    $totalInterest  = array_sum(array_column($schedule, 'interest'));
-                    $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
-                    $interestAmount = round($totalInterest, 2);
-                    $validated['repayment_months']    = $repaymentMonths;
-                    $validated['principal_start_date'] = $principalStartDate;
+                if ($day < 20) {
+                    $interestAmount = $amount * $rate / 100;
+                } elseif ($day <= 25) {
+                    $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
                 } else {
-                    // Day-of-month simple interest
-                    if ($day < 20) {
-                        $interestAmount = $amount * $rate / 100;
-                    } elseif ($day <= 25) {
-                        $interestAmount = ($amount * $rate / 100) * ($remainingDays / $daysInMonth);
-                    } else {
-                        $interestAmount = 0;
-                        $validated['interest_rate'] = 0;
-                    }
-                    $interestAmount = round($interestAmount, 2);
-                    $validated['repayment_months']    = null;
-                    $validated['principal_start_date'] = null;
+                    $interestAmount = 0;
+                    $validated['interest_rate'] = 0;
                 }
+                $interestAmount = round($interestAmount, 2);
 
+                $validated['repayment_months']     = null;
+                $validated['principal_start_date'] = null;
                 $validated['charge_amount']   = $chargeAmount;
                 $validated['interest_amount'] = $interestAmount;
                 $validated['total_amount']    = round($amount + $interestAmount + $chargeAmount, 2);
@@ -425,7 +403,7 @@ class ClientAdvanceController extends Controller
                 'type' => $advanceTypeId
             ]);
 
-            // Create amortization schedule entries (Type 3 always; Type 2 when repayment months provided)
+            // Create amortization schedule entries (Type 3 / Overpayment Advance only)
             if (!empty($schedule)) {
                 foreach ($schedule as $index => $entry) {
                     try {
@@ -540,11 +518,9 @@ class ClientAdvanceController extends Controller
             ];
 
             // Type-specific rules
-            if ($advanceTypeId == 2) { // Client Payment Advance
+            if ($advanceTypeId == 2) { // Client Payment Advance — one-off payment, no repayment schedule
                 $rules['charge_amount'] = 'nullable|numeric|min:0';
                 $rules['interest_rate'] = 'nullable|numeric|min:0|max:100';
-                $rules['repayment_months'] = 'nullable|integer|min:1|max:360';
-                $rules['principal_start_date'] = 'nullable|date';
             } elseif ($advanceTypeId == 3) { // Overpayment Advance
                 $rules['repayment_months'] = 'required|integer|min:1|max:360';
                 $rules['principal_start_date'] = 'required|date|after:disbursement_date';
@@ -564,43 +540,25 @@ class ClientAdvanceController extends Controller
             $schedule = [];
 
             if ($advanceTypeId == 2) {
-                // CLIENT PAYMENT ADVANCE
+                // CLIENT PAYMENT ADVANCE — one-off payment, no repayment schedule.
+                // Interest is a single day-of-month charge; nothing to amortize.
                 $day = $disbursement->day;
                 $daysInMonth = $disbursement->daysInMonth;
                 $remainingDays = $daysInMonth - $day;
                 $rate = floatval($validated['interest_rate'] ?? 0);
                 $chargeAmount = floatval($validated['charge_amount'] ?? 100);
-                $repaymentMonths = !empty($validated['repayment_months']) ? intval($validated['repayment_months']) : null;
-                $principalStartDate = $validated['principal_start_date'] ?? null;
 
-                if ($repaymentMonths && $principalStartDate) {
-                    $schedule = $this->calculateAmortizationSchedule(
-                        $amount, $rate, $repaymentMonths,
-                        $validated['disbursement_date'], $principalStartDate
-                    );
-                    if ($day < 25 && !empty($schedule)) {
-                        $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
-                        $schedule[0]['interest']     = $proratedFirst;
-                        $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
-                    }
-                    $totalInterest  = array_sum(array_column($schedule, 'interest'));
-                    $totalPrincipal = array_sum(array_column($schedule, 'principal_amount'));
-                    $interestAmount = round($totalInterest, 2);
-                    $validated['repayment_months']    = $repaymentMonths;
-                    $validated['principal_start_date'] = $principalStartDate;
+                if ($day < 20) {
+                    $interestAmount = round($amount * $rate / 100, 2);
+                } elseif ($day <= 25) {
+                    $interestAmount = round(($amount * $rate / 100) * ($remainingDays / $daysInMonth), 2);
                 } else {
-                    if ($day < 20) {
-                        $interestAmount = round($amount * $rate / 100, 2);
-                    } elseif ($day <= 25) {
-                        $interestAmount = round(($amount * $rate / 100) * ($remainingDays / $daysInMonth), 2);
-                    } else {
-                        $interestAmount = 0;
-                        $validated['interest_rate'] = 0;
-                    }
-                    $validated['repayment_months']    = null;
-                    $validated['principal_start_date'] = null;
+                    $interestAmount = 0;
+                    $validated['interest_rate'] = 0;
                 }
 
+                $validated['repayment_months']     = null;
+                $validated['principal_start_date'] = null;
                 $validated['charge_amount']   = $chargeAmount;
                 $validated['interest_amount'] = $interestAmount;
                 $validated['total_amount']    = round($amount + $interestAmount + $chargeAmount, 2);
@@ -1591,10 +1549,11 @@ class ClientAdvanceController extends Controller
                 ];
             }
 
-            // Principal repayment schedule
+            // Principal repayment schedule — the first installment always falls exactly
+            // on the chosen Payment Start Date; only later installments roll to the next month.
             $currentDate = $principalStart->copy();
             for ($month = 1; $month <= $repaymentMonths; $month++) {
-                if ($month > 1 || $gracePeriodMonths == 0) {
+                if ($month > 1) {
                     $currentDate->addMonth()->startOfMonth();
                 }
 
