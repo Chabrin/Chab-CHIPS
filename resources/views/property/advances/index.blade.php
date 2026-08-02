@@ -52,23 +52,6 @@
                             </div>
 
                             <div class="tab-pane fade" id="confirm-pane" role="tabpanel">
-                                <div class="alert alert-info small mb-3">
-                                    This tab shows advances that are still waiting for the landlord to approve the email that was sent to them.
-                                    <ul class="mb-0 mt-2 ps-3">
-                                        <li>
-                                            <strong>If the landlord approves it themselves</strong> (by clicking the link in their email), everything
-                                            is done automatically - the advance is approved and immediately applied to their account. No further action is needed from anyone.
-                                        </li>
-                                        <li class="mt-1">
-                                            <strong>If the landlord hasn't responded</strong>, someone on the team can click "Confirm" here to approve
-                                            it on the landlord's behalf. This only marks it as approved - the money is <u>not</u> applied to the
-                                            landlord's account yet. A second person still needs to go to the "All Advances" tab and click "Post" to
-                                            actually complete it. This extra step exists so that one person can't both confirm and finalize an advance
-                                            on their own - a second, different person always has to sign off before the money moves. You also can't
-                                            confirm an advance you created yourself, for the same reason.
-                                        </li>
-                                    </ul>
-                                </div>
                                 <div class="table-responsive custom-scrollbar">
                                     <table class="display" id="confirm-table" style="width:100%;">
                                         <thead>
