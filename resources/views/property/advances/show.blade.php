@@ -32,6 +32,12 @@
         font-size: 0.75rem;
         white-space: nowrap;
     }
+
+    #editAdvanceModal input.form-control-sm {
+        font-size: 0.8125rem;
+        padding: 0.3rem 0.5rem;
+        height: calc(1.5em + 0.6rem + 2px);
+    }
 </style>
 @endsection
 
@@ -64,9 +70,11 @@
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">autorenew</span> Reschedule
                             </a>
                             @endif
-                            <a href="{{ route('property.advances.edit', Crypt::encrypt($advance->id)) }}" class="btn btn-primary btn-sm">
+                            @if($advance->current_status_id != 6)
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editAdvanceModal">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">edit</span> Edit
-                            </a>
+                            </button>
+                            @endif
                             @endpermission
                             <a href="{{ route('client.advances.index') }}" class="btn btn-outline-primary btn-sm">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">arrow_back</span> Back
@@ -315,6 +323,48 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Advance Modal — only start dates, percentage, and amount are editable -->
+<div class="modal fade" id="editAdvanceModal" tabindex="-1" aria-labelledby="editAdvanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editAdvanceModalLabel" style="font-size:1rem;">Edit Advance &mdash; {{ $advance->reference_number ?? '-' }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editAdvanceForm">
+                <div class="modal-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label-sm">Disbursement Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control form-control-sm" id="editDisbursementDate" name="disbursement_date" value="{{ $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control form-control-sm" id="editPrincipalStartDate" name="principal_start_date" value="{{ $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '' }}" required>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label-sm">Amount <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control form-control-sm" id="editAmount" name="amount" step="0.01" min="1" value="{{ $advance->amount ?? '' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label-sm">Percentage (%) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control form-control-sm" id="editInterestRate" name="interest_rate" step="0.01" min="0" max="100" value="{{ $advance->interest_rate ?? 0 }}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="btnSaveEditAdvance">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">save</span> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
@@ -392,6 +442,43 @@
                         btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">check_circle</span> Post Advance');
                     }
                 });
+            });
+        });
+
+        // Edit advance (start dates, percentage, amount only)
+        $('#editAdvanceForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var btn = $('#btnSaveEditAdvance');
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Saving...');
+
+            $.ajax({
+                url: '/property/advances/' + encryptedId,
+                method: 'PUT',
+                data: {
+                    _token: csrfToken,
+                    disbursement_date: $('#editDisbursementDate').val(),
+                    principal_start_date: $('#editPrincipalStartDate').val(),
+                    amount: $('#editAmount').val(),
+                    interest_rate: $('#editInterestRate').val()
+                },
+                success: function(response) {
+                    $('#editAdvanceModal').modal('hide');
+                    Swal.fire({ icon: 'success', title: 'Saved', text: response.message || 'Advance updated successfully', confirmButtonColor: '#3598db' })
+                        .then(() => location.reload());
+                },
+                error: function(xhr) {
+                    var msg = 'Failed to update advance';
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        msg = Object.values(xhr.responseJSON.errors)[0][0];
+                    } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                        msg = xhr.responseJSON.message;
+                    }
+                    Swal.fire({ icon: 'error', title: 'Error', text: msg, confirmButtonColor: '#3598db' });
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">save</span> Save Changes');
+                }
             });
         });
     });

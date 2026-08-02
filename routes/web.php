@@ -958,7 +958,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/client/advances', [App\Http\Controllers\ClientAdvanceController::class, 'index'])->name('client.advances.index');
     Route::get('/client/advances/create', [App\Http\Controllers\ClientAdvanceController::class, 'create'])->name('client.advances.create');
     Route::get('/property/advances/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'show'])->name('property.advances.show');
-    Route::get('/property/advances/{encryptedId}/edit', [App\Http\Controllers\ClientAdvanceController::class, 'edit'])->name('property.advances.edit');
     Route::get('/property/data', [App\Http\Controllers\ClientAdvanceController::class, 'getAdvances'])->name('property.advances.data');
     Route::get('/property/advances/clients', [App\Http\Controllers\ClientAdvanceController::class, 'getClients'])->name('property.advances.clients');
     Route::get('/property/advances/client-properties/{clientId}', [App\Http\Controllers\ClientAdvanceController::class, 'getClientProperties'])->name('property.advances.client-properties');

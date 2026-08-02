@@ -174,13 +174,13 @@
                                             </div>
                                         </div>
 
-                                        <!-- Repayment Row (Overpayment Advance only — Client Payment Advance is a one-off payment) -->
+                                        <!-- Repayment Row: Months (Overpayment only) + Payment Start Date (both types) -->
                                         <div class="row g-2 mb-2 d-none" id="rowRepayment">
-                                            <div class="col-md-6">
+                                            <div class="col-md-6 d-none" id="colMonths">
                                                 <label class="form-label-sm">Repayment Months <span class="text-danger">*</span></label>
                                                 <input type="number" class="form-control form-control-sm" id="months" name="repayment_months" min="1" max="360">
                                             </div>
-                                            <div class="col-md-6">
+                                            <div class="col-md-6" id="colPaymentStart">
                                                 <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
                                                 <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" min="{{ date('Y-m-d') }}" value="{{ date('Y-m-d', strtotime('+1 month')) }}">
                                             </div>
@@ -538,16 +538,21 @@
 
             // Hide all dynamic rows
             $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').addClass('d-none');
+            $('#colMonths').addClass('d-none');
+            $('#colPaymentStart').removeClass('col-md-6 col-md-12');
 
             // Reset required
             $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart').prop('required', false);
             $('#interestRate').val(3).prop('readonly', false);
 
             switch (type) {
-                case '2': // Client Payment Advance — one-off payment, no repayment schedule
-                    $('#rowDates, #rowAmount, #rowChequeCharge, #rowNarration').removeClass('d-none');
-                    $('#requisitionDate, #issuedDate, #amount').prop('required', true);
-                    $('#months, #paymentStart').val('');
+                case '2': // Client Payment Advance — one-off payment, no repayment schedule, but still has a start date
+                    $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').removeClass('d-none');
+                    $('#requisitionDate, #issuedDate, #amount, #paymentStart').prop('required', true);
+                    $('#colMonths').addClass('d-none');
+                    $('#colPaymentStart').addClass('col-md-12');
+                    $('#months').val('');
+                    $('#paymentStart').val($('#paymentStart').val() || defaultPaymentStart);
                     $('#chequeChargeGeneral').val(100);
                     recalculate();
                     break;
@@ -555,6 +560,8 @@
                 case '3': // Overpayment Advance
                     $('#rowDates, #rowAmount, #rowRepayment, #rowChequeCharge, #rowNarration').removeClass('d-none');
                     $('#requisitionDate, #issuedDate, #amount, #months, #paymentStart').prop('required', true);
+                    $('#colMonths').removeClass('d-none');
+                    $('#colPaymentStart').addClass('col-md-6');
                     $('#months').val($('#months').val() || 3);
                     $('#paymentStart').val($('#paymentStart').val() || defaultPaymentStart);
                     $('#chequeChargeGeneral').val(100);
