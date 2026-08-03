@@ -102,6 +102,7 @@
             <th>Principal (KSh)</th>
             <th>Interest (KSh)</th>
             <th>Payment (KSh)</th>
+            <th>Repaid (KSh)</th>
             <th>Balance (KSh)</th>
             <th>Status</th>
         </tr>
@@ -110,10 +111,11 @@
         @foreach($schedule as $i => $entry)
         <tr>
             <td>{{ $i + 1 }}</td>
-            <td>{{ $entry['payment_date'] }}</td>
+            <td>{{ $entry['payment_date'] }}@if($entry['restructured'] ?? false) (restructured)@endif</td>
             <td>{{ number_format($entry['principal_amount'], 2) }}</td>
             <td>{{ number_format($entry['interest'], 2) }}</td>
             <td>{{ number_format($entry['total_amount'], 2) }}</td>
+            <td>{{ ($entry['repaid_amount'] ?? 0) > 0 ? number_format($entry['repaid_amount'], 2) : '-' }}</td>
             <td>{{ number_format($entry['loan_balance'], 2) }}</td>
             <td>{{ $statusLabels[$entry['status_id'] ?? 1] ?? '-' }}</td>
         </tr>
@@ -125,6 +127,7 @@
             <td>{{ number_format($totalPrincipal, 2) }}</td>
             <td>{{ number_format($totalInterest, 2) }}</td>
             <td>{{ number_format($totalPayment, 2) }}</td>
+            <td>{{ number_format(array_sum(array_column($schedule, 'repaid_amount')), 2) }}</td>
             <td>-</td>
             <td>-</td>
         </tr>

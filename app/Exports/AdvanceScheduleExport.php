@@ -54,10 +54,11 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
         return collect($this->schedule)->map(function ($entry, $index) {
             return [
                 'no'             => $index + 1,
-                'due_date'       => $entry['payment_date'],
+                'due_date'       => $entry['payment_date'] . (($entry['restructured'] ?? false) ? ' (restructured)' : ''),
                 'principal'      => number_format($entry['principal_amount'], 2),
                 'interest'       => number_format($entry['interest'], 2),
                 'total_payment'  => number_format($entry['total_amount'], 2),
+                'repaid'         => ($entry['repaid_amount'] ?? 0) > 0 ? number_format($entry['repaid_amount'], 2) : '—',
                 'balance'        => number_format($entry['loan_balance'], 2),
                 'status'         => $this->statusNames[$entry['status_id'] ?? 1] ?? '—',
             ];
@@ -66,7 +67,7 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
 
     public function headings(): array
     {
-        return ['#', 'Due Date', 'Principal (KSh)', 'Interest (KSh)', 'Payment (KSh)', 'Balance (KSh)', 'Status'];
+        return ['#', 'Due Date', 'Principal (KSh)', 'Interest (KSh)', 'Payment (KSh)', 'Repaid (KSh)', 'Balance (KSh)', 'Status'];
     }
 
     public function styles(Worksheet $sheet)
@@ -76,13 +77,13 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
 
         // Title
         $sheet->setCellValue('A1', 'CLIENT ADVANCE — REPAYMENT SCHEDULE');
-        $sheet->mergeCells('A1:G1');
+        $sheet->mergeCells('A1:H1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(15);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Subtitle
         $sheet->setCellValue('A2', 'Generated: ' . now()->format('d M Y, H:i'));
-        $sheet->mergeCells('A2:G2');
+        $sheet->mergeCells('A2:H2');
         $sheet->getStyle('A2')->getFont()->setItalic(true)->setSize(10);
         $sheet->getStyle('A2')->getFont()->getColor()->setRGB('888888');
         $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -134,26 +135,28 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2c3e50']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ];
-        $sheet->getStyle('A9:G9')->applyFromArray($headerStyle);
+        $sheet->getStyle('A9:H9')->applyFromArray($headerStyle);
 
         // Data rows alignment
-        $sheet->getStyle('A10:G' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('A10:H' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Totals row
         $totalsRow = $lastRow + 1;
         $totalPrincipal = array_sum(array_column($this->schedule, 'principal_amount'));
         $totalInterest  = array_sum(array_column($this->schedule, 'interest'));
         $totalPayment   = array_sum(array_column($this->schedule, 'total_amount'));
+        $totalRepaid    = array_sum(array_column($this->schedule, 'repaid_amount'));
 
         $sheet->setCellValue('A' . $totalsRow, 'Totals');
         $sheet->mergeCells('A' . $totalsRow . ':B' . $totalsRow);
         $sheet->setCellValue('C' . $totalsRow, number_format($totalPrincipal, 2));
         $sheet->setCellValue('D' . $totalsRow, number_format($totalInterest, 2));
         $sheet->setCellValue('E' . $totalsRow, number_format($totalPayment, 2));
-        $sheet->setCellValue('F' . $totalsRow, '—');
+        $sheet->setCellValue('F' . $totalsRow, number_format($totalRepaid, 2));
         $sheet->setCellValue('G' . $totalsRow, '—');
+        $sheet->setCellValue('H' . $totalsRow, '—');
 
-        $sheet->getStyle('A' . $totalsRow . ':G' . $totalsRow)->applyFromArray([
+        $sheet->getStyle('A' . $totalsRow . ':H' . $totalsRow)->applyFromArray([
             'font' => ['bold' => true],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EAF0FF']],
             'borders' => ['top' => ['borderStyle' => Border::BORDER_MEDIUM]],
@@ -162,16 +165,17 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
 
         // Column widths
         $sheet->getColumnDimension('A')->setWidth(6);
-        $sheet->getColumnDimension('B')->setWidth(14);
+        $sheet->getColumnDimension('B')->setWidth(18);
         $sheet->getColumnDimension('C')->setWidth(18);
         $sheet->getColumnDimension('D')->setWidth(18);
         $sheet->getColumnDimension('E')->setWidth(18);
         $sheet->getColumnDimension('F')->setWidth(18);
-        $sheet->getColumnDimension('G')->setWidth(14);
+        $sheet->getColumnDimension('G')->setWidth(18);
+        $sheet->getColumnDimension('H')->setWidth(14);
 
         // Border around data
         if (count($this->schedule) > 0) {
-            $sheet->getStyle('A9:G' . $lastRow)->applyFromArray([
+            $sheet->getStyle('A9:H' . $lastRow)->applyFromArray([
                 'borders' => [
                     'allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'DDDDDD']],
                 ],

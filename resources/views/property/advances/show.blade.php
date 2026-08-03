@@ -240,7 +240,7 @@
                                                     @foreach($schedule as $idx => $entry)
                                                     <tr>
                                                         <td>{{ $idx + 1 }}</td>
-                                                        <td>{{ $entry['payment_date'] }}</td>
+                                                        <td>{{ $entry['payment_date'] }}@if($entry['restructured'] ?? false) <span class="badge bg-secondary">restructured</span>@endif</td>
                                                         <td>{{ number_format($entry['principal_amount'], 2) }}</td>
                                                         <td>{{ number_format($entry['interest'], 2) }}</td>
                                                         <td>{{ number_format($entry['total_amount'], 2) }}</td>
