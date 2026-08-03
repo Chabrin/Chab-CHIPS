@@ -45,12 +45,25 @@ class ClientAdvanceController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy', 'schedule', 'previousAdvance', 'rescheduleHistory.fromAdvance', 'rescheduleHistory.toAdvance', 'rescheduleHistory.rescheduledBy'])
+            $advance = ClientAdvance::with(['client', 'property', 'zone', 'invoiceableitems', 'createdBy', 'schedule', 'previousAdvance', 'rescheduleHistory.fromAdvance', 'rescheduleHistory.toAdvance', 'rescheduleHistory.rescheduledBy', 'landlordAccountEntries'])
                 ->findOrFail($id);
 
             $schedule = $this->buildScheduleArray($advance);
+            $canRestructure = $advance->canBeRestructured();
 
-            return view('property.advances.show', compact('advance', 'schedule'));
+            // Already-recovered installments, for display alongside the live restructure
+            // preview so the modal shows the full picture (repaid + newly-restructured rows).
+            $recoveredIds = $advance->recoveredScheduleIds();
+            $recoveredScheduleRows = $advance->schedule->whereIn('id', $recoveredIds)->values()->map(function ($s) {
+                return [
+                    'payment_date'     => $s->payment_date ? $s->payment_date->format('Y-m-d') : '—',
+                    'principal_amount' => (float) $s->principal_amount,
+                    'interest'         => (float) $s->interest,
+                    'total_amount'     => round((float) $s->principal_amount + (float) $s->interest, 2),
+                ];
+            });
+
+            return view('property.advances.show', compact('advance', 'schedule', 'canRestructure', 'recoveredScheduleRows'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading advance details: ' . $e->getMessage());
@@ -591,6 +604,225 @@ class ClientAdvanceController extends Controller
     }
 
     /**
+     * Restructure an advance's dates (and, for Overpayment Advances, its repayment
+     * months / interest rate). Unlike the quick-edit modal, this is allowed on Posted
+     * advances. For Overpayment Advances (installments), already-recovered installments
+     * — and their matching cb_landlord_account rows — are left completely untouched;
+     * only the still-pending ones are rebuilt, and the principal being carried forward
+     * can never be reduced below what was still outstanding. A one-off Client Payment
+     * Advance has no partial concept, so it's blocked entirely once recovered. The
+     * interest rate may only be held or lowered, never raised. No new GL journal entries
+     * are posted — this corrects the pending ledger records, it does not create a new
+     * financial transaction. A cb_advance_reschedule_history row is written purely as an
+     * audit trail (from/to/original all point at this same advance, since nothing new is
+     * created).
+     */
+    public function restructure(Request $request, $encryptedId)
+    {
+        if (!Auth::user()->isAbleTo('update_client_advances')) {
+            return response()->json(['success' => false, 'message' => 'You do not have permission to restructure advances'], 403);
+        }
+
+        DB::beginTransaction();
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $advance = ClientAdvance::with(['client', 'schedule', 'landlordAccountEntries'])->findOrFail($id);
+
+            if (!$advance->canBeRestructured()) {
+                DB::rollBack();
+                $message = $advance->advance_type_id == 3
+                    ? 'This advance can no longer be restructured — every installment has already been recovered.'
+                    : 'This advance can no longer be restructured — an amount has already been recovered against it.';
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            $rules = [
+                'disbursement_date'    => 'required|date',
+                'principal_start_date' => 'required|date',
+                'interest_rate'        => 'required|numeric|min:0|max:' . (float) ($advance->interest_rate ?? 0),
+                'narration'            => 'nullable|string|max:500',
+            ];
+            if ($advance->advance_type_id == 3) {
+                $rules['repayment_months'] = 'required|integer|min:1|max:360';
+            }
+            $validated = $request->validate($rules);
+
+            $disbursement  = \Carbon\Carbon::parse($validated['disbursement_date']);
+            $rate          = (float) $validated['interest_rate'];
+            $day           = $disbursement->day;
+            $daysInMonth   = $disbursement->daysInMonth;
+            $remainingDays = $daysInMonth - $day;
+            $chargeAmount  = (float) ($advance->charge_amount ?? 0);
+            $schedule      = [];
+
+            if ($advance->advance_type_id == 2) {
+                // One-off payment — no partial concept, the whole amount is locked.
+                $amount = (float) $advance->amount;
+                if ($day < 20) {
+                    $interestAmount = round($amount * $rate / 100, 2);
+                } elseif ($day <= 25) {
+                    $interestAmount = round(($amount * $rate / 100) * ($remainingDays / $daysInMonth), 2);
+                } else {
+                    $interestAmount = 0;
+                    $rate = 0;
+                }
+                $totalAmount = round($amount + $interestAmount + $chargeAmount, 2);
+                $amountPaid  = 0;
+
+                $advance->update([
+                    'disbursement_date'    => $validated['disbursement_date'],
+                    'principal_start_date' => $validated['principal_start_date'],
+                    'interest_rate'        => $rate,
+                    'interest_amount'      => $interestAmount,
+                    'total_amount'         => $totalAmount,
+                    'current_balance'      => $totalAmount,
+                ]);
+            } else {
+                // OVERPAYMENT ADVANCE — only the still-pending (unrecovered) installments
+                // are rebuilt. Already-recovered installments are historical fact and are
+                // left exactly as they are. The principal carried into the new schedule is
+                // locked to what was still outstanding — it is never reduced.
+                //
+                // "Recovered" is determined via cb_landlord_account.is_recovered, joined by
+                // schedule_id — NOT AdvanceSchedule.current_status_id, which the
+                // merge-batch/MASTERRETURN returns flow never syncs back after a real
+                // recovery, so it can sit at 1 (Pending) forever even once money has
+                // actually been recovered against that installment.
+                $recoveredIds       = $advance->recoveredScheduleIds();
+                $recoveredRows      = $advance->schedule->whereIn('id', $recoveredIds);
+                $pendingRowsBefore  = $advance->schedule->whereNotIn('id', $recoveredIds);
+                $recoveredPrincipal = (float) $recoveredRows->sum('principal_amount');
+                $recoveredInterest  = (float) $recoveredRows->sum('interest');
+                $pendingPrincipal   = (float) $pendingRowsBefore->sum('principal_amount');
+                $repaymentMonths    = (int) $validated['repayment_months'];
+
+                $schedule = $this->calculateAmortizationSchedule(
+                    $pendingPrincipal, $rate, $repaymentMonths,
+                    $validated['disbursement_date'], $validated['principal_start_date']
+                );
+
+                if ($day < 25 && !empty($schedule)) {
+                    $proratedFirst = round($schedule[0]['interest'] * ($remainingDays / $daysInMonth), 2);
+                    $schedule[0]['interest']     = $proratedFirst;
+                    $schedule[0]['total_amount'] = $schedule[0]['principal_amount'] + $proratedFirst;
+                }
+
+                $newPendingInterest = round(array_sum(array_column($schedule, 'interest')), 2);
+                $interestAmount     = round($recoveredInterest + $newPendingInterest, 2);
+                $totalAmount        = round($recoveredPrincipal + $pendingPrincipal + $interestAmount + $chargeAmount, 2);
+                $amountPaid         = round($recoveredPrincipal + $recoveredInterest, 2);
+
+                $advance->update([
+                    'disbursement_date'    => $validated['disbursement_date'],
+                    'principal_start_date' => $validated['principal_start_date'],
+                    'interest_rate'        => $rate,
+                    'repayment_months'     => $repaymentMonths,
+                    'interest_amount'      => $interestAmount,
+                    'total_amount'         => $totalAmount,
+                    'current_balance'      => round($totalAmount - $amountPaid, 2),
+                ]);
+
+                // Only the pending installments are replaced — recovered ones stay untouched
+                \App\Models\AdvanceSchedule::whereIn('id', $pendingRowsBefore->pluck('id'))->delete();
+                foreach ($schedule as $entry) {
+                    \App\Models\AdvanceSchedule::create([
+                        'parent_id' => $advance->id,
+                        'payment_date' => $entry['payment_date'],
+                        'principal_amount' => $entry['principal_amount'],
+                        'interest' => $entry['interest'],
+                        'loan_balance' => $entry['loan_balance'],
+                        'current_status_id' => 1,
+                        'is_restructured' => true,
+                    ]);
+                }
+            }
+
+            // Resync only the UNRECOVERED ledger rows for this advance (if it was already
+            // posted) — recovered rows are historical fact and are left completely alone.
+            $unrecoveredEntries = $advance->landlordAccountEntries->where('is_recovered', 0);
+            if ($unrecoveredEntries->isNotEmpty()) {
+                $codes = DB::table('sys_pm_clients as c')
+                    ->crossJoin('sys_pm_properties as p')
+                    ->where('c.id', $advance->client_id)
+                    ->where('p.id', $advance->property_id)
+                    ->select('c.reference_number as landlord_code', 'p.reference_number as property_code')
+                    ->first();
+                $ref = $advance->reference_number ?? 'N/A';
+
+                LandlordAccount::where('advance_id', $advance->id)->where('is_recovered', 0)->delete();
+
+                if ($advance->advance_type_id == 3) {
+                    // Old recovered rows keep their original (pre-rebuild) IDs, which are
+                    // exactly $recoveredIds; freshly-created rows have new IDs and were
+                    // never in that set — so this reliably isolates the new pending rows
+                    // without depending on current_status_id.
+                    $allRows     = $advance->schedule()->orderBy('payment_date')->get();
+                    $totalCount  = $allRows->count();
+                    $pendingRows = $allRows->whereNotIn('id', $recoveredIds)->values();
+                    $startIndex  = $totalCount - $pendingRows->count();
+
+                    foreach ($pendingRows as $i => $entry) {
+                        $position    = $startIndex + $i + 1;
+                        $payDate     = \Carbon\Carbon::parse($entry->payment_date);
+                        $installment = round((float) $entry->principal_amount + (float) $entry->interest, 2);
+                        $label = 'Advance ' . $ref . ' Instalment ' . $position . ' of ' . $totalCount . ' (restructured)';
+
+                        LandlordAccount::create([
+                            'year' => $payDate->year, 'month' => $payDate->month,
+                            'landlord_code' => $codes->landlord_code ?? null, 'landlord_name' => $advance->client->names ?? null,
+                            'property_code' => $codes->property_code ?? null,
+                            'transaction_number' => $ref . '/' . $position, 'entry_type_code' => '0009',
+                            'entry_description' => 'ADVANCE', 'entry_particulars' => $label, 'entry_date' => $payDate,
+                            'debit_amount' => $installment, 'credit_amount' => 0, 'total_amount' => $installment,
+                            'gl_account' => '1150', 'vendor_id' => $codes->landlord_code ?? null,
+                            'audit_user' => substr(Auth::user()->name ?? (string) Auth::id(), 0, 20),
+                            'is_recovered' => 0, 'client_id' => $advance->client_id, 'property_id' => $advance->property_id,
+                            'advance_id' => $advance->id, 'schedule_id' => $entry->id,
+                        ]);
+                    }
+                } else {
+                    LandlordAccount::create([
+                        'year' => $disbursement->year, 'month' => $disbursement->month,
+                        'landlord_code' => $codes->landlord_code ?? null, 'landlord_name' => $advance->client->names ?? null,
+                        'property_code' => $codes->property_code ?? null,
+                        'transaction_number' => $ref, 'entry_type_code' => '0009',
+                        'entry_description' => 'ADVANCE', 'entry_particulars' => 'Advance ' . $ref . ' (restructured)',
+                        'entry_date' => $disbursement, 'debit_amount' => $totalAmount, 'credit_amount' => 0, 'total_amount' => $totalAmount,
+                        'gl_account' => '1150', 'vendor_id' => $codes->landlord_code ?? null,
+                        'audit_user' => substr(Auth::user()->name ?? (string) Auth::id(), 0, 20),
+                        'is_recovered' => 0, 'client_id' => $advance->client_id, 'property_id' => $advance->property_id,
+                        'advance_id' => $advance->id, 'schedule_id' => null,
+                    ]);
+                }
+            }
+
+            // Audit trail — no new advance is created, so from/to/original all point at this one
+            \App\Models\AdvanceRescheduleHistory::create([
+                'original_advance_id'               => $advance->id,
+                'from_advance_id'                   => $advance->id,
+                'to_advance_id'                      => $advance->id,
+                'amount_paid_at_reschedule'         => $amountPaid,
+                'outstanding_balance_at_reschedule' => $totalAmount - $amountPaid,
+                'narration'                         => $validated['narration'] ?? 'Restructured',
+                'rescheduled_by'                    => Auth::id(),
+                'rescheduled_at'                    => now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Advance restructured successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error restructuring client advance: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to restructure advance'], 500);
+        }
+    }
+
+    /**
      * Delete a client advance
      */
     public function destroy($encryptedId)
@@ -722,14 +954,22 @@ class ClientAdvanceController extends Controller
              ($advance->advance_type_id == 2 && !empty($advance->repayment_months)));
 
         if ($hasStoredSchedule) {
-            return $advance->schedule->map(function ($s) {
+            // "Repaid" is determined via cb_landlord_account.is_recovered (joined by
+            // schedule_id) — the true source of truth — not AdvanceSchedule.current_status_id,
+            // which is not reliably synced for merge-batch/MASTERRETURN landlords.
+            $recoveredIds = $advance->recoveredScheduleIds();
+
+            return $advance->schedule->map(function ($s) use ($recoveredIds) {
+                $isRepaid = $recoveredIds->contains($s->id);
                 return [
                     'payment_date'     => $s->payment_date ? $s->payment_date->format('Y-m-d') : '—',
                     'principal_amount' => (float) $s->principal_amount,
                     'interest'         => (float) $s->interest,
                     'total_amount'     => round((float) $s->principal_amount + (float) $s->interest, 2),
+                    'repaid_amount'    => $isRepaid ? round((float) $s->principal_amount + (float) $s->interest, 2) : 0.0,
                     'loan_balance'     => (float) $s->loan_balance,
-                    'status_id'        => $s->current_status_id,
+                    'status_id'        => $isRepaid ? 2 : $s->current_status_id,
+                    'restructured'     => (bool) $s->is_restructured,
                 ];
             })->toArray();
         }
@@ -747,17 +987,22 @@ class ClientAdvanceController extends Controller
                     : $advance->principal_start_date
             );
             return array_map(function ($row) use ($advance) {
-                return array_merge($row, ['status_id' => $advance->current_status_id]);
+                return array_merge($row, ['repaid_amount' => 0.0, 'status_id' => $advance->current_status_id, 'restructured' => false]);
             }, $computed);
         }
+
+        // One-off Client Payment Advance — all-or-nothing, checked via the ledger directly
+        $isRepaid = $advance->hasRecoveredLandlordEntries();
 
         return [[
             'payment_date'     => $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '—',
             'principal_amount' => (float) ($advance->amount ?? 0),
             'interest'         => (float) ($advance->interest_amount ?? 0),
             'total_amount'     => (float) ($advance->total_amount ?? 0),
+            'repaid_amount'    => $isRepaid ? (float) ($advance->total_amount ?? 0) : 0.0,
             'loan_balance'     => 0.00,
-            'status_id'        => $advance->current_status_id,
+            'status_id'        => $isRepaid ? 2 : $advance->current_status_id,
+            'restructured'     => false,
         ]];
     }
 
@@ -1182,197 +1427,6 @@ class ClientAdvanceController extends Controller
                 'property_id'  => $propertyId,
             ]);
         }
-    }
-
-    /**
-     * Show the reschedule form for a Posted advance (status=6).
-     */
-    public function showRescheduleForm($encryptedId)
-    {
-        try {
-            $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
-
-            if ($advance->current_status_id !== 6) {
-                return redirect()->route('property.advances.show', $encryptedId)
-                    ->with('error', 'Only Posted advances can be rescheduled.');
-            }
-
-            // ⚠️ TODO #2: Confirm source of truth for payments made.
-            // Currently using sum of cleared (status=2) schedule rows.
-            // May need to cross-check sys_pm_landlord_accounts_transaction instead.
-            // See docs/advance_reschedule_missing.md for full context.
-            $amountPaid = $advance->schedule()
-                ->where('current_status_id', 2)
-                ->sum(DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
-
-            $outstandingBalance = max(0, round((float) $advance->total_amount - (float) $amountPaid, 2));
-
-            return view('property.advances.reschedule', compact('advance', 'amountPaid', 'outstandingBalance', 'encryptedId'));
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading reschedule form: ' . $e->getMessage());
-            return redirect()->route('client.advances.index')->with('error', 'Failed to load reschedule form.');
-        }
-    }
-
-    /**
-     * Process the reschedule: close old advance, open new one, log history.
-     */
-    public function processReschedule(Request $request, $encryptedId)
-    {
-        $validated = $request->validate([
-            'amount'               => 'required|numeric|min:1',
-            'interest_rate'        => 'nullable|numeric|min:0|max:100',
-            'repayment_months'     => 'nullable|integer|min:1|max:360',
-            'disbursement_date'    => 'required|date',
-            'principal_start_date' => 'required|date',
-            'narration'            => 'nullable|string|max:1000',
-        ]);
-
-        DB::beginTransaction();
-        try {
-            $id = Crypt::decrypt($encryptedId);
-            $oldAdvance = ClientAdvance::with(['client', 'property', 'zone', 'schedule'])->findOrFail($id);
-
-            if ($oldAdvance->current_status_id !== 6) {
-                return response()->json(['success' => false, 'message' => 'Only Posted advances can be rescheduled.'], 422);
-            }
-
-            // ⚠️ TODO #2: Confirm source of truth for payments made.
-            $amountPaid = $oldAdvance->schedule()
-                ->where('current_status_id', 2)
-                ->sum(DB::raw('CAST(principal_amount AS numeric) + COALESCE(CAST(interest AS numeric), 0)'));
-            $outstandingBalance = max(0, round((float) $oldAdvance->total_amount - (float) $amountPaid, 2));
-
-            // --- Recalculate interest / total for new advance ---
-            $newAmount       = (float) $validated['amount'];
-            $interestRate    = (float) ($validated['interest_rate'] ?? 0);
-            $repaymentMonths = (int) ($validated['repayment_months'] ?? 1);
-            $disbursement    = \Carbon\Carbon::parse($validated['disbursement_date']);
-            $principalStart  = \Carbon\Carbon::parse($validated['principal_start_date']);
-
-            $interestAmount = 0;
-            $newSchedule    = [];
-
-            if ($oldAdvance->advance_type_id == 3 && $interestRate > 0) {
-                $newSchedule    = $this->calculateAmortizationSchedule($newAmount, $interestRate, $repaymentMonths, $disbursement, $principalStart);
-                $interestAmount = collect($newSchedule)->sum('interest');
-            }
-            $newTotal = round($newAmount + $interestAmount, 2);
-
-            // 1. Mark old advance as Rescheduled
-            $oldAdvance->update(['current_status_id' => 8]);
-
-            // 2. Mark all pending schedule rows of old advance as Rescheduled
-            $oldAdvance->schedule()->where('current_status_id', 1)->update(['current_status_id' => 8]);
-
-            // 3. Create new advance record
-            $newAdvance = ClientAdvance::create([
-                'date_time'            => now(),
-                'requisition_date'     => now(),
-                'narration'            => $validated['narration'] ?? 'Rescheduled from ' . $oldAdvance->reference_number,
-                'created_by'           => Auth::id(),
-                'zone_id'              => $oldAdvance->zone_id,
-                'client_id'            => $oldAdvance->client_id,
-                'property_id'          => $oldAdvance->property_id,
-                'current_status_id'    => 1, // Pending — awaits landlord approval
-                'amount'               => $newAmount,
-                'repayment_months'     => $repaymentMonths,
-                'interest_rate'        => $interestRate,
-                'principal_start_date' => $principalStart,
-                'disbursement_date'    => $disbursement,
-                'interest_amount'      => $interestAmount,
-                'total_amount'         => $newTotal,
-                'current_balance'      => $newTotal,
-                'reference_number'     => $oldAdvance->reference_number . '-R' . (substr_count($oldAdvance->reference_number, '-R') + 1),
-                'advance_type_id'      => $oldAdvance->advance_type_id,
-                'previous_advance_id'  => $oldAdvance->id,
-                'miscallenous_charge_id' => $oldAdvance->miscallenous_charge_id,
-                'charge_amount'        => $oldAdvance->charge_amount,
-            ]);
-
-            // 4. Create new schedule rows (Type 3 / Overpayment advances)
-            if (!empty($newSchedule)) {
-                foreach ($newSchedule as $row) {
-                    \App\Models\AdvanceSchedule::create([
-                        'parent_id'        => $newAdvance->id,
-                        'payment_date'     => $row['payment_date'],
-                        'principal_amount' => $row['principal'],
-                        'interest'         => $row['interest'],
-                        'loan_balance'     => $row['balance'],
-                        'current_status_id'=> 1,
-                    ]);
-                }
-            }
-
-            // 5. Log to reschedule history
-            $rootId = $this->getRootAdvanceId($oldAdvance);
-            \App\Models\AdvanceRescheduleHistory::create([
-                'original_advance_id'               => $rootId,
-                'from_advance_id'                   => $oldAdvance->id,
-                'to_advance_id'                     => $newAdvance->id,
-                'amount_paid_at_reschedule'         => $amountPaid,
-                'outstanding_balance_at_reschedule' => $outstandingBalance,
-                'narration'                         => $validated['narration'] ?? null,
-                'rescheduled_by'                    => Auth::id(),
-                'rescheduled_at'                    => now(),
-            ]);
-
-            DB::commit();
-
-            Log::info('Advance rescheduled', [
-                'old_advance_id' => $oldAdvance->id,
-                'new_advance_id' => $newAdvance->id,
-                'user_id'        => Auth::id(),
-            ]);
-
-            // Notify landlord of new advance pending approval
-            try {
-                $newEncryptedId  = Crypt::encrypt($newAdvance->id);
-                $notifySchedule  = $this->buildScheduleArray($newAdvance->load('schedule'));
-                $newAdvance->client->notify(new \App\Notifications\AdvanceApprovalNotification(
-                    $newAdvance,
-                    $newEncryptedId,
-                    $notifySchedule
-                ));
-            } catch (\Exception $notifyEx) {
-                Log::warning('Failed to send reschedule approval notification', [
-                    'advance_id' => $newAdvance->id,
-                    'error'      => $notifyEx->getMessage(),
-                ]);
-            }
-
-            return response()->json([
-                'success'         => true,
-                'message'         => 'Advance rescheduled successfully. Landlord has been notified.',
-                'new_advance_id'  => Crypt::encrypt($newAdvance->id),
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error processing reschedule: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to reschedule advance: ' . $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Walk the previous_advance_id chain to find the very first (original) advance.
-     */
-    private function getRootAdvanceId(ClientAdvance $advance): int
-    {
-        $current = $advance;
-        $visited = [];
-        while ($current->previous_advance_id && !in_array($current->previous_advance_id, $visited)) {
-            $visited[] = $current->id;
-            $parent = ClientAdvance::find($current->previous_advance_id);
-            if (!$parent) break;
-            $current = $parent;
-        }
-        return $current->id;
     }
 
     /**

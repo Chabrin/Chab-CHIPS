@@ -61,4 +61,14 @@ class LandlordAccount extends Model
     {
         return $this->belongsTo(Property::class, 'property_id');
     }
+
+    public function advance()
+    {
+        return $this->belongsTo(ClientAdvance::class, 'advance_id');
+    }
+
+    public function scheduleEntry()
+    {
+        return $this->belongsTo(AdvanceSchedule::class, 'schedule_id');
+    }
 }

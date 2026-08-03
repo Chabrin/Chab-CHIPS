@@ -16,7 +16,8 @@ class AdvanceSchedule extends Model
         'principal_amount',
         'interest',
         'loan_balance',
-        'current_status_id'
+        'current_status_id',
+        'is_restructured',
     ];
 
     protected $casts = [

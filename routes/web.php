@@ -973,8 +973,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/advances/{encryptedId}/schedule/email', [App\Http\Controllers\ClientAdvanceController::class, 'emailSchedule'])->name('property.advances.schedule.email');
     Route::post('/property/advances/{encryptedId}/confirm', [App\Http\Controllers\ClientAdvanceController::class, 'confirmAdvance'])->name('property.advances.confirm');
     Route::post('/property/advances/{encryptedId}/post', [App\Http\Controllers\ClientAdvanceController::class, 'postAdvance'])->name('property.advances.post');
-    Route::get('/property/advances/{encryptedId}/reschedule', [App\Http\Controllers\ClientAdvanceController::class, 'showRescheduleForm'])->name('property.advances.reschedule');
-    Route::post('/property/advances/{encryptedId}/reschedule', [App\Http\Controllers\ClientAdvanceController::class, 'processReschedule'])->name('property.advances.reschedule.store');
+    Route::post('/property/advances/{encryptedId}/restructure', [App\Http\Controllers\ClientAdvanceController::class, 'restructure'])->name('property.advances.restructure');
 
 
     Route::post('/property/listings', [App\Http\Controllers\PropertiesController::class, 'store'])->name('property.properties.store');

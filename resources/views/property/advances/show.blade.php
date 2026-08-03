@@ -65,11 +65,6 @@
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">check_circle</span> Post Advance
                             </button>
                             @endif
-                            @if($advance->current_status_id == 6)
-                            <a href="{{ route('property.advances.reschedule', Crypt::encrypt($advance->id)) }}" class="btn btn-outline-primary btn-sm">
-                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">autorenew</span> Reschedule
-                            </a>
-                            @endif
                             @if($advance->current_status_id != 6)
                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editAdvanceModal">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">edit</span> Edit
@@ -82,6 +77,23 @@
                         </div>
                     </div>
                     <div class="card-body" style="padding: 15px;">
+
+                        <ul class="nav nav-tabs mb-3" id="advanceTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="details-tab" data-bs-toggle="tab" data-bs-target="#details-pane" type="button" role="tab">
+                                    Advance Request Details
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="ledger-tab" data-bs-toggle="tab" data-bs-target="#ledger-pane" type="button" role="tab">
+                                    Landlord Ledger &amp; Restructure
+                                    <span class="badge bg-secondary ms-1">{{ $advance->landlordAccountEntries->count() }}</span>
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="advanceTabsContent">
+                        <div class="tab-pane fade show active" id="details-pane" role="tabpanel">
 
                         <!-- Client & Property (shown first) -->
                         <div class="row g-2 mb-2">
@@ -219,6 +231,7 @@
                                                         <th>Principal</th>
                                                         <th>Interest</th>
                                                         <th>Payment</th>
+                                                        <th>Repaid</th>
                                                         <th>Balance</th>
                                                         <th>Status</th>
                                                     </tr>
@@ -231,6 +244,13 @@
                                                         <td>{{ number_format($entry['principal_amount'], 2) }}</td>
                                                         <td>{{ number_format($entry['interest'], 2) }}</td>
                                                         <td>{{ number_format($entry['total_amount'], 2) }}</td>
+                                                        <td>
+                                                            @if(($entry['repaid_amount'] ?? 0) > 0)
+                                                                {{ number_format($entry['repaid_amount'], 2) }}
+                                                            @else
+                                                                &mdash;
+                                                            @endif
+                                                        </td>
                                                         <td>{{ number_format($entry['loan_balance'], 2) }}</td>
                                                         <td>
                                                             @php $st = $entry['status_id'] ?? 1; @endphp
@@ -250,6 +270,7 @@
                                                         <td>{{ number_format(array_sum(array_column($schedule, 'principal_amount')), 2) }}</td>
                                                         <td>{{ number_format(array_sum(array_column($schedule, 'interest')), 2) }}</td>
                                                         <td>{{ number_format(array_sum(array_column($schedule, 'total_amount')), 2) }}</td>
+                                                        <td>{{ number_format(array_sum(array_column($schedule, 'repaid_amount')), 2) }}</td>
                                                         <td>&mdash;</td>
                                                         <td>&mdash;</td>
                                                     </tr>
@@ -316,6 +337,81 @@
                             </table>
                         </div>
                         @endif
+
+                        </div><!-- /details-pane -->
+
+                        <div class="tab-pane fade" id="ledger-pane" role="tabpanel">
+                            <div class="section-header">Landlord Ledger Entries (cb_landlord_account)</div>
+
+                            @if($advance->landlordAccountEntries->isEmpty())
+                            <p class="text-muted small">No ledger entries yet — this advance has not been posted to the landlord account.</p>
+                            @else
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered text-center mb-0 cs-compact-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Date</th>
+                                            <th>Particulars</th>
+                                            <th>Debit</th>
+                                            <th>Credit</th>
+                                            <th>GL Account</th>
+                                            <th>Recovered</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($advance->landlordAccountEntries as $i => $le)
+                                        <tr>
+                                            <td>{{ $i + 1 }}</td>
+                                            <td>{{ $le->entry_date ? $le->entry_date->format('Y-m-d') : '-' }}</td>
+                                            <td class="text-start">{{ $le->entry_particulars ?? '-' }}</td>
+                                            <td>{{ number_format($le->debit_amount ?? 0, 2) }}</td>
+                                            <td>{{ number_format($le->credit_amount ?? 0, 2) }}</td>
+                                            <td>{{ $le->gl_account ?? '-' }}</td>
+                                            <td>
+                                                @if((int) $le->is_recovered === 1)
+                                                    <span class="badge badge-light-success">Yes</span>
+                                                @else
+                                                    <span class="badge badge-light-warning">No</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            @endif
+
+                            <div class="section-header">Restructure Advance Payments</div>
+                            @permission('update_client_advances')
+                                @if($canRestructure)
+                                <p class="text-muted small">
+                                    @if($advance->advance_type_id == 3)
+                                        Already-recovered installments are left untouched. The remaining principal of
+                                        <strong>{{ number_format($advance->remainingPendingPrincipal(), 2) }}</strong> can be restructured —
+                                        dates and repayment months can be changed freely, but that principal can never be reduced,
+                                        and the interest rate can only be held or lowered — never raised.
+                                    @else
+                                        Nothing has been recovered against this advance yet, so it can still be restructured. Dates
+                                        can be changed freely. The amount is locked, and the interest rate can only be held or lowered — never raised.
+                                    @endif
+                                </p>
+                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#restructureModal">
+                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">tune</span> Restructure
+                                </button>
+                                @else
+                                <p class="text-muted small mb-0">
+                                    @if($advance->advance_type_id == 3)
+                                        This advance can no longer be restructured — every installment has already been recovered in the landlord ledger.
+                                    @else
+                                        This advance can no longer be restructured — an amount has already been recovered against it in the landlord ledger.
+                                    @endif
+                                </p>
+                                @endif
+                            @endpermission
+                        </div><!-- /ledger-pane -->
+
+                        </div><!-- /tab-content -->
 
                     </div>
                 </div>
@@ -395,6 +491,89 @@
         </div>
     </div>
 </div>
+
+@if($canRestructure)
+<!-- Restructure Modal — dates (and, for Overpayment, repayment months) only. Amount is locked;
+     interest rate may only be held or lowered. Allowed only while nothing has been recovered
+     against this advance in cb_landlord_account. -->
+<div class="modal fade" id="restructureModal" tabindex="-1" aria-labelledby="restructureModalLabel" aria-hidden="true">
+    <div class="modal-dialog {{ $advance->advance_type_id == 3 ? 'modal-lg' : '' }}">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="restructureModalLabel" style="font-size:1rem;">Restructure Advance &mdash; {{ $advance->reference_number ?? '-' }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="restructureForm">
+                <input type="hidden" id="restructureAdvanceType" value="{{ $advance->advance_type_id }}">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="{{ $advance->advance_type_id == 3 ? 'col-lg-5' : 'col-12' }}">
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">{{ $advance->advance_type_id == 3 ? 'Remaining Principal (locked)' : 'Amount (locked)' }}</label>
+                                    <input type="text" class="form-control form-control-sm" value="{{ number_format($advance->advance_type_id == 3 ? $advance->remainingPendingPrincipal() : ($advance->amount ?? 0), 2) }}" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Percentage (%) <span class="text-danger">*</span> <small class="text-muted">(max {{ $advance->interest_rate ?? 0 }}%)</small></label>
+                                    <input type="number" class="form-control form-control-sm" id="restructureInterestRate" name="interest_rate" step="0.01" min="0" max="{{ $advance->interest_rate ?? 0 }}" value="{{ $advance->interest_rate ?? 0 }}" required>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Disbursement Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control form-control-sm" id="restructureDisbursementDate" name="disbursement_date" value="{{ $advance->disbursement_date ? $advance->disbursement_date->format('Y-m-d') : '' }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control form-control-sm" id="restructurePrincipalStartDate" name="principal_start_date" value="{{ $advance->principal_start_date ? $advance->principal_start_date->format('Y-m-d') : '' }}" required>
+                                </div>
+                            </div>
+                            @if($advance->advance_type_id == 3)
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label-sm">Repayment Months <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control form-control-sm" id="restructureRepaymentMonths" name="repayment_months" min="1" max="360" value="{{ $advance->repayment_months ?? 3 }}" required>
+                                </div>
+                            </div>
+                            @endif
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-12">
+                                    <label class="form-label-sm">Narration (optional)</label>
+                                    <textarea class="form-control form-control-sm" id="restructureNarration" name="narration" rows="2" placeholder="Reason for restructuring"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if($advance->advance_type_id == 3)
+                        <div class="col-lg-7">
+                            <div class="p-2" style="border-radius:4px; background:#f8f9fa;">
+                                <div class="text-muted small mb-1">Repayment Schedule Preview</div>
+                                <input type="hidden" id="restructureRecoveredRows" value='@json($recoveredScheduleRows)'>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered text-center mb-0 cs-compact-table">
+                                        <thead class="table-light">
+                                            <tr><th>#</th><th>Due Date</th><th>Principal</th><th>Interest</th><th>Payment</th><th>Repaid</th></tr>
+                                        </thead>
+                                        <tbody id="restructureScheduleBody"></tbody>
+                                        <tfoot id="restructureScheduleFoot"></tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="btnSaveRestructure">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">tune</span> Save Restructure
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 @endsection
 
 @section('scripts')
@@ -591,6 +770,99 @@
                 },
                 complete: function() {
                     btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">save</span> Save Changes');
+                }
+            });
+        });
+
+        // Live repayment-schedule preview inside the Restructure modal (Overpayment Advance only)
+        function renderRestructureSchedulePreview() {
+            if ($('#restructureAdvanceType').val() != '3') return;
+
+            var amount = {{ (float) $advance->remainingPendingPrincipal() }};
+            var rate = parseFloat($('#restructureInterestRate').val()) || 0;
+            var months = parseInt($('#restructureRepaymentMonths').val()) || 0;
+            var disbursementDate = $('#restructureDisbursementDate').val();
+            var principalStart = $('#restructurePrincipalStartDate').val();
+
+            var recoveredRows = [];
+            try { recoveredRows = JSON.parse($('#restructureRecoveredRows').val() || '[]'); } catch (e) { recoveredRows = []; }
+
+            // Merge already-recovered installments (context, untouched) with the newly
+            // computed pending ones, then sort the combined set by due date ascending.
+            var rows = recoveredRows.map(function(row) {
+                return { payment_date: row.payment_date, principal_amount: row.principal_amount, interest: row.interest, total_amount: row.total_amount, repaid: true };
+            });
+
+            if (amount && months && disbursementDate && principalStart) {
+                var schedule = calcEditAmortization(amount, rate, months, disbursementDate, principalStart);
+                schedule.forEach(function(row) {
+                    rows.push({ payment_date: row.payment_date, principal_amount: row.principal_amount, interest: row.interest, total_amount: row.total_amount, repaid: false });
+                });
+            }
+
+            if (rows.length === 0) {
+                $('#restructureScheduleBody, #restructureScheduleFoot').html('');
+                return;
+            }
+
+            rows.sort(function(a, b) { return a.payment_date < b.payment_date ? -1 : (a.payment_date > b.payment_date ? 1 : 0); });
+
+            var tPrin = 0, tInt = 0, tPay = 0, tRepaid = 0, tbody = '';
+            rows.forEach(function(row, i) {
+                tPrin += row.principal_amount; tInt += row.interest; tPay += row.total_amount;
+                if (row.repaid) tRepaid += row.total_amount;
+                tbody += '<tr' + (row.repaid ? ' class="table-success bg-opacity-25"' : '') + '><td>' + (i + 1) + '</td><td>' + row.payment_date + '</td><td>' +
+                    fmtEdit(row.principal_amount) + '</td><td>' + fmtEdit(row.interest) + '</td><td>' + fmtEdit(row.total_amount) +
+                    '</td><td>' + (row.repaid ? fmtEdit(row.total_amount) : '&mdash;') + '</td></tr>';
+            });
+
+            var tfoot = '<tr class="fw-bold table-light"><td colspan="2">Totals</td><td>' +
+                fmtEdit(tPrin) + '</td><td>' + fmtEdit(tInt) + '</td><td>' + fmtEdit(tPay) + '</td><td>' + fmtEdit(tRepaid) + '</td></tr>';
+            $('#restructureScheduleBody').html(tbody);
+            $('#restructureScheduleFoot').html(tfoot);
+        }
+
+        $('#restructureInterestRate, #restructureRepaymentMonths, #restructureDisbursementDate, #restructurePrincipalStartDate').on('input change', renderRestructureSchedulePreview);
+        $('#restructureModal').on('shown.bs.modal', renderRestructureSchedulePreview);
+
+        // Restructure advance (dates, repayment months, interest rate down-only — amount locked)
+        $('#restructureForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var btn = $('#btnSaveRestructure');
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Saving...');
+
+            var payload = {
+                _token: csrfToken,
+                disbursement_date: $('#restructureDisbursementDate').val(),
+                principal_start_date: $('#restructurePrincipalStartDate').val(),
+                interest_rate: $('#restructureInterestRate').val(),
+                narration: $('#restructureNarration').val()
+            };
+            if ($('#restructureAdvanceType').val() == '3') {
+                payload.repayment_months = $('#restructureRepaymentMonths').val();
+            }
+
+            $.ajax({
+                url: '/property/advances/' + encryptedId + '/restructure',
+                method: 'POST',
+                data: payload,
+                success: function(response) {
+                    $('#restructureModal').modal('hide');
+                    Swal.fire({ icon: 'success', title: 'Restructured', text: response.message || 'Advance restructured successfully', confirmButtonColor: '#3598db' })
+                        .then(() => location.reload());
+                },
+                error: function(xhr) {
+                    var msg = 'Failed to restructure advance';
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        msg = Object.values(xhr.responseJSON.errors)[0][0];
+                    } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                        msg = xhr.responseJSON.message;
+                    }
+                    Swal.fire({ icon: 'error', title: 'Error', text: msg, confirmButtonColor: '#3598db' });
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">tune</span> Save Restructure');
                 }
             });
         });

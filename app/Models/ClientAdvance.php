@@ -127,6 +127,68 @@ class ClientAdvance extends Model
             ->orderBy('payment_date', 'asc');
     }
 
+    /**
+     * The real landlord ledger entries posted for this advance (cb_landlord_account),
+     * as opposed to the internal repayment plan in AdvanceSchedule.
+     */
+    public function landlordAccountEntries()
+    {
+        return $this->hasMany(LandlordAccount::class, 'advance_id')->orderBy('entry_date', 'asc');
+    }
+
+    /**
+     * True once any linked ledger entry has been marked recovered.
+     */
+    public function hasRecoveredLandlordEntries(): bool
+    {
+        return $this->landlordAccountEntries()->where('is_recovered', 1)->exists();
+    }
+
+    /**
+     * IDs of AdvanceSchedule (sys_pm_clients_advances_requisitions_89_repeat) rows that
+     * have actually been recovered, per cb_landlord_account.is_recovered — joined via
+     * schedule_id. This is the source of truth, NOT AdvanceSchedule.current_status_id:
+     * the returns-processing flow for merge-batch/MASTERRETURN landlords flips
+     * is_recovered on the ledger row but never syncs it back to current_status_id, so an
+     * installment can be genuinely recovered while its schedule row still sits at
+     * current_status_id = 1 (Pending) indefinitely.
+     */
+    public function recoveredScheduleIds()
+    {
+        return $this->landlordAccountEntries()
+            ->where('is_recovered', 1)
+            ->whereNotNull('schedule_id')
+            ->pluck('schedule_id');
+    }
+
+    /**
+     * Principal still outstanding across installments that have NOT actually been
+     * recovered in the landlord ledger — the floor that a restructure of an Overpayment
+     * Advance is never allowed to go below.
+     */
+    public function remainingPendingPrincipal(): float
+    {
+        return (float) $this->schedule()
+            ->whereNotIn('id', $this->recoveredScheduleIds())
+            ->sum('principal_amount');
+    }
+
+    /**
+     * Whether there's anything left to restructure. Overpayment Advances (installments)
+     * can be restructured as long as at least one installment hasn't actually been
+     * recovered yet (per the ledger) — already-recovered installments are left untouched.
+     * A one-off Client Payment Advance has no partial concept, so it's all-or-nothing.
+     */
+    public function canBeRestructured(): bool
+    {
+        if ($this->advance_type_id == 3) {
+            return $this->schedule()
+                ->whereNotIn('id', $this->recoveredScheduleIds())
+                ->exists();
+        }
+        return !$this->hasRecoveredLandlordEntries();
+    }
+
     public function getTotalPaidAttribute()
     {
         return $this->schedule()
