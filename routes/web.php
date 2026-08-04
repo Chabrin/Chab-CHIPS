@@ -825,6 +825,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/returns/{id}/details', [App\Http\Controllers\ClientReturnsController::class, 'showUnprocessedReturnDetails'])->name('returns.details');
     Route::get('/ajax/returns/{id}/units', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnUnitsData'])->name('ajax.returns.units');
     Route::get('/ajax/returns/{id}/summary', [App\Http\Controllers\ClientReturnsController::class, 'getUnprocessedReturnSummaryData'])->name('ajax.returns.summary');
+    Route::get('/returns/{id}/pdf', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedPdf'])->name('returns.pdf');
     Route::get('/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedExcel'])->name('returns.excel');
     Route::post('/ajax/returns/lines/{lineId}/recovery', [App\Http\Controllers\ClientReturnsController::class, 'setRecoveryStatus'])->name('ajax.returns.lines.recovery');
 

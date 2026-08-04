@@ -37,7 +37,6 @@ trait ReturnsPayThresholdTrait
             $monthStart,
             $monthStart,
             $monthStart,
-            $prevMonthStart,
             $monthStart,
             $returnPeriod,
         ];
@@ -114,10 +113,10 @@ trait ReturnsPayThresholdTrait
                     SELECT pi2.id, pi2.current_balance, pi2.total_amount
                     FROM sys_pm_debtors_invoices pi2
                     WHERE pi2.tenant_id = rc2.tenant_id
-                      AND pi2.date_due >= ?::date AND pi2.date_due < ?::date
+                      AND pi2.date_due < ?::date
                       AND pi2.current_status_id = 1
                       AND pi2.debtor_type_id = '2'
-                    ORDER BY pi2.id DESC LIMIT 1
+                    ORDER BY pi2.date_due DESC, pi2.id DESC LIMIT 1
                 ) pi ON true
                 WHERE rc2.return_period = ?
                   AND rc2.entry_type = 'RENT CURRENT'

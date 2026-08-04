@@ -383,6 +383,7 @@ class ClientReturnsController extends Controller
                     'net_amount' => number_format(($lineTotals->total_cr ?? 0) - ($lineTotals->total_dr ?? 0), 2),
                 ],
                 'unitsUrl' => route('ajax.returns.units', encrypt($return->id)),
+                'pdfUrl' => route('returns.pdf', encrypt($return->id)),
                 'excelUrl' => route('returns.excel', encrypt($return->id)),
             ]);
         } catch (Exception $e) {
@@ -512,6 +513,54 @@ class ClientReturnsController extends Controller
     /**
      * Download Excel for an unprocessed return
      */
+    public function downloadUnprocessedPdf($id)
+    {
+        try {
+            $id = decrypt($id);
+            $return = ReturnSummary::findOrFail($id);
+
+            $lines = ReturnClient::where('return_code', $return->return_code)
+                ->orderBy('entry_type')
+                ->orderBy('unit_code')
+                ->orderBy('tenant_name')
+                ->get();
+
+            $logoPath = public_path('assets/images/logo/logo_dark.png');
+            $logoSrc = file_exists($logoPath)
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+                : '';
+
+            $pdf = Pdf::loadView('property.returns.unprocessed-pdf', [
+                'return' => $return,
+                'lines' => $lines,
+                'logoSrc' => $logoSrc,
+            ]);
+            $pdf->setPaper('A4', 'portrait');
+
+            $dompdf = $pdf->getDomPDF();
+            $dompdf->render();
+            $canvas = $dompdf->get_canvas();
+            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
+            $canvas->page_text(470, 815, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+
+            $fileName = 'Unprocessed_Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
+            $token = request()->query('download_token');
+            $pdfContent = $dompdf->output();
+
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $fileName . '"');
+            header('Cache-Control: max-age=0');
+            if ($token) {
+                header('Set-Cookie: download_complete_' . $token . '=1; Path=/; Max-Age=60; SameSite=Lax');
+            }
+            echo $pdfContent;
+            exit;
+        } catch (Exception $e) {
+            Log::error('Error downloading unprocessed return pdf: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to download PDF');
+        }
+    }
+
     public function downloadUnprocessedExcel($id)
     {
         try {

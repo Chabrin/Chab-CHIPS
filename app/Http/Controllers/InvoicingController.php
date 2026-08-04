@@ -104,6 +104,29 @@ class InvoicingController extends Controller
                 $query->whereDate($dateColumn, '<=', $request->date_to);
             }
 
+            // Per-column top filters
+            if ($request->filled('f_date')) {
+                $query->whereDate('date_time', $request->input('f_date'));
+            }
+            if ($request->filled('f_reference')) {
+                $query->where('reference_number', 'ILIKE', '%' . $request->input('f_reference') . '%');
+            }
+            if ($request->filled('f_tenant')) {
+                $val = $request->input('f_tenant');
+                $query->whereHas('tenant', fn ($q) => $q->where('names', 'ILIKE', '%' . $val . '%'));
+            }
+            if ($request->filled('f_property')) {
+                $val = $request->input('f_property');
+                $query->whereHas('property', fn ($q) => $q->where('property_name', 'ILIKE', '%' . $val . '%'));
+            }
+            if ($request->filled('f_unit')) {
+                $val = $request->input('f_unit');
+                $query->whereHas('unit', fn ($q) => $q->where('unit_name', 'ILIKE', '%' . $val . '%'));
+            }
+            if ($request->filled('f_amount') && is_numeric($request->input('f_amount'))) {
+                $query->where('total_amount', (float) $request->input('f_amount'));
+            }
+
             // No date range given — this isn't a bounded search, it's the default
             // browse view, so cap it to the 100 most recent instead of paging
             // through the entire table.
@@ -119,7 +142,6 @@ class InvoicingController extends Controller
                 1 => 'date_time',
                 2 => 'reference_number',
                 6 => 'total_amount',
-                7 => 'current_status_id',
             ];
             $orderIndex = (int) data_get($request->all(), 'order.0.column', 1);
             $orderBy = $columns[$orderIndex] ?? 'date_time';

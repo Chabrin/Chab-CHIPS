@@ -89,7 +89,15 @@
                                         <th>Property</th>
                                         <th>Unit</th>
                                         <th class="text-end">Amount</th>
-                                        <th class="text-center">Status</th>
+                                    </tr>
+                                    <tr class="column-filters">
+                                        <th></th>
+                                        <th><input type="date" class="form-control form-control-sm col-filter" data-col="f_date"></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-col="f_reference" placeholder="Search"></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-col="f_tenant" placeholder="Search"></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-col="f_property" placeholder="Search"></th>
+                                        <th><input type="text" class="form-control form-control-sm col-filter" data-col="f_unit" placeholder="Search"></th>
+                                        <th><input type="number" step="0.01" class="form-control form-control-sm col-filter" data-col="f_amount" placeholder="Exact amount"></th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -116,6 +124,9 @@
                     d.date_filter_type = $('input[name="date_filter_type"]:checked').val();
                     d.date_from = $('#date_from').val();
                     d.date_to = $('#date_to').val();
+                    $('.col-filter').each(function() {
+                        d[$(this).data('col')] = $(this).val();
+                    });
                 },
                 dataSrc: function(json) {
                     if (json.error) {
@@ -165,10 +176,6 @@
                 {
                     data: 'total_amount',
                     className: 'text-end'
-                },
-                {
-                    data: 'status_name',
-                    className: 'text-center'
                 }
             ],
             paging: true,
@@ -176,6 +183,7 @@
             lengthChange: true,
             searching: false,
             ordering: true,
+            orderCellsTop: true,
             order: [
                 [1, 'desc']
             ]
@@ -225,12 +233,27 @@
             $('#date_filter_generated').prop('checked', true);
             $('#date_from').val('');
             $('#date_to').val('');
+            $('.col-filter').val('');
 
             table.ajax.reload(function() {
                 $('#clear_spinner').hide();
                 $('#clear_icon').show();
                 $('#clear_btn').prop('disabled', false);
             });
+        });
+
+        // Per-column top filters — don't let clicks/typing inside them trigger
+        // DataTables' column-sort handler on the enclosing <th>.
+        $('.column-filters').on('click keydown', 'input', function(e) {
+            e.stopPropagation();
+        });
+
+        var colFilterTimer = null;
+        $('.col-filter').on('keyup change', function() {
+            clearTimeout(colFilterTimer);
+            colFilterTimer = setTimeout(function() {
+                table.ajax.reload();
+            }, 400);
         });
     });
 </script>

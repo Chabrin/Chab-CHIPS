@@ -209,7 +209,12 @@
                                     <i class="fa fa-check-circle me-1"></i> Approvals
                                 </button>
                             </li>
-                            <li class="ms-auto d-flex align-items-center">
+                            <li class="ms-auto d-flex align-items-center gap-2">
+                                <a href="{{ route('returns.pdf', encrypt($return->id)) }}" id="pdf-link" class="btn btn-primary btn-sm py-0 px-2 d-flex align-items-center">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">picture_as_pdf</span>
+                                    <span class="ms-1" id="pdf-btn-text" style="font-size:0.72rem;">PDF</span>
+                                    <span id="pdf-spinner" class="spinner-border spinner-border-sm ms-1 d-none" style="width:.7rem;height:.7rem;"></span>
+                                </a>
                                 <a href="{{ route('returns.excel', encrypt($return->id)) }}" id="excel-link" class="btn btn-sm py-0 px-2 d-flex align-items-center" style="background-color:#00674F;border-color:#00674F;color:#fff;">
                                     <span class="material-symbols-outlined" style="font-size:14px;">download</span>
                                     <span class="ms-1" style="font-size:0.72rem;">Excel</span>
@@ -570,7 +575,45 @@
                 $('#remarks-row').hide();
             }
 
+            $('#pdf-link').attr('href', r.pdf_url);
             $('#excel-link').attr('href', r.excel_url);
+        }
+
+        // PDF download handler
+        $('#pdf-link').on('click', function(e) {
+            e.preventDefault();
+            var url = $(this).attr('href');
+            if (!url) {
+                toastr.warning('PDF generation not available');
+                return;
+            }
+            triggerDownload(url, 'pdf-spinner', 'pdf-btn-text', 'Generating...', 'PDF');
+        });
+
+        function triggerDownload(url, spinnerSelector, textSelector, loadingText, originalText) {
+            var token = 'token_' + Date.now();
+            $('#' + spinnerSelector).removeClass('d-none');
+            $('#' + textSelector).text(loadingText);
+
+            var downloadUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'download_token=' + token;
+            window.location.href = downloadUrl;
+
+            var checkInterval = setInterval(function() {
+                var cookieName = 'download_complete_' + token;
+                if (document.cookie.indexOf(cookieName) !== -1) {
+                    $('#' + spinnerSelector).addClass('d-none');
+                    $('#' + textSelector).text(originalText);
+                    clearInterval(checkInterval);
+                }
+            }, 500);
+
+            setTimeout(function() {
+                if ($('#' + spinnerSelector).not('.d-none').length) {
+                    $('#' + spinnerSelector).addClass('d-none');
+                    $('#' + textSelector).text(originalText);
+                }
+                clearInterval(checkInterval);
+            }, 30000);
         }
 
         // Initial load of detail lines
@@ -595,6 +638,7 @@
                 success: function(response) {
                     if (response.success) {
                         currentEncId = encId;
+                        response.return.pdf_url = response.pdfUrl;
                         response.return.excel_url = response.excelUrl;
                         updatePage(response.return, response.lineTotals);
                         loadDetailLines(response.unitsUrl);
