@@ -236,97 +236,90 @@ class InvoicingController extends Controller
         try {
             $validated = $request->validate([
                 'tenant_id' => 'required|integer',
-                'lease_id' => 'required|integer',
                 'property_id' => 'required|integer',
                 'unit_id' => 'required|integer',
-                'due_date' => 'required|date',
-                'narration' => 'required|string',
-                'line_items' => 'required|array|min:1',
-                'line_items.*.item_id' => 'required|integer',
-                'line_items.*.line_total' => 'required|numeric|min:0.01'
+                'lease_id' => 'required|integer',
+                'item_type_id' => 'required|integer',
+                'date_due' => 'required|date',
+                'returns_period' => 'required|date',
+                'total_amount' => 'required|numeric|min:0',
+                'return_report_type' => 'required|string',
+                'is_arrear' => 'required|in:Yes,No'
             ]);
 
-            // Fetch related data once
+            // Fetch all related data needed for invoice creation
             $property = Property::find($validated['property_id']);
             $lease = LeaseAgreement::find($validated['lease_id']);
             $unit = Unit::find($validated['unit_id']);
+            $invoiceableItem = InvoiceableItem::find($validated['item_type_id']);
             $serviceAgreement = $lease && $lease->sla_id ? ServiceAgreement::find($lease->sla_id) : null;
 
             $landlordId = $property ? $property->client_id : null;
+
+            // Calculate commission and VAT based on invoiceable item settings
+            $totalAmount = $validated['total_amount'];
+            $isCommissionable = $invoiceableItem && $invoiceableItem->commissionable === 'Yes';
+            $isVatable = $unit && $unit->vat_able === 'Yes';
+            $commissionPercentage = $serviceAgreement ? $serviceAgreement->commission_percentage : 0;
+
+            $vatAmount = $isVatable ? round($totalAmount * 0.16, 2) : 0;
+            $commissionableBase = $isVatable ? ($totalAmount - $vatAmount) : $totalAmount;
+            $commAmount = $isCommissionable ? round($commissionableBase * ($commissionPercentage / 100), 2) : 0;
+            $commissionableAmount = $isCommissionable ? $commissionableBase : 0;
+            $payableAmount = $totalAmount - $commAmount;
+            $vatOnCommission = $isCommissionable ? round($commAmount * (16 / 100), 2) : 0;
+
+            // Generate reference number matching invoice generation format
+            $unit_code = $unit ? $unit->unit_code : 'UNKNOWN';
+            $item_name = $invoiceableItem ? $invoiceableItem->item_name : $validated['return_report_type'];
+            $period = date('M Y', strtotime($validated['returns_period']));
+            $referenceNumber = 'INV' . date('Y', strtotime($validated['returns_period'])) .
+                               date('m', strtotime($validated['returns_period'])) .
+                               $unit_code . '-' . $item_name . ' for ' . $period . '-' . $validated['lease_id'];
+
             $batchNumber = date('YmdHi');
-            $returnsPeriod = date('Y-m-01', strtotime($validated['due_date'])); // First day of the month
 
-            $createdInvoices = [];
-
-            // Create one invoice for each selected line item
-            foreach ($validated['line_items'] as $lineItem) {
-                $invoiceableItem = InvoiceableItem::find($lineItem['item_id']);
-                $totalAmount = $lineItem['line_total'];
-
-                // Calculate commission and VAT
-                $isCommissionable = $invoiceableItem && $invoiceableItem->commissionable === 'Yes';
-                $isVatable = $unit && $unit->vat_able === 'Yes';
-                $commissionPercentage = $serviceAgreement ? $serviceAgreement->commission_percentage : 0;
-
-                $vatAmount = $isVatable ? round($totalAmount * 0.16, 2) : 0;
-                $commissionableBase = $isVatable ? ($totalAmount - $vatAmount) : $totalAmount;
-                $commAmount = $isCommissionable ? round($commissionableBase * ($commissionPercentage / 100), 2) : 0;
-                $commissionableAmount = $isCommissionable ? $commissionableBase : 0;
-                $payableAmount = $totalAmount - $commAmount;
-                $vatOnCommission = $isCommissionable ? round($commAmount * (16 / 100), 2) : 0;
-
-                // Generate reference number
-                $unit_code = $unit ? $unit->unit_code : 'UNKNOWN';
-                $item_name = $invoiceableItem ? $invoiceableItem->item_name : 'Invoice Item';
-                $periodStr = date('M Y', strtotime($returnsPeriod));
-                $referenceNumber = 'INV' . date('Y', strtotime($returnsPeriod)) .
-                                   date('m', strtotime($returnsPeriod)) .
-                                   $unit_code . '-' . $item_name . ' for ' . $periodStr . '-' . $lease->id;
-
-                $invoice = DebtorInvoice::create([
-                    'date_time' => now(),
-                    'date_due' => $validated['due_date'],
-                    'returns_period' => $returnsPeriod,
-                    'zone_id' => $lease ? $lease->zone_id : null,
-                    'property_id' => $validated['property_id'],
-                    'unit_id' => $validated['unit_id'],
-                    'lease_id' => $validated['lease_id'],
-                    'tenant_id' => $validated['tenant_id'],
-                    'client_id' => $landlordId,
-                    'sla_id' => $lease ? $lease->sla_id : null,
-                    'created_by' => auth()->id(),
-                    'reference_number' => $referenceNumber,
-                    'narration' => 'Tenant Invoice - ' . $item_name,
-                    'debtor_type_id' => 2, // Tenant
-                    'total_amount' => $totalAmount,
-                    'trans_details' => '18:' . ($lease ? $lease->id : 0) . ':' . intval(microtime(true) * 1000),
-                    'current_status_id' => 1, // Pending
-                    'processed' => 'No',
-                    'comm_ammount' => $commAmount,
-                    'comm_per' => $isCommissionable ? $commissionPercentage : 0,
-                    'vat_ammount' => $vatAmount,
-                    'vat_per' => 16.00,
-                    'commisionable_amount' => $commissionableAmount,
-                    'payable_amount' => $payableAmount,
-                    'item_type_id' => $lineItem['item_id'],
-                    'cycle_id' => 2,
-                    'current_balance' => $totalAmount,
-                    'occupancy_status_id' => $unit ? $unit->occupancy_status_id : null,
-                    'field_officer_id' => $property ? $property->field_officer_id : null,
-                    'zone_supervisor_id' => $property ? $property->zone_supervisor_id : null,
-                    'zone_manager_id' => $property ? $property->zone_manager_id : null,
-                    'vat_on_commission' => $vatOnCommission,
-                    'override_period_check' => 1,
-                    'batch_number' => $batchNumber
-                ]);
-
-                $createdInvoices[] = $invoice;
-            }
+            $invoice = DebtorInvoice::create([
+                'date_time' => now(),
+                'date_due' => $validated['date_due'],
+                'returns_period' => $validated['returns_period'],
+                'zone_id' => $lease ? $lease->zone_id : null,
+                'property_id' => $validated['property_id'],
+                'unit_id' => $validated['unit_id'],
+                'lease_id' => $validated['lease_id'],
+                'tenant_id' => $validated['tenant_id'],
+                'client_id' => $landlordId,
+                'sla_id' => $lease ? $lease->sla_id : null,
+                'created_by' => auth()->id(),
+                'reference_number' => $referenceNumber,
+                'narration' => 'Tenant Invoice - ' . $item_name,
+                'debtor_type_id' => 2, // Tenant
+                'total_amount' => $totalAmount,
+                'trans_details' => '18:' . ($lease ? $lease->id : 0) . ':' . intval(microtime(true) * 1000),
+                'current_status_id' => 1, // Pending
+                'processed' => 'No',
+                'comm_ammount' => $commAmount,
+                'comm_per' => $isCommissionable ? $commissionPercentage : 0,
+                'vat_ammount' => $vatAmount,
+                'vat_per' => 16.00,
+                'commisionable_amount' => $commissionableAmount,
+                'payable_amount' => $payableAmount,
+                'item_type_id' => $validated['item_type_id'],
+                'cycle_id' => 2,
+                'current_balance' => $totalAmount,
+                'occupancy_status_id' => $unit ? $unit->occupancy_status_id : null,
+                'field_officer_id' => $property ? $property->field_officer_id : null,
+                'zone_supervisor_id' => $property ? $property->zone_supervisor_id : null,
+                'zone_manager_id' => $property ? $property->zone_manager_id : null,
+                'vat_on_commission' => $vatOnCommission,
+                'override_period_check' => 1,
+                'batch_number' => $batchNumber
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => count($createdInvoices) . ' invoice(s) created successfully',
-                'invoices' => $createdInvoices
+                'message' => 'Invoice created successfully',
+                'invoice' => $invoice
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
