@@ -40,6 +40,31 @@
 --   _030  vw_cheque_register_030  (CHCHQ -> cheque_register)
 --   _031  vw_cheque_register_details_031  (CHCHD -> cheque_register_details)
 --   _032  vw_landlord_advance_repayment_schedule_032  (CHLNTR -> landlord_advance_repayment_schedule)
+--   ── HR module, merged in from peter_hr_mods_final.sql (was _P_01–_P_24) ──
+--   _033  vw_sys_set_departments_033
+--   _034  vw_sys_set_staff_positions_034
+--   _035  vw_sys_set_banks_035
+--   _036  vw_sys_set_banks_branches_036
+--   _037  vw_sys_staff_037
+--   _038  vw_sys_staff_next_of_kin_038
+--   _039  vw_sys_hr_payroll_elements_039
+--   _040  vw_um_tax_bands_040
+--   _041  vw_sys_hr_payroll_calendar_041
+--   _042  vw_sys_hr_payroll_periods_042
+--   _043  vw_sys_hr_payroll_summary_043
+--   _044  vw_sys_hr_payslip_elements_044
+--   _045  vw_sys_helb_deductions_045
+--   _046  vw_sys_hr_employee_amortized_deductions_046
+--   _047  vw_sys_hr_p9a_047
+--   _048  vw_rpt_statutory_nssf_048
+--   _049  vw_rpt_statutory_shif_049
+--   _050  vw_rpt_statutory_housing_levy_050
+--   _051  vw_sys_pm_clients_17_repeat_051  (staff bank accounts)
+--   _052  vw_sys_pm_clients_19_repeat_052  (staff other contacts)
+--   _053  vw_sys_hr_employee_contracts_053
+--   _054  vw_sys_hr_employee_contracts_279_repeat_054
+--   _055  vw_sys_hr_payroll_deductions_register_055
+--   _056  vw_sys_hr_payroll_elements_repeat_staff_positions_id_056
 -- ============================================================================
 
 USE CHABRINS_NEW;
@@ -1321,5 +1346,807 @@ FROM CHABRINS_NEW.dbo.CHLNTR l
 LEFT JOIN CHABRINS_NEW.dbo.CHLRDS c
   ON REPLACE(RTRIM(LTRIM(c.LORDID)), '' '', '''') = REPLACE(RTRIM(LTRIM(l.LORDID)), ''LAN-LAN-'', ''LAN-'')
 WHERE l.LORDID IS NOT NULL AND l.TRANSNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- HR MODULE — merged in from peter_hr_mods_final.sql (2026-08-05)
+-- ============================================================================
+-- peter_hr_mods_final.sql was the latest/combined HR views file (superseding
+-- hr_views_mod.sql), originally written against database CHABRINS with bare
+-- (unqualified) table names under its own "USE CHABRINS;" context. Merged
+-- here with two changes only:
+--   1) Views renumbered _P_01..._P_24 -> _033..._056 (continuing this file's
+--      numbering), including all internal cross-view references.
+--   2) All 13 source tables (CHDEPT, CHDESN, CHBANK, CHBBRA, CHSTFF, CHSNOK,
+--      CHPREDS, CHPTABS, CHPRDS, CHPYSL, CHLOAN, CHP9A, CHSCNTS) fully
+--      qualified as CHABRINS_NEW.dbo.* -- confirmed present with live data in
+--      CHABRINS_NEW (the source CHABRINS database is currently in
+--      RECOVERY_PENDING state and inaccessible), so the whole file now runs
+--      as one consistent batch against CHABRINS_NEW.
+-- Two pre-existing stale comment references in the original source were
+-- corrected while merging (not logic changes, comments only):
+--   - _051''s "resolved from BANKBRAN via _014" corrected to "_036"
+--   - _054''s "For each contract period (from _P_03)" corrected to "_053"
+--     (both referenced the wrong view number in the original file).
+-- No other logic, joins, or column mappings were altered from the source.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_set_departments_033 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY DEPTCODE)   AS id,
+    GETDATE()                                AS date_time,
+    DEPTNAME                                 AS department_name,
+    DEPTCODE                                 AS mssql_dept_code
+FROM CHABRINS_NEW.dbo.CHDEPT;
+';
+
+-- ============================================================================
+-- _034  vw_sys_set_staff_positions_034
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_set_staff_positions_034 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY DESIGNCODE) AS id,
+    GETDATE()                                AS date_time,
+    DESGINNAME                               AS position_name,
+    NULL                                     AS basic_salary,
+    NULL                                     AS salary_account_id,
+    1                                        AS current_status_id,
+    NULL                                     AS reports_to_id,
+    DESIGNCODE                               AS mssql_design_code
+FROM CHABRINS_NEW.dbo.CHDESN;
+';
+
+-- ============================================================================
+-- _035  vw_sys_set_banks_035
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_set_banks_035 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY BANKCODE)   AS id,
+    GETDATE()                                AS date_time,
+    BANKNAME                                 AS bank_name,
+    NULL                                     AS address,
+    1                                        AS current_status_id,
+    BANKCODE                                 AS mssql_bank_code
+FROM CHABRINS_NEW.dbo.CHBANK;
+';
+
+-- ============================================================================
+-- _036  vw_sys_set_banks_branches_036
+--       References: vw_sys_set_banks_035
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_set_banks_branches_036 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY BANKCODE, BRANCODE) AS id,
+    GETDATE()                                        AS date_time,
+    BRANCODE                                         AS branch_code,
+    BRANNAME                                         AS branch_name,
+    bk.id                                            AS bank_id,
+    1                                                AS current_status_id,
+    br.BANKCODE                                      AS mssql_bank_code,
+    br.BRANCODE                                      AS mssql_branch_code
+FROM CHABRINS_NEW.dbo.CHBBRA br
+LEFT JOIN vw_sys_set_banks_035 bk ON br.BANKCODE = bk.mssql_bank_code;
+';
+
+-- ============================================================================
+-- _037  vw_sys_staff_037
+--       References: vw_sys_set_departments_033
+--                   vw_sys_set_staff_positions_034
+--                   vw_sys_set_banks_035
+--                   vw_sys_set_banks_branches_036
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_staff_037 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY s.EMPNUMB)  AS id,
+    GETDATE()                                AS date_time,
+    NULL                                     AS photo,
+    s.FULLNAME                               AS full_names,
+    s.GENDER                                 AS gender,
+    s.EMPADDR                                AS address,
+    s.MOBNUM1                                AS mobile_number,
+    s.WEMAIL                                 AS email_address,
+    CAST(s.EMPDOB AS DATE)                   AS birth_date,
+    s.NATIDNO                                AS national_id,
+    NULL                                     AS passport,
+    b.id                                     AS bank_name,
+    NULL                                     AS account_name,
+    s.BANKACC                                AS account_number,
+    s.NUMPIN                                 AS pin_number,
+    s.NUMNHIF                                AS nhif_number,
+    s.NUMNSSF                                AS nssf_number,
+    s.APPDATE                                AS hire_date,
+    d.id                                     AS department_id,
+    p.id                                     AS position_id,
+    NULL                                     AS username,
+    s.PRMSPAS                                AS system_password,
+    NEWID()                                  AS uid,
+    NULL                                     AS permission_group_id,
+    CASE
+        WHEN s.CURRSTAT = ''Active''   THEN 1
+        WHEN s.CURRSTAT = ''Inactive'' THEN 2
+        ELSE NULL
+    END                                      AS current_status_id,
+    br.id                                    AS branch_id,
+    NULL                                     AS zone_id,
+    NULL                                     AS zone_area_id,
+    s.DISTRCT                                AS district,
+    s.IDLOCAT                                AS location,
+    s.IDSUBLOC                               AS sub_location,
+    s.MSTATUS                                AS marital,
+    s.SPOUSNAM                               AS spouse_name,
+    s.PLACEOB                                AS birth_place,
+    s.CITIZEN                                AS citizenship,
+    s.PEMAIL                                 AS personal_email,
+    NULL                                     AS disability,
+    nok.NOKNAM                               AS kins_names,
+    s.EMPNUMB                                AS staff_number,
+    s.SALBASC                                AS mssql_basic_salary,
+    s.GRADE                                  AS mssql_grade,
+    s.EMPTYPE                                AS mssql_emp_type,
+    s.EMPSECT                                AS mssql_section
+FROM CHABRINS_NEW.dbo.CHSTFF s
+LEFT JOIN vw_sys_set_departments_033       d  ON s.DEPTCODE = d.mssql_dept_code
+LEFT JOIN vw_sys_set_staff_positions_034   p  ON s.DESIGN   = p.mssql_design_code
+LEFT JOIN vw_sys_set_banks_035             b  ON s.BANKCODE = b.mssql_bank_code
+LEFT JOIN vw_sys_set_banks_branches_036    br ON s.BANKBRAN = br.mssql_branch_code
+                                              AND s.BANKCODE = br.mssql_bank_code
+OUTER APPLY (
+    SELECT TOP 1 NOKNAM
+    FROM CHABRINS_NEW.dbo.CHSNOK n
+    WHERE n.EMPNUMB = s.EMPNUMB
+      AND n.NOKTYPE = ''Next of kin''
+    ORDER BY n.NOKNAM
+) nok;
+';
+
+-- ============================================================================
+-- _038  vw_sys_staff_next_of_kin_038
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_staff_next_of_kin_038 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY n.EMPNUMB, n.NOKTYPE) AS id,
+    n.EMPNUMB   AS staff_number,
+    n.NOKNAM    AS kin_name,
+    n.NOKRELA   AS relationship,
+    n.NOKTYPE   AS kin_type,
+    n.NOKADDR   AS kin_address,
+    n.NOKCITY   AS kin_city,
+    n.NOKTEL    AS kin_phone
+FROM CHABRINS_NEW.dbo.CHSNOK n;
+';
+
+-- ============================================================================
+-- _039  vw_sys_hr_payroll_elements_039
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_payroll_elements_039 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY EDCODE)  AS id,
+    GETDATE()                             AS date_time,
+    EDNAME                                AS element_name,
+    CASE
+        WHEN EDTYPE = ''Deduction'' THEN 1
+        WHEN EDTYPE = ''Earning''   THEN 2
+        WHEN EDTYPE = ''Saving''    THEN 1
+        WHEN EDTYPE = ''Computed''  THEN 1
+        ELSE NULL
+    END                                   AS element_type,
+    CASE
+        WHEN TYPECHR = ''Fixed''             THEN 1
+        WHEN TYPECHR = ''Computed''          THEN 2
+        WHEN TYPECHR = ''Depends on Staff''  THEN 3
+        ELSE NULL
+    END                                   AS formula_id,
+    EDRATE                                AS amount,
+    NULL                                  AS account_id,
+    NULL                                  AS staff_positions_id,
+    NULL                                  AS created_by_id,
+    NULL                                  AS payslip_position,
+    CASE EDNAME
+        WHEN ''BASIC SALARY''   THEN ''basic_salary''
+        WHEN ''NSSF''           THEN ''nssf''
+        WHEN ''NHIF''           THEN ''nhif''
+        WHEN ''HOUSING LEVY''   THEN ''housing_levy''
+        WHEN ''PAYE''           THEN ''payee''
+        WHEN ''HELB LOANS''     THEN ''helb_loans''
+        WHEN ''NET SALARY''     THEN ''net_salary''
+        WHEN ''SALARY ADVANCE'' THEN ''salary_advance''
+        ELSE LOWER(REPLACE(REPLACE(EDNAME, '' '', ''_''), ''-'', ''_''))
+    END                                   AS element_key,
+    5                                     AS current_status_id,
+    EDCODE                                AS mssql_ed_code,
+    GLACCOUNT                             AS mssql_gl_account,
+    TAXABLE                               AS mssql_taxable,
+    RECURR                                AS mssql_recurring,
+    EDTYPE                                AS mssql_ed_type,
+    TYPECHR                               AS mssql_type_chr
+FROM CHABRINS_NEW.dbo.CHPREDS;
+';
+
+-- ============================================================================
+-- _040  vw_um_tax_bands_040
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_um_tax_bands_040 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY t.CATMIN)  AS id,
+    t.CATMIN                                AS range_from,
+    CASE
+        WHEN t.CATMAX >= 999999999 THEN NULL
+        ELSE t.CATMAX
+    END                                     AS range_to,
+    t.CATRAT                                AS tax_rate,
+    CASE
+        WHEN t.CATMAX >= 999999999 THEN 1
+        ELSE 0
+    END                                     AS is_last,
+    ''system''                              AS added_by,
+    NULL                                    AS updated_by,
+    GETDATE()                               AS created_at,
+    NULL                                    AS updated_at,
+    t.CATEGO                                AS mssql_category,
+    t.PYEAR                                 AS mssql_year,
+    t.PMONTH                                AS mssql_month
+FROM CHABRINS_NEW.dbo.CHPTABS t
+WHERE t.PYEAR  = (SELECT MAX(PYEAR) FROM CHABRINS_NEW.dbo.CHPTABS)
+  AND t.PMONTH = (
+      SELECT MAX(PMONTH)
+      FROM CHABRINS_NEW.dbo.CHPTABS
+      WHERE PYEAR = (SELECT MAX(PYEAR) FROM CHABRINS_NEW.dbo.CHPTABS)
+  );
+';
+
+-- ============================================================================
+-- _041  vw_sys_hr_payroll_calendar_041
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_payroll_calendar_041 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY PRYEAR, PRMNTH)  AS id,
+    GETDATE()                                      AS date_time,
+    CAST(PRYEAR AS VARCHAR(4)) + RIGHT(''0'' + CAST(PRMNTH AS VARCHAR(2)), 2)
+                                                   AS payroll_month_date,
+    CASE
+        WHEN PRSTATUS = ''Open''   THEN 5
+        WHEN PRSTATUS = ''Closed'' THEN 6
+        ELSE NULL
+    END                                            AS current_status_id,
+    NULL                                           AS created_by,
+    NULL                                           AS position_id,
+    PRYEAR                                         AS mssql_year,
+    PRMNTH                                         AS mssql_month,
+    PRSTATUS                                       AS mssql_status,
+    TAXTHRS                                        AS mssql_tax_threshold,
+    TAXRLF                                         AS mssql_tax_relief,
+    CONAME                                         AS mssql_company_name,
+    COPIN                                          AS mssql_company_pin
+FROM CHABRINS_NEW.dbo.CHPRDS;
+';
+
+-- ============================================================================
+-- _042  vw_sys_hr_payroll_periods_042
+--       References: vw_sys_hr_payroll_calendar_041
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_payroll_periods_042 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY p.PRYEAR, p.PRMNTH)  AS id,
+    GETDATE()                                          AS date_time,
+    DATEFROMPARTS(p.PRYEAR, p.PRMNTH, 1)               AS period,
+    CASE
+        WHEN p.PRSTATUS = ''Open''   THEN 5
+        WHEN p.PRSTATUS = ''Closed'' THEN 6
+        ELSE NULL
+    END                                                AS current_status_id,
+    cal.id                                             AS calendar_id,
+    1                                                  AS period_number,
+    p.OPEDATE                                          AS start_date,
+    p.CLSDATE                                          AS end_date
+FROM CHABRINS_NEW.dbo.CHPRDS p
+CROSS APPLY (
+    SELECT TOP 1 id
+    FROM vw_sys_hr_payroll_calendar_041 cal
+    WHERE cal.mssql_year  = p.PRYEAR
+      AND cal.mssql_month = p.PRMNTH
+) cal;
+';
+
+-- ============================================================================
+-- _043  vw_sys_hr_payroll_summary_043
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_payroll_summary_043 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY e.EMPNUMB, e.PRYEAR, e.PRMNTH) AS id,
+    GETDATE()                                                    AS date_time,
+    staff.id                                                     AS staff_id,
+    e.EMPNUMB                                                    AS staff_number_id,
+    DATEFROMPARTS(e.PRYEAR, e.PRMNTH, 1)                         AS period,
+    ISNULL(basic.EDAMT,      0)                                  AS basic_salary,
+    ISNULL(sarr.EDAMT,       0)                                  AS salary_arrears,
+    ISNULL(actall.EDAMT,     0)                                  AS acting_allowance,
+    ISNULL(paye.EDAMT,       0)                                  AS tax_payable,
+    ISNULL(nhif.EDAMT,       0)                                  AS nhif,
+    ISNULL(nssf.EDAMT,       0)                                  AS nssf,
+    ISNULL(socwel.EDAMT,     0)                                  AS social_welfare,
+    ISNULL(akiba.EDAMT,      0)                                  AS akiba_sacco_loan,
+    ISNULL(sadv.EDAMT,       0)                                  AS salary_advance,
+    ISNULL(absent.EDAMT,     0)                                  AS absenteeism,
+    ISNULL(secdepo.EDAMT,    0)                                  AS security_deposit,
+    ISNULL(helb.EDAMT,       0)                                  AS helb_loans,
+    ISNULL(ahl.EDAMT,        0)                                  AS housing_levy,
+    ISNULL(otherded.EDAMT,   0)                                  AS other_deductions,
+    ISNULL(totded.EDAMT,     0)                                  AS total_deductions,
+    ISNULL(net.EDAMT,        0)                                  AS net_pay,
+    ISNULL(akibashare.EDAMT, 0)                                  AS akiba_share_contribution,
+    5                                                            AS current_status_id,
+    NULL                                                         AS register_id,
+    NULL                                                         AS prorated_deduction,
+    ISNULL(upleave.EDAMT,    0)                                  AS unpaid_leave,
+    staff.department_id                                          AS department_id,
+    staff.position_id                                            AS position_id,
+    NULL                                                         AS worked_days,
+    NULL                                                         AS guarantor_loan,
+    NULL                                                         AS emmergency_loan,
+    NULL                                                         AS period_id,
+    ISNULL(neglig.EDAMT,     0)                                  AS negligence,
+    e.PRYEAR                                                     AS mssql_year,
+    e.PRMNTH                                                     AS mssql_month
+FROM (
+    SELECT DISTINCT EMPNUMB, PRYEAR, PRMNTH
+    FROM CHABRINS_NEW.dbo.CHPYSL
+) e
+LEFT JOIN vw_sys_staff_037  staff     ON e.EMPNUMB = staff.staff_number
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL basic      ON e.EMPNUMB = basic.EMPNUMB      AND e.PRYEAR = basic.PRYEAR      AND e.PRMNTH = basic.PRMNTH      AND basic.EDCODE      = ''00001''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL sarr       ON e.EMPNUMB = sarr.EMPNUMB       AND e.PRYEAR = sarr.PRYEAR       AND e.PRMNTH = sarr.PRMNTH       AND sarr.EDCODE       = ''00019''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL actall     ON e.EMPNUMB = actall.EMPNUMB     AND e.PRYEAR = actall.PRYEAR     AND e.PRMNTH = actall.PRMNTH     AND actall.EDCODE     = ''00018''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL nssf       ON e.EMPNUMB = nssf.EMPNUMB       AND e.PRYEAR = nssf.PRYEAR       AND e.PRMNTH = nssf.PRMNTH       AND nssf.EDCODE       = ''00004''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL nhif       ON e.EMPNUMB = nhif.EMPNUMB       AND e.PRYEAR = nhif.PRYEAR       AND e.PRMNTH = nhif.PRMNTH       AND nhif.EDCODE       = ''00005''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL ahl        ON e.EMPNUMB = ahl.EMPNUMB        AND e.PRYEAR = ahl.PRYEAR        AND e.PRMNTH = ahl.PRMNTH        AND ahl.EDCODE        = ''00022''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL paye       ON e.EMPNUMB = paye.EMPNUMB       AND e.PRYEAR = paye.PRYEAR       AND e.PRMNTH = paye.PRMNTH       AND paye.EDCODE       = ''00013''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL helb       ON e.EMPNUMB = helb.EMPNUMB       AND e.PRYEAR = helb.PRYEAR       AND e.PRMNTH = helb.PRMNTH       AND helb.EDCODE       = ''00020''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL socwel     ON e.EMPNUMB = socwel.EMPNUMB     AND e.PRYEAR = socwel.PRYEAR     AND e.PRMNTH = socwel.PRMNTH     AND socwel.EDCODE     = ''00010''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL akiba      ON e.EMPNUMB = akiba.EMPNUMB      AND e.PRYEAR = akiba.PRYEAR      AND e.PRMNTH = akiba.PRMNTH      AND akiba.EDCODE      = ''00009''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL sadv       ON e.EMPNUMB = sadv.EMPNUMB       AND e.PRYEAR = sadv.PRYEAR       AND e.PRMNTH = sadv.PRMNTH       AND sadv.EDCODE       = ''00007''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL absent     ON e.EMPNUMB = absent.EMPNUMB     AND e.PRYEAR = absent.PRYEAR     AND e.PRMNTH = absent.PRMNTH     AND absent.EDCODE     = ''00015''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL secdepo    ON e.EMPNUMB = secdepo.EMPNUMB    AND e.PRYEAR = secdepo.PRYEAR    AND e.PRMNTH = secdepo.PRMNTH    AND secdepo.EDCODE    = ''00017''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL otherded   ON e.EMPNUMB = otherded.EMPNUMB   AND e.PRYEAR = otherded.PRYEAR   AND e.PRMNTH = otherded.PRMNTH   AND otherded.EDCODE   = ''00012''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL totded     ON e.EMPNUMB = totded.EMPNUMB     AND e.PRYEAR = totded.PRYEAR     AND e.PRMNTH = totded.PRMNTH     AND totded.EDNAME     = ''TOTAL DEDUCTIONS''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL net        ON e.EMPNUMB = net.EMPNUMB        AND e.PRYEAR = net.PRYEAR        AND e.PRMNTH = net.PRMNTH        AND net.EDCODE        = ''00014''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL akibashare ON e.EMPNUMB = akibashare.EMPNUMB AND e.PRYEAR = akibashare.PRYEAR AND e.PRMNTH = akibashare.PRMNTH AND akibashare.EDCODE = ''00011''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL upleave    ON e.EMPNUMB = upleave.EMPNUMB    AND e.PRYEAR = upleave.PRYEAR    AND e.PRMNTH = upleave.PRMNTH    AND upleave.EDCODE    = ''00016''
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL neglig     ON e.EMPNUMB = neglig.EMPNUMB     AND e.PRYEAR = neglig.PRYEAR     AND e.PRMNTH = neglig.PRMNTH     AND neglig.EDCODE     = ''00024'';
+';
+
+-- ============================================================================
+-- _044  vw_sys_hr_payslip_elements_044
+--       References: vw_sys_hr_payroll_elements_039
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_payslip_elements_044 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY sl.EMPNUMB, sl.PRYEAR, sl.PRMNTH, sl.EDCODE) AS id,
+    sl.EMPNUMB  AS staff_number,
+    sl.PRYEAR   AS payroll_year,
+    sl.PRMNTH   AS payroll_month,
+    sl.EDCODE   AS element_code,
+    sl.EDNAME   AS element_name,
+    sl.EDTYPE   AS element_type,
+    sl.EDAMT    AS amount,
+    sl.YTD      AS year_to_date,
+    el.id       AS payroll_element_id
+FROM CHABRINS_NEW.dbo.CHPYSL sl
+LEFT JOIN vw_sys_hr_payroll_elements_039 el ON sl.EDCODE = el.mssql_ed_code;
+';
+
+-- ============================================================================
+-- _045  vw_sys_helb_deductions_045
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_helb_deductions_045 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY l.LORDID, l.LNAMT DESC) AS id,
+    GETDATE()                                             AS date_time,
+    NULL                                                  AS created_by_id,
+    staff.id                                              AS staff_id,
+    l.LNBALANC                                            AS loan_balance,
+    l.AMTMONT                                             AS monthly_deduction,
+    NULL                                                  AS start_deduction_date,
+    CASE
+        WHEN l.REPSTAT = 1 THEN 5
+        WHEN l.REPSTAT = 0 THEN 6
+        ELSE NULL
+    END                                                   AS current_status_id,
+    l.LORDID                                              AS mssql_staff_number,
+    l.REPSTAT                                             AS mssql_status,
+    l.VENDORID                                            AS mssql_vendor_id,
+    l.BANKN                                               AS mssql_bank,
+    l.CHEQNO                                              AS mssql_cheque_no
+FROM CHABRINS_NEW.dbo.CHLOAN l
+LEFT JOIN vw_sys_staff_037 staff ON l.LORDID = staff.staff_number;
+';
+
+-- ============================================================================
+-- _046  vw_sys_hr_employee_amortized_deductions_046
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_employee_amortized_deductions_046 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY l.LORDID, l.LNAMT DESC) AS id,
+    GETDATE()                                             AS date_time,
+    staff.id                                              AS staff_id,
+    l.AMTPRINC                                            AS principal_amount,
+    l.INTRATE                                             AS interest_rate,
+    NULL                                                  AS deduction_date,
+    NULL                                                  AS created_by_id,
+    CASE
+        WHEN l.REPSTAT = 1 THEN 5
+        WHEN l.REPSTAT = 0 THEN 6
+        ELSE NULL
+    END                                                   AS current_status_id,
+    l.AMTMONT                                             AS monthly_deduction,
+    l.LNAMT                                               AS total_amount,
+    l.AMTINTER                                            AS interest_amount,
+    NULL                                                  AS repayment_months,
+    NULL                                                  AS deduction_type_id,
+    NULL                                                  AS element_id,
+    NULL                                                  AS issued_date,
+    NULL                                                  AS initial_deduction,
+    l.LORDID                                              AS mssql_staff_number,
+    l.LNBALANC                                            AS mssql_loan_balance,
+    l.REPSTAT                                             AS mssql_status,
+    l.VENDORID                                            AS mssql_vendor_id,
+    l.BANKN                                               AS mssql_bank,
+    l.CHEQNO                                              AS mssql_cheque_no
+FROM CHABRINS_NEW.dbo.CHLOAN l
+LEFT JOIN vw_sys_staff_037 staff ON l.LORDID = staff.staff_number;
+';
+
+-- ============================================================================
+-- _047  vw_sys_hr_p9a_047
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_sys_hr_p9a_047 AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY p.EMPNUMB, p.PRYEAR, p.PRMNTH) AS id,
+    GETDATE()   AS date_time,
+    staff.id    AS staff_id,
+    p.EMPNUMB   AS staff_number,
+    p.PRYEAR    AS tax_year,
+    p.PRMNTH    AS tax_month,
+    p.AMTA      AS gross_pay,
+    p.AMTB      AS benefits_value,
+    p.AMTD      AS defined_contribution,
+    p.AMTE1     AS owner_occupied_interest,
+    p.AMTE2     AS retirement_contribution,
+    p.AMTE3     AS other_exemptions,
+    p.AMTF      AS taxable_pay,
+    p.AMTG      AS tax_charged,
+    p.AMTH      AS personal_relief,
+    p.AMTJ      AS paye_tax
+FROM CHABRINS_NEW.dbo.CHP9A p
+LEFT JOIN vw_sys_staff_037 staff ON p.EMPNUMB = staff.staff_number;
+';
+
+-- ============================================================================
+-- _048  vw_rpt_statutory_nssf_048
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_rpt_statutory_nssf_048 AS
+SELECT
+    staff.id            AS staff_id,
+    sl.EMPNUMB          AS staff_number,
+    staff.full_names    AS staff_name,
+    staff.nssf_number   AS nssf_number,
+    sl.PRYEAR           AS payroll_year,
+    sl.PRMNTH           AS payroll_month,
+    sl.EDAMT            AS nssf_amount
+FROM CHABRINS_NEW.dbo.CHPYSL sl
+LEFT JOIN vw_sys_staff_037 staff ON sl.EMPNUMB = staff.staff_number
+WHERE sl.EDCODE = ''00004'';
+';
+
+-- ============================================================================
+-- _049  vw_rpt_statutory_shif_049
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_rpt_statutory_shif_049 AS
+SELECT
+    staff.id            AS staff_id,
+    sl.EMPNUMB          AS staff_number,
+    staff.full_names    AS staff_name,
+    staff.nhif_number   AS nhif_number,
+    sl.PRYEAR           AS payroll_year,
+    sl.PRMNTH           AS payroll_month,
+    sl.EDAMT            AS shif_amount
+FROM CHABRINS_NEW.dbo.CHPYSL sl
+LEFT JOIN vw_sys_staff_037 staff ON sl.EMPNUMB = staff.staff_number
+WHERE sl.EDCODE = ''00005'';
+';
+
+-- ============================================================================
+-- _050  vw_rpt_statutory_housing_levy_050
+--       References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_rpt_statutory_housing_levy_050 AS
+SELECT
+    staff.id            AS staff_id,
+    sl.EMPNUMB          AS staff_number,
+    staff.full_names    AS staff_name,
+    sl.PRYEAR           AS payroll_year,
+    sl.PRMNTH           AS payroll_month,
+    sl.EDAMT            AS housing_levy_amount
+FROM CHABRINS_NEW.dbo.CHPYSL sl
+LEFT JOIN vw_sys_staff_037 staff ON sl.EMPNUMB = staff.staff_number
+WHERE sl.EDCODE = ''00022'';
+';
+
+-- ============================================================================
+-- _051  vw_sys_pm_clients_17_repeat_051
+--        Staff Bank Accounts (CHABRINS_NEW.dbo.CHSTFF bank columns → sys_pm_clients_17_repeat)
+--        Model: ClientBankAccount  |  Controller: ClientsController::saveBankAccounts
+--        CHABRINS_NEW.dbo.CHSTFF stores one bank per staff member (BANKCODE, BANKBRAN, BANKACC).
+--        Laravel stores bank accounts as child rows in sys_pm_clients_17_repeat
+--        linked to the parent client/staff via parent_id.
+--        Only staff with a non-empty BANKACC are included.
+--        References: vw_sys_staff_037
+--                    vw_sys_set_banks_035
+--                    vw_sys_set_banks_branches_036
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW [vw_sys_pm_clients_17_repeat_051] AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY s.EMPNUMB)          AS id,
+    staff.id                                         AS parent_id,
+    -- FK to sys_staff / sys_pm_clients (resolved via vw_sys_staff_037)
+    bk.id                                            AS bank_id,
+    -- FK to sys_set_banks (resolved from BANKCODE via vw_sys_set_banks_035)
+    s.FULLNAME                                       AS account_name,
+    -- No separate account name in MSSQL; staff full name used
+    s.BANKACC                                        AS account_number,
+    br.id                                            AS branch,
+    -- FK to sys_set_banks_branches (resolved from BANKBRAN via _036)
+    CAST(NULL AS DECIMAL(13,2))                      AS return_percentage,
+    -- No MSSQL equivalent
+    s.EMPNUMB                                        AS mssql_staff_number,
+    s.BANKCODE                                       AS mssql_bank_code,
+    s.BANKBRAN                                       AS mssql_branch_code
+FROM CHABRINS_NEW.dbo.CHSTFF s
+LEFT JOIN vw_sys_staff_037              staff ON s.EMPNUMB  = staff.staff_number
+LEFT JOIN vw_sys_set_banks_035          bk    ON s.BANKCODE = bk.mssql_bank_code
+LEFT JOIN vw_sys_set_banks_branches_036 br    ON s.BANKBRAN = br.mssql_branch_code
+                                              AND s.BANKCODE = br.mssql_bank_code
+WHERE s.BANKACC IS NOT NULL
+  AND LTRIM(RTRIM(s.BANKACC)) != '''';
+';
+
+-- ============================================================================
+-- _052  vw_sys_pm_clients_19_repeat_052
+--        Staff Other Contacts (CHABRINS_NEW.dbo.CHSCNTS → sys_pm_clients_19_repeat)
+--        Model: ClientOtherContact  |  Controller: ClientsController::saveOtherContacts
+--        CHABRINS_NEW.dbo.CHSCNTS stores alternate contact details (home/company addresses,
+--        mobile, email) for staff. Laravel stores these as child rows in
+--        sys_pm_clients_19_repeat linked via parent_id.
+--        Only rows with at least a MOBNO or CUEMAIL are included.
+--        References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW [vw_sys_pm_clients_19_repeat_052] AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY c.EMPNUMB)          AS id,
+    staff.id                                         AS parent_id,
+    -- FK to sys_staff / sys_pm_clients (resolved via vw_sys_staff_037)
+    staff.full_names                                 AS contact_names,
+    c.CUEMAIL                                        AS other_email,
+    c.MOBNO                                          AS other_mobile_number,
+    c.EMPNUMB                                        AS mssql_staff_number,
+    c.HMPBOX                                         AS mssql_home_po_box,
+    c.HMTOWN                                         AS mssql_home_town,
+    c.HHSETEL                                        AS mssql_home_tel,
+    c.HFAXNO                                         AS mssql_home_fax,
+    c.HMPCODE                                        AS mssql_home_postal_code,
+    c.CAPBOX                                         AS mssql_company_po_box,
+    c.CAPCODE                                        AS mssql_company_postal_code,
+    c.CATOWN                                         AS mssql_company_town,
+    c.CFAXNO                                         AS mssql_company_fax,
+    c.PHYADD                                         AS mssql_physical_address
+FROM CHABRINS_NEW.dbo.CHSCNTS c
+LEFT JOIN vw_sys_staff_037 staff ON c.EMPNUMB = staff.staff_number
+WHERE c.MOBNO IS NOT NULL OR c.CUEMAIL IS NOT NULL;
+';
+
+-- ============================================================================
+-- _053  vw_sys_hr_employee_contracts_053
+--        Employee Contracts (derived from CHABRINS_NEW.dbo.CHPYSL basic salary history)
+--        Maps to: sys_hr_employee_contracts (Contract model)
+--        The MSSQL system has no explicit contracts table. Contracts are
+--        DERIVED from payslip history: each distinct (EMPNUMB, basic_salary)
+--        combination represents one contract period.
+--          date_start = 1st day of first salary month
+--          date_end   = last day of last salary month (NULL = active contract)
+--        References: vw_sys_staff_037
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW [vw_sys_hr_employee_contracts_053] AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY p.EMPNUMB, p.first_period)  AS id,
+    CAST(GETDATE() AS DATETIME)                              AS date_time,
+    s.id                                                     AS staff_id,
+    -- FK → sys_staff.id
+    CAST(DATEFROMPARTS(
+        p.first_period / 100,
+        p.first_period % 100, 1
+    ) AS DATETIME)                                           AS date_start,
+    CASE
+        WHEN p.last_period = emp_max.max_period
+        THEN CAST(NULL AS DATETIME)
+        ELSE CAST(EOMONTH(DATEFROMPARTS(
+                 p.last_period / 100,
+                 p.last_period % 100, 1
+             )) AS DATETIME)
+    END                                                      AS date_end,
+    CASE
+        WHEN p.last_period = emp_max.max_period THEN 5
+        ELSE 6
+    END                                                      AS current_status_id,
+    s.position_id                                            AS position_id,
+    -- FK → sys_set_staff_positions.id
+    CAST(NULL AS INT)                                        AS created_by,
+    p.salary                                                 AS basic_salary,
+    s.staff_number                                           AS staff_number,
+    p.EMPNUMB                                                AS mssql_emp_number,
+    p.first_period                                           AS mssql_first_period,
+    p.last_period                                            AS mssql_last_period,
+    p.months                                                 AS mssql_months_count
+FROM (
+    SELECT
+        EMPNUMB,
+        CAST(EDAMT AS DECIMAL(13,2))   AS salary,
+        MIN(PRYEAR * 100 + PRMNTH)     AS first_period,
+        MAX(PRYEAR * 100 + PRMNTH)     AS last_period,
+        COUNT(*)                        AS months
+    FROM CHABRINS_NEW.dbo.CHPYSL
+    WHERE EDNAME = ''BASIC SALARY''
+    GROUP BY EMPNUMB, CAST(EDAMT AS DECIMAL(13,2))
+) p
+JOIN (
+    SELECT
+        EMPNUMB,
+        MAX(PRYEAR * 100 + PRMNTH) AS max_period
+    FROM CHABRINS_NEW.dbo.CHPYSL
+    WHERE EDNAME = ''BASIC SALARY''
+    GROUP BY EMPNUMB
+) emp_max ON p.EMPNUMB = emp_max.EMPNUMB
+LEFT JOIN vw_sys_staff_037 s ON TRY_CAST(p.EMPNUMB AS INT) = s.id;
+';
+
+-- ============================================================================
+-- _054  vw_sys_hr_employee_contracts_279_repeat_054
+--        Contract Element Lines
+--        Maps to: sys_hr_employee_contracts_279_repeat (ContractElement model)
+--        For each contract period (from _053), lists the distinct payroll
+--        elements active during that period. Excludes computed/total
+--        pseudo-elements. Amount = average monthly value during the contract.
+--        References: vw_sys_hr_employee_contracts_053
+--                    vw_sys_hr_payroll_elements_039
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW [vw_sys_hr_employee_contracts_279_repeat_054] AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY ct.id, el.id)                    AS id,
+    ct.id                                                         AS parent_id,
+    -- FK → vw_sys_hr_employee_contracts_053.id
+    el.id                                                         AS element_id,
+    -- FK → vw_sys_hr_payroll_elements_039.id
+    CAST(1 AS INT)                                                AS entry_type_id,
+    CAST(AVG(CAST(ps.EDAMT AS DECIMAL(13,2))) AS DECIMAL(13,2))  AS amount
+FROM vw_sys_hr_employee_contracts_053 ct
+JOIN CHABRINS_NEW.dbo.CHPYSL ps
+    ON  ps.EMPNUMB  = ct.mssql_emp_number
+    AND (ps.PRYEAR * 100 + ps.PRMNTH) BETWEEN ct.mssql_first_period
+                                           AND ct.mssql_last_period
+    AND ps.EDNAME   != ''BASIC SALARY''
+    AND ps.EDCODE NOT IN (''DEDUCTIONS'', ''TAXC'', ''TAXR'', ''TEARNINGS'')
+    AND ps.EDAMT    != 0
+JOIN vw_sys_hr_payroll_elements_039 el
+    ON ps.EDCODE = el.mssql_ed_code
+GROUP BY ct.id, el.id;
+';
+
+-- ============================================================================
+-- _055  vw_sys_hr_payroll_deductions_register_055
+--        Payroll Deductions Register (audit log)
+--        Maps to: sys_hr_payroll_deductions_register
+--        One row per deduction element per employee per payroll period.
+--        Covers all actual deduction EDCODEs: statutory + voluntary + loans.
+--        References: vw_sys_staff_037
+--                    vw_sys_hr_payroll_elements_039
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW [vw_sys_hr_payroll_deductions_register_055] AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY s.id, p.PRYEAR, p.PRMNTH, p.EDCODE) AS id,
+    GETDATE()                                                         AS date_time,
+    CAST(DATEFROMPARTS(p.PRYEAR, p.PRMNTH, 1) AS DATETIME)           AS payroll_period,
+    s.id                                                              AS staff_id,
+    -- FK → sys_staff.id
+    el.id                                                             AS deduction_type_id,
+    -- FK → sys_hr_payroll_elements.id
+    CAST(p.EDAMT AS DECIMAL(13,2))                                    AS amount,
+    CAST(0 AS DECIMAL(13,2))                                          AS company_amount,
+    CAST(p.EDAMT AS DECIMAL(13,2))                                    AS total_amount,
+    CAST(ISNULL(bs.EDAMT, 0) AS DECIMAL(13,2))                        AS salary
+FROM CHABRINS_NEW.dbo.CHPYSL p
+INNER JOIN vw_sys_staff_037               s  ON TRY_CAST(p.EMPNUMB AS INT) = s.id
+INNER JOIN vw_sys_hr_payroll_elements_039 el ON p.EDCODE = el.mssql_ed_code
+LEFT JOIN CHABRINS_NEW.dbo.CHPYSL bs
+    ON  p.EMPNUMB = bs.EMPNUMB
+    AND p.PRYEAR  = bs.PRYEAR
+    AND p.PRMNTH  = bs.PRMNTH
+    AND bs.EDCODE = ''00001''
+WHERE p.EDCODE IN (
+    ''00004'',   -- NSSF
+    ''00005'',   -- NHIF / SHIF
+    ''00007'',   -- Salary Advance
+    ''00009'',   -- Akiba Sacco Loan
+    ''00010'',   -- Social Welfare
+    ''00011'',   -- Akiba Share Contribution
+    ''00012'',   -- Other Deductions
+    ''00013'',   -- Tax Payable (PAYE)
+    ''00015'',   -- Absenteeism
+    ''00016'',   -- Unpaid Leave
+    ''00017'',   -- Security Deposit
+    ''00020'',   -- HELB Loans
+    ''00022'',   -- Housing Levy
+    ''00024''    -- Loss Due to Negligence
+)
+AND p.EDAMT != 0;
+';
+
+-- ============================================================================
+-- _056  vw_sys_hr_payroll_elements_repeat_staff_positions_id_056
+--        Payroll Element ↔ Staff Position Pivot (many-to-many)
+--        Maps to: sys_hr_payroll_elements_repeat_staff_positions_id
+--        Derived: which payroll elements have historically been applied to
+--        which staff positions. parent_id = element_id.
+--        Pseudo-element and computed EDCODEs are excluded.
+--        References: vw_sys_staff_037
+--                    vw_sys_hr_payroll_elements_039
+-- ============================================================================
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW [vw_sys_hr_payroll_elements_repeat_staff_positions_id_056] AS
+SELECT
+    ROW_NUMBER() OVER (ORDER BY el.id, s.position_id) AS id,
+    el.id                                              AS parent_id,
+    -- FK → sys_hr_payroll_elements.id
+    CAST(s.position_id AS INT)                         AS staff_positions_id
+    -- FK → sys_set_staff_positions.id
+FROM CHABRINS_NEW.dbo.CHPYSL p
+INNER JOIN vw_sys_staff_037               s  ON TRY_CAST(p.EMPNUMB AS INT) = s.id
+INNER JOIN vw_sys_hr_payroll_elements_039 el ON p.EDCODE = el.mssql_ed_code
+WHERE p.EDCODE NOT IN (
+    ''00001'',       -- Basic Salary
+    ''DEDUCTIONS'',  -- Computed total deductions
+    ''NETP'',        -- Net pay
+    ''NHIFR'',       -- NHIF relief
+    ''TAXC'',        -- Tax credit
+    ''TAXP'',        -- Tax payable
+    ''TAXR'',        -- Tax relief
+    ''TEARNINGS''    -- Total earnings
+)
+  AND p.EDAMT        != 0
+  AND s.position_id  IS NOT NULL
+GROUP BY el.id, s.position_id;
 ';
 
