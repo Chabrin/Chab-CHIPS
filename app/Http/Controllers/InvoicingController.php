@@ -114,15 +114,15 @@ class InvoicingController extends Controller
             }
             if ($request->filled('f_tenant')) {
                 $val = $request->input('f_tenant');
-                $query->whereHas('tenant', fn ($q) => $q->where('names', 'ILIKE', '%' . $val . '%'));
+                $query->whereHas('tenant', fn($q) => $q->where('names', 'ILIKE', '%' . $val . '%'));
             }
             if ($request->filled('f_property')) {
                 $val = $request->input('f_property');
-                $query->whereHas('property', fn ($q) => $q->where('property_name', 'ILIKE', '%' . $val . '%'));
+                $query->whereHas('property', fn($q) => $q->where('property_name', 'ILIKE', '%' . $val . '%'));
             }
             if ($request->filled('f_unit')) {
                 $val = $request->input('f_unit');
-                $query->whereHas('unit', fn ($q) => $q->where('unit_name', 'ILIKE', '%' . $val . '%'));
+                $query->whereHas('unit', fn($q) => $q->where('unit_name', 'ILIKE', '%' . $val . '%'));
             }
             if ($request->filled('f_amount') && is_numeric($request->input('f_amount'))) {
                 $query->where('total_amount', (float) $request->input('f_amount'));
@@ -274,8 +274,8 @@ class InvoicingController extends Controller
             $item_name = $invoiceableItem ? $invoiceableItem->item_name : $validated['return_report_type'];
             $period = date('M Y', strtotime($validated['returns_period']));
             $referenceNumber = 'INV' . date('Y', strtotime($validated['returns_period'])) .
-                               date('m', strtotime($validated['returns_period'])) .
-                               $unit_code . '-' . $item_name . ' for ' . $period . '-' . $validated['lease_id'];
+                date('m', strtotime($validated['returns_period'])) .
+                $unit_code . '-' . $item_name . ' for ' . $period . '-' . $validated['lease_id'];
 
             $batchNumber = date('YmdHi');
 
@@ -1995,7 +1995,6 @@ class InvoicingController extends Controller
                     'message' => 'Error: ' . $e->getMessage()
                 ], 500);
             }
-            
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,

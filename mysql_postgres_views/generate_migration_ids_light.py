@@ -134,6 +134,36 @@ TABLES = [
         'where':    'CHQNO IS NOT NULL',
         'desc':     'FK -- cheque books',
     },
+    # --- Own-row identity stamps (not currently consumed by any view --
+    #     requested ahead of need so the source rows have a stable raw id) ---
+    {
+        'table':    'CHOFALL',
+        'id_col':   'mapping_id',
+        'order_by': 'BLOCKID, OFFID, ALLDATE',
+        'where':    "OFFID IS NOT NULL AND BLOCKID IS NOT NULL",
+        'desc':     '_027 -- staff_property_mappings (raw row id; not selected by the view)',
+    },
+    {
+        'table':    'CHVENDS',
+        'id_col':   'vendor_entry_id',
+        'order_by': 'VENDORID, LASTMNT',
+        'where':    "VENDORID IS NOT NULL AND RTRIM(LTRIM(VENDORID)) <> ''",
+        'desc':     '_028 -- vendors (raw row id; CHVENDS has multiple rows per vendor_code, view dedups separately)',
+    },
+    {
+        'table':    'CHLRH',
+        'id_col':   'link_id',
+        'order_by': 'BLOCKID, LORDID',
+        'where':    "LORDID IS NOT NULL AND BLOCKID IS NOT NULL",
+        'desc':     '_029 -- landlord_property_mappings (raw row id; not selected by the view)',
+    },
+    {
+        'table':    'CHLNTR',
+        'id_col':   'schedule_id',
+        'order_by': 'LORDID, LNSERIE, REPAYNO, TRANSNO',
+        'where':    "LORDID IS NOT NULL AND TRANSNO IS NOT NULL",
+        'desc':     '_032 -- landlord_advance_repayment_schedule (raw row id; not selected by the view)',
+    },
 ]
 
 

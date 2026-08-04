@@ -21,6 +21,11 @@ CHPVH -> cb_payment_vouchers_headers (old)
 CHPVDD -> cb_payment_vouchers_lines (new)
 CHPVD -> cb_payment_vouchers_lines (old)
 CHCDC -> cb_landlord_charge_pairs
+CHOFALL -> staff_property_mappings
+CHVENDS -> vendors
+CHLRH -> landlord_property_mappings
+CHCHQ -> cheque_register
+CHCHD -> cheque_register_details
 
 -- HR MODULE (peter_hr_mods_final.sql)
 CHDEPT -> sys_set_departments
@@ -39,11 +44,9 @@ CHSCNTS -> sys_hr_employee_contracts
 
 -- PENDING_1 (no view yet — to be created)
 CHBCTH -> Batch Headers (payment channel transaction batches)
-CHLRH -> Landlord-Property Links
 CHRMES -> Returns Scheduler
 CHREST -> Bank Statement Recon Entries
 CHRDED -> Deduction Config
-CHCHQ -> Cheques
 
 -- PENDING_1 (empty / negligible — skipped)
 CHLAP -> empty
@@ -56,8 +59,7 @@ CHPAYMENTS -> 4 rows (negligible)
 -- ============================================================
 
 -- >> LANDLORD ACCOUNTS & LOANS (⚠ review for migration)
-CHLNTR -> Landlord Loan/Advance Repayment Schedule — 5,593 rows
-Per-period amortised loan rows per landlord (LNAMT, INTRATE, REPDATE, INTRESTAMT, BALANC, REPAYNO). KEY missing table.
+CHLNTR -> MAPPED (2026-08-04) -> landlord_advance_repayment_schedule (see other_views_mod.sql _032)
 CHLCAC -> Landlord Account Period Close Summary — 58,797 rows
 Monthly closing Dr/Cr/Balance per landlord (SUMDR, SUMCR, SUMBL, CLSTAT).
 CHLSTM -> Landlord Statement Entries — 49,238 rows
@@ -156,14 +158,12 @@ CHRRUN -> Returns Processing Run Log — 110 rows
 Records each returns generation run (month, year).
 
 -- >> VENDORS & EXPENSES
-CHVENDS -> Vendor / Supplier Master — 1,787 rows
-Vendor name, type, address, bank account, current balance.
+CHVENDS -> MAPPED (2026-08-04) -> vendors (see other_views_mod.sql _028)
 CHEXPS -> Property Expense Entries — 10 rows
 Expenses paid to/by landlord per unit.
 
 -- >> SYSTEM SETUP / CONFIG
-CHOFALL -> Officer-Property Allocation — 5,363 rows
-Links officer to property (OFFID, BLOCKID, ALLTYPE, ALLDATE).
+CHOFALL -> MAPPED (2026-08-04) -> staff_property_mappings (see other_views_mod.sql _027)
 CHTAXES -> Tax / VAT Rates — 1 row
 CHTCHRG -> Tenant Charge Type to GL Account mapping — 7 rows
 CHTYPES -> Transaction Type Codes — 9 rows
@@ -235,15 +235,10 @@ CHIVD -> Invoice Detail Lines (legacy) — 4 rows
 -- ============================================================
 -- ⚠ LANDLORD RECOVERIES / ADVANCES / LOANS — KEY GAPS
 -- ============================================================
--- CHLNTR — 5,593 rows — Landlord Loan Amortisation Schedule
--- LORDID, LNAMT, INTRATE, REPDATE, AMOUNT (per period), INTRESTAMT,
--- TOTALAMT, BALANC, REPAYNO, TRANTYPE (advance vs loan)
--- Full amortised repayment schedule per landlord loan/advance.
--- Feeds CHLACC (landlord account debits for loan recovery).
--- → Proposed PG table: cb_landlord_loans
---
--- CHRACT (already mapped → cb_money_recoveries) handles charge recoveries.
--- CHLNTR handles structured loan/advance repayment specifically.
+-- CHLNTR -> MAPPED (2026-08-04) -> landlord_advance_repayment_schedule
+-- (see other_views_mod.sql _032). Feeds CHLACC (landlord account debits for
+-- loan recovery) -- CHRACT (already mapped -> cb_money_recoveries) handles
+-- charge recoveries; CHLNTR handles structured loan/advance repayment.
 --
 -- CHLCAC — 58,797 rows — Landlord Period Close Summaries
 -- Monthly Dr/Cr/Balance per landlord — useful for period reporting.
@@ -252,3 +247,34 @@ CHIVD -> Invoice Detail Lines (legacy) — 4 rows
 -- CHSUBS — 774,116 rows — Recurring Subscriptions / Advance Payments
 -- Has INVONUM, PAYFOR, PAYMNTH — likely advance/prepayment entries.
 -- May overlap with CHBCTD unallocated payments. Needs investigation.
+
+-- ============================================================
+-- CHLRH STUDY NOTES (2026-08-04) — landlord-property links
+-- MAPPED (2026-08-04) -> landlord_property_mappings (see other_views_mod.sql _029)
+-- ============================================================
+-- Columns: LORDID (varchar20), ENTRYID (int, 100% NULL — migrated anyway, not dropped),
+--          BLOCKID (varchar20), MSTATUS (varchar50, 100% 'Active' in this data)
+-- 1,812 rows. Near-1:1 property->landlord (only 1 BLOCKID has >1 distinct LORDID).
+-- BLOCKID -> CHBLOCKS: 100% match (1812/1812).
+-- LORDID  -> CHLRDS:   99.7% match (1809/1814).
+--
+-- IMPORTANT: this is NOT purely additive — CHBLOCKS already carries LLORDID
+-- (the landlord currently stamped on the property, used by vw_sys_pm_properties_001
+-- to set client_id). Comparing CHLRH.LORDID vs CHBLOCKS.LLORDID for the same
+-- BLOCKID (after stripping the inconsistent 'LAN-' prefix on both sides):
+--   92.3% agree (1,672 / 1,812)
+--   7.7% DISAGREE (140 properties) — CHLRH names a different landlord than
+--   the one currently stamped on CHBLOCKS.LLORDID.
+-- This matches the note already in chabrins_to_postgres_views.sql:
+--   "CHLRH maps LORDID -> BLOCKID with status. Use to verify client_id assignment."
+-- i.e. CHLRH's primary value is as a RECONCILIATION check against
+-- sys_pm_properties.client_id, not a fresh mapping table — the 140 disagreeing
+-- rows need a human call (which source is right?) before building anything
+-- that writes client_id changes.
+--
+-- Built as a plain `landlord_property_mappings` table (same shape as
+-- staff_property_mappings), mirroring CHLRH 1:1. landlord_code is kept raw
+-- alongside client_id specifically so the 140 mismatches can still be
+-- reconciled against sys_pm_properties.client_id later — do not treat this
+-- table as authoritative over the existing property.client_id without that
+-- manual review.

@@ -34,6 +34,12 @@
 --   _023  vw_cb_payment_vouchers_lines_new_023
 --   _024  vw_cb_payment_vouchers_lines_old_024
 --   _026  vw_cb_landlord_charge_pairs_026
+--   _027  vw_staff_property_mappings_027  (CHOFALL -> staff_property_mappings)
+--   _028  vw_vendors_028  (CHVENDS -> vendors)
+--   _029  vw_landlord_property_mappings_029  (CHLRH -> landlord_property_mappings)
+--   _030  vw_cheque_register_030  (CHCHQ -> cheque_register)
+--   _031  vw_cheque_register_details_031  (CHCHD -> cheque_register_details)
+--   _032  vw_landlord_advance_repayment_schedule_032  (CHLNTR -> landlord_advance_repayment_schedule)
 -- ============================================================================
 
 USE CHABRINS_NEW;
@@ -59,7 +65,8 @@ SELECT
     RTRIM(LTRIM(b.BLOCKDESC))                           AS property_name,
     RTRIM(LTRIM(b.LRNUM))                               AS lr_number,
     NULL                                                AS usage_type_id,
-    CASE WHEN b.BSTATUS = 1 THEN 1 ELSE 2 END          AS current_status_id,
+    b.BSTATUS                                           AS active,
+    b.BSTATUS                                           AS current_status_id,
     NULL                                                AS acquisition_date,
     NULL                                                AS created_by,
     NULL                                                AS bank_account_id,
@@ -1041,5 +1048,278 @@ SELECT
     RTRIM(LTRIM(c.DCHRGID))                             AS debit_charge_code
 FROM CHABRINS_NEW.dbo.CHCDC c
 WHERE c.PCHRGID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _027  vw_staff_property_mappings_027  (CHOFALL -> staff_property_mappings, 8,202 rows)
+-- ============================================================================
+-- Officer-to-property allocation history (field officer / senior field officer /
+-- property manager / zone manager roles). Multiple rows per OFFID+BLOCKID pair
+-- are expected -- each row is a distinct allocation event (re-assignments keep
+-- their own ALLDATE), not a single current-state record.
+-- officer_id  : OFFID -> CHOFFICERS.officer_id (LEFT JOIN, ~76% match; CHOFALL
+--               has 24% OFFID codes with no matching officer record)
+-- property_id : BLOCKID -> CHBLOCKS.property_id (LEFT JOIN, ~96% match)
+-- property_code is kept as raw text alongside property_id so the mapping stays
+-- readable even when the property_id join misses.
+-- allocated_by (ALLBY) does NOT match any CHOFFICERS.OFFID (0% join rate) --
+-- kept as raw text, not resolved to an FK. Needs manual review post-migration
+-- if a hard link to the allocating user is required.
+-- NOTE: ALLTYPE has a dirty variant ''Senior Field Officer2'' (likely a data-entry
+-- duplicate of ''Senior Field Officer'') -- migrated as-is, not silently corrected.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_staff_property_mappings_027 AS
+SELECT
+    o.officer_id                                        AS officer_id,
+    -- PRE-STAMPED: officer_id from CHOFFICERS via OFFID
+    b.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKID
+    RTRIM(LTRIM(f.BLOCKID))                             AS property_code,
+    RTRIM(LTRIM(f.ALLBY))                               AS allocated_by,
+    -- NOTE: does not join to CHOFFICERS.OFFID -- kept as raw text
+    f.ALLDATE                                           AS allocated_on,
+    RTRIM(LTRIM(f.ALLTYPE))                             AS allocation_type,
+    RTRIM(LTRIM(f.MSTATUS))                             AS status
+FROM CHABRINS_NEW.dbo.CHOFALL f
+LEFT JOIN CHABRINS_NEW.dbo.CHOFFICERS o
+  ON RTRIM(LTRIM(o.OFFID)) = RTRIM(LTRIM(f.OFFID))
+LEFT JOIN CHABRINS_NEW.dbo.CHBLOCKS b
+  ON RTRIM(LTRIM(b.BLOCKID)) = RTRIM(LTRIM(f.BLOCKID))
+WHERE f.OFFID IS NOT NULL AND f.BLOCKID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _028  vw_vendors_028  (CHVENDS -> vendors, 1,787 rows -> 1,091 deduplicated)
+-- ============================================================================
+-- SOURCE: CHVENDS is a bank/address CHANGE LOG, not a clean vendor master --
+-- 1,787 rows cover only 1,091 distinct VENDORID values (some vendors have up
+-- to 3 historical revisions). Deduplicated to one row per VENDORID: prefer the
+-- revision with a populated ACCNUM (most complete bank details), then the most
+-- recent LASTMNT.
+-- client_id: only resolved for VENDTYP = ''LAN'' (landlord) vendors. VENDORID
+--   is often double-prefixed (''LAN-LAN-00739'') vs CHLRDS.LORDID (''LAN-00739'') --
+--   collapsed before matching. ~99% match rate for LAN-type vendors.
+-- taxable (TAXABLE): values in the live data are large inconsistent integers,
+--   not a usable 0/1 flag -- migrated anyway (not dropped), meaning TBD.
+-- NOTE: CHVENDS.BANKACC actually holds the bank NAME in this data (not an
+--   account code) -- mapped to bank_name, not account_number.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_vendors_028 AS
+WITH ranked AS (
+    SELECT
+        v.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY RTRIM(LTRIM(v.VENDORID))
+            ORDER BY
+                CASE WHEN NULLIF(RTRIM(LTRIM(v.ACCNUM)), '''') IS NOT NULL THEN 0 ELSE 1 END,
+                v.LASTMNT DESC
+        ) AS rn
+    FROM CHABRINS_NEW.dbo.CHVENDS v
+    WHERE v.VENDORID IS NOT NULL AND RTRIM(LTRIM(v.VENDORID)) <> ''''
+)
+SELECT
+    RTRIM(LTRIM(r.VENDORID))                            AS vendor_code,
+    RTRIM(LTRIM(r.VENDNAM))                             AS vendor_name,
+    RTRIM(LTRIM(r.VENDTYP))                             AS vendor_type,
+    c.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id from CHLRDS via VENDORID (LAN-type only)
+    RTRIM(LTRIM(r.ADDRESS1))                            AS address_line_1,
+    RTRIM(LTRIM(r.ADDRESS2))                            AS address_line_2,
+    RTRIM(LTRIM(r.ADDRESS3))                            AS address_line_3,
+    RTRIM(LTRIM(r.ADDRESS4))                            AS address_line_4,
+    RTRIM(LTRIM(r.BANKACC))                             AS bank_name,
+    RTRIM(LTRIM(r.BANKBRC))                             AS bank_branch,
+    RTRIM(LTRIM(r.ACCNUM))                              AS account_number,
+    ISNULL(r.VENDBAL, 0)                                AS current_balance,
+    r.LASTMNT                                           AS last_maintained_at,
+    RTRIM(LTRIM(r.AUDTUSR))                             AS audit_user,
+    ''Active''                                            AS status,
+    r.TAXABLE                                           AS taxable
+FROM ranked r
+LEFT JOIN CHABRINS_NEW.dbo.CHLRDS c
+  ON RTRIM(LTRIM(r.VENDTYP)) = ''LAN''
+ AND REPLACE(RTRIM(LTRIM(c.LORDID)), '' '', '''') = REPLACE(RTRIM(LTRIM(r.VENDORID)), ''LAN-LAN-'', ''LAN-'')
+WHERE r.rn = 1;
+';
+
+-- ============================================================================
+-- _029  vw_landlord_property_mappings_029  (CHLRH -> landlord_property_mappings, 1,812 rows)
+-- ============================================================================
+-- Landlord-to-property links. Near-1:1 (only 1 of 1,812 BLOCKIDs has more
+-- than one distinct LORDID) -- this is not an ownership-history table.
+-- client_id   : LORDID -> CHLRDS.client_id (LEFT JOIN, 99.7% match)
+-- property_id : BLOCKID -> CHBLOCKS.property_id (LEFT JOIN, 100% match)
+-- landlord_code is kept as raw text alongside client_id deliberately:
+-- IMPORTANT -- this table disagrees with CHBLOCKS.LLORDID (the landlord
+-- already stamped on the property, used by vw_sys_pm_properties_001 to set
+-- client_id) in ~7.7% of rows (140 / 1,812), after normalising the
+-- inconsistent ''LAN-'' prefixing on both sides. Matches the note already in
+-- chabrins_to_postgres_views.sql: "Use to verify client_id assignment."
+-- landlord_code lets a human reconcile the 140 mismatches against
+-- sys_pm_properties.client_id post-migration -- do NOT assume this view is
+-- authoritative over the existing property.client_id without that review.
+-- entry_id (CHLRH.ENTRYID) is 100% NULL in current data -- migrated anyway
+-- (not dropped), kept for future use.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_landlord_property_mappings_029 AS
+SELECT
+    c.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id from CHLRDS via LORDID
+    b.property_id                                       AS property_id,
+    -- PRE-STAMPED: property_id from CHBLOCKS via BLOCKID
+    RTRIM(LTRIM(h.BLOCKID))                             AS property_code,
+    RTRIM(LTRIM(h.LORDID))                              AS landlord_code,
+    RTRIM(LTRIM(h.MSTATUS))                             AS status,
+    h.ENTRYID                                           AS entry_id
+FROM CHABRINS_NEW.dbo.CHLRH h
+LEFT JOIN CHABRINS_NEW.dbo.CHLRDS c
+  ON REPLACE(RTRIM(LTRIM(c.LORDID)), '' '', '''') = REPLACE(RTRIM(LTRIM(h.LORDID)), ''LAN-LAN-'', ''LAN-'')
+LEFT JOIN CHABRINS_NEW.dbo.CHBLOCKS b
+  ON RTRIM(LTRIM(b.BLOCKID)) = RTRIM(LTRIM(h.BLOCKID))
+WHERE h.LORDID IS NOT NULL AND h.BLOCKID IS NOT NULL;
+';
+
+-- ============================================================================
+-- _030  vw_cheque_register_030  (CHCHQ -> cheque_register, 53,879 rows)
+-- ============================================================================
+-- No stamping needed: CHCHQ.cheque_id is ALREADY in generate_migration_ids_light.py
+-- (added earlier for CHCHD''s FK stamp) -- this table just was not selected as an
+-- ''id'' by any view yet. TARGET: cheque_register (new clean DDL, id auto-generated
+-- by Postgres). NOTE: views cannot carry ORDER BY in SQL Server -- when this data
+-- is loaded, INSERT INTO cheque_register (...) SELECT ... FROM this view ORDER BY
+-- cheque_no, so Postgres id enumeration stays aligned with the pre-stamped
+-- CHCHQ.cheque_id used internally by the SQL-side pipeline (for CHCHD''s FK, later).
+-- cheque_book_no / is_reconciled / reconciled_at / reconciled_by /
+-- reconciliation_status are 100% NULL in the current source data but are
+-- migrated anyway (not dropped) -- kept for future use once populated.
+-- used_flag (CHQUSD) has a 3rd value (2, 20 rows) with no documented meaning --
+-- kept as a raw small int (0/1/2), not forced into a boolean.
+-- leaf_status (TYPCHQ) is misleadingly named "cheque type" in source but is
+-- actually an availability state (''Open'' vs ''Closed''), not a type -- mapped as-is.
+-- payment_voucher_number (PAYVOUC) matches cb_payment_vouchers_headers_new
+-- (CHPVHH.PVNO) at ~65% (only used cheques have a linked voucher) -- kept as raw
+-- text, not resolved to an FK.
+-- payee_code (PAYEEID) holds landlord codes (LAN-xxxxx) for ~19% of rows --
+-- kept as raw text, not resolved to client_id.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cheque_register_030 AS
+SELECT
+    RTRIM(LTRIM(q.CHQNO))                               AS cheque_no,
+    RTRIM(LTRIM(q.CHQBKNO))                             AS cheque_book_no,
+    RTRIM(LTRIM(q.CHQBNK))                              AS bank_name,
+    RTRIM(LTRIM(q.CHQACC))                              AS bank_account,
+    q.CHQUSD                                            AS used_flag,
+    RTRIM(LTRIM(q.CHQUSBY))                             AS used_by,
+    q.CHQUDAT                                           AS used_date,
+    RTRIM(LTRIM(q.PAYVOUC))                             AS payment_voucher_number,
+    RTRIM(LTRIM(q.PAYEEN))                              AS payee_name,
+    RTRIM(LTRIM(q.PAYEEID))                             AS payee_code,
+    ISNULL(q.CHQAMT, 0)                                 AS amount,
+    CASE WHEN q.CHQSTAT = 1 THEN 1 ELSE 0 END           AS is_cancelled,
+    RTRIM(LTRIM(q.CANBY))                               AS cancelled_by,
+    RTRIM(LTRIM(q.CANREAS))                             AS cancel_reason,
+    q.CANDAT                                            AS cancelled_at,
+    RTRIM(LTRIM(q.TYPCHQ))                              AS leaf_status,
+    q.CHQPDAT                                           AS paid_date,
+    RTRIM(LTRIM(q.CHQPOST))                             AS is_posted,
+    RTRIM(LTRIM(q.CHQRMKS))                             AS remarks,
+    RTRIM(LTRIM(q.CHQRECON))                            AS is_reconciled,
+    q.RECNDAT                                           AS reconciled_at,
+    RTRIM(LTRIM(q.RECNBY))                              AS reconciled_by,
+    RTRIM(LTRIM(q.RECNSTAT))                            AS reconciliation_status
+FROM CHABRINS_NEW.dbo.CHCHQ q
+WHERE q.CHQNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- _031  vw_cheque_register_details_031  (CHCHD -> cheque_register_details, 43,301 rows)
+-- ============================================================================
+-- No stamping needed for this view either -- CHQNO+CHQACC -> CHCHQ.cheque_id
+-- and PAYVOUC -> voucher_id are ALREADY in generate_migration_ids_light.py
+-- (Phase 3, added earlier). Not used here since cheque_register/cheque_register_details
+-- both use raw text keys (no stable transferable id on either side) -- see _030.
+-- ⚠ BUG FOUND in the existing script: the pre-written CHCHD.voucher_id stamp
+--   joins PAYVOUC to CHBCTH.BTCHID, but PAYVOUC does NOT match CHBCTH at all
+--   (0% join rate, verified against live data). PAYVOUC actually matches
+--   CHPVHH.PVNO (payment vouchers, new) at ~99.9%. The existing FK-stamping
+--   code for CHCHD.voucher_id in generate_migration_ids_light.py will silently
+--   produce an all-NULL voucher_id column if run as-is. Flagging, not fixing --
+--   this script predates this session and touches a shared pipeline step.
+-- entry_sequence (ENTRYID) is a per-voucher line number, not a globally unique
+-- row id -- (PAYVOUC, ENTRYID) is only ~99.8% unique, not enforced as a
+-- constraint given the near-miss.
+-- Columns below are 100% NULL in current source data but are migrated anyway
+-- (not dropped): ENTDESC, CODEFT, PAYEEID, PAYENAME, PACCNUM, PBANK, PBANKBRA,
+-- EFTENTNO, CHKSTAT, CHKBY, CHKDAT, VERISTAT, VERIBY, VERIDAT.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_cheque_register_details_031 AS
+SELECT
+    RTRIM(LTRIM(d.CHQNO))                               AS cheque_no,
+    RTRIM(LTRIM(d.CHQACC))                              AS bank_account,
+    RTRIM(LTRIM(d.PAYVOUC))                             AS payment_voucher_number,
+    d.ENTRYID                                           AS entry_sequence,
+    ISNULL(d.ENTRYAMT, 0)                               AS entry_amount,
+    RTRIM(LTRIM(d.ENTDESC))                             AS entry_description,
+    RTRIM(LTRIM(d.CODEFT))                              AS eft_code,
+    RTRIM(LTRIM(d.PAYEEID))                             AS payee_code,
+    RTRIM(LTRIM(d.PAYENAME))                            AS payee_name,
+    RTRIM(LTRIM(d.PACCNUM))                             AS payee_account_number,
+    RTRIM(LTRIM(d.PBANK))                               AS payee_bank,
+    RTRIM(LTRIM(d.PBANKBRA))                            AS payee_bank_branch,
+    d.EFTENTNO                                          AS eft_entry_number,
+    RTRIM(LTRIM(d.CHKSTAT))                             AS checked_status,
+    RTRIM(LTRIM(d.CHKBY))                               AS checked_by,
+    d.CHKDAT                                            AS checked_at,
+    RTRIM(LTRIM(d.VERISTAT))                            AS verified_status,
+    RTRIM(LTRIM(d.VERIBY))                              AS verified_by,
+    d.VERIDAT                                           AS verified_at,
+    RTRIM(LTRIM(d.ENTRYBY))                             AS entered_by
+FROM CHABRINS_NEW.dbo.CHCHD d
+WHERE d.CHQNO IS NOT NULL;
+';
+
+-- ============================================================================
+-- _032  vw_landlord_advance_repayment_schedule_032  (CHLNTR -> landlord_advance_repayment_schedule, 5,593 rows)
+-- ============================================================================
+-- Per-period amortised loan/advance repayment ledger per landlord. One row per
+-- transaction line (Principal or Interest); a landlord can have several loan
+-- series over time (LNSERIE) -- one landlord seen with 12 distinct series.
+-- client_id : LORDID -> CHLRDS.client_id (LEFT JOIN, 100% match).
+-- loan_amount (LNAMT) vs amount (AMOUNT): differ on ~20% of rows -- not
+-- redundant, kept as two separate columns rather than collapsed into one.
+-- total_amount (TOTALAMT) / balance (BALANC): appear to be a running
+-- opening/closing balance pair but the exact semantics were not fully
+-- reverse-engineered -- mapped as-is under their source names rather than
+-- guessed at with invented column names.
+-- transaction_no (TRANSNO) is 100% unique across all 5,593 rows -- the
+-- natural row key (used as the ORDER BY for schedule_id in
+-- generate_migration_ids_light.py, alongside LORDID/LNSERIE/REPAYNO).
+-- is_paid (STPAID) is 100% = 1 in the current data -- mapped to boolean true,
+-- not dropped, but note there is no observed ''unpaid'' case to validate against.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_landlord_advance_repayment_schedule_032 AS
+SELECT
+    c.client_id                                         AS client_id,
+    -- PRE-STAMPED: client_id from CHLRDS via LORDID
+    RTRIM(LTRIM(l.LORDID))                              AS landlord_code,
+    l.LNSERIE                                           AS loan_series_no,
+    l.LNAMT                                             AS loan_amount,
+    ISNULL(l.AMOUNT, 0)                                 AS amount,
+    l.REPDATE                                           AS repayment_date,
+    l.INTRATE                                           AS interest_rate,
+    l.MONTHH                                            AS repayment_month,
+    l.YEARR                                             AS repayment_year,
+    ISNULL(l.INTRESTAMT, 0)                             AS interest_amount,
+    l.TOTALAMT                                          AS total_amount,
+    l.BALANC                                            AS balance,
+    l.REPAYNO                                           AS repayment_no,
+    CASE WHEN l.STPAID = 1 THEN 1 ELSE 0 END            AS is_paid,
+    RTRIM(LTRIM(l.DOCNO))                               AS document_reference,
+    RTRIM(LTRIM(l.TRANSNO))                             AS transaction_no,
+    RTRIM(LTRIM(l.TRANTYPE))                            AS transaction_type
+FROM CHABRINS_NEW.dbo.CHLNTR l
+LEFT JOIN CHABRINS_NEW.dbo.CHLRDS c
+  ON REPLACE(RTRIM(LTRIM(c.LORDID)), '' '', '''') = REPLACE(RTRIM(LTRIM(l.LORDID)), ''LAN-LAN-'', ''LAN-'')
+WHERE l.LORDID IS NOT NULL AND l.TRANSNO IS NOT NULL;
 ';
 
