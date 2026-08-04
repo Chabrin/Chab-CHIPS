@@ -525,23 +525,160 @@ class ClientReturnsController extends Controller
                 ->orderBy('tenant_name')
                 ->get();
 
+            // Recompute line totals (same formula as details page)
+            $lineTotals = ReturnClient::where('return_code', $return->return_code)
+                ->selectRaw("
+                    SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
+                    SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) ELSE 0 END) as commission,
+                    SUM(CASE WHEN entry_type = 'VAT' THEN net_amount ELSE 0 END)
+                      + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(vat_amount, 0) ELSE 0 END) as vat
+                ")
+                ->first();
+
+            // Pivot lines by tenant + unit
+            $tenantRows = [];
+            $totals = [
+                'monthly_rent'   => 0.0,
+                'rent_arrears'   => 0.0,
+                'vat'            => 0.0,
+                'house_deposit'  => 0.0,
+                'elec_deposit'   => 0.0,
+                'water_deposit'  => 0.0,
+                'elec_bill'      => 0.0,
+                'water_bill'     => 0.0,
+                'service_charge' => 0.0,
+            ];
+
+            foreach ($lines as $l) {
+                $key = ($l->tenant_name ?? '') . '||' . ($l->unit_code ?? '');
+                if (!isset($tenantRows[$key])) {
+                    $tenantRows[$key] = [
+                        'tenant_name'       => $l->tenant_name ?? '-',
+                        'unit_code'         => $l->unit_code ?? '-',
+                        'monthly_rent'      => 0.0,
+                        'rent_arrears'      => 0.0,
+                        'vat'               => 0.0,
+                        'house_deposit_amt' => 0.0,
+                        'house_deposit_ref' => '',
+                        'elec_deposit_amt'  => 0.0,
+                        'elec_deposit_ref'  => '',
+                        'water_deposit_amt' => 0.0,
+                        'water_deposit_ref' => '',
+                        'elec_bill'         => 0.0,
+                        'water_bill'        => 0.0,
+                        'service_charge'    => 0.0,
+                        'remarks'           => '',
+                    ];
+                }
+
+                $et  = strtoupper(trim($l->entry_type ?? ''));
+                $ed  = strtoupper(trim($l->entry_description ?? ''));
+                $amt = (float) ($l->net_amount ?? 0);
+                $ref = $l->transaction_ref ?? '';
+
+                if (str_contains($et, 'HOUSE') && str_contains($et, 'DEPOSIT')) {
+                    $tenantRows[$key]['house_deposit_amt'] += $amt;
+                    if ($ref) $tenantRows[$key]['house_deposit_ref'] = $ref;
+                    $totals['house_deposit'] += $amt;
+                } elseif ((str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC')) && str_contains($et, 'DEPOSIT')) {
+                    $tenantRows[$key]['elec_deposit_amt'] += $amt;
+                    if ($ref) $tenantRows[$key]['elec_deposit_ref'] = $ref;
+                    $totals['elec_deposit'] += $amt;
+                } elseif (str_contains($et, 'WATER') && str_contains($et, 'DEPOSIT')) {
+                    $tenantRows[$key]['water_deposit_amt'] += $amt;
+                    if ($ref) $tenantRows[$key]['water_deposit_ref'] = $ref;
+                    $totals['water_deposit'] += $amt;
+                } elseif (str_contains($et, 'RENT ARREARS') || str_contains($ed, 'RENT ARREARS')) {
+                    $tenantRows[$key]['rent_arrears'] += $amt;
+                    $totals['rent_arrears'] += $amt;
+                } elseif (str_contains($et, 'RENT') || str_contains($ed, 'RENT')) {
+                    $tenantRows[$key]['monthly_rent'] += $amt;
+                    $totals['monthly_rent'] += $amt;
+                } elseif (str_contains($et, 'ELEC') || str_contains($et, 'ELECTRIC') || str_contains($ed, 'ELEC') || str_contains($ed, 'ELECTRIC')) {
+                    $tenantRows[$key]['elec_bill'] += $amt;
+                    $totals['elec_bill'] += $amt;
+                } elseif (str_contains($et, 'WATER') || str_contains($ed, 'WATER')) {
+                    $tenantRows[$key]['water_bill'] += $amt;
+                    $totals['water_bill'] += $amt;
+                } elseif (str_contains($et, 'SERVICE') || str_contains($ed, 'SERVICE')) {
+                    $tenantRows[$key]['service_charge'] += $amt;
+                    $totals['service_charge'] += $amt;
+                }
+
+                if ((float) ($l->vat_amount ?? 0) > 0) {
+                    $tenantRows[$key]['vat'] += (float) $l->vat_amount;
+                    $totals['vat'] += (float) $l->vat_amount;
+                }
+
+                if (!empty($l->remarks)) {
+                    $tenantRows[$key]['remarks'] = trim($tenantRows[$key]['remarks'] . ' ' . $l->remarks);
+                }
+            }
+
+            // Financial summary
+            $commTotal      = (float) ($return->commission_total ?? 0);
+            $commission     = (float) ($lineTotals->commission ?? 0);
+            $vat            = (float) ($lineTotals->vat ?? 0);
+            $balAfterComm   = $commTotal - $commission;
+            $balLessVat     = $balAfterComm - $vat;
+            $houseDeposits  = $totals['house_deposit'];
+            $waterElecBills = $totals['elec_bill'] + $totals['water_bill'];
+
+            $summary = [
+                'total_rent'       => (float) ($lineTotals->rent_total ?? 0),
+                'comm_total'       => $commTotal,
+                'commission'       => $commission,
+                'bal_after_comm'   => $balAfterComm,
+                'vat'              => $vat,
+                'bal_less_vat'     => $balLessVat,
+                'house_deposits'   => $houseDeposits,
+                'water_elec_bills' => $waterElecBills,
+                'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
+            ];
+
             $logoPath = public_path('assets/images/logo/logo_dark.png');
             $logoSrc = file_exists($logoPath)
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
                 : '';
 
-            $pdf = Pdf::loadView('property.returns.unprocessed-pdf', [
-                'return' => $return,
-                'lines' => $lines,
-                'logoSrc' => $logoSrc,
-            ]);
-            $pdf->setPaper('A4', 'portrait');
+            $landlordName = $return->landlord_name
+                ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
+            $propertyName = $return->property_name
+                ?: DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->value('property_name');
+
+            $propertyDisplay = $propertyName
+                ? trim($propertyName . ' - ' . ($return->property_code ?? ''))
+                : ($return->property_code ?? '-');
+            $landlordDisplay = $landlordName
+                ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
+                : ($return->landlord_code ?? '-');
+
+            $signoff = [
+                'prepared' => [
+                    'name' => $return->prepared_by ?? '-',
+                    'date' => $return->prepared_date ? \Carbon\Carbon::parse($return->prepared_date)->format('d/m/Y') : '-'
+                ],
+                'checked' => [
+                    'name' => $return->checked_by ?? '-',
+                    'date' => $return->checked_date ? \Carbon\Carbon::parse($return->checked_date)->format('d/m/Y') : '-'
+                ],
+                'approved' => [
+                    'name' => $return->approved_by ?? '-',
+                    'date' => $return->approved_date ? \Carbon\Carbon::parse($return->approved_date)->format('d/m/Y') : '-'
+                ]
+            ];
+
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff', 'propertyDisplay', 'landlordDisplay');
+
+            $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
+            $pdf->setPaper('A4', 'landscape');
 
             $dompdf = $pdf->getDomPDF();
             $dompdf->render();
             $canvas = $dompdf->get_canvas();
             $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-            $canvas->page_text(470, 815, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
 
             $fileName = 'Unprocessed_Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token = request()->query('download_token');
@@ -926,8 +1063,8 @@ class ClientReturnsController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => $requestedPropertyId
-                        ? 'No approved invoices found for this property in the selected period.'
-                        : 'No approved invoices found for the selected period.'
+                        ? 'No  invoices found for this property in the selected period.'
+                        : 'No  invoices found for the selected period.'
                 ], 422);
             }
 
