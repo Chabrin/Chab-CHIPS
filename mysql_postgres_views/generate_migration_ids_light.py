@@ -559,10 +559,12 @@ def stamp_light_fk_columns(conn):
         UPDATE t SET t.[client_id] = ref.[client_id]
         FROM [CHBLOCKS] t
         INNER JOIN [CHLRDS] ref
-          ON RTRIM(LTRIM(ref.LORDID)) = RTRIM(LTRIM(t.LLORDID))
-          OR RTRIM(LTRIM(ref.LORDID)) = REPLACE(RTRIM(LTRIM(t.LLORDID)), 'LAN-', '')
+          ON REPLACE(RTRIM(LTRIM(ref.LORDID)), 'LAN-', '') = REPLACE(RTRIM(LTRIM(t.LLORDID)), 'LAN-', '')
         WHERE ref.[client_id] IS NOT NULL
-    """, 'LLORDID -> CHLRDS.LORDID')
+    """, 'LLORDID -> CHLRDS.LORDID  (BUGFIX 2026-08-05: REPLACE was only applied to '
+         'LLORDID, so rows where LLORDID already lacked the LAN- prefix never matched '
+         "CHLRDS.LORDID which always has it. Verified: was 482/1889 matched, now 1691/1889 -- "
+         'the remaining 198 have a genuinely NULL/blank LLORDID in the source.)')
 
     _stamp('CHBLOCKS', ['field_officer_id', 'zone_supervisor_id', 'zone_manager_id'], """
         UPDATE t
@@ -671,9 +673,11 @@ def stamp_light_fk_columns(conn):
         UPDATE t SET t.[client_id] = ref.[client_id]
         FROM [CHRACT] t
         INNER JOIN [CHLRDS] ref
-          ON RTRIM(LTRIM(ref.LORDID)) = REPLACE(RTRIM(LTRIM(t.LORDID)), 'LAN-', '')
+          ON REPLACE(RTRIM(LTRIM(ref.LORDID)), 'LAN-', '') = REPLACE(RTRIM(LTRIM(t.LORDID)), 'LAN-', '')
         WHERE ref.[client_id] IS NOT NULL
-    """, 'LORDID (strip LAN-) -> CHLRDS')
+    """, 'LORDID (strip LAN- from both sides) -> CHLRDS  (BUGFIX 2026-08-05: REPLACE was '
+         'only applied to t.LORDID, but CHRACT.LORDID always keeps its LAN- prefix, so this '
+         'matched 0/37106 rows. Verified fix: now matches 37106/37106.)')
 
     _stamp('CHRACT', ['return_id'], """
         UPDATE t SET t.[return_id] = ref.[return_id]
@@ -773,9 +777,10 @@ def stamp_light_fk_columns(conn):
         UPDATE t SET t.[client_id] = ref.[client_id]
         FROM [CHLACC] t
         INNER JOIN [CHLRDS] ref
-          ON RTRIM(LTRIM(ref.LORDID)) = REPLACE(RTRIM(LTRIM(t.LORDID)), 'LAN-', '')
+          ON REPLACE(RTRIM(LTRIM(ref.LORDID)), 'LAN-', '') = REPLACE(RTRIM(LTRIM(t.LORDID)), 'LAN-', '')
         WHERE ref.[client_id] IS NOT NULL
-    """, 'LORDID (strip LAN-) -> CHLRDS')
+    """, 'LORDID (strip LAN- from both sides) -> CHLRDS  (BUGFIX 2026-08-05: same issue as '
+         'CHRACT above -- matched 0/108550 rows before, 108550/108550 after.)')
 
     _stamp('CHLACC', ['property_id'], """
         UPDATE t SET t.[property_id] = blk.[property_id]
