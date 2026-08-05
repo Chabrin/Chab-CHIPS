@@ -777,6 +777,34 @@
         align-items: flex-start;
     }
 
+    #unitsTable td,
+    #unitsTable th {
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+        vertical-align: middle;
+    }
+
+    .edit-unit-btn {
+        width: 24px;
+        height: 24px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        color: #6c757d;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .edit-unit-btn:hover {
+        background-color: #eef3fb;
+        color: #3598db;
+    }
+
+    .edit-unit-btn .material-symbols-outlined {
+        font-size: 15px;
+    }
+
     .info-label {
         flex: 0 0 45%;
         max-width: 45%;
@@ -975,7 +1003,7 @@
                         }
                         return `
                             <button type="button" class="btn btn-link p-0 edit-unit-btn" title="Edit Unit" data-row='${JSON.stringify(row)}'>
-                                <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
+                                <span class="material-symbols-outlined">edit</span>
                             </button>
                         `;
                     }
