@@ -65,6 +65,7 @@
 --   _054  vw_sys_hr_employee_contracts_279_repeat_054
 --   _055  vw_sys_hr_payroll_deductions_register_055
 --   _056  vw_sys_hr_payroll_elements_repeat_staff_positions_id_056
+--   _057  vw_employee_deductions_perperiod_057  (CHPEED -> employee_deductions_perperiod)
 -- ============================================================================
 
 USE CHABRINS_NEW;
@@ -2148,5 +2149,47 @@ WHERE p.EDCODE NOT IN (
   AND p.EDAMT        != 0
   AND s.position_id  IS NOT NULL
 GROUP BY el.id, s.position_id;
+';
+
+-- ============================================================================
+-- _057  vw_employee_deductions_perperiod_057  (CHPEED -> employee_deductions_perperiod, 159,099 rows)
+-- ============================================================================
+-- Per-employee extra one-off/recurring deductions beyond standard payroll
+-- elements. (staff_number, payroll_year, payroll_month, element_code) is
+-- 100% unique across all rows -- clean natural key, no dedup needed.
+-- staff_id      : EMPNUMB -> vw_sys_staff_037.staff_number (LEFT JOIN, ~99.9% match)
+--   NOTE: deliberately joined on staff_number (the natural key column the
+--   view exposes for this purpose), NOT TRY_CAST(EMPNUMB AS INT) = id like
+--   some of the merged HR views (_047/_048/_049/_050/_053/_055/_056) do --
+--   EMPNUMB has inconsistent zero-padding in CHSTFF (e.g. "0" vs "001"), so
+--   varchar-sorted ROW_NUMBER() id and TRY_CAST-to-int are not guaranteed to
+--   line up. That existing pattern was preserved as-is where it was already
+--   used (not modified during the HR merge), but not propagated into new work.
+-- payroll_element_id : EDCODE -> vw_sys_hr_payroll_elements_039.mssql_ed_code (LEFT JOIN, ~99.99% match)
+-- is_locked (LOCKD): 99.1% of rows are 1 (locked); mapped to boolean.
+-- audit_user (AUDTUSR) is only ~5% populated and mixed format (numeric ids
+-- like "137" alongside usernames like "murungi") -- kept as raw text, not
+-- resolved to an FK.
+EXEC sp_executesql N'
+CREATE OR ALTER VIEW vw_employee_deductions_perperiod_057 AS
+SELECT
+    staff.id                                            AS staff_id,
+    -- PRE-STAMPED: staff_id from CHSTFF via EMPNUMB (vw_sys_staff_037)
+    RTRIM(LTRIM(p.EMPNUMB))                             AS staff_number,
+    el.id                                                AS payroll_element_id,
+    -- PRE-STAMPED: payroll_element_id from CHPREDS via EDCODE (vw_sys_hr_payroll_elements_039)
+    RTRIM(LTRIM(p.EDCODE))                              AS element_code,
+    p.PRYEAR                                            AS payroll_year,
+    p.PRMNTH                                            AS payroll_month,
+    ISNULL(p.EDAMT, 0)                                  AS amount,
+    CASE WHEN p.LOCKD = 1 THEN 1 ELSE 0 END             AS is_locked,
+    RTRIM(LTRIM(p.AUDTUSR))                             AS audit_user,
+    p.AUDDATE                                           AS audited_at
+FROM CHABRINS_NEW.dbo.CHPEED p
+LEFT JOIN vw_sys_staff_037 staff
+  ON staff.staff_number = RTRIM(LTRIM(p.EMPNUMB))
+LEFT JOIN vw_sys_hr_payroll_elements_039 el
+  ON el.mssql_ed_code = RTRIM(LTRIM(p.EDCODE))
+WHERE p.EMPNUMB IS NOT NULL AND p.EDCODE IS NOT NULL;
 ';
 

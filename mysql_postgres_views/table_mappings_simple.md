@@ -177,8 +177,7 @@ CHSECTS -> HR Department Sections — 32 rows
 CHEXS -> Allocation / Exchange Settings — 6 rows
 
 -- >> HR EXTRAS
-CHPEED -> Per-Employee Extra Deduction per Period — 153,660 rows
-Additional one-off/recurring deductions beyond payroll elements.
+CHPEED -> MAPPED (2026-08-05) -> employee_deductions_perperiod (see other_views_mod.sql _057)
 CHGRDS -> Salary Grades — 2 rows
 CHEMPT -> Employment Types — 3 rows
 CHSTFFE -> Staff Employment Change History — 74 rows

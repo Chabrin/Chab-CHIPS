@@ -92,6 +92,10 @@
         {
             "src_full": "dbo.vw_cb_landlord_charge_pairs_026",
             "tgt_full": "chips_db_v3.cb_landlord_charge_pairs"
+        },
+        {
+            "src_full": "dbo.vw_employee_deductions_perperiod_057",
+            "tgt_full": "chips_db_v3.employee_deductions_perperiod"
         }
     ]
 }

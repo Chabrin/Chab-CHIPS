@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "mappings": [
+    { "src_full": "dbo.vw_sys_pm_properties_001", "tgt_full": "chips_db_v3.sys_pm_properties" },
+    { "src_full": "dbo.vw_sys_pm_clients_landlords_002", "tgt_full": "chips_db_v3.sys_pm_clients" },
+    { "src_full": "dbo.vw_sys_pm_units_003", "tgt_full": "chips_db_v3.sys_pm_units" },
+    { "src_full": "dbo.vw_sys_pm_clients_tenants_004", "tgt_full": "chips_db_v3.sys_pm_clients" },
+    { "src_full": "dbo.vw_sys_set_banks_035", "tgt_full": "chips_db_v3.sys_set_banks" },
+    { "src_full": "dbo.vw_um_tax_bands_040", "tgt_full": "chips_db_v3.um_tax_bands" },
+    { "src_full": "dbo.vw_staff_property_mappings_027", "tgt_full": "chips_db_v3.staff_property_mappings" },
+    { "src_full": "dbo.vw_landlord_property_mappings_029", "tgt_full": "chips_db_v3.landlord_property_mappings" },
+    { "src_full": "dbo.vw_cb_payment_vouchers_headers_new_021", "tgt_full": "chips_db_v3.cb_payment_vouchers_headers_new" },
+    { "src_full": "dbo.vw_sys_set_banks_branches_036", "tgt_full": "chips_db_v3.sys_set_banks_branches" },
+    { "src_full": "dbo.vw_sys_staff_037", "tgt_full": "chips_db_v3.sys_staff" },
+    { "src_full": "dbo.vw_sys_pm_clients_17_repeat_051", "tgt_full": "chips_db_v3.sys_pm_clients_17_repeat" },
+    { "src_full": "dbo.vw_sys_pm_clients_19_repeat_052", "tgt_full": "chips_db_v3.sys_pm_clients_19_repeat" }
+  ]
+}
