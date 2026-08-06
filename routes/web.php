@@ -231,7 +231,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Skip Step (for flexible workflow)
     Route::post('/discipline/tracker/case/{caseId}/skip-step', [DisciplineTrackerController::class, 'skipStep'])->name('discipline.tracker.skip.step');
 
-
     // Employee Termination Routes
     Route::get('/hr/employee/termination', [StaffController::class, 'employeeTerminationIndex'])->name('employee.termination.index');
     Route::get('/hr/employees/termination/{encryptedTerminationID}', [StaffController::class, 'employeeTerminationShow'])->name('employee.termination.show');
@@ -1277,6 +1276,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/users/ajax/check-email', [UsersController::class, 'checkEmailExists'])->name('user.ajax.check-email');
 
     Route::get('/user/profile', [LoginController::class, 'profile'])->name('user.profile');
+    Route::post('/user/password/update', [LoginController::class, 'updatePassword'])->name('user.password.update');
     Route::get('/email/templates', [EmailTemplateController::class, 'index'])->name('email_templates.index');
 
     Route::get('/confirm/templates', function () {

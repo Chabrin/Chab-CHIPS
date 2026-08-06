@@ -186,6 +186,7 @@ class UsersController extends Controller
             $user->email = $validated['email'];
             if (!empty($validated['password'])) {
                 $user->password = $validated['password'];
+                $user->requireReset = true;
             }
             $user->save();
 

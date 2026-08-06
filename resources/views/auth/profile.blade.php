@@ -405,6 +405,12 @@
                         </div>
                     </div>
 
+                    {{-- Change Password --}}
+                    <div class="pf-section">
+                        <div class="pf-section-title">Change Password</div>
+                        @include('partials.password-change-form', ['context' => 'profile'])
+                    </div>
+
                     {{-- Companies --}}
                     @if($assignedCompanies && count($assignedCompanies) > 0)
                     <div class="pf-section">

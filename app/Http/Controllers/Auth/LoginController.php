@@ -434,6 +434,62 @@ class LoginController extends Controller
         }
     }
 
+    public function updatePassword(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['success' => false, 'error' => 'Not authenticated'], 401);
+            }
+
+            $validated = $request->validate([
+                'current_password' => 'required|string',
+                'new_password' => 'required|string|min:8|confirmed',
+            ]);
+
+            if (!Hash::check($validated['current_password'], $user->password)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'current_password' => ['The current password is incorrect.'],
+                ]);
+            }
+
+            if (Hash::check($validated['new_password'], $user->password)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'new_password' => ['New password must be different from the current password.'],
+                ]);
+            }
+
+            $user->password = $validated['new_password'];
+            $user->requireReset = false;
+            $user->save();
+
+            try {
+                DB::table('password_securities')->updateOrInsert(
+                    ['user_id' => $user->id],
+                    [
+                        'password_changed_at' => Carbon::now(),
+                        'password_updated_at' => Carbon::now(),
+                        'updated_at' => Carbon::now(),
+                    ]
+                );
+            } catch (\Exception $securityException) {
+                Log::warning('Could not update password_securities table', [
+                    'user_id' => $user->id,
+                    'error' => $securityException->getMessage(),
+                ]);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Password updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating password: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to update password'], 500);
+        }
+    }
+
     /**
      * Get the user's real IP address, handling proxies and load balancers.
      */

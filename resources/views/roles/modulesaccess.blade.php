@@ -75,6 +75,24 @@
         margin: 0;
     }
 
+    .module-select-all-wrap {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+        padding-left: 8px;
+    }
+
+    .module-select-all-wrap .form-check-input {
+        margin: 0 6px 0 0;
+    }
+
+    .module-select-all-wrap label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        cursor: pointer;
+        margin: 0;
+    }
+
     .module-icon {
         color: #6c757d;
         font-size: 16px;
@@ -98,6 +116,8 @@
                     <div class="condensed-header d-flex align-items-center">
                         <h6 class="mb-0 me-auto">Modules for: <strong>{{ $role->name }}</strong></h6>
                         <div class="d-flex gap-2">
+                            <button id="select-all-modules-btn" class="btn btn-outline-primary btn-sm" type="button">Select All</button>
+                            <button id="unselect-all-modules-btn" class="btn btn-outline-secondary btn-sm" type="button">Unselect All</button>
                             <button id="save-modules-btn" class="btn btn-primary btn-sm d-flex align-items-center" type="button">
                                 <span class="spinner-border spinner-border-sm d-none me-1" id="save-spinner" role="status"></span>
                                 <span class="material-symbols-outlined">
@@ -122,13 +142,17 @@
                                     <span class="material-symbols-outlined module-icon me-2">{!! $module->icon !!}</span>
                                     @endif
                                     <h6 class="module-title">{{ $module->module_name }}</h6>
+                                    <div class="module-select-all-wrap">
+                                        <input class="form-check-input module-select-all" type="checkbox" data-module-id="{{ $module->id }}" id="module_select_all_{{ $module->id }}">
+                                        <label for="module_select_all_{{ $module->id }}">Select All</label>
+                                    </div>
                                 </div>
                                 <div class="card-body">
                                     <div class="row g-1">
                                         @foreach($module->submodules as $sub)
                                         <div class="col-lg-3 col-md-4 col-sm-6">
                                             <div class="condensed-form-check">
-                                                <input class="form-check-input" type="checkbox" name="submodules[]" value="{{ $sub->id }}" id="submodule_{{ $sub->id }}" {{ in_array($sub->id, $assigned) ? 'checked' : '' }}>
+                                                <input class="form-check-input submodule-checkbox" type="checkbox" name="submodules[]" value="{{ $sub->id }}" id="submodule_{{ $sub->id }}" data-module-id="{{ $module->id }}" {{ in_array($sub->id, $assigned) ? 'checked' : '' }}>
                                                 <label class="form-check-label" for="submodule_{{ $sub->id }}">{{ $sub->sub_module_name }}</label>
                                             </div>
                                         </div>
@@ -152,6 +176,42 @@
 
 <script>
     $(function() {
+        function refreshModuleSelectAll(moduleId) {
+            var $moduleChecks = $('.submodule-checkbox[data-module-id="' + moduleId + '"]');
+            var total = $moduleChecks.length;
+            var checkedCount = $moduleChecks.filter(':checked').length;
+            var $selectAll = $('.module-select-all[data-module-id="' + moduleId + '"]');
+
+            $selectAll.prop('checked', total > 0 && checkedCount === total);
+            $selectAll.prop('indeterminate', checkedCount > 0 && checkedCount < total);
+        }
+
+        // Set initial state of each module's "Select All" checkbox based on preselected submodules
+        $('.module-select-all').each(function() {
+            refreshModuleSelectAll($(this).data('module-id'));
+        });
+
+        $('#select-all-modules-btn').on('click', function() {
+            $('.submodule-checkbox').prop('checked', true);
+            $('.module-select-all').prop('checked', true).prop('indeterminate', false);
+        });
+
+        $('#unselect-all-modules-btn').on('click', function() {
+            $('.submodule-checkbox').prop('checked', false);
+            $('.module-select-all').prop('checked', false).prop('indeterminate', false);
+        });
+
+        $('.module-select-all').on('change', function() {
+            var moduleId = $(this).data('module-id');
+            var checked = $(this).is(':checked');
+            $(this).prop('indeterminate', false);
+            $('.submodule-checkbox[data-module-id="' + moduleId + '"]').prop('checked', checked);
+        });
+
+        $(document).on('change', '.submodule-checkbox', function() {
+            refreshModuleSelectAll($(this).data('module-id'));
+        });
+
         $('#save-modules-btn').on('click', function() {
             var $btn = $(this);
             var $spinner = $('#save-spinner');
