@@ -1,3 +1,0 @@
-- Move data from chips local to pg/confirm:
-  Select Insert Tables:
-  - 
