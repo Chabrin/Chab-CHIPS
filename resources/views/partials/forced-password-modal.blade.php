@@ -8,6 +8,15 @@
                 <p class="text-muted small">An administrator has reset your password. You must set a new password before continuing.</p>
                 @include('partials.password-change-form', ['context' => 'forced'])
             </div>
+            <div class="modal-footer justify-content-start">
+                <form method="POST" action="{{ route('logout') }}" style="display: inline;">
+                    @csrf
+                    <a href="#" onclick="event.preventDefault(); this.closest('form').submit();" class="d-flex align-items-center text-decoration-none text-muted small">
+                        <span class="material-symbols-outlined" style="font-size:16px;">logout</span>
+                        <span class="ms-1">Log out instead</span>
+                    </a>
+                </form>
+            </div>
         </div>
     </div>
 </div>
