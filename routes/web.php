@@ -1273,6 +1273,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/users/ajax/update/{id}', [UsersController::class, 'updateSystemUser'])->name('user.ajax.update');
     Route::post('/users/ajax/suspend/{id}', [UsersController::class, 'suspendUser'])->name('user.ajax.suspend');
     Route::post('/users/ajax/activate/{id}', [UsersController::class, 'activateUser'])->name('user.ajax.activate');
+    Route::post('/users/ajax/bulk-activate', [UsersController::class, 'bulkActivateUsers'])->name('user.ajax.bulk-activate');
+    Route::post('/users/ajax/bulk-suspend', [UsersController::class, 'bulkSuspendUsers'])->name('user.ajax.bulk-suspend');
+    Route::post('/users/ajax/bulk-reset-password', [UsersController::class, 'bulkResetPassword'])->name('user.ajax.bulk-reset-password');
     Route::get('/users/ajax/check-email', [UsersController::class, 'checkEmailExists'])->name('user.ajax.check-email');
 
     Route::get('/user/profile', [LoginController::class, 'profile'])->name('user.profile');
