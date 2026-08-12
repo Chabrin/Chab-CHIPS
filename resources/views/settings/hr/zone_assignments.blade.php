@@ -239,7 +239,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 <style>
     .staff-name-link,
     .text-link {
@@ -587,3 +587,4 @@
         });
     });
 </script>
+@endsection

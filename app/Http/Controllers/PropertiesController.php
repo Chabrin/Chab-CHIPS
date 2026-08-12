@@ -125,7 +125,8 @@ class PropertiesController extends Controller
                 'units',
                 'leaseAgreements'
             ])
-                ->findOrFail($id);
+            ->findOrFail($id);
+
 
             $unitTopologies = \App\Models\UnitTopology::orderBy('topology_name')->get();
             $unitCategories = \App\Models\UnitCategory::orderBy('category_name')->get();

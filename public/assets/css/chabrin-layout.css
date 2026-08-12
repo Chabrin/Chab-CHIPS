@@ -1211,3 +1211,11 @@ label {
         padding: 4px 6px;
     }
 }
+
+/* Chromium/Windows sometimes defers the checked-state repaint (background,
+   border, checkmark image) on custom-styled native checkboxes until another
+   nearby paint event forces it — showing as a one-click lag. Hint the browser
+   to prepare an optimized paint path for those properties up front. */
+.form-check-input {
+    will-change: background-color, border-color, box-shadow;
+}
