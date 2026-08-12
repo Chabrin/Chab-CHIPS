@@ -1,59 +1,59 @@
 <style>
-.ps-wrap { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 13px; color: #1e293b; max-width: 860px; margin: 0 auto; }
+.ps-wrap { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 13px; color: #495057; max-width: 860px; margin: 0 auto; }
 
 /* Header */
 .ps-header { display: flex; justify-content: space-between; align-items: center;
-             border-bottom: 3px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 16px; }
-.ps-co-name { font-size: 22px; font-weight: 700; color: #1d4ed8; letter-spacing: -0.3px; }
-.ps-co-sub  { font-size: 11px; color: #94a3b8; margin-top: 2px; }
-.ps-slip-label  { font-size: 15px; font-weight: 700; color: #0f172a; letter-spacing: 1px; text-align: right; }
-.ps-slip-period { font-size: 13px; color: #64748b; text-align: right; margin-top: 3px; }
+             border-bottom: 3px solid #3598db; padding-bottom: 12px; margin-bottom: 16px; }
+.ps-co-name { font-size: 22px; font-weight: 700; color: #3598db; letter-spacing: -0.3px; }
+.ps-co-sub  { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.ps-slip-label  { font-size: 15px; font-weight: 700; color: #0a0a0a; letter-spacing: 1px; text-align: right; }
+.ps-slip-period { font-size: 13px; color: #6b7280; text-align: right; margin-top: 3px; }
 
 /* Info grid */
 .ps-info { width: 100%; border-collapse: collapse; margin-bottom: 18px;
-           border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
-.ps-info td { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+           border: 1px solid #d9ebf7; border-radius: 6px; overflow: hidden; }
+.ps-info td { padding: 7px 12px; border-bottom: 1px solid #f0f7fd; vertical-align: middle; }
 .ps-info tr:last-child td { border-bottom: none; }
-.ps-info tr:nth-child(odd)  { background: #f8fafc; }
+.ps-info tr:nth-child(odd)  { background: #f5fafd; }
 .ps-info tr:nth-child(even) { background: #fff; }
-.ps-lbl { color: #64748b; font-size: 12px; width: 14%; white-space: nowrap; }
-.ps-val { color: #0f172a; font-weight: 600; font-size: 13px; width: 36%; }
+.ps-lbl { color: #6b7280; font-size: 12px; width: 14%; white-space: nowrap; }
+.ps-val { color: #0a0a0a; font-weight: 600; font-size: 13px; width: 36%; }
 
 /* Main table */
 .ps-tbl { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-.ps-tbl th, .ps-tbl td { border: 1px solid #e2e8f0; }
-.ps-sec { background: #1d4ed8; color: #fff; font-size: 11px; font-weight: 700;
+.ps-tbl th, .ps-tbl td { border: 1px solid #d9ebf7; }
+.ps-sec { background: #3598db; color: #fff; font-size: 11px; font-weight: 700;
           letter-spacing: 0.7px; padding: 8px 12px; text-transform: uppercase; }
-.ps-col { background: #dbeafe; color: #1e3a8a; font-size: 11px; font-weight: 700; padding: 6px 12px; }
+.ps-col { background: #d9ebf7; color: #0a0a0a; font-size: 11px; font-weight: 700; padding: 6px 12px; }
 .ps-col-r { text-align: right; }
-.ps-tbl tbody tr:nth-child(odd)  td { background: #f8fafc; }
+.ps-tbl tbody tr:nth-child(odd)  td { background: #f5fafd; }
 .ps-tbl tbody tr:nth-child(even) td { background: #fff; }
 .ps-tbl tbody td { padding: 6px 12px; font-size: 13px; }
 .ps-amt { text-align: right; font-variant-numeric: tabular-nums; }
-.ps-total td { background: #1e3a8a !important; color: #fff !important;
+.ps-total td { background: #3598db !important; color: #fff !important;
                font-weight: 700; font-size: 13px; padding: 8px 12px; }
 
 /* Tax strip */
 .ps-tax { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-.ps-tax-hdr td { background: #0f172a; color: #fff; font-size: 11px; font-weight: 700;
+.ps-tax-hdr td { background: #3598db; color: #fff; font-size: 11px; font-weight: 700;
                  letter-spacing: 0.7px; padding: 7px 12px; text-transform: uppercase; }
-.ps-tax td { border: 1px solid #e2e8f0; padding: 6px 12px; font-size: 13px; }
-.ps-tax tr:nth-child(2) td { background: #f8fafc; }
+.ps-tax td { border: 1px solid #d9ebf7; padding: 6px 12px; font-size: 13px; }
+.ps-tax tr:nth-child(2) td { background: #f5fafd; }
 .ps-tax tr:nth-child(3) td { background: #fff; }
-.ps-tx-lbl { color: #64748b; width: 27%; }
-.ps-tx-val { text-align: right; font-weight: 600; color: #0f172a; width: 23%; }
+.ps-tx-lbl { color: #6b7280; width: 27%; }
+.ps-tx-val { text-align: right; font-weight: 600; color: #0a0a0a; width: 23%; }
 
 /* Net Pay */
 .ps-net { width: 100%; border-collapse: collapse; margin-bottom: 16px; border-radius: 6px; overflow: hidden; }
 .ps-net td { padding: 10px 14px; }
-.ps-net-label  { background: #0f172a; color: #fff; font-size: 13px; font-weight: 700;
+.ps-net-label  { background: #3598db; color: #fff; font-size: 13px; font-weight: 700;
                  letter-spacing: 0.5px; width: 65%; }
-.ps-net-amount { background: #0f172a; color: #4ade80; font-size: 18px; font-weight: 700;
+.ps-net-amount { background: #3598db; color: #fff; font-size: 18px; font-weight: 700;
                  text-align: right; width: 35%; }
 
 /* Footer */
-.ps-footer { text-align: center; font-size: 11px; color: #94a3b8; padding-top: 10px;
-             border-top: 1px solid #e2e8f0; margin-top: 4px; }
+.ps-footer { text-align: center; font-size: 11px; color: #9ca3af; padding-top: 10px;
+             border-top: 1px solid #d9ebf7; margin-top: 4px; }
 </style>
 
 <div class="ps-wrap">
@@ -183,7 +183,7 @@
             <td class="ps-tx-lbl">Personal Relief</td>
             <td class="ps-tx-val">2,400.00</td>
             <td class="ps-tx-lbl">PAYE Payable</td>
-            <td class="ps-tx-val" style="color:#1d4ed8;">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
+            <td class="ps-tx-val" style="color:#3598db;">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
         </tr>
     </table>
 

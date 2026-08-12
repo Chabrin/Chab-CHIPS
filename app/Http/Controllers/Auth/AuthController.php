@@ -289,7 +289,7 @@ class AuthController extends Controller
             }
 
             //Update password and clear reset token
-            $user->password = Hash::make($password);
+            $user->password = $password;
             $user->reset_token = null;
             $user->reset_token_expires_at = null;
             $user->save();
@@ -501,7 +501,7 @@ class AuthController extends Controller
             }
 
             // Update password and activation flags
-            $user->password = Hash::make($password);
+            $user->password = $password;
             $user->user_activated = 1;
             $user->activated_at = Carbon::now();
             $user->is_active = 1; // ensure user can login

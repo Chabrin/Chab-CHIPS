@@ -16,6 +16,7 @@ class ViewServiceProvider extends ServiceProvider
             if (!$user) {
                 $view->with('menus', []);
                 $view->with('superModuleMenus', []);
+                $view->with('forcePasswordChange', false);
                 return;
             }
 
@@ -77,6 +78,7 @@ class ViewServiceProvider extends ServiceProvider
 
             $view->with('menus', $ungroupedMenus);
             $view->with('superModuleMenus', $superModuleMenus);
+            $view->with('forcePasswordChange', (bool) ($user->requireReset ?? false));
         });
     }
 }

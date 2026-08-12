@@ -231,7 +231,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Skip Step (for flexible workflow)
     Route::post('/discipline/tracker/case/{caseId}/skip-step', [DisciplineTrackerController::class, 'skipStep'])->name('discipline.tracker.skip.step');
 
-
     // Employee Termination Routes
     Route::get('/hr/employee/termination', [StaffController::class, 'employeeTerminationIndex'])->name('employee.termination.index');
     Route::get('/hr/employees/termination/{encryptedTerminationID}', [StaffController::class, 'employeeTerminationShow'])->name('employee.termination.show');
@@ -1274,9 +1273,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/users/ajax/update/{id}', [UsersController::class, 'updateSystemUser'])->name('user.ajax.update');
     Route::post('/users/ajax/suspend/{id}', [UsersController::class, 'suspendUser'])->name('user.ajax.suspend');
     Route::post('/users/ajax/activate/{id}', [UsersController::class, 'activateUser'])->name('user.ajax.activate');
+    Route::post('/users/ajax/bulk-activate', [UsersController::class, 'bulkActivateUsers'])->name('user.ajax.bulk-activate');
+    Route::post('/users/ajax/bulk-suspend', [UsersController::class, 'bulkSuspendUsers'])->name('user.ajax.bulk-suspend');
+    Route::post('/users/ajax/bulk-reset-password', [UsersController::class, 'bulkResetPassword'])->name('user.ajax.bulk-reset-password');
     Route::get('/users/ajax/check-email', [UsersController::class, 'checkEmailExists'])->name('user.ajax.check-email');
 
     Route::get('/user/profile', [LoginController::class, 'profile'])->name('user.profile');
+    Route::post('/user/password/update', [LoginController::class, 'updatePassword'])->name('user.password.update');
     Route::get('/email/templates', [EmailTemplateController::class, 'index'])->name('email_templates.index');
 
     Route::get('/confirm/templates', function () {

@@ -17,10 +17,40 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        <div id="bulkActionsBar" class="d-none flex-column gap-2 mb-3 p-2" style="background:#f0f7fd;border:1px solid #d9ebf7;border-radius:6px;">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="small fw-semibold" id="bulkSelectedCount">0 selected</span>
+                                <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="collapse" data-bs-target="#selectedUsersPanel">
+                                    View selected
+                                </button>
+                                <div class="ms-auto d-flex gap-2">
+                                    @permission('delete_users')
+                                    <button class="btn btn-outline-primary btn-sm d-flex align-items-center" id="bulkActivateBtn" type="button">
+                                        <span class="material-symbols-outlined" style="font-size:16px;">change_circle</span>
+                                        <span class="ms-1">Activate</span>
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm d-flex align-items-center" id="bulkSuspendBtn" type="button">
+                                        <span class="material-symbols-outlined" style="font-size:16px;">block</span>
+                                        <span class="ms-1">Suspend</span>
+                                    </button>
+                                    @endpermission
+                                    @permission('update_users')
+                                    <button class="btn btn-outline-secondary btn-sm d-flex align-items-center" id="bulkResetPasswordBtn" type="button">
+                                        <span class="material-symbols-outlined" style="font-size:16px;">key</span>
+                                        <span class="ms-1">Reset Password</span>
+                                    </button>
+                                    @endpermission
+                                </div>
+                            </div>
+                            <div class="collapse" id="selectedUsersPanel">
+                                <div id="selectedUsersList" class="border rounded bg-white p-1" style="max-height:220px; overflow-y:auto;"></div>
+                            </div>
+                        </div>
                         <div class="table-responsive custom-scrollbar">
                             <table class="table" id="basic-1">
                                 <thead>
                                     <tr>
+                                        <th><input type="checkbox" id="selectAllUsers" class="form-check-input"></th>
                                         <th>#</th>
                                         <th>Name</th>
                                         <th>Email</th>
@@ -235,6 +265,147 @@
     </div>
 </div>
 
+<!-- Bulk Suspend Confirmation Modal -->
+<div class="modal fade" id="bulkSuspendModal" tabindex="-1" aria-labelledby="bulkSuspendModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkSuspendModalLabel">Confirm Bulk Suspension</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Are you sure you want to suspend <strong id="bulkSuspendCount">0</strong> user(s)?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                    <span class="ms-1">Cancel</span>
+                </button>
+                <button type="button" class="btn btn-danger btn-sm d-flex align-items-center" id="confirmBulkSuspendBtn">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">block</span>
+                    <span>Suspend</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Activate Confirmation Modal -->
+<div class="modal fade" id="bulkActivateModal" tabindex="-1" aria-labelledby="bulkActivateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkActivateModalLabel">Confirm Bulk Activation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Are you sure you want to activate <strong id="bulkActivateCount">0</strong> user(s)?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                    <span class="ms-1">Cancel</span>
+                </button>
+                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="confirmBulkActivateBtn">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">change_circle</span>
+                    <span>Activate</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Reset Password Modal -->
+<div class="modal fade" id="bulkResetPasswordModal" tabindex="-1" aria-labelledby="bulkResetPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkResetPasswordModalLabel">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">This will reset the password for <strong id="bulkResetCount">0</strong> user(s). Each affected user will be required to set a new password the next time they log in.</p>
+
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="reset_mode" id="reset_mode_auto" value="auto" checked>
+                        <label class="form-check-label" for="reset_mode_auto">
+                            Auto-generate a unique password for each user
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="reset_mode" id="reset_mode_fixed" value="fixed">
+                        <label class="form-check-label" for="reset_mode_fixed">
+                            Set the same password for all selected users
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3 d-none" id="bulkFixedPasswordWrapper">
+                    <label for="bulkFixedPassword" class="form-label">New Password <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="bulkFixedPassword" minlength="8" autocomplete="new-password">
+                    <div class="invalid-feedback"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                    <span class="ms-1">Cancel</span>
+                </button>
+                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="confirmBulkResetPasswordBtn">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">key</span>
+                    <span>Reset Password</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Reset Password Results Modal -->
+<div class="modal fade" id="bulkResetResultsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="bulkResetResultsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkResetResultsModalLabel">New Passwords</h5>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning d-flex align-items-center gap-2">
+                    <span class="material-symbols-outlined">warning</span>
+                    <div>These passwords are shown only once. Copy and share them with each user before closing this window.</div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>New Password</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkResetResultsBody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" id="copyAllResultsBtn">
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">content_copy</span>
+                    <span>Copy All</span>
+                </button>
+                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
+                    <span>Done</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @section('scripts')
@@ -245,6 +416,50 @@
         let activateUserId = null;
         let canUpdate = false;
         let canDelete = false;
+        // Persists across pagination/sort/filter — keyed by user id, value is {id, name, email}
+        let selectedUsers = new Map();
+
+        function updateSelectAllHeaderState() {
+            const total = usersTable ? usersTable.rows().count() : 0;
+            const checkedCount = selectedUsers.size;
+            $('#selectAllUsers').prop('checked', total > 0 && checkedCount === total);
+            $('#selectAllUsers').prop('indeterminate', checkedCount > 0 && checkedCount < total);
+        }
+
+        // Re-check/un-check whatever rows are currently rendered in the DOM
+        // (a page of the table) to match selectedUsers, since DataTables only
+        // keeps the current page's rows as real elements.
+        function syncVisibleCheckboxes() {
+            $('.row-select-user').each(function() {
+                const user = $(this).data('user');
+                $(this).prop('checked', !!(user && selectedUsers.has(user.id)));
+            });
+            updateSelectAllHeaderState();
+        }
+
+        function renderSelectedList() {
+            const $list = $('#selectedUsersList');
+            if (selectedUsers.size === 0) {
+                $list.html('<div class="text-muted small p-2">No users selected.</div>');
+                return;
+            }
+            const rows = Array.from(selectedUsers.values()).map(function(u) {
+                return '<div class="d-flex align-items-center justify-content-between py-1 px-2 border-bottom">' +
+                    '<span class="small"><strong>' + $('<div>').text(u.name).html() + '</strong> ' +
+                    '<span class="text-muted">' + $('<div>').text(u.email).html() + '</span></span>' +
+                    '<button type="button" class="btn btn-sm btn-link text-danger p-0 remove-selected-user" data-id="' + u.id + '" title="Remove from selection">' +
+                    '<span class="material-symbols-outlined" style="font-size:16px;">close</span></button>' +
+                    '</div>';
+            });
+            $list.html(rows.join(''));
+        }
+
+        function updateBulkBar() {
+            const count = selectedUsers.size;
+            $('#bulkSelectedCount').text(count + ' selected');
+            $('#bulkActionsBar').toggleClass('d-none', count === 0).toggleClass('d-flex', count > 0);
+            renderSelectedList();
+        }
 
         // Load users via Ajax
         function loadUsers() {
@@ -264,6 +479,13 @@
                     }
                 },
                 columns: [{
+                        data: null,
+                        orderable: false,
+                        render: function() {
+                            return '<input type="checkbox" class="form-check-input row-select-user">';
+                        }
+                    },
+                    {
                         data: null,
                         render: function(data, type, row, meta) {
                             return meta.row + 1;
@@ -329,12 +551,70 @@
                     }
                 ],
                 order: [
-                    [1, 'asc']
-                ]
+                    [2, 'asc']
+                ],
+                createdRow: function(row, data) {
+                    // Store the full row object on its checkbox (not just the id) so
+                    // the "view selected" list can show name/email without a lookup.
+                    $(row).find('.row-select-user').data('user', data);
+                }
+            });
+
+            // Rows are rebuilt as new DOM nodes on every redraw (pagination, sort,
+            // filter) — re-check whichever of them are already selected instead of
+            // wiping the selection, since selection must survive pagination.
+            usersTable.on('draw', function() {
+                syncVisibleCheckboxes();
+                updateBulkBar();
             });
         }
 
         loadUsers();
+
+        // Row checkbox selection
+        $(document).on('change', '.row-select-user', function() {
+            const user = $(this).data('user');
+            if ($(this).is(':checked')) {
+                selectedUsers.set(user.id, user);
+            } else {
+                selectedUsers.delete(user.id);
+            }
+
+            updateSelectAllHeaderState();
+            updateBulkBar();
+        });
+
+        // Select-all checkbox — selects every user in the table (all pages,
+        // since this DataTable loads its full dataset up front and only
+        // paginates client-side), not just the currently rendered page.
+        $(document).on('change', '#selectAllUsers', function() {
+            const checked = $(this).is(':checked');
+            $(this).prop('indeterminate', false);
+
+            if (checked) {
+                usersTable.rows().every(function() {
+                    const rowData = this.data();
+                    selectedUsers.set(rowData.id, {
+                        id: rowData.id,
+                        name: rowData.name,
+                        email: rowData.email
+                    });
+                });
+            } else {
+                selectedUsers.clear();
+            }
+
+            syncVisibleCheckboxes();
+            updateBulkBar();
+        });
+
+        // Remove a single user from the selection via the "View selected" list
+        $(document).on('click', '.remove-selected-user', function() {
+            const id = parseInt($(this).data('id'), 10);
+            selectedUsers.delete(id);
+            syncVisibleCheckboxes();
+            updateBulkBar();
+        });
 
         // Select2 staff search config factory
         function staffSelect2Config(modalSelector) {
@@ -596,6 +876,177 @@
                     btn.prop('disabled', false);
                     spinner.addClass('d-none');
                 }
+            });
+        });
+
+        // Bulk Activate Button Click
+        $('#bulkActivateBtn').on('click', function() {
+            $('#bulkActivateCount').text(selectedUsers.size);
+            $('#bulkActivateModal').modal('show');
+        });
+
+        // Bulk Suspend Button Click
+        $('#bulkSuspendBtn').on('click', function() {
+            $('#bulkSuspendCount').text(selectedUsers.size);
+            $('#bulkSuspendModal').modal('show');
+        });
+
+        // Bulk Reset Password Button Click
+        $('#bulkResetPasswordBtn').on('click', function() {
+            $('#bulkResetCount').text(selectedUsers.size);
+            $('#reset_mode_auto').prop('checked', true);
+            $('#bulkFixedPasswordWrapper').addClass('d-none');
+            $('#bulkFixedPassword').val('').removeClass('is-invalid');
+            $('#bulkResetPasswordModal').modal('show');
+        });
+
+        // Toggle fixed-password field based on reset mode
+        $('input[name="reset_mode"]').on('change', function() {
+            $('#bulkFixedPasswordWrapper').toggleClass('d-none', $(this).val() !== 'fixed');
+        });
+
+        // Confirm Bulk Activate
+        $('#confirmBulkActivateBtn').on('click', function() {
+            const btn = $(this);
+            const spinner = btn.find('.spinner-border');
+
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: '{{ route("user.ajax.bulk-activate") }}',
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    ids: Array.from(selectedUsers.keys())
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#bulkActivateModal').modal('hide');
+                        usersTable.ajax.reload();
+                        toastr.success(response.message);
+                    }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to activate users');
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Confirm Bulk Suspend
+        $('#confirmBulkSuspendBtn').on('click', function() {
+            const btn = $(this);
+            const spinner = btn.find('.spinner-border');
+
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: '{{ route("user.ajax.bulk-suspend") }}',
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    ids: Array.from(selectedUsers.keys())
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#bulkSuspendModal').modal('hide');
+                        usersTable.ajax.reload();
+                        toastr.success(response.message);
+                    }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to suspend users');
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Confirm Bulk Reset Password
+        $('#confirmBulkResetPasswordBtn').on('click', function() {
+            const btn = $(this);
+            const spinner = btn.find('.spinner-border');
+            const mode = $('input[name="reset_mode"]:checked').val();
+            const fixedPassword = $('#bulkFixedPassword');
+
+            fixedPassword.removeClass('is-invalid');
+
+            if (mode === 'fixed' && fixedPassword.val().length < 8) {
+                fixedPassword.addClass('is-invalid');
+                fixedPassword.siblings('.invalid-feedback').text('Password must be at least 8 characters.');
+                return;
+            }
+
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: '{{ route("user.ajax.bulk-reset-password") }}',
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    ids: Array.from(selectedUsers.keys()),
+                    mode: mode,
+                    fixed_password: mode === 'fixed' ? fixedPassword.val() : null
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#bulkResetPasswordModal').modal('hide');
+                        toastr.success(response.message);
+
+                        const rows = response.results.map(function(r) {
+                            return '<tr>' +
+                                '<td>' + $('<div>').text(r.name).html() + '</td>' +
+                                '<td>' + $('<div>').text(r.email).html() + '</td>' +
+                                '<td><code>' + $('<div>').text(r.password).html() + '</code></td>' +
+                                '<td><button type="button" class="btn btn-sm btn-outline-secondary copy-single-password" data-password="' + $('<div>').text(r.password).html() + '"><span class="material-symbols-outlined" style="font-size:16px;">content_copy</span></button></td>' +
+                                '</tr>';
+                        });
+                        $('#bulkResetResultsBody').html(rows.join(''));
+                        $('#bulkResetResultsModal').modal('show');
+                        usersTable.ajax.reload();
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422) {
+                        toastr.error('Please check the form and try again.');
+                    } else {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to reset passwords');
+                    }
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Copy a single generated password
+        $(document).on('click', '.copy-single-password', function() {
+            navigator.clipboard.writeText($(this).data('password')).then(function() {
+                toastr.success('Password copied');
+            });
+        });
+
+        // Copy all results as "Name <email>: password" lines
+        $('#copyAllResultsBtn').on('click', function() {
+            const lines = [];
+            $('#bulkResetResultsBody tr').each(function() {
+                const cells = $(this).find('td');
+                const name = $(cells[0]).text();
+                const email = $(cells[1]).text();
+                const password = $(cells[2]).text();
+                lines.push(name + ' <' + email + '>: ' + password);
+            });
+            navigator.clipboard.writeText(lines.join('\n')).then(function() {
+                toastr.success('All passwords copied');
             });
         });
 

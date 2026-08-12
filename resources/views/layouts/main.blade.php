@@ -787,6 +787,10 @@
 
     @yield('scripts')
 
+    @if ($forcePasswordChange ?? false)
+        @include('partials.forced-password-modal')
+    @endif
+
     @yield('modals')
 </body>
 

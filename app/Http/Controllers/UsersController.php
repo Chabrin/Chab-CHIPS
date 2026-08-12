@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use App\Services\ErrorDispatcher;
 use App\Models\User;
 use App\Models\UserStaffLink;
@@ -186,6 +187,7 @@ class UsersController extends Controller
             $user->email = $validated['email'];
             if (!empty($validated['password'])) {
                 $user->password = $validated['password'];
+                $user->requireReset = true;
             }
             $user->save();
 
@@ -240,6 +242,103 @@ class UsersController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error activating user: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to activate user'], 500);
+        }
+    }
+
+    public function bulkActivateUsers(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'integer|exists:josya_users,id',
+            ]);
+
+            $count = User::whereIn('id', $validated['ids'])->update(['block' => 0]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $count . ' user(s) activated successfully',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk activating users: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to activate users'], 500);
+        }
+    }
+
+    public function bulkSuspendUsers(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'integer|exists:josya_users,id',
+            ]);
+
+            $count = User::whereIn('id', $validated['ids'])->update(['block' => 1]);
+
+            return response()->json([
+                'success' => true,
+                'message' => $count . ' user(s) suspended successfully',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk suspending users: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to suspend users'], 500);
+        }
+    }
+
+    public function bulkResetPassword(Request $request)
+    {
+        try {
+            // Bcrypt is intentionally slow (~200-300ms/hash), so hashing one password
+            // per selected user can comfortably exceed PHP's default 30s limit once
+            // more than ~100 users are selected at once (e.g. via "select all").
+            set_time_limit(600);
+
+            $validated = $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'integer|exists:josya_users,id',
+                'mode' => 'required|in:auto,fixed',
+                'fixed_password' => 'required_if:mode,fixed|nullable|string|min:8|max:255',
+            ]);
+
+            $users = User::whereIn('id', $validated['ids'])->get();
+            $results = [];
+
+            DB::transaction(function () use ($users, $validated, &$results) {
+                foreach ($users as $user) {
+                    $plainPassword = $validated['mode'] === 'fixed'
+                        ? $validated['fixed_password']
+                        : Str::password(12);
+
+                    $user->password = $plainPassword;
+                    $user->requireReset = true;
+                    $user->save();
+
+                    $results[] = [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'password' => $plainPassword,
+                    ];
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => count($results) . ' user(s) had their password reset',
+                'results' => $results,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk resetting passwords: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to reset passwords'], 500);
         }
     }
 
