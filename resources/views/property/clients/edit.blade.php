@@ -1,5 +1,9 @@
 @extends('layouts.main')
 @section('content')
+<style>
+    /* Hidden immediately if the record is Individual (or by default); toggleClientTypeFields() controls it from there. */
+    .company-only { display: none; }
+</style>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
@@ -92,19 +96,82 @@
                                         <div class="col-md-6 mb-3">
                                             <label for="client_type_id" class="form-label">Client Type <span class="text-danger">*</span></label>
                                             <select class="form-select @error('client_type_id') is-invalid @enderror" id="client_type_id" name="client_type_id" required>
-                                                <option value="">Please select</option>
-                                                <option value="1" {{ old('client_type_id', $client->client_type_id) == 1 ? 'selected' : '' }}>Landlord</option>
-                                                <option value="2" {{ old('client_type_id', $client->client_type_id) == 2 ? 'selected' : '' }}>Tenant</option>
-                                                <option value="3" {{ old('client_type_id', $client->client_type_id) == 3 ? 'selected' : '' }}>Both</option>
+                                                <option value="1" {{ old('client_type_id', $client->client_type_id) == 1 ? 'selected' : '' }}>Individual</option>
+                                                <option value="3" {{ old('client_type_id', $client->client_type_id) == 3 ? 'selected' : '' }}>Company</option>
                                             </select>
                                             @error('client_type_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-2 mb-3">
+                                        <!-- Company Information Section -->
+                                        <div class="col-12 mb-3 mt-3 company-only" id="companyHeading">
+                                            <h6 class="text-muted border-bottom pb-2">Company Information</h6>
+                                        </div>
+
+                                        <div class="col-md-6 mb-3 company-only" id="companyFields">
+                                            <label for="company_name" class="form-label">Company Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('company_name') is-invalid @enderror" id="company_name" name="company_name" value="{{ old('company_name', $client->company_name) }}" placeholder="Enter company name">
+                                            @error('company_name')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-6 mb-3 company-only">
+                                            <label for="company_registration_number" class="form-label">Registration Number</label>
+                                            <input type="text" class="form-control @error('company_registration_number') is-invalid @enderror" id="company_registration_number" name="company_registration_number" value="{{ old('company_registration_number', $client->company_registration_number) }}" placeholder="Enter certificate of incorporation / registration number">
+                                            @error('company_registration_number')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                            <small class="text-danger d-none duplicate-check-message" id="company_registration_number_duplicate"></small>
+                                        </div>
+
+                                        <!-- Contact Person Section (Company only) -->
+                                        <div class="col-12 mb-3 mt-3 company-only" id="contactPersonHeading">
+                                            <h6 class="text-muted border-bottom pb-2">Contact Person</h6>
+                                            <small class="text-muted">The individual who deals with this account day-to-day</small>
+                                        </div>
+
+                                        <div class="col-md-3 mb-3 company-only" id="companyContactFields">
+                                            <label for="contact_person_name" class="form-label">Contact Person Name</label>
+                                            <input type="text" class="form-control @error('contact_person_name') is-invalid @enderror" id="contact_person_name" name="contact_person_name" value="{{ old('contact_person_name', $client->contact_person_name) }}" placeholder="Enter contact person's name">
+                                            @error('contact_person_name')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-3 mb-3 company-only">
+                                            <label for="contact_person_title" class="form-label">Position / Title</label>
+                                            <input type="text" class="form-control @error('contact_person_title') is-invalid @enderror" id="contact_person_title" name="contact_person_title" value="{{ old('contact_person_title', $client->contact_person_title) }}" placeholder="e.g. Director, Property Manager">
+                                            @error('contact_person_title')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-3 mb-3 company-only">
+                                            <label for="contact_person_mobile" class="form-label">Contact Person Mobile</label>
+                                            <input type="text" class="form-control @error('contact_person_mobile') is-invalid @enderror" id="contact_person_mobile" name="contact_person_mobile" value="{{ old('contact_person_mobile', $client->contact_person_mobile) }}" placeholder="254XXXXXXXXX">
+                                            @error('contact_person_mobile')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-md-3 mb-3 company-only">
+                                            <label for="contact_person_email" class="form-label">Contact Person Email</label>
+                                            <input type="email" class="form-control @error('contact_person_email') is-invalid @enderror" id="contact_person_email" name="contact_person_email" value="{{ old('contact_person_email', $client->contact_person_email) }}" placeholder="name@example.com">
+                                            @error('contact_person_email')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <!-- Personal Information Section -->
+                                        <div class="col-12 mb-3 mt-3 individual-only">
+                                            <h6 class="text-muted border-bottom pb-2">Personal Information</h6>
+                                        </div>
+
+                                        <div class="col-md-2 mb-3 individual-only" id="individualFields">
                                             <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('title') is-invalid @enderror" id="title" name="title" required>
+                                            <select class="form-select @error('title') is-invalid @enderror" id="title" name="title">
                                                 <option value="">Select</option>
                                                 <option value="Mr" {{ old('title', $client->title) == 'Mr' ? 'selected' : '' }}>Mr</option>
                                                 <option value="Mrs" {{ old('title', $client->title) == 'Mrs' ? 'selected' : '' }}>Mrs</option>
@@ -125,39 +192,39 @@
                                             $lastName = $client->last_name ?? '';
                                         @endphp
 
-                                        <div class="col-md-4 mb-3">
+                                        <div class="col-md-4 mb-3 individual-only">
                                             <label for="first_name" class="form-label">First Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('first_name') is-invalid @enderror" 
-                                                   id="first_name" name="first_name" 
-                                                   value="{{ old('first_name', $firstName) }}" required>
+                                            <input type="text" class="form-control @error('first_name') is-invalid @enderror"
+                                                   id="first_name" name="first_name"
+                                                   value="{{ old('first_name', $firstName) }}">
                                             @error('first_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-3 mb-3 individual-only">
                                             <label for="middle_name" class="form-label">Middle Name</label>
-                                            <input type="text" class="form-control @error('middle_name') is-invalid @enderror" 
-                                                   id="middle_name" name="middle_name" 
+                                            <input type="text" class="form-control @error('middle_name') is-invalid @enderror"
+                                                   id="middle_name" name="middle_name"
                                                    value="{{ old('middle_name', $middleName) }}">
                                             @error('middle_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-3 mb-3 individual-only">
                                             <label for="last_name" class="form-label">Last Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('last_name') is-invalid @enderror" 
-                                                   id="last_name" name="last_name" 
-                                                   value="{{ old('last_name', $lastName) }}" required>
+                                            <input type="text" class="form-control @error('last_name') is-invalid @enderror"
+                                                   id="last_name" name="last_name"
+                                                   value="{{ old('last_name', $lastName) }}">
                                             @error('last_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-4 mb-3">
+                                        <div class="col-md-4 mb-3 individual-only">
                                             <label for="gender" class="form-label">Gender <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender" required>
+                                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender">
                                                 <option value="">Please select</option>
                                                 <option value="Male" {{ old('gender', $client->gender) == 'Male' ? 'selected' : '' }}>Male</option>
                                                 <option value="Female" {{ old('gender', $client->gender) == 'Female' ? 'selected' : '' }}>Female</option>
@@ -190,20 +257,21 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-4 mb-3">
+                                        <div class="col-md-4 mb-3 individual-only" id="individualIdFields">
                                             <label for="national_id" class="form-label">National ID</label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" 
-                                                   id="national_id" name="national_id" 
+                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror"
+                                                   id="national_id" name="national_id"
                                                    value="{{ old('national_id', $client->national_id) }}">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <small class="text-danger d-none duplicate-check-message" id="national_id_duplicate"></small>
                                         </div>
 
-                                        <div class="col-md-4 mb-3">
+                                        <div class="col-md-4 mb-3 individual-only">
                                             <label for="passport_number" class="form-label">Passport Number</label>
-                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror" 
-                                                   id="passport_number" name="passport_number" 
+                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror"
+                                                   id="passport_number" name="passport_number"
                                                    value="{{ old('passport_number', $client->passport_number) }}">
                                             @error('passport_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -247,16 +315,6 @@
                                                    id="email_address" name="email_address"
                                                    value="{{ old('email_address', $client->email_address) }}">
                                             @error('email_address')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="overdraft_penalty" class="form-label">Overdraft Penalty (%)</label>
-                                            <input type="number" step="0.01" class="form-control @error('overdraft_penalty') is-invalid @enderror"
-                                                   id="overdraft_penalty" name="overdraft_penalty"
-                                                   value="{{ old('overdraft_penalty', $client->overdraft_penalty) }}" placeholder="0.00">
-                                            @error('overdraft_penalty')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
@@ -345,10 +403,6 @@
                                                         <label for="account_number_{{ $index }}" class="form-label">Account Number</label>
                                                         <input type="text" class="form-control" id="account_number_{{ $index }}" name="banks[{{ $index }}][account_number]" value="{{ $bankAccount->account_number }}">
                                                     </div>
-                                                    <div class="col-md-5 mb-3">
-                                                        <label for="return_percentage_{{ $index }}" class="form-label">Return Percentage</label>
-                                                        <input type="text" class="form-control" id="return_percentage_{{ $index }}" name="banks[{{ $index }}][return_percentage]" value="{{ $bankAccount->return_percentage }}">
-                                                    </div>
                                                     <div class="col-md-2 mb-3 d-flex align-items-end">
                                                         <button type="button" class="btn btn-danger btn-sm remove-bank" style="{{ $loop->first && $client->bankAccounts->count() == 1 ? 'display:none;' : '' }}">
                                                             <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
@@ -380,10 +434,6 @@
                                                     <div class="col-md-5 mb-3">
                                                         <label for="account_number_0" class="form-label">Account Number</label>
                                                         <input type="text" class="form-control" id="account_number_0" name="banks[0][account_number]">
-                                                    </div>
-                                                    <div class="col-md-5 mb-3">
-                                                        <label for="return_percentage_0" class="form-label">Return Percentage</label>
-                                                        <input type="text" class="form-control" id="return_percentage_0" name="banks[0][return_percentage]">
                                                     </div>
                                                     <div class="col-md-2 mb-3 d-flex align-items-end">
                                                         <button type="button" class="btn btn-danger btn-sm remove-bank" style="display:none;">
@@ -657,6 +707,102 @@
         let branchesData = [];
         let existingBankData = @json($client->bankAccounts);
 
+        // Native HTML5 validation can't focus a field inside a hidden (inactive)
+        // Bootstrap tab-pane — the browser just silently aborts the submit with no
+        // visible feedback. Switch to the offending field's tab as soon as it's
+        // flagged invalid, so the browser can focus it and show its error bubble.
+        document.querySelectorAll('#clientEditForm [required], #clientEditForm [pattern]').forEach(function(field) {
+            field.addEventListener('invalid', function() {
+                var pane = this.closest('.tab-pane');
+                if (pane && !pane.classList.contains('active')) {
+                    var tabButton = document.getElementById(pane.id + '-tab');
+                    if (tabButton) {
+                        bootstrap.Tab.getOrCreateInstance(tabButton).show();
+                    }
+                }
+            });
+        });
+
+        // Toggle Individual vs Company fields based on Client Type
+        function toggleClientTypeFields() {
+            var isCompany = $('#client_type_id').val() === '3';
+
+            $('.individual-only').toggle(!isCompany);
+            $('.company-only').toggle(isCompany);
+
+            // First/Last Name/Gender are required for Individual; Company Name for Company.
+            $('#first_name, #last_name, #gender').prop('required', !isCompany);
+            $('#company_name').prop('required', isCompany);
+        }
+
+        $('#client_type_id').on('change', toggleClientTypeFields);
+        toggleClientTypeFields();
+
+        // Live duplicate-identifier checker — a landlord can only be registered once,
+        // by National ID (Individual) or Registration Number (Company). Excludes this
+        // client's own record so its existing identifier isn't flagged against itself.
+        function checkDuplicateIdentifier(fieldId, clientTypeId, label) {
+            var $field = $('#' + fieldId);
+            var $msg = $('#' + fieldId + '_duplicate');
+            var value = $field.val().trim();
+
+            $msg.addClass('d-none').text('');
+            $field.removeClass('is-invalid').removeData('duplicate-flagged');
+
+            if (!value) {
+                return;
+            }
+
+            $.ajax({
+                url: "{{ route('property.clients.check-identifier') }}",
+                type: 'GET',
+                data: {
+                    client_type_id: clientTypeId,
+                    value: value,
+                    exclude_id: '{{ Crypt::encrypt($client->id) }}'
+                },
+                success: function(response) {
+                    if ($field.val().trim() !== value) {
+                        return;
+                    }
+                    if (response.exists) {
+                        var details = [response.name, response.reference_number].filter(Boolean).join(' — ');
+                        $msg.removeClass('d-none').text('A landlord with this ' + label + ' already exists' + (details ? ': ' + details : '') + '.');
+                        $field.addClass('is-invalid').data('duplicate-flagged', true);
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Duplicate identifier check failed:', xhr);
+                }
+            });
+        }
+
+        $('#national_id').on('blur', function() {
+            checkDuplicateIdentifier('national_id', 1, 'National ID');
+        });
+
+        $('#company_registration_number').on('blur', function() {
+            checkDuplicateIdentifier('company_registration_number', 3, 'Registration Number');
+        });
+
+        // Block submission while a flagged duplicate is showing for the active client
+        // type — runs before the spinner handler below so a blocked submit doesn't
+        // leave the Update button stuck disabled.
+        $('#clientEditForm').on('submit', function(e) {
+            var isCompany = $('#client_type_id').val() === '3';
+            var $flagged = isCompany ? $('#company_registration_number') : $('#national_id');
+
+            if ($flagged.data('duplicate-flagged')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                var tabButton = document.getElementById('personal-tab');
+                if (tabButton) {
+                    bootstrap.Tab.getOrCreateInstance(tabButton).show();
+                }
+                toastr.error('Please resolve the duplicate ' + (isCompany ? 'registration number' : 'National ID') + ' before submitting.');
+            }
+        });
+
         // Handle form submission
         $('#clientEditForm').on('submit', function() {
             var submitButton = $('#updateButton');
@@ -782,10 +928,6 @@
                         <div class="col-md-5 mb-3">
                             <label for="account_number_${bankCounter}" class="form-label">Account Number</label>
                             <input type="text" class="form-control" id="account_number_${bankCounter}" name="banks[${bankCounter}][account_number]">
-                        </div>
-                        <div class="col-md-5 mb-3">
-                            <label for="return_percentage_${bankCounter}" class="form-label">Return Percentage</label>
-                            <input type="text" class="form-control" id="return_percentage_${bankCounter}" name="banks[${bankCounter}][return_percentage]">
                         </div>
                         <div class="col-md-2 mb-3 d-flex align-items-end">
                             <button type="button" class="btn btn-danger btn-sm remove-bank">
