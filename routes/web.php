@@ -612,6 +612,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/clients', [App\Http\Controllers\ClientsController::class, 'index'])->name('property.clients.index');
     Route::get('/property/clients/data', [ClientsController::class, 'getCLients'])->name('property.clients.data');
     Route::get('/property/clients/create', [ClientsController::class, 'create'])->name('property.clients.create');
+    Route::get('/property/clients/check-identifier', [ClientsController::class, 'checkIdentifierExists'])->name('property.clients.check-identifier');
 
     Route::get('/ajax/clients/list', [App\Http\Controllers\ClientsController::class, 'getCLients'])->name('ajax.clients.list');
     Route::get('/property/clients/{encryptedId}/edit', [ClientsController::class, 'edit'])->name('property.clients.edit');
@@ -928,6 +929,18 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/settings/return-types/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateReturnType'])->name('property.settings.return-types.update');
     Route::delete('/property/settings/return-types/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteReturnType'])->name('property.settings.return-types.delete');
 
+    // Unit Topology Routes
+    Route::get('/property/settings/unit-topologies/data', [App\Http\Controllers\PropertySettingsController::class, 'getUnitTopologies'])->name('property.settings.unit-topologies.data');
+    Route::post('/property/settings/unit-topologies', [App\Http\Controllers\PropertySettingsController::class, 'storeUnitTopology'])->name('property.settings.unit-topologies.store');
+    Route::post('/property/settings/unit-topologies/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateUnitTopology'])->name('property.settings.unit-topologies.update');
+    Route::delete('/property/settings/unit-topologies/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteUnitTopology'])->name('property.settings.unit-topologies.delete');
+
+    // Unit Category Routes
+    Route::get('/property/settings/unit-categories/data', [App\Http\Controllers\PropertySettingsController::class, 'getUnitCategories'])->name('property.settings.unit-categories.data');
+    Route::post('/property/settings/unit-categories', [App\Http\Controllers\PropertySettingsController::class, 'storeUnitCategory'])->name('property.settings.unit-categories.store');
+    Route::post('/property/settings/unit-categories/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateUnitCategory'])->name('property.settings.unit-categories.update');
+    Route::delete('/property/settings/unit-categories/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteUnitCategory'])->name('property.settings.unit-categories.delete');
+
     // Invoiceable Items Routes
     Route::get('/property/settings/invoiceable-items/data', [App\Http\Controllers\PropertySettingsController::class, 'getInvoiceableItems'])->name('property.settings.invoiceable-items.data');
     Route::post('/property/settings/invoiceable-items', [App\Http\Controllers\PropertySettingsController::class, 'storeInvoiceableItem'])->name('property.settings.invoiceable-items.store');
@@ -1111,6 +1124,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/confirmations/{id}/reject', [PropertyConfirmationController::class, 'reject'])->name('property.confirmations.reject');
     Route::post('/property/confirmations/bulk-approve', [PropertyConfirmationController::class, 'bulkApprove'])->name('property.confirmations.bulk-approve');
     Route::post('/property/confirmations/bulk-reject', [PropertyConfirmationController::class, 'bulkReject'])->name('property.confirmations.bulk-reject');
+    Route::get('/ajax/property/confirmations/landlord-onboarding/list', [PropertyConfirmationController::class, 'landlordOnboardingList'])->name('property.confirmations.landlord-onboarding.list');
+    Route::post('/property/confirmations/landlord-onboarding/approve', [PropertyConfirmationController::class, 'landlordOnboardingApprove'])->name('property.confirmations.landlord-onboarding.approve');
+    Route::post('/property/confirmations/landlord-onboarding/reject', [PropertyConfirmationController::class, 'landlordOnboardingReject'])->name('property.confirmations.landlord-onboarding.reject');
 
     // Personal onboarding pipeline tracker
     Route::get('/property/my-onboarding', [OnboardingPipelineController::class, 'index'])->name('property.onboarding.mine');

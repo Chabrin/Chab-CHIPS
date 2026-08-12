@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Unit;
 use App\Models\Zone;
+use App\Models\Staff;
 use App\Models\Client;
 use App\Models\Property;
 use App\Models\ZoneArea;
+use App\Models\UnitTopology;
+use App\Models\UnitCategory;
 use App\Models\ClientBankAccount;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
@@ -28,11 +31,12 @@ class BulkUploadController extends Controller
         try {
             $type = $request->type;
             $clientId = $request->client_id;
-            
+            $propertyId = $request->property_id;
+
             if ($type === 'properties') {
                 return $this->generatePropertiesSample($clientId);
             } elseif ($type === 'units') {
-                return $this->generateUnitsSample($clientId);
+                return $this->generateUnitsSample($clientId, $propertyId);
             } elseif ($type === 'tenants') {
                 return $this->generateTenantsSample($clientId);
             }
@@ -105,24 +109,34 @@ class BulkUploadController extends Controller
     }
     
     /**
-     * Generate units sample file
+     * Generate units sample file. When $propertyId is given (property-scoped
+     * upload), every sample row's Property Reference is locked to that
+     * property and the reference list is skipped, since there's only one
+     * property in play.
      */
-    private function generateUnitsSample($clientId)
+    private function generateUnitsSample($clientId, $propertyId = null)
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        
-        // Get client properties for reference
-        $properties = Property::where('client_id', $clientId)
-            ->select('reference_number', 'property_name')
-            ->get();
-        
-        // Set headers
+
+        $scopedProperty = $propertyId ? Property::find($propertyId) : null;
+
+        // Get client properties for reference (only needed for the unscoped, client-wide upload)
+        $properties = $scopedProperty
+            ? collect()
+            : Property::where('client_id', $clientId)->select('reference_number', 'property_name')->get();
+
+        $topologies = UnitTopology::orderBy('topology_name')->pluck('topology_name');
+        $categories = UnitCategory::orderBy('category_name')->pluck('category_name');
+
+        // Set headers (11 columns — "Unit Type" is intentionally not a bulk-upload
+        // field: it's a Normal/Owner Occupied/Caretaker classification set manually
+        // after import, not something typically known in bulk. "Usage Type" below
+        // is the Commercial/Residential/Hybrid field.)
         $headers = [
             'Property Reference',
             'Unit Number',
             'Unit Name',
-            'Unit Type',
             'Usage Type',
             'Unit Condition',
             'Topology',
@@ -132,49 +146,83 @@ class BulkUploadController extends Controller
             'VAT (0/1)',
             'Initial Water Meter Reading',
         ];
-        
+
         $sheet->fromArray($headers, null, 'A1');
-        
+
         // Style headers
         $headerStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => '4472C4']],
         ];
-        $sheet->getStyle('A1:L1')->applyFromArray($headerStyle);
-        
+        $sheet->getStyle('A1:K1')->applyFromArray($headerStyle);
+
         // Add sample data
-        $propertyRef = $properties->first() ? $properties->first()->reference_number : '1A';
+        $propertyRef = $scopedProperty ? $scopedProperty->reference_number : ($properties->first() ? $properties->first()->reference_number : '1A');
+        $sampleTopology1 = $topologies->get(0, '1 Bedroom');
+        $sampleTopology2 = $topologies->get(1, '2 Bedroom');
+        $sampleCategory1 = $categories->get(0, 'Standard');
+        $sampleCategory2 = $categories->get(1, 'Premium');
         $sampleData = [
-            [$propertyRef, 'Shop 1', 'Unit A1', 'Commercial', 'Commercial', 'Good', '1 Bedroom', 'Standard', '50000', 'Ground floor shop', '0', '0'],
-            [$propertyRef, 'Apt 101', 'Apartment 101', 'Residential', 'Residential', 'Excellent', '2 Bedroom', 'Premium', '35000', '2 bedroom apartment', '0', '100'],
+            [$propertyRef, 'Shop 1', 'Unit A1', 'Commercial', 'Good', $sampleTopology1, $sampleCategory1, '50000', 'Ground floor shop', '0', '0'],
+            [$propertyRef, 'Apt 101', 'Apartment 101', 'Residential', 'Excellent', $sampleTopology2, $sampleCategory2, '35000', '2 bedroom apartment', '0', '100'],
         ];
-        
+
         $sheet->fromArray($sampleData, null, 'A2');
-        
-        // Add available properties as reference
-        if ($properties->count() > 0) {
-            $sheet->setCellValue('L1', 'Available Properties:');
-            $sheet->getStyle('L1')->getFont()->setBold(true);
-            $row = 2;
+
+        // Reference information block, left of a blank gap column (M) so it
+        // never overwrites a real data header.
+        $refCol = 'M';
+        $refRow = 1;
+
+        if ($scopedProperty) {
+            $sheet->setCellValue($refCol . $refRow, 'This file is locked to property:');
+            $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
+            $refRow++;
+            $sheet->setCellValue($refCol . $refRow, $scopedProperty->reference_number . ' - ' . $scopedProperty->property_name);
+            $refRow++;
+            $sheet->setCellValue($refCol . $refRow, 'Every row will be attached to this property regardless of what is typed in "Property Reference".');
+            $refRow += 2;
+        } elseif ($properties->count() > 0) {
+            $sheet->setCellValue($refCol . $refRow, 'Available Properties:');
+            $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
+            $refRow++;
             foreach ($properties as $property) {
-                $sheet->setCellValue('L' . $row, $property->reference_number . ' - ' . $property->property_name);
-                $row++;
+                $sheet->setCellValue($refCol . $refRow, $property->reference_number . ' - ' . $property->property_name);
+                $refRow++;
             }
+            $refRow++;
         }
-        
+
+        $sheet->setCellValue($refCol . $refRow, 'Valid Topology values:');
+        $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
+        $refRow++;
+        foreach ($topologies as $topologyName) {
+            $sheet->setCellValue($refCol . $refRow, $topologyName);
+            $refRow++;
+        }
+        $refRow++;
+
+        $sheet->setCellValue($refCol . $refRow, 'Valid Category values:');
+        $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
+        $refRow++;
+        foreach ($categories as $categoryName) {
+            $sheet->setCellValue($refCol . $refRow, $categoryName);
+            $refRow++;
+        }
+
         // Auto-size columns
-        foreach (range('A', 'L') as $col) {
+        foreach (range('A', 'M') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
-        
+
         // Generate file
         $writer = new Xlsx($spreadsheet);
         $filename = 'units_bulk_upload_sample_' . date('Ymd') . '.xlsx';
-        
+
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment;filename="' . $filename . '"');
         header('Cache-Control: max-age=0');
-        
+
         $writer->save('php://output');
         exit;
     }
@@ -298,33 +346,42 @@ class BulkUploadController extends Controller
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',
                 'upload_type' => 'required|in:properties,units,tenants',
                 'bulk_file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+                'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
             ]);
-            
+
             $uploadType = $request->upload_type;
             $clientId = $request->client_id;
+            $propertyId = $request->property_id;
             $file = $request->file('bulk_file');
-            
+
             // Load spreadsheet
             $spreadsheet = IOFactory::load($file->getPathname());
             $sheet = $spreadsheet->getActiveSheet();
             $data = $sheet->toArray();
-            
+
             // Remove header row
             array_shift($data);
-            
+
             if ($uploadType === 'properties') {
                 $result = $this->processProperties($data, $clientId);
             } elseif ($uploadType === 'units') {
-                $result = $this->processUnits($data, $clientId);
+                $result = $this->processUnits($data, $clientId, $propertyId);
             } elseif ($uploadType === 'tenants') {
                 $result = $this->processTenants($data, $clientId);
             }
-            
+
             DB::commit();
-            
+
+            $message = "Bulk upload successful! Created {$result['success']} records. {$result['failed']} failed.";
+
+            if ($propertyId) {
+                return redirect()->route('property.properties.show', Crypt::encrypt($propertyId))
+                    ->with('success', $message);
+            }
+
             return redirect()->route('property.clients.show', Crypt::encrypt($clientId))
-                ->with('success', "Bulk upload successful! Created {$result['success']} records. {$result['failed']} failed.");
-            
+                ->with('success', $message);
+
         } catch (\Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
@@ -350,16 +407,16 @@ class BulkUploadController extends Controller
                 $rowNum = $index + 2; // +2 because Excel is 1-indexed and has header row
                 
                 // Find zone by name
-                $zone = Zone::where('zone_name', $row[1])->first();
+                $zone = Zone::whereRaw('LOWER(TRIM(zone_name)) = ?', [strtolower(trim($row[1]))])->first();
                 if (!$zone) {
                     $errors[] = "Row {$rowNum}: Zone '{$row[1]}' not found";
                     Log::error("Row {$rowNum}: Zone not found - " . json_encode($row));
                     $failed++;
                     continue;
                 }
-                
+
                 // Find zone area by name
-                $zoneArea = ZoneArea::where('zone_area_name', $row[2])
+                $zoneArea = ZoneArea::whereRaw('LOWER(TRIM(zone_area_name)) = ?', [strtolower(trim($row[2]))])
                     ->where('zone_id', $zone->id)
                     ->first();
                 if (!$zoneArea) {
@@ -368,51 +425,46 @@ class BulkUploadController extends Controller
                     $failed++;
                     continue;
                 }
-                
-                // Find zone manager by name (optional)
+
+                // Find zone manager by name (optional) — matched against sys_staff,
+                // the same table the current Add Property form's dropdown uses.
                 $zoneManagerId = null;
                 if (!empty($row[3])) {
-                    $zoneManager = DB::table('sys_hrm_employees')
-                        ->whereRaw('LOWER(full_names) = ?', [strtolower($row[3])])
-                        ->first();
+                    $zoneManager = Staff::whereRaw('LOWER(TRIM(full_names)) = ?', [strtolower(trim($row[3]))])->first();
                     if ($zoneManager) {
                         $zoneManagerId = $zoneManager->id;
                     } else {
                         Log::warning("Row {$rowNum}: Zone manager '{$row[3]}' not found, proceeding without");
                     }
                 }
-                
+
                 // Find zone supervisor by name (optional)
                 $zoneSupervisorId = null;
                 if (!empty($row[4])) {
-                    $zoneSupervisor = DB::table('sys_hrm_employees')
-                        ->whereRaw('LOWER(full_names) = ?', [strtolower($row[4])])
-                        ->first();
+                    $zoneSupervisor = Staff::whereRaw('LOWER(TRIM(full_names)) = ?', [strtolower(trim($row[4]))])->first();
                     if ($zoneSupervisor) {
                         $zoneSupervisorId = $zoneSupervisor->id;
                     } else {
                         Log::warning("Row {$rowNum}: Zone supervisor '{$row[4]}' not found, proceeding without");
                     }
                 }
-                
+
                 // Find field officer by name (optional)
                 $fieldOfficerId = null;
                 if (!empty($row[5])) {
-                    $fieldOfficer = DB::table('sys_hrm_employees')
-                        ->whereRaw('LOWER(full_names) = ?', [strtolower($row[5])])
-                        ->first();
+                    $fieldOfficer = Staff::whereRaw('LOWER(TRIM(full_names)) = ?', [strtolower(trim($row[5]))])->first();
                     if ($fieldOfficer) {
                         $fieldOfficerId = $fieldOfficer->id;
                     } else {
                         Log::warning("Row {$rowNum}: Field officer '{$row[5]}' not found, proceeding without");
                     }
                 }
-                
+
                 // Find bank account by account number (optional)
                 $bankAccountId = null;
                 if (!empty($row[6])) {
                     $bankAccount = ClientBankAccount::where('parent_id', $clientId)
-                        ->where('account_number', $row[6])
+                        ->whereRaw('TRIM(account_number) = ?', [trim($row[6])])
                         ->first();
                     if ($bankAccount) {
                         $bankAccountId = $bankAccount->id;
@@ -420,22 +472,12 @@ class BulkUploadController extends Controller
                         Log::warning("Row {$rowNum}: Settlement account '{$row[6]}' not found for this client, proceeding without");
                     }
                 }
-                
-                // Generate reference number
-                $zoneName = strtoupper($zone->zone_name);
-                $lastProperty = Property::where('reference_number', 'LIKE', "%{$zoneName}")
-                    ->orderByRaw('CAST(SUBSTRING(reference_number, 1, LENGTH(reference_number) - LENGTH("' . $zoneName . '")) AS UNSIGNED) DESC')
-                    ->first();
-                
-                if ($lastProperty) {
-                    $lastNumber = intval(preg_replace('/[^0-9]/', '', substr($lastProperty->reference_number, 0, -strlen($zoneName))));
-                    $newNumber = $lastNumber + 1;
-                } else {
-                    $newNumber = 1;
-                }
-                
-                $referenceNumber = $newNumber . $zoneName;
-                
+
+                // Generate reference number — shared with PropertiesController::store()
+                // so the two paths can't drift apart again (this also fixes the previous
+                // MySQL-only CAST(... AS UNSIGNED) SQL, which errors on this app's Postgres DB).
+                $referenceNumber = Property::generateReferenceNumber($zone);
+
                 // Map property type
                 $propertyTypeMap = ['commercial' => 1, 'residential' => 2, 'hybrid' => 3];
                 $propertyType = $propertyTypeMap[strtolower($row[8])] ?? 1;
@@ -458,7 +500,7 @@ class BulkUploadController extends Controller
                     'bank_account_id' => $bankAccountId,
                     'lr_number' => $row[7] ?? null,
                     'usage_type_id' => $propertyType,
-                    'acquisition_date' => !empty($row[9]) ? date('Y-m-d', strtotime($row[9])) : null,
+                    'acquisition_date' => !empty($row[9]) ? date('Y-m-d', strtotime($row[9])) : now(),
                     'description' => $row[10] ?? null,
                     'lat_long' => $latLong,
                     'date_time' => now(),
@@ -483,78 +525,80 @@ class BulkUploadController extends Controller
     }
     
     /**
-     * Process units bulk upload
+     * Process units bulk upload. Column layout (11 columns, no "Unit Type" —
+     * see generateUnitsSample()): Property Reference, Unit Number, Unit Name,
+     * Usage Type, Unit Condition, Topology, Category, Rent Amount, Description,
+     * VAT (0/1), Initial Water Meter Reading.
+     *
+     * When $propertyId is given (property-scoped upload from the property show
+     * page), every row is attached to that exact property regardless of what's
+     * in the Property Reference column — that column is simply ignored.
      */
-    private function processUnits($data, $clientId)
+    private function processUnits($data, $clientId, $propertyId = null)
     {
         $success = 0;
         $failed = 0;
         $errors = [];
-        
+
+        $scopedProperty = $propertyId ? Property::find($propertyId) : null;
+
         foreach ($data as $index => $row) {
             try {
                 // Skip empty rows
-                if (empty($row[0])) continue;
-                
+                if (empty($row[0]) && !$scopedProperty) continue;
+                if ($scopedProperty && empty($row[1])) continue; // no unit number
+
                 $rowNum = $index + 2; // +2 because Excel is 1-indexed and has header row
-                
-                // Find property by reference number
-                $property = Property::where('reference_number', $row[0])
-                    ->where('client_id', $clientId)
-                    ->first();
-                    
-                if (!$property) {
-                    $errors[] = "Row {$rowNum}: Property '{$row[0]}' not found for this client";
-                    Log::error("Row {$rowNum}: Property not found - " . json_encode($row));
-                    $failed++;
-                    continue;
-                }
-                
-                // Find topology by name (optional)
-                $topologyId = null;
-                if (!empty($row[6])) {
-                    $topology = DB::table('sys_classifications')
-                        ->where('classification_name', 'Unit Topology')
-                        ->whereRaw('LOWER(name) = ?', [strtolower($row[6])])
+
+                if ($scopedProperty) {
+                    $property = $scopedProperty;
+                } else {
+                    // Find property by reference number
+                    $property = Property::where('reference_number', $row[0])
+                        ->where('client_id', $clientId)
                         ->first();
+
+                    if (!$property) {
+                        $errors[] = "Row {$rowNum}: Property '{$row[0]}' not found for this client";
+                        Log::error("Row {$rowNum}: Property not found - " . json_encode($row));
+                        $failed++;
+                        continue;
+                    }
+                }
+
+                // Find topology by name (optional) — matched against sys_pm_unit_topologies,
+                // the same table now backing the Add/Edit Unit modal's dropdown.
+                $topologyId = null;
+                if (!empty($row[5])) {
+                    $topology = UnitTopology::whereRaw('LOWER(TRIM(topology_name)) = ?', [strtolower(trim($row[5]))])->first();
                     if ($topology) {
                         $topologyId = $topology->id;
                     } else {
-                        Log::warning("Row {$rowNum}: Topology '{$row[6]}' not found, proceeding without");
+                        Log::warning("Row {$rowNum}: Topology '{$row[5]}' not found, proceeding without");
                     }
                 }
-                
-                // Find category by name (optional)
+
+                // Find category by name (optional) — matched against sys_pm_unit_categories
                 $categoryId = null;
-                if (!empty($row[7])) {
-                    $category = DB::table('sys_classifications')
-                        ->where('classification_name', 'Unit Category')
-                        ->whereRaw('LOWER(name) = ?', [strtolower($row[7])])
-                        ->first();
+                if (!empty($row[6])) {
+                    $category = UnitCategory::whereRaw('LOWER(TRIM(category_name)) = ?', [strtolower(trim($row[6]))])->first();
                     if ($category) {
                         $categoryId = $category->id;
                     } else {
-                        Log::warning("Row {$rowNum}: Category '{$row[7]}' not found, proceeding without");
+                        Log::warning("Row {$rowNum}: Category '{$row[6]}' not found, proceeding without");
                     }
                 }
-                
-                // Generate unit code
-                $lastUnit = Unit::where('property_id', $property->id)
-                    ->orderBy('unit_code', 'desc')
-                    ->first();
-                
-                if ($lastUnit && preg_match('/(\d+)$/', $lastUnit->unit_code, $matches)) {
-                    $newNumber = str_pad(intval($matches[1]) + 1, 3, '0', STR_PAD_LEFT);
-                } else {
-                    $newNumber = '001';
-                }
-                $unitCode = $property->reference_number . '-U' . $newNumber;
-                
-                // Map types (simplified - adjust based on your actual type IDs)
-                $unitTypeMap = ['commercial' => 1, 'residential' => 2, 'hybrid' => 3];
-                $unitType = $unitTypeMap[strtolower($row[3])] ?? 1;
-                $usageType = $unitTypeMap[strtolower($row[4])] ?? 1;
-                
+
+                // Generate unit code — shared with UnitsController::store() so the two
+                // paths can't drift apart again.
+                $unitCode = Unit::generateUnitCode($property);
+
+                // Usage Type: Commercial/Residential/Hybrid. Unit Type (Normal/Owner
+                // Occupied/Caretaker) has no bulk column — every bulk-created unit
+                // defaults to Normal (1) and can be changed manually afterward.
+                $usageTypeMap = ['commercial' => 1, 'residential' => 2, 'hybrid' => 3];
+                $usageType = $usageTypeMap[strtolower(trim($row[3] ?? ''))] ?? 1;
+
                 Unit::create([
                     'unit_code' => $unitCode,
                     'property_id' => $property->id,
@@ -562,21 +606,21 @@ class BulkUploadController extends Controller
                     'zone_id' => $property->zone_id,
                     'unit_number' => $row[1],
                     'unit_name' => $row[2] ?? null,
-                    'unit_type_id' => $unitType,
+                    'unit_type_id' => 1, // Normal
                     'usage_type_id' => $usageType,
-                    'unit_condition_id' => $row[5] ?? 'Good',
+                    'unit_condition_id' => $row[4] ?? 'Good',
                     'topology_id' => $topologyId,
                     'category_id' => $categoryId,
-                    'rent_amount' => $row[8] ?? 0,
-                    'description' => $row[9] ?? null,
-                    'vat_able' => $row[10] ?? 0,
-                    'initial_water_meter_reading' => $row[11] ?? 0,
+                    'rent_amount' => $row[7] ?? 0,
+                    'description' => $row[8] ?? null,
+                    'vat_able' => $this->normalizeVatAble($row[9] ?? null),
+                    'initial_water_meter_reading' => $row[10] ?? 0,
                     'date_time' => now(),
                     'created_by_id' => Auth::id(),
-                    'occupancy_status_id' => 31,
-                    'current_status_id' => 31,
+                    'occupancy_status_id' => 31, // Vacant
+                    'current_status_id' => 1, // Pending — awaiting maker-checker approval, same as manual creation
                 ]);
-                
+
                 $success++;
             } catch (\Exception $e) {
                 $rowNum = $index + 2;
@@ -585,12 +629,25 @@ class BulkUploadController extends Controller
                 $failed++;
             }
         }
-        
+
         if (!empty($errors)) {
             Log::error('Unit bulk upload errors: ' . json_encode($errors));
         }
-        
+
         return ['success' => $success, 'failed' => $failed];
+    }
+
+    /**
+     * Normalize a bulk-uploaded VAT cell (which may arrive as "Yes"/"No",
+     * "1"/"0", "y"/"n", or blank) to the "Yes"/"No" string format the manual
+     * Add/Edit Unit form already stores, so vat_able doesn't hold inconsistent
+     * data types depending on which flow created the row.
+     */
+    private function normalizeVatAble($value): string
+    {
+        $normalized = strtolower(trim((string) $value));
+
+        return in_array($normalized, ['1', 'yes', 'y', 'true'], true) ? 'Yes' : 'No';
     }
     
     /**

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\ReturnType;
 use App\Models\InvoiceableItem;
+use App\Models\UnitTopology;
+use App\Models\UnitCategory;
 use App\Models\Zone;
 use App\Traits\GeneralTraits\Reusables;
 use Illuminate\Support\Facades\DB;
@@ -155,6 +157,192 @@ class PropertySettingsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error deleting return type: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to delete return type'], 500);
+        }
+    }
+
+    // ============ UNIT TOPOLOGY METHODS ============
+
+    /**
+     * Get all unit topologies (AJAX)
+     */
+    public function getUnitTopologies()
+    {
+        try {
+            $topologies = UnitTopology::select(['id', 'topology_name'])
+                ->orderBy('topology_name', 'asc')
+                ->get()
+                ->map(function ($topology) {
+                    return [
+                        'id' => $topology->id,
+                        'encrypted_id' => Crypt::encrypt($topology->id),
+                        'topology_name' => $topology->topology_name ?? '-',
+                        'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
+                        'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
+                    ];
+                });
+            return response()->json(['data' => $topologies]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading unit topologies: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load unit topologies'], 500);
+        }
+    }
+
+    /**
+     * Store a new unit topology
+     */
+    public function storeUnitTopology(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'topology_name' => 'required|string|max:255|unique:sys_pm_unit_topologies,topology_name',
+            ]);
+
+            UnitTopology::create($validated);
+
+            return response()->json(['success' => true, 'message' => 'Unit topology created successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating unit topology: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to create unit topology'], 500);
+        }
+    }
+
+    /**
+     * Update a unit topology
+     */
+    public function updateUnitTopology(Request $request, $encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $topology = UnitTopology::findOrFail($id);
+
+            $validated = $request->validate([
+                'topology_name' => 'required|string|max:255|unique:sys_pm_unit_topologies,topology_name,' . $id,
+            ]);
+
+            $topology->update($validated);
+
+            return response()->json(['success' => true, 'message' => 'Unit topology updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating unit topology: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update unit topology'], 500);
+        }
+    }
+
+    /**
+     * Delete a unit topology
+     */
+    public function deleteUnitTopology($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $topology = UnitTopology::findOrFail($id);
+            $topology->delete();
+
+            return response()->json(['success' => true, 'message' => 'Unit topology deleted successfully']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error deleting unit topology: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to delete unit topology'], 500);
+        }
+    }
+
+    // ============ UNIT CATEGORY METHODS ============
+
+    /**
+     * Get all unit categories (AJAX)
+     */
+    public function getUnitCategories()
+    {
+        try {
+            $categories = UnitCategory::select(['id', 'category_name'])
+                ->orderBy('category_name', 'asc')
+                ->get()
+                ->map(function ($category) {
+                    return [
+                        'id' => $category->id,
+                        'encrypted_id' => Crypt::encrypt($category->id),
+                        'category_name' => $category->category_name ?? '-',
+                        'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
+                        'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
+                    ];
+                });
+            return response()->json(['data' => $categories]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading unit categories: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load unit categories'], 500);
+        }
+    }
+
+    /**
+     * Store a new unit category
+     */
+    public function storeUnitCategory(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'category_name' => 'required|string|max:255|unique:sys_pm_unit_categories,category_name',
+            ]);
+
+            UnitCategory::create($validated);
+
+            return response()->json(['success' => true, 'message' => 'Unit category created successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating unit category: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to create unit category'], 500);
+        }
+    }
+
+    /**
+     * Update a unit category
+     */
+    public function updateUnitCategory(Request $request, $encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $category = UnitCategory::findOrFail($id);
+
+            $validated = $request->validate([
+                'category_name' => 'required|string|max:255|unique:sys_pm_unit_categories,category_name,' . $id,
+            ]);
+
+            $category->update($validated);
+
+            return response()->json(['success' => true, 'message' => 'Unit category updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating unit category: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update unit category'], 500);
+        }
+    }
+
+    /**
+     * Delete a unit category
+     */
+    public function deleteUnitCategory($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $category = UnitCategory::findOrFail($id);
+            $category->delete();
+
+            return response()->json(['success' => true, 'message' => 'Unit category deleted successfully']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error deleting unit category: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to delete unit category'], 500);
         }
     }
 

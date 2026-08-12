@@ -139,6 +139,11 @@ class Property extends Model
         return $this->hasMany(Unit::class, 'property_id', 'id');
     }
 
+    public function serviceAgreements()
+    {
+        return $this->hasMany(ServiceAgreement::class, 'property_id');
+    }
+
     public function leaseAgreements()
     {
         return $this->hasMany(LeaseAgreement::class, 'property_id', 'id');
@@ -157,5 +162,40 @@ class Property extends Model
     public function scopeWithAll($query)
     {
         return $query->withoutGlobalScope('user_properties');
+    }
+
+    /**
+     * Generate the next reference number for a zone, e.g. "146A". Locks the
+     * matching rows for the duration of the caller's transaction so two
+     * concurrent creations in the same zone can't collide, with a defensive
+     * backstop that keeps bumping the number if it's somehow already taken
+     * (e.g. irregular legacy data). Shared by PropertiesController::store()
+     * and BulkUploadController::processProperties() so the two creation
+     * paths can't drift apart again.
+     */
+    public static function generateReferenceNumber(Zone $zone): string
+    {
+        $zoneName = strtoupper($zone->zone_name);
+
+        $lastProperty = static::where('reference_number', 'LIKE', "%{$zoneName}")
+            ->orderByRaw("CAST(SUBSTRING(reference_number FROM '^[0-9]+') AS INTEGER) DESC")
+            ->lockForUpdate()
+            ->first();
+
+        if ($lastProperty) {
+            preg_match('/(\d+)([A-Z]+)$/', $lastProperty->reference_number, $matches);
+            $newNumber = !empty($matches) ? intval($matches[1]) + 1 : 1;
+        } else {
+            $newNumber = 1;
+        }
+
+        $referenceNumber = $newNumber . $zoneName;
+
+        while (static::where('reference_number', $referenceNumber)->exists()) {
+            $newNumber++;
+            $referenceNumber = $newNumber . $zoneName;
+        }
+
+        return $referenceNumber;
     }
 }

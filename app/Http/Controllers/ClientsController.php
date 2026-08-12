@@ -1468,6 +1468,35 @@ class ClientsController extends Controller
     }
 
     /**
+     * Check whether a landlord already exists with the given National ID
+     * (Individual) or Registration Number (Company). Used both for the
+     * live on-blur checker on the create form and as a data source for the
+     * server-side uniqueness check in validateIndividualOrCompanyFields().
+     */
+    public function checkIdentifierExists(Request $request)
+    {
+        $clientTypeId = (int) $request->input('client_type_id');
+        $value = trim((string) $request->input('value', ''));
+
+        if ($value === '') {
+            return response()->json(['exists' => false]);
+        }
+
+        $column = $clientTypeId === 3 ? 'company_registration_number' : 'national_id';
+
+        $match = Client::landlords()
+            ->where($column, $value)
+            ->select(['id', 'names', 'reference_number'])
+            ->first();
+
+        return response()->json([
+            'exists' => (bool) $match,
+            'name' => $match->names ?? null,
+            'reference_number' => $match->reference_number ?? null,
+        ]);
+    }
+
+    /**
      * Store a newly created client
      */
     public function store(Request $request)
@@ -1475,6 +1504,7 @@ class ClientsController extends Controller
         DB::beginTransaction();
         try {
             $validated = $this->validateClientRequest($request);
+            $this->validateIndividualOrCompanyFields($validated);
             Log::info('Validated client data: ' . json_encode($validated));
 
             $referenceNumber = $this->generateClientReferenceNumber();
@@ -1520,15 +1550,27 @@ class ClientsController extends Controller
         return $request->validate([
             'select_time' => 'nullable|date',
             'client_id' => 'nullable|string|max:255',
-            'title' => 'required|string|max:10',
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
+            'title' => 'nullable|string|max:10',
+            // Individual-only fields: not required here since a Company client
+            // (client_type_id 3, from the create form only — the edit form reuses
+            // this same validator with a different client_type_id meaning) doesn't
+            // fill these in. store() applies its own conditional requirement on top.
+            'first_name' => 'nullable|string|max:255',
+            'last_name' => 'nullable|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'surname2' => 'nullable|string|max:255',
             'national_id' => 'nullable|string|max:50',
             'prefix' => 'nullable|string|max:20',
-            'gender' => 'required|in:Male,Female,Other',
+            'gender' => 'nullable|in:Male,Female,Other',
             'pin_number' => 'nullable|string|max:50',
+
+            // Company-only fields (create form's "Company" client type)
+            'company_name' => 'nullable|string|max:255',
+            'company_registration_number' => 'nullable|string|max:255',
+            'contact_person_name' => 'nullable|string|max:255',
+            'contact_person_title' => 'nullable|string|max:255',
+            'contact_person_mobile' => 'nullable|string|max:20',
+            'contact_person_email' => 'nullable|email|max:255',
             'preferred_language_id' => 'nullable|integer',
             'passport_number' => 'nullable|string|max:50',
             'mobile_number' => 'required|string|size:12|regex:/^254[0-9]{9}$/',
@@ -1572,6 +1614,53 @@ class ClientsController extends Controller
             'next_of_kin.*.relation' => 'nullable|string|max:100',
             'next_of_kin.*.national_id' => 'nullable|string|max:50',
         ]);
+    }
+
+    /**
+     * Individual vs Company are mutually exclusive on the create-client form
+     * (client_type_id 1 = Individual, 3 = Company). Their required fields
+     * can't live in validateClientRequest()'s rule array since that same
+     * validator is reused by update(), where client_type_id means something
+     * else entirely (Landlord/Tenant/Both) — so this check runs only from
+     * store(), scoped to the create form's client_type_id meaning.
+     */
+    private function validateIndividualOrCompanyFields(array $validated): void
+    {
+        if ((int) $validated['client_type_id'] === 3) {
+            if (empty($validated['company_name'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'company_name' => ['Company name is required for a Company client.'],
+                ]);
+            }
+
+            if (!empty($validated['company_registration_number'])
+                && Client::landlords()->where('company_registration_number', trim($validated['company_registration_number']))->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'company_registration_number' => ['A landlord with this registration number already exists.'],
+                ]);
+            }
+        } else {
+            $missing = [];
+            if (empty($validated['first_name'])) {
+                $missing['first_name'] = ['First name is required for an Individual client.'];
+            }
+            if (empty($validated['last_name'])) {
+                $missing['last_name'] = ['Last name is required for an Individual client.'];
+            }
+            if (empty($validated['gender'])) {
+                $missing['gender'] = ['Gender is required for an Individual client.'];
+            }
+            if (!empty($missing)) {
+                throw \Illuminate\Validation\ValidationException::withMessages($missing);
+            }
+
+            if (!empty($validated['national_id'])
+                && Client::landlords()->where('national_id', trim($validated['national_id']))->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'national_id' => ['A landlord with this National ID already exists.'],
+                ]);
+            }
+        }
     }
 
     private function normalizeLandlordName(string $name): string
@@ -1655,24 +1744,33 @@ class ClientsController extends Controller
      */
     private function createClient(array $validated, string $referenceNumber, ?string $photoPath)
     {
+        $isCompany = (int) $validated['client_type_id'] === 3;
+
+        $names = $isCompany
+            ? trim($validated['company_name'])
+            : trim($validated['first_name'] . ' ' . ($validated['middle_name'] ?? '') . ' ' . $validated['last_name']);
+
         $clientData = [
             'reference_number' => $referenceNumber,
             'client_type_id' => $validated['client_type_id'],
-            'type_id' => $validated['client_type_id'], // For compatibility
-            'title' => $validated['title'],
-            'names' => trim($validated['first_name'] . ' ' . ($validated['middle_name'] ?? '') . ' ' . $validated['last_name']),
-            'second_name' => $validated['middle_name'] ?? null,
-            'national_id' => $validated['national_id'] ?? null,
-            'last_name' => $validated['last_name'],
-            'national_id' => $validated['national_id'] ?? null,
-            'gender' => $validated['gender'],
+            // 1 = Landlord, per Client::landlords()/tenants() scopes used throughout the
+            // app. This form is landlord-only (tenants go through TenantsController), so
+            // this must always be 1 regardless of client_type_id (Individual/Company) —
+            // it was previously set to client_type_id itself, which silently made every
+            // Company landlord invisible to landlord-scoped reports/lists.
+            'type_id' => 1,
+            'title' => $isCompany ? null : $validated['title'],
+            'names' => $names,
+            'second_name' => $isCompany ? null : ($validated['middle_name'] ?? null),
+            'last_name' => $isCompany ? null : $validated['last_name'],
+            'national_id' => $isCompany ? null : ($validated['national_id'] ?? null),
+            'passport_number' => $isCompany ? null : ($validated['passport_number'] ?? null),
+            'gender' => $isCompany ? null : $validated['gender'],
             'pin_number' => $validated['pin_number'] ?? null,
-            'passport_number' => $validated['passport_number'] ?? null,
-            'nationality_id' => $validated['nationality_id'] ?? null,
+            'nationality_id' => $isCompany ? null : ($validated['nationality_id'] ?? null),
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'] ?? null,
             'vat_number' => $validated['vat_number'] ?? null,
-            'overdraft_penalty' => $validated['overdraft_penalty'] ?? null,
             'address' => $validated['address'] ?? null,
             'photo' => $photoPath,
             'address_2' => $validated['address_2'] ?? null,
@@ -1682,6 +1780,12 @@ class ClientsController extends Controller
             'date_time' => $validated['select_time'] ?? now(),
             'current_status_id' => '1',
             'created_by' => Auth::id(),
+            'company_name' => $isCompany ? $validated['company_name'] : null,
+            'company_registration_number' => $isCompany ? ($validated['company_registration_number'] ?? null) : null,
+            'contact_person_name' => $isCompany ? ($validated['contact_person_name'] ?? null) : null,
+            'contact_person_title' => $isCompany ? ($validated['contact_person_title'] ?? null) : null,
+            'contact_person_mobile' => $isCompany ? ($validated['contact_person_mobile'] ?? null) : null,
+            'contact_person_email' => $isCompany ? ($validated['contact_person_email'] ?? null) : null,
         ];
 
         return Client::create($clientData);
@@ -1901,7 +2005,7 @@ class ClientsController extends Controller
     {
         $client->update([
             'client_type_id' => $validated['client_type_id'],
-            'type_id' => $validated['client_type_id'],
+            'type_id' => 1, // Landlord — see comment in createClient()
             'title' => $validated['title'],
             'names' => trim($validated['first_name'] . ' ' . ($validated['middle_name'] ?? '') . ' ' . $validated['last_name']),
             'second_name' => $validated['middle_name'] ?? null,

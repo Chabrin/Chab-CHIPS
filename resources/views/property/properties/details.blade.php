@@ -341,8 +341,12 @@
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                     </div>
-                                    <div class="col-auto ms-auto">
+                                    <div class="col-auto ms-auto d-flex gap-2">
                                         @permission('create_units')
+                                        <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#bulkUploadUnitsModal">
+                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
+                                            Bulk Upload Units
+                                        </button>
                                         <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitBtn">
                                             <span class="material-symbols-outlined me-1" style="font-size:18px;">add_circle</span>
                                             Add Unit
@@ -528,8 +532,9 @@
                             <label for="topology_id" class="form-label">Topology</label>
                             <select class="form-select" id="topology_id" name="topology_id">
                                 <option value="">Please select</option>
-                                <option value="1">Topology 1</option>
-                                <option value="2">Topology 2</option>
+                                @foreach($unitTopologies as $topology)
+                                <option value="{{ $topology->id }}">{{ $topology->topology_name }}</option>
+                                @endforeach
                             </select>
                             <div class="invalid-feedback"></div>
                         </div>
@@ -538,8 +543,9 @@
                             <label for="category_id" class="form-label">Category</label>
                             <select class="form-select" id="category_id" name="category_id">
                                 <option value="">Please select</option>
-                                <option value="1">For Rent</option>
-                                <option value="2">Other</option>
+                                @foreach($unitCategories as $category)
+                                <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                                @endforeach
                             </select>
                             <div class="invalid-feedback"></div>
                         </div>
@@ -656,8 +662,9 @@
                             <label for="edit_topology_id" class="form-label">Topology</label>
                             <select class="form-select" id="edit_topology_id" name="topology_id">
                                 <option value="">Please select</option>
-                                <option value="1">Topology 1</option>
-                                <option value="2">Topology 2</option>
+                                @foreach($unitTopologies as $topology)
+                                <option value="{{ $topology->id }}">{{ $topology->topology_name }}</option>
+                                @endforeach
                             </select>
                             <div class="invalid-feedback"></div>
                         </div>
@@ -666,8 +673,9 @@
                             <label for="edit_category_id" class="form-label">Category</label>
                             <select class="form-select" id="edit_category_id" name="category_id">
                                 <option value="">Please select</option>
-                                <option value="1">For Rent</option>
-                                <option value="2">Other</option>
+                                @foreach($unitCategories as $category)
+                                <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                                @endforeach
                             </select>
                             <div class="invalid-feedback"></div>
                         </div>
@@ -713,6 +721,58 @@
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Upload Units Modal -->
+<div class="modal fade" id="bulkUploadUnitsModal" tabindex="-1" aria-labelledby="bulkUploadUnitsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkUploadUnitsModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align: middle;">upload_file</span>
+                    Bulk Upload Units
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('property.bulk.upload') }}" method="POST" enctype="multipart/form-data" id="bulkUploadUnitsForm">
+                @csrf
+                <input type="hidden" name="upload_type" value="units">
+                <input type="hidden" name="client_id" value="{{ $property->client_id }}">
+                <input type="hidden" name="property_id" value="{{ $property->id }}">
+
+                <div class="modal-body">
+                    <div class="alert alert-info d-flex align-items-start">
+                        <span class="material-symbols-outlined text-primary me-2" style="font-size:24px;">info</span>
+                        <div class="flex-grow-1">
+                            <p class="mb-2 small">Every unit in this file will be added to <strong>{{ $property->property_name }} ({{ $property->reference_number }})</strong>, regardless of what's in the "Property Reference" column of the sample.</p>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="downloadUnitsSampleBtn">
+                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">download</span>
+                                Download Sample File
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="bulk_units_file" class="form-label fw-bold">
+                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">attach_file</span>
+                            Upload File <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" class="form-control" id="bulk_units_file" name="bulk_file" accept=".xlsx,.xls,.csv" required>
+                        <small class="form-text text-muted">Accepted formats: Excel (.xlsx, .xls) or CSV (.csv)</small>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="uploadUnitsBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="uploadUnitsSpinner"></span>
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">upload</span>
+                        Upload &amp; Process
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -1057,6 +1117,16 @@
                 }
             });
         }
+
+        // ── Bulk Upload Units Modal ────────────────────────────────────────────
+        $('#downloadUnitsSampleBtn').on('click', function() {
+            window.location.href = "{{ route('property.bulk.sample') }}?type=units&client_id={{ $property->client_id }}&property_id={{ $property->id }}";
+        });
+
+        $('#bulkUploadUnitsForm').on('submit', function() {
+            $('#uploadUnitsSpinner').removeClass('d-none');
+            $('#uploadUnitsBtn').prop('disabled', true);
+        });
 
         // ── Add Unit Modal ──────────────────────────────────────────────────────
         $('#addUnitBtn').on('click', function() {

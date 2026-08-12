@@ -463,7 +463,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Rent Amount</th>
                                                 <th>Zone</th>
                                                 <th>Status</th>
-                                                <th>Action</th>
+                                                {{-- <th>Action</th> --}}
                                             </tr>
                                         </thead>
                                         <tbody></tbody>
@@ -1138,19 +1138,19 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 },
                 {
                     data: 'occupancy_status'
-                },
-                {
-                    data: 'id',
-                    orderable: false,
-                    searchable: false,
-                    render: function(id, type, row) {
-                        return `
-                            <a href="/property/units/${row.encrypted_id}/edit" title="Edit Unit">
-                                <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
-                            </a>
-                        `;
-                    }
                 }
+                // {
+                //     data: 'id',
+                //     orderable: false,
+                //     searchable: false,
+                //     render: function(id, type, row) {
+                //         return `
+                //             <a href="/property/units/${row.encrypted_id}/edit" title="Edit Unit">
+                //                 <span class="material-symbols-outlined" style="font-size:18px;">edit</span>
+                //             </a>
+                //         `;
+                //     }
+                // }
             ],
             pageLength: 10,
             responsive: true,
