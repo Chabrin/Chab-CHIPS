@@ -364,17 +364,55 @@ class SLAController extends Controller
                 'zone',
                 'createdBy',
                 'serviceAgreementDocuments',
-                'invoiceClients.item',
-                'billCharges.item',
-                'returnTypes.returnType',
-                'returnTypes.invoiceableItems.invoiceableItem',
             ])->findOrFail($id);
 
-            return view('property.properties.sla.details', compact('sla'));
+            $returnsCombinationLabels = [
+                'rent_separate_rest_combined' => 'Rent (Electricity Bill, Water Bill, Service Charges)',
+                'each_separate' => 'Rent, Electricity Bill, Water Bill, Service Charges (each separate)',
+                'all_combined' => 'Rent, Electricity Bill, Water Bill, Service Charges (all combined)',
+            ];
+
+            $documents = $sla->serviceAgreementDocuments->map(function ($document) {
+                $exists = $document->sla_documents && Storage::disk('public')->exists($document->sla_documents);
+                return [
+                    'name' => $document->sla_documents ? basename($document->sla_documents) : '-',
+                    'url' => $exists ? Storage::url($document->sla_documents) : null,
+                ];
+            })->values();
+
+            return response()->json([
+                'reference_number' => $sla->reference_number ?? '-',
+                'date_start' => $sla->date_start ? \Carbon\Carbon::parse($sla->date_start)->format('Y-m-d') : '-',
+                'date_end' => $sla->date_end ? \Carbon\Carbon::parse($sla->date_end)->format('Y-m-d') : '-',
+                'is_expired' => $sla->date_end ? \Carbon\Carbon::parse($sla->date_end)->isPast() : false,
+                'current_status_id' => $sla->current_status_id,
+                'years' => $sla->years ?? '-',
+                'auto_renewal' => $sla->auto_renewal ?? 'No',
+                'client_name' => $sla->client->names ?? '-',
+                'client_reference' => $sla->client->reference_number ?? '-',
+                'property_name' => $sla->property->property_name ?? '-',
+                'property_reference' => $sla->property->reference_number ?? '-',
+                'zone_name' => $sla->zone->zone_name ?? '-',
+                'commission_percentage' => $sla->commission_percentage ?? 0,
+                'vat' => $sla->vat ?? 'No',
+                'vat_per' => $sla->vat_per ?? 0,
+                'flat_rate_vat' => $sla->flat_rate_vat ?? 0,
+                'charge_registration_fee' => (bool) $sla->charge_registration_fee,
+                'returns_combination_label' => $returnsCombinationLabels[$sla->returns_combination] ?? '-',
+                'billable_items' => [
+                    ['name' => 'Rent', 'selected' => (bool) $sla->rent_selected, 'cost' => null],
+                    ['name' => 'Electricity Bill', 'selected' => (bool) $sla->electricity_bill_selected, 'cost' => $sla->electricity_bill_cost],
+                    ['name' => 'Water Bill', 'selected' => (bool) $sla->water_bill_selected, 'cost' => $sla->water_bill_cost],
+                    ['name' => 'Service Charges', 'selected' => (bool) $sla->service_charges_selected, 'cost' => $sla->service_charges_cost],
+                ],
+                'documents' => $documents,
+                'created_by' => $sla->createdBy->name ?? '-',
+                'date_time' => $sla->date_time ? $sla->date_time->format('Y-m-d H:i') : '-',
+            ]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA details: ' . $e->getMessage());
-            return redirect()->route('service.agreements.index')->with('error', 'Failed to load service agreement details');
+            return response()->json(['error' => 'Failed to load service agreement details'], 500);
         }
     }
 

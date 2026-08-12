@@ -955,6 +955,21 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+<div class="modal fade" id="slaDetailsModal" tabindex="-1" aria-labelledby="slaDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="slaDetailsModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">description</span>
+                    Service Agreement Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="slaDetailsModalBody"></div>
+        </div>
+    </div>
+</div>
+
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;
@@ -1292,7 +1307,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         let buttons = '<div class="d-flex flex-row gap-1">';
                         // View button
                         buttons += `
-                            <a href="/property/sla/${row.encrypted_id}/show" title="View Details">
+                            <a href="#" class="sla-view-link" data-id="${row.encrypted_id}" title="View Details">
                                 <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
                             </a>
                         `;
@@ -1344,6 +1359,113 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     toastr.error('Failed to load service agreements. Please try again.');
                 }
             });
+        }
+
+        // Handle clicks on the SLA view link - load details into a modal
+        $(document).on('click', '.sla-view-link', function(e) {
+            e.preventDefault();
+            var encryptedId = $(this).data('id');
+            var $modal = $('#slaDetailsModal');
+            var $body = $('#slaDetailsModalBody');
+
+            $body.html('<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span></div>');
+            $modal.modal('show');
+
+            $.ajax({
+                url: `/property/sla/${encryptedId}/show`,
+                method: 'GET',
+                dataType: 'json',
+                success: function(sla) {
+                    $body.html(renderSlaDetails(sla));
+                },
+                error: function() {
+                    $body.html('<div class="text-danger">Failed to load service agreement details.</div>');
+                }
+            });
+        });
+
+        function renderSlaDetails(sla) {
+            var statusBadge;
+            if (sla.is_expired) {
+                statusBadge = '<span class="badge bg-danger">Expired</span>';
+            } else if (sla.current_status_id == 5) {
+                statusBadge = '<span class="badge bg-success">Active</span>';
+            } else {
+                statusBadge = '<span class="badge bg-secondary">Inactive</span>';
+            }
+
+            function field(label, value) {
+                return `
+                    <div class="col-6 col-md-3">
+                        <div class="text-muted" style="font-size:10px; line-height:1.2;">${label}</div>
+                        <div class="fw-semibold" style="font-size:12px; line-height:1.3;">${value}</div>
+                    </div>
+                `;
+            }
+
+            function sectionLabel(title) {
+                return `<div class="text-muted text-uppercase" style="font-size:10px; letter-spacing:.5px;">${title}</div>`;
+            }
+
+            var billableItemsBadges = sla.billable_items.map(function(item) {
+                if (!item.selected) return '';
+                var cost = (item.cost !== null && item.cost !== undefined) ? ' &mdash; ' + Number(item.cost).toFixed(2) : '';
+                return `<span class="badge bg-light text-dark border me-1">${item.name}${cost}</span>`;
+            }).join('') || '<span class="text-muted" style="font-size:12px;">None selected</span>';
+
+            var documentsList = sla.documents.length ? sla.documents.map(function(doc) {
+                return `
+                    <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+                        <span style="font-size:12px;">${doc.name}</span>
+                        ${doc.url ? `<a href="${doc.url}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">Download</a>` : '<span class="text-muted" style="font-size:11px;">Not available</span>'}
+                    </div>
+                `;
+            }).join('') : '<div class="text-muted" style="font-size:12px;">No documents uploaded</div>';
+
+            return `
+                <div class="card">
+                    <div class="card-body p-3">
+                        <div class="row g-2">
+                            ${field('Reference Number', sla.reference_number)}
+                            ${field('Status', statusBadge)}
+                            ${field('Start Date', sla.date_start)}
+                            ${field('End Date', sla.date_end)}
+                            ${field('Duration (Years)', sla.years)}
+                            ${field('Auto Renewal', sla.auto_renewal)}
+                            ${field('Client Name', sla.client_name)}
+                            ${field('Client Reference', sla.client_reference)}
+                            ${field('Property', sla.property_name)}
+                            ${field('Property Reference', sla.property_reference)}
+                            ${field('Zone', sla.zone_name)}
+                            ${field('Commission', sla.commission_percentage + '%')}
+                            ${field('VAT', sla.vat)}
+                            ${field('VAT Percentage', sla.vat_per + '%')}
+                            ${field('Flat Rate VAT', sla.flat_rate_vat)}
+                            ${field('Registration Fee', sla.charge_registration_fee ? 'Yes' : 'No')}
+                            ${field('Created On', sla.date_time)}
+                            ${field('Created By', sla.created_by)}
+                        </div>
+
+                        <hr class="my-2">
+
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                ${sectionLabel('Billable Items')}
+                                <div class="mt-1">${billableItemsBadges}</div>
+                            </div>
+                            <div class="col-md-6">
+                                ${sectionLabel('Returns Combination')}
+                                <div style="font-size:12px;" class="mt-1">${sla.returns_combination_label}</div>
+                            </div>
+                        </div>
+
+                        <hr class="my-2">
+
+                        ${sectionLabel('Documents')}
+                        <div class="mt-1">${documentsList}</div>
+                    </div>
+                </div>
+            `;
         }
 
         // Load stats when tab is clicked
