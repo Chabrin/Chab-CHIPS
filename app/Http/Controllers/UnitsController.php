@@ -178,18 +178,7 @@ class UnitsController extends Controller
 
             // Generate unit code
             $property = Property::findOrFail($validated['property_id']);
-            $lastUnit = Unit::where('property_id', $validated['property_id'])
-                ->orderBy('unit_code', 'desc')
-                ->first();
-
-            if ($lastUnit && preg_match('/(\d+)$/', $lastUnit->unit_code, $matches)) {
-                $lastNumber = intval($matches[1]);
-                $newNumber = str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
-            } else {
-                $newNumber = '001';
-            }
-
-            $unitCode = $property->reference_number . '-U' . $newNumber;
+            $unitCode = Unit::generateUnitCode($property);
             $zone_id = $property->zone_id;
 
             // Create the unit record

@@ -61,6 +61,16 @@ class Unit extends Model
         return $this->belongsTo(Zone::class, 'zone_id');
     }
 
+    public function topology()
+    {
+        return $this->belongsTo(UnitTopology::class, 'topology_id');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(UnitCategory::class, 'category_id');
+    }
+
     public function unit_documents()
     {
         return $this->hasMany(UnitDocument::class, 'parent_id', 'id');
@@ -93,5 +103,25 @@ class Unit extends Model
     {
         return $this->hasOne(LeaseAgreement::class, 'unit_id')
             ->latest('date_start');
+    }
+
+    /**
+     * Generate the next sequential unit code for a property, e.g. "145A-U004".
+     * Shared by UnitsController::store() and BulkUploadController::processUnits()
+     * so the two creation paths can't drift apart again.
+     */
+    public static function generateUnitCode(Property $property): string
+    {
+        $lastUnit = static::where('property_id', $property->id)
+            ->orderBy('unit_code', 'desc')
+            ->first();
+
+        if ($lastUnit && preg_match('/(\d+)$/', $lastUnit->unit_code, $matches)) {
+            $newNumber = str_pad(intval($matches[1]) + 1, 3, '0', STR_PAD_LEFT);
+        } else {
+            $newNumber = '001';
+        }
+
+        return $property->reference_number . '-U' . $newNumber;
     }
 }

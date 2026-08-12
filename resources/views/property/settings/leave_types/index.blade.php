@@ -46,6 +46,62 @@
                     </div>
                 </div>
 
+                <!-- Unit Topology Section -->
+                <div class="card mb-4">
+                    <div class="card-header card-no-border d-flex align-items-center">
+                        <h5 class="mb-0">Unit Topology</h5>
+                        @permission('create_property_settings_items')
+                        <div class="ms-auto d-flex gap-2">
+                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitTopologyBtn">
+                                <span class="material-symbols-outlined">add_circle</span>
+                                <span class="ms-1">Add Topology</span>
+                            </button>
+                        </div>
+                        @endpermission
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive custom-scrollbar">
+                            <table id="unitTopologiesTable" class="display" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Topology Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Unit Category Section -->
+                <div class="card mb-4">
+                    <div class="card-header card-no-border d-flex align-items-center">
+                        <h5 class="mb-0">Unit Category</h5>
+                        @permission('create_property_settings_items')
+                        <div class="ms-auto d-flex gap-2">
+                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitCategoryBtn">
+                                <span class="material-symbols-outlined">add_circle</span>
+                                <span class="ms-1">Add Category</span>
+                            </button>
+                        </div>
+                        @endpermission
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive custom-scrollbar">
+                            <table id="unitCategoriesTable" class="display" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Category Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Invoiceable Items Section -->
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
@@ -104,6 +160,58 @@
                     <div class="mb-3">
                         <label for="returnTypeName" class="form-label">Type Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="returnTypeName" name="type_name" required>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Unit Topology Modal -->
+<div class="modal fade" id="unitTopologyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unitTopologyModalLabel">Add Topology</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="unitTopologyForm">
+                <div class="modal-body">
+                    <input type="hidden" id="unitTopologyId" name="id">
+                    <div class="mb-3">
+                        <label for="unitTopologyName" class="form-label">Topology Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="unitTopologyName" name="topology_name" required>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Unit Category Modal -->
+<div class="modal fade" id="unitCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unitCategoryModalLabel">Add Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="unitCategoryForm">
+                <div class="modal-body">
+                    <input type="hidden" id="unitCategoryId" name="id">
+                    <div class="mb-3">
+                        <label for="unitCategoryName" class="form-label">Category Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="unitCategoryName" name="category_name" required>
                         <div class="invalid-feedback"></div>
                     </div>
                 </div>
@@ -221,6 +329,84 @@ $(document).ready(function() {
                     }
                     if (data.can_delete) {
                         actions += `<a href="javascript:void(0)" class="text-danger delete-return-type" data-id="${data.encrypted_id}" data-name="${data.type_name}" title="Delete">
+                            <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+                        </a>`;
+                    }
+                    return actions || '-';
+                }
+            }
+        ],
+        order: [[0, 'asc']],
+        pageLength: 10,
+        responsive: true
+    });
+
+    // ============ UNIT TOPOLOGIES TABLE ============
+    const unitTopologiesTable = $('#unitTopologiesTable').DataTable({
+        processing: true,
+        serverSide: false,
+        ajax: {
+            url: '{{ route("property.settings.unit-topologies.data") }}',
+            type: 'GET',
+            dataSrc: 'data',
+            error: function(xhr) {
+                console.error('Error loading unit topologies:', xhr);
+            }
+        },
+        columns: [
+            { data: 'topology_name' },
+            {
+                data: null,
+                orderable: false,
+                searchable: false,
+                render: function(data) {
+                    let actions = '';
+                    if (data.can_update) {
+                        actions += `<a href="javascript:void(0)" class="text-success edit-unit-topology me-2" data-id="${data.encrypted_id}" data-name="${data.topology_name}" title="Edit">
+                            <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                        </a>`;
+                    }
+                    if (data.can_delete) {
+                        actions += `<a href="javascript:void(0)" class="text-danger delete-unit-topology" data-id="${data.encrypted_id}" data-name="${data.topology_name}" title="Delete">
+                            <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
+                        </a>`;
+                    }
+                    return actions || '-';
+                }
+            }
+        ],
+        order: [[0, 'asc']],
+        pageLength: 10,
+        responsive: true
+    });
+
+    // ============ UNIT CATEGORIES TABLE ============
+    const unitCategoriesTable = $('#unitCategoriesTable').DataTable({
+        processing: true,
+        serverSide: false,
+        ajax: {
+            url: '{{ route("property.settings.unit-categories.data") }}',
+            type: 'GET',
+            dataSrc: 'data',
+            error: function(xhr) {
+                console.error('Error loading unit categories:', xhr);
+            }
+        },
+        columns: [
+            { data: 'category_name' },
+            {
+                data: null,
+                orderable: false,
+                searchable: false,
+                render: function(data) {
+                    let actions = '';
+                    if (data.can_update) {
+                        actions += `<a href="javascript:void(0)" class="text-success edit-unit-category me-2" data-id="${data.encrypted_id}" data-name="${data.category_name}" title="Edit">
+                            <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                        </a>`;
+                    }
+                    if (data.can_delete) {
+                        actions += `<a href="javascript:void(0)" class="text-danger delete-unit-category" data-id="${data.encrypted_id}" data-name="${data.category_name}" title="Delete">
                             <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
                         </a>`;
                     }
@@ -501,6 +687,180 @@ $(document).ready(function() {
                 },
                 error: function(xhr) {
                     toastr.error(xhr.responseJSON?.message || 'Failed to delete return type');
+                }
+            });
+        }
+    });
+
+    // ============ UNIT TOPOLOGY CRUD ============
+
+    // Add Unit Topology
+    $('#addUnitTopologyBtn').click(function() {
+        $('#unitTopologyForm')[0].reset();
+        $('#unitTopologyId').val('');
+        $('#unitTopologyModalLabel').text('Add Topology');
+        $('.invalid-feedback').text('').hide();
+        $('.form-control').removeClass('is-invalid');
+        $('#unitTopologyModal').modal('show');
+    });
+
+    // Edit Unit Topology
+    $('#unitTopologiesTable').on('click', '.edit-unit-topology', function() {
+        const id = $(this).data('id');
+        const name = $(this).data('name');
+
+        $('#unitTopologyId').val(id);
+        $('#unitTopologyName').val(name);
+        $('#unitTopologyModalLabel').text('Edit Topology');
+        $('.invalid-feedback').text('').hide();
+        $('.form-control').removeClass('is-invalid');
+        $('#unitTopologyModal').modal('show');
+    });
+
+    // Submit Unit Topology Form
+    $('#unitTopologyForm').submit(function(e) {
+        e.preventDefault();
+
+        const id = $('#unitTopologyId').val();
+        const url = id
+            ? '{{ route("property.settings.unit-topologies.update", ":id") }}'.replace(':id', id)
+            : '{{ route("property.settings.unit-topologies.store") }}';
+
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: $(this).serialize(),
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                $('#unitTopologyModal').modal('hide');
+                unitTopologiesTable.ajax.reload();
+                toastr.success(response.message);
+            },
+            error: function(xhr) {
+                if (xhr.status === 422) {
+                    const errors = xhr.responseJSON.errors;
+                    $('.form-control').removeClass('is-invalid');
+                    $('.invalid-feedback').text('').hide();
+
+                    $.each(errors, function(field, messages) {
+                        const input = $(`[name="${field}"]`);
+                        input.addClass('is-invalid');
+                        input.siblings('.invalid-feedback').text(messages[0]).show();
+                    });
+                } else {
+                    toastr.error(xhr.responseJSON?.message || 'An error occurred');
+                }
+            }
+        });
+    });
+
+    // Delete Unit Topology
+    $('#unitTopologiesTable').on('click', '.delete-unit-topology', function() {
+        const id = $(this).data('id');
+        const name = $(this).data('name');
+
+        if (confirm(`Are you sure you want to delete "${name}"?`)) {
+            $.ajax({
+                url: '{{ route("property.settings.unit-topologies.delete", ":id") }}'.replace(':id', id),
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    unitTopologiesTable.ajax.reload();
+                    toastr.success(response.message);
+                },
+                error: function(xhr) {
+                    toastr.error(xhr.responseJSON?.message || 'Failed to delete unit topology');
+                }
+            });
+        }
+    });
+
+    // ============ UNIT CATEGORY CRUD ============
+
+    // Add Unit Category
+    $('#addUnitCategoryBtn').click(function() {
+        $('#unitCategoryForm')[0].reset();
+        $('#unitCategoryId').val('');
+        $('#unitCategoryModalLabel').text('Add Category');
+        $('.invalid-feedback').text('').hide();
+        $('.form-control').removeClass('is-invalid');
+        $('#unitCategoryModal').modal('show');
+    });
+
+    // Edit Unit Category
+    $('#unitCategoriesTable').on('click', '.edit-unit-category', function() {
+        const id = $(this).data('id');
+        const name = $(this).data('name');
+
+        $('#unitCategoryId').val(id);
+        $('#unitCategoryName').val(name);
+        $('#unitCategoryModalLabel').text('Edit Category');
+        $('.invalid-feedback').text('').hide();
+        $('.form-control').removeClass('is-invalid');
+        $('#unitCategoryModal').modal('show');
+    });
+
+    // Submit Unit Category Form
+    $('#unitCategoryForm').submit(function(e) {
+        e.preventDefault();
+
+        const id = $('#unitCategoryId').val();
+        const url = id
+            ? '{{ route("property.settings.unit-categories.update", ":id") }}'.replace(':id', id)
+            : '{{ route("property.settings.unit-categories.store") }}';
+
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: $(this).serialize(),
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                $('#unitCategoryModal').modal('hide');
+                unitCategoriesTable.ajax.reload();
+                toastr.success(response.message);
+            },
+            error: function(xhr) {
+                if (xhr.status === 422) {
+                    const errors = xhr.responseJSON.errors;
+                    $('.form-control').removeClass('is-invalid');
+                    $('.invalid-feedback').text('').hide();
+
+                    $.each(errors, function(field, messages) {
+                        const input = $(`[name="${field}"]`);
+                        input.addClass('is-invalid');
+                        input.siblings('.invalid-feedback').text(messages[0]).show();
+                    });
+                } else {
+                    toastr.error(xhr.responseJSON?.message || 'An error occurred');
+                }
+            }
+        });
+    });
+
+    // Delete Unit Category
+    $('#unitCategoriesTable').on('click', '.delete-unit-category', function() {
+        const id = $(this).data('id');
+        const name = $(this).data('name');
+
+        if (confirm(`Are you sure you want to delete "${name}"?`)) {
+            $.ajax({
+                url: '{{ route("property.settings.unit-categories.delete", ":id") }}'.replace(':id', id),
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    unitCategoriesTable.ajax.reload();
+                    toastr.success(response.message);
+                },
+                error: function(xhr) {
+                    toastr.error(xhr.responseJSON?.message || 'Failed to delete unit category');
                 }
             });
         }

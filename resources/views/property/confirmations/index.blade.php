@@ -27,7 +27,7 @@
                         <span class="material-symbols-outlined me-2" style="font-size:18px;">close</span>Bulk Reject
                     </button>
                 </div>
-                <div class="table-responsive">
+                <div class="table-responsive" id="property-confirmations-table-wrapper">
                     <table class="table table-striped table-hover" id="property-confirmations-table">
                         <thead>
                             <tr>
@@ -44,6 +44,21 @@
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+
+                <!-- Landlord Onboarding — bundled review (landlord + property + units + SLA as one card) -->
+                <div id="onboarding-bundles-wrapper" class="d-none">
+                    <div id="onboarding-bundles-list"></div>
+                    <div id="onboarding-bundles-empty" class="text-muted text-center py-5 d-none">Nothing pending.</div>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <button class="btn btn-light btn-sm d-flex align-items-center" id="onboarding-prev-btn" disabled>
+                            <span class="material-symbols-outlined me-1" style="font-size:18px;">chevron_left</span>Previous
+                        </button>
+                        <span class="text-muted small" id="onboarding-page-info"></span>
+                        <button class="btn btn-light btn-sm d-flex align-items-center" id="onboarding-next-btn" disabled>
+                            Next<span class="material-symbols-outlined ms-1" style="font-size:18px;">chevron_right</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -87,6 +102,59 @@
     .confirmation-field-value {
         font-weight: 600;
         word-break: break-word;
+    }
+
+    .onboarding-bundle-card {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        overflow: hidden;
+    }
+
+    .onboarding-bundle-header {
+        background: #f8f9fb;
+        padding: 0.65rem 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .onboarding-bundle-body {
+        padding: 1rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+
+    .onboarding-bundle-section-title {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6c757d;
+        margin-bottom: 0.4rem;
+    }
+
+    .onboarding-bundle-item {
+        font-size: 0.85rem;
+        padding: 0.3rem 0;
+        border-bottom: 1px dashed #eef0f2;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .onboarding-bundle-item:last-child {
+        border-bottom: none;
+    }
+
+    .onboarding-bundle-footer {
+        padding: 0.65rem 1rem;
+        border-top: 1px solid #e9ecef;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
     }
 </style>
 
@@ -140,6 +208,8 @@
 $(document).ready(function() {
     let currentSection = '';
     let selectedIds = new Set();
+    let onboardingStart = 0;
+    const onboardingLength = 10;
     
     let table = $('#property-confirmations-table').DataTable({
         processing: true,
@@ -221,30 +291,10 @@ $(document).ready(function() {
     // Render details based on section
     function renderDetails(section, data) {
         switch(section) {
-            case 'Clients':
-                return fieldGrid([
-                    ['Ref', data.reference_number], ['Name', data.names], ['Email', data.email],
-                    ['Phone', data.phone_number], ['Type', data.client_type], ['Zone', data.zone]
-                ]);
-            case 'Properties':
-                return fieldGrid([
-                    ['Ref', data.reference_number], ['Name', data.property_name], ['Client', data.client],
-                    ['Zone', data.zone], ['Type', data.property_type]
-                ]);
-            case 'Units':
-                return fieldGrid([
-                    ['Code', data.unit_code], ['Number', data.unit_number], ['Property', data.property],
-                    ['Client', data.client], ['Type', data.unit_type], ['Status', data.occupancy_status]
-                ]);
             case 'Tenants':
                 return fieldGrid([
                     ['Ref', data.reference_number], ['Name', data.names], ['Email', data.email],
                     ['Phone', data.phone_number], ['ID Number', data.id_number]
-                ]);
-            case 'Service Agreements':
-                return fieldGrid([
-                    ['Ref', data.ref_number], ['Property', data.property], ['Client', data.client],
-                    ['Start Date', data.date_start], ['End Date', data.date_end], ['Duration', data.duration_years ? data.duration_years + ' years' : null]
                 ]);
             case 'Recoveries':
                 return fieldGrid([
@@ -291,11 +341,21 @@ $(document).ready(function() {
         width: '100%'
     });
 
-    // Reload table on section change
+    // Reload table (or the bundle view) on section change
     $('#confirmation-section').on('change', function() {
         currentSection = $(this).val();
         selectedIds.clear();
-        table.ajax.reload();
+
+        if (currentSection === 'Landlord Onboarding') {
+            $('#property-confirmations-table-wrapper, #bulk-approve, #bulk-reject').addClass('d-none');
+            $('#onboarding-bundles-wrapper').removeClass('d-none');
+            onboardingStart = 0;
+            loadOnboardingBundles();
+        } else {
+            $('#onboarding-bundles-wrapper').addClass('d-none');
+            $('#property-confirmations-table-wrapper').removeClass('d-none');
+            table.ajax.reload();
+        }
     });
     
     function toggleBulkButtons() {
@@ -591,6 +651,179 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to bulk reject');
             }
+        }).always(function() {
+            setButtonLoading($btn, false);
+        });
+    });
+
+    // ===================== Landlord Onboarding (bundled review) =====================
+
+    const statusBadgeClass = { 1: 'badge-light-warning', 5: 'badge-light-success', 41: 'badge-light-danger' };
+    function statusBadge(statusId, statusLabel) {
+        let cls = statusBadgeClass[statusId] || 'badge-light-secondary';
+        return `<span class="badge ${cls}">${statusLabel || '-'}</span>`;
+    }
+
+    function renderBundleCard(bundle) {
+        let landlord = bundle.landlord;
+        let property = bundle.property;
+        let hasPendingLandlord = landlord && landlord.status_id === 1;
+        let hasPendingProperty = property && property.status_id === 1;
+        let pendingUnits = (bundle.units || []).filter(u => u.status_id === 1);
+        let pendingSlas = (bundle.service_agreements || []).filter(s => s.status_id === 1);
+        let anyPending = hasPendingLandlord || hasPendingProperty || pendingUnits.length > 0 || pendingSlas.length > 0;
+
+        let headerTitle = property
+            ? `${property.name} <span class="text-muted small">(${property.reference_number})</span>`
+            : `Landlord Onboarding <span class="text-muted small">— no property yet</span>`;
+
+        let landlordSection = landlord ? `
+            <div>
+                <div class="onboarding-bundle-section-title">Landlord</div>
+                <div class="onboarding-bundle-item">
+                    <span>${landlord.name} <span class="text-muted">(${landlord.reference_number})</span></span>
+                    ${statusBadge(landlord.status_id, landlord.status_label)}
+                </div>
+            </div>` : '';
+
+        let propertySection = property ? `
+            <div>
+                <div class="onboarding-bundle-section-title">Property</div>
+                <div class="onboarding-bundle-item">
+                    <span>${property.name} <span class="text-muted">(${property.reference_number})</span> — ${property.zone}</span>
+                    ${statusBadge(property.status_id, property.status_label)}
+                </div>
+            </div>` : '';
+
+        let unitsSection = (bundle.units && bundle.units.length > 0) ? `
+            <div>
+                <div class="onboarding-bundle-section-title">Units (${bundle.units.length})</div>
+                ${bundle.units.map(u => `
+                    <div class="onboarding-bundle-item">
+                        <span>${u.number} <span class="text-muted">(${u.code})</span></span>
+                        ${statusBadge(u.status_id, u.status_label)}
+                    </div>
+                `).join('')}
+            </div>` : '';
+
+        let slaSection = (bundle.service_agreements && bundle.service_agreements.length > 0) ? `
+            <div>
+                <div class="onboarding-bundle-section-title">Service Agreements (${bundle.service_agreements.length})</div>
+                ${bundle.service_agreements.map(s => `
+                    <div class="onboarding-bundle-item">
+                        <span>${s.reference_number} <span class="text-muted">(${s.date_start} → ${s.date_end})</span></span>
+                        ${statusBadge(s.status_id, s.status_label)}
+                    </div>
+                `).join('')}
+            </div>` : '';
+
+        let footer = anyPending ? `
+            <div class="onboarding-bundle-footer">
+                <button class="btn btn-danger btn-sm d-flex align-items-center onboarding-reject-btn" data-bundle-key="${bundle.bundle_key}">
+                    <span class="material-symbols-outlined me-1" style="font-size:16px;">close</span>Reject
+                </button>
+                <button class="btn btn-success btn-sm d-flex align-items-center onboarding-approve-btn" data-bundle-key="${bundle.bundle_key}">
+                    <span class="material-symbols-outlined me-1" style="font-size:16px;">check</span>Approve
+                </button>
+            </div>` : `
+            <div class="onboarding-bundle-footer">
+                <span class="text-muted small">Nothing pending in this bundle.</span>
+            </div>`;
+
+        return `
+            <div class="onboarding-bundle-card">
+                <div class="onboarding-bundle-header">
+                    <strong>${headerTitle}</strong>
+                    <span class="text-muted small">Created ${bundle.created_at}</span>
+                </div>
+                <div class="onboarding-bundle-body">
+                    ${landlordSection}${propertySection}${unitsSection}${slaSection}
+                </div>
+                ${footer}
+            </div>
+        `;
+    }
+
+    function loadOnboardingBundles() {
+        $('#onboarding-bundles-list').html('<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>');
+        $('#onboarding-bundles-empty').addClass('d-none');
+
+        $.get("{{ route('property.confirmations.landlord-onboarding.list') }}", {
+            start: onboardingStart,
+            length: onboardingLength
+        }, function(res) {
+            let records = res.records || [];
+            if (records.length === 0) {
+                $('#onboarding-bundles-list').empty();
+                $('#onboarding-bundles-empty').removeClass('d-none');
+            } else {
+                $('#onboarding-bundles-list').html(records.map(renderBundleCard).join(''));
+            }
+
+            let total = res.recordsTotal || 0;
+            let shownFrom = total === 0 ? 0 : onboardingStart + 1;
+            let shownTo = Math.min(onboardingStart + onboardingLength, total);
+            $('#onboarding-page-info').text(`${shownFrom}-${shownTo} of ${total}`);
+            $('#onboarding-prev-btn').prop('disabled', onboardingStart === 0);
+            $('#onboarding-next-btn').prop('disabled', shownTo >= total);
+        }).fail(function() {
+            $('#onboarding-bundles-list').empty();
+            toastr.error('Failed to load onboarding confirmations.');
+        });
+    }
+
+    $('#onboarding-prev-btn').on('click', function() {
+        onboardingStart = Math.max(0, onboardingStart - onboardingLength);
+        loadOnboardingBundles();
+    });
+
+    $('#onboarding-next-btn').on('click', function() {
+        onboardingStart += onboardingLength;
+        loadOnboardingBundles();
+    });
+
+    $(document).on('click', '.onboarding-approve-btn', async function() {
+        let $btn = $(this);
+        let bundleKey = $btn.data('bundle-key');
+        let ok = await confirmAction('Approve Bundle', 'This approves every pending item in this bundle (landlord, property, units, and service agreements). Continue?', 'btn-success');
+        if (!ok) return;
+        setButtonLoading($btn, true);
+        $.post("{{ route('property.confirmations.landlord-onboarding.approve') }}", {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            bundle_key: bundleKey
+        }, function(res) {
+            if (res.success) {
+                toastr.success(res.message || 'Approved successfully');
+                loadOnboardingBundles();
+            } else {
+                toastr.error(res.error || 'Failed to approve bundle');
+            }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to approve bundle');
+        }).always(function() {
+            setButtonLoading($btn, false);
+        });
+    });
+
+    $(document).on('click', '.onboarding-reject-btn', async function() {
+        let $btn = $(this);
+        let bundleKey = $btn.data('bundle-key');
+        let reason = await promptRejectReason();
+        if (!reason) return;
+        setButtonLoading($btn, true);
+        $.post("{{ route('property.confirmations.landlord-onboarding.reject') }}", {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            bundle_key: bundleKey,
+            rejection_reason: reason
+        }, function(res) {
+            if (res.success) {
+                toastr.success(res.message || 'Rejected successfully');
+                loadOnboardingBundles();
+            } else {
+                toastr.error(res.error || 'Failed to reject bundle');
+            }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to reject bundle');
         }).always(function() {
             setButtonLoading($btn, false);
         });

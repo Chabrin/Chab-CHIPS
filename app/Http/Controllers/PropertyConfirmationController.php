@@ -20,11 +20,8 @@ class PropertyConfirmationController extends Controller
     public function index()
     {
         $approvalSections = [
-            ['permission' => 'update_clients', 'label' => 'Clients'],
-            ['permission' => 'update_properties', 'label' => 'Properties'],
-            ['permission' => 'update_units', 'label' => 'Units'],
+            ['permission' => 'update_properties', 'label' => 'Landlord Onboarding'],
             ['permission' => 'update_tenants', 'label' => 'Tenants'],
-            ['permission' => 'update_service_agreements', 'label' => 'Service Agreements'],
             ['permission' => 'update_recoveries', 'label' => 'Recoveries'],
             ['permission' => 'update_lease_agreements', 'label' => 'Lease Agreements'],
             ['permission' => 'update_inspections', 'label' => 'Inspections'],
@@ -69,6 +66,250 @@ class PropertyConfirmationController extends Controller
             'Tenant Exit Settlements' => \App\Models\TenantExitSettlement::class,
         ];
         return $map[$section] ?? '';
+    }
+
+    /**
+     * A checker must hold all four underlying permissions to review a bundle, since
+     * approving/rejecting one can flip a landlord, a property, its units, and its
+     * service agreements all at once.
+     */
+    private function canConfirmLandlordOnboarding(): bool
+    {
+        $user = Auth::user();
+
+        return $user
+            && $user->hasPermission('update_clients')
+            && $user->hasPermission('update_properties')
+            && $user->hasPermission('update_units')
+            && $user->hasPermission('update_service_agreements');
+    }
+
+    /**
+     * Bundle a Landlord with its Property, that property's Units, and its Service
+     * Agreement(s) into one reviewable card. A bundle is anchored on a Property
+     * whenever the property itself, one of its units, or one of its SLAs is still
+     * Pending — so a unit added later to an already-approved property still shows
+     * up, with the property/landlord shown read-only for context. A Landlord with
+     * no properties yet gets its own standalone bundle so it isn't lost.
+     */
+    public function landlordOnboardingList(Request $request)
+    {
+        if (!$this->canConfirmLandlordOnboarding()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $start = max(0, (int) $request->get('start', 0));
+        $length = (int) $request->get('length', 25);
+        $length = $length > 0 ? min($length, 100) : 25;
+        $draw = (int) $request->get('draw', 1);
+        $search = trim((string) data_get($request->get('search'), 'value', ''));
+
+        $propertiesQuery = \App\Models\Property::where(function ($q) {
+            $q->where('current_status_id', 1)
+                ->orWhereHas('units', fn($uq) => $uq->where('current_status_id', 1))
+                ->orWhereHas('serviceAgreements', fn($sq) => $sq->where('current_status_id', 1));
+        });
+
+        $landlordOnlyQuery = \App\Models\Client::where('current_status_id', 1)
+            ->where('reference_number', 'LIKE', 'LAN%')
+            ->whereDoesntHave('properties');
+
+        if ($search !== '') {
+            $propertiesQuery->where(function ($q) use ($search) {
+                $q->where('reference_number', 'ILIKE', "%{$search}%")
+                    ->orWhere('property_name', 'ILIKE', "%{$search}%")
+                    ->orWhereHas('client', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"));
+            });
+            $landlordOnlyQuery->where(function ($q) use ($search) {
+                $q->where('reference_number', 'ILIKE', "%{$search}%")
+                    ->orWhere('names', 'ILIKE', "%{$search}%");
+            });
+        }
+
+        $bundles = collect();
+
+        foreach ($propertiesQuery->with(['client', 'zone', 'units', 'serviceAgreements'])->get() as $property) {
+            $bundles->push($this->buildPropertyOnboardingBundle($property));
+        }
+
+        foreach ($landlordOnlyQuery->get() as $landlord) {
+            $bundles->push($this->buildLandlordOnlyOnboardingBundle($landlord));
+        }
+
+        $bundles = $bundles->sortByDesc('created_at_raw')->values();
+        $recordsTotal = $bundles->count();
+
+        $records = $bundles->slice($start, $length)->values()->map(function ($bundle) {
+            unset($bundle['created_at_raw']);
+            return $bundle;
+        });
+
+        return response()->json([
+            'records' => $records,
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsTotal,
+        ]);
+    }
+
+    private function landlordSummary(\App\Models\Client $landlord): array
+    {
+        return [
+            'id' => $landlord->id,
+            'encrypted_id' => Crypt::encrypt($landlord->id),
+            'name' => $landlord->names ?? '-',
+            'reference_number' => $landlord->reference_number ?? '-',
+            'status_id' => $landlord->current_status_id,
+            'status_label' => $this->workflowStatuses[$landlord->current_status_id] ?? 'Unknown',
+        ];
+    }
+
+    private function buildPropertyOnboardingBundle(\App\Models\Property $property): array
+    {
+        return [
+            'bundle_key' => 'property:' . $property->id,
+            'created_at' => $property->date_time ? $property->date_time->format('d-m-Y H:i') : '-',
+            'created_at_raw' => $property->date_time,
+            'landlord' => $property->client ? $this->landlordSummary($property->client) : null,
+            'property' => [
+                'id' => $property->id,
+                'encrypted_id' => Crypt::encrypt($property->id),
+                'name' => $property->property_name ?? '-',
+                'reference_number' => $property->reference_number ?? '-',
+                'zone' => $property->zone->zone_name ?? '-',
+                'status_id' => $property->current_status_id,
+                'status_label' => $this->workflowStatuses[$property->current_status_id] ?? 'Unknown',
+            ],
+            'units' => $property->units->map(fn($unit) => [
+                'id' => $unit->id,
+                'encrypted_id' => Crypt::encrypt($unit->id),
+                'code' => $unit->unit_code ?? '-',
+                'number' => $unit->unit_number ?? '-',
+                'status_id' => $unit->current_status_id,
+                'status_label' => $this->workflowStatuses[$unit->current_status_id] ?? 'Unknown',
+            ])->values(),
+            'service_agreements' => $property->serviceAgreements->map(fn($sla) => [
+                'id' => $sla->id,
+                'encrypted_id' => Crypt::encrypt($sla->id),
+                'reference_number' => $sla->reference_number ?? '-',
+                'date_start' => $sla->date_start ? \Carbon\Carbon::parse($sla->date_start)->format('d-m-Y') : '-',
+                'date_end' => $sla->date_end ? \Carbon\Carbon::parse($sla->date_end)->format('d-m-Y') : '-',
+                'status_id' => $sla->current_status_id,
+                'status_label' => $this->workflowStatuses[$sla->current_status_id] ?? 'Unknown',
+            ])->values(),
+        ];
+    }
+
+    private function buildLandlordOnlyOnboardingBundle(\App\Models\Client $landlord): array
+    {
+        return [
+            'bundle_key' => 'landlord:' . $landlord->id,
+            'created_at' => $landlord->date_time ? $landlord->date_time->format('d-m-Y H:i') : '-',
+            'created_at_raw' => $landlord->date_time,
+            'landlord' => $this->landlordSummary($landlord),
+            'property' => null,
+            'units' => [],
+            'service_agreements' => [],
+        ];
+    }
+
+    /**
+     * Approve or reject every still-Pending piece of a bundle (landlord, property,
+     * units, service agreements) in one transaction. The bundle is re-derived
+     * server-side from bundle_key rather than trusting any client-supplied id list.
+     * Already-resolved pieces are left untouched; a bundle with nothing left pending
+     * (e.g. re-opened after a partial prior action) is a no-op, not an error.
+     */
+    private function processLandlordOnboardingAction(Request $request, int $newStatus, string $action)
+    {
+        if (!$this->canConfirmLandlordOnboarding()) {
+            return response()->json(['success' => false, 'error' => 'Unauthorized'], 403);
+        }
+
+        $bundleKey = (string) $request->input('bundle_key', '');
+        $rejectionReason = $request->input('rejection_reason');
+
+        if ($action === 'reject' && empty($rejectionReason)) {
+            return response()->json(['success' => false, 'error' => 'A rejection reason is required.'], 422);
+        }
+
+        [$type, $id] = array_pad(explode(':', $bundleKey, 2), 2, null);
+        if (!in_array($type, ['property', 'landlord'], true) || !ctype_digit((string) $id)) {
+            return response()->json(['success' => false, 'error' => 'Invalid bundle.'], 422);
+        }
+
+        try {
+            $flipped = [];
+
+            DB::transaction(function () use ($type, $id, $newStatus, &$flipped) {
+                if ($type === 'landlord') {
+                    $landlord = \App\Models\Client::findOrFail($id);
+                    if ((int) $landlord->current_status_id === 1) {
+                        $landlord->current_status_id = $newStatus;
+                        $landlord->save();
+                        $flipped['Clients'] = [$landlord->id];
+                    }
+                    return;
+                }
+
+                $property = \App\Models\Property::with(['client', 'units', 'serviceAgreements'])->findOrFail($id);
+
+                if ((int) $property->current_status_id === 1) {
+                    $property->current_status_id = $newStatus;
+                    $property->save();
+                    $flipped['Properties'] = [$property->id];
+                }
+
+                if ($property->client && (int) $property->client->current_status_id === 1) {
+                    $landlord = $property->client;
+                    $landlord->current_status_id = $newStatus;
+                    $landlord->save();
+                    $flipped['Clients'] = [$landlord->id];
+                }
+
+                $pendingUnits = $property->units->where('current_status_id', 1);
+                if ($pendingUnits->isNotEmpty()) {
+                    \App\Models\Unit::whereIn('id', $pendingUnits->pluck('id'))->update(['current_status_id' => $newStatus]);
+                    $flipped['Units'] = $pendingUnits->pluck('id')->values()->all();
+                }
+
+                $pendingSlas = $property->serviceAgreements->where('current_status_id', 1);
+                if ($pendingSlas->isNotEmpty()) {
+                    \App\Models\ServiceAgreement::whereIn('id', $pendingSlas->pluck('id'))->update(['current_status_id' => $newStatus]);
+                    $flipped['Service Agreements'] = $pendingSlas->pluck('id')->values()->all();
+                }
+            });
+
+            if (empty($flipped)) {
+                return response()->json(['success' => true, 'message' => 'Nothing pending in this bundle — already resolved.']);
+            }
+
+            foreach ($flipped as $section => $ids) {
+                $this->logConfirmation($section, $action, $ids, null, [
+                    'new_status_id' => $newStatus,
+                    'action_type' => 'bundle_' . $action,
+                    'bundle_key' => "{$type}:{$id}",
+                    'rejection_reason' => $action === 'reject' ? $rejectionReason : null,
+                ]);
+            }
+
+            $summary = collect($flipped)->map(fn($ids, $section) => count($ids) . ' ' . $section)->implode(', ');
+
+            return response()->json(['success' => true, 'message' => ucfirst($action) . 'd: ' . $summary]);
+        } catch (\Exception $e) {
+            Log::error("Error processing landlord onboarding {$action}: " . $e->getMessage());
+            return response()->json(['success' => false, 'error' => "Failed to {$action} bundle"], 500);
+        }
+    }
+
+    public function landlordOnboardingApprove(Request $request)
+    {
+        return $this->processLandlordOnboardingAction($request, 5, 'approve');
+    }
+
+    public function landlordOnboardingReject(Request $request)
+    {
+        return $this->processLandlordOnboardingAction($request, 41, 'reject');
     }
 
     public function approvalsList(Request $request)

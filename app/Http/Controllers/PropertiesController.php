@@ -129,7 +129,11 @@ class PropertiesController extends Controller
                 'leaseAgreements'
             ])
                 ->findOrFail($id);
-            return view('property.properties.details', compact('property'));
+
+            $unitTopologies = \App\Models\UnitTopology::orderBy('topology_name')->get();
+            $unitCategories = \App\Models\UnitCategory::orderBy('category_name')->get();
+
+            return view('property.properties.details', compact('property', 'unitTopologies', 'unitCategories'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading property details: ' . $e->getMessage());
@@ -401,47 +405,10 @@ class PropertiesController extends Controller
                 'settlement_account_id' => 'nullable|integer|exists:sys_pm_clients_17_repeat,id',
             ]);
     
-            // Get zone name for reference number
-            $zone = Zone::findOrFail($validated['zone_id']);
-            $zoneName = strtoupper($zone->zone_name); // Ensure uppercase (e.g., "A")
-    
             // Generate reference number with zone suffix (e.g., 145A, 146A)
-            // Find the last property with this zone suffix - sorted by the NUMERIC part,
-            // not the raw string (string sort would rank "99G" above "100G"-"194G" since
-            // '9' > '1' as a character, silently reusing an already-taken number).
-            // lockForUpdate() (inside this method's existing transaction) also serializes
-            // two people creating a property in the same zone at the same time.
-            $lastProperty = Property::where('reference_number', 'LIKE', "%{$zoneName}")
-                ->orderByRaw("CAST(SUBSTRING(reference_number FROM '^[0-9]+') AS INTEGER) DESC")
-                ->lockForUpdate()
-                ->first();
+            $zone = Zone::findOrFail($validated['zone_id']);
+            $referenceNumber = Property::generateReferenceNumber($zone);
 
-            if ($lastProperty) {
-                // Extract the numeric part before the zone name
-                // Example: "145A" -> extract "145"
-                $refNumber = $lastProperty->reference_number;
-                preg_match('/(\d+)([A-Z]+)$/', $refNumber, $matches);
-
-                if (!empty($matches)) {
-                    $lastNumber = intval($matches[1]);
-                    $newNumber = $lastNumber + 1;
-                } else {
-                    $newNumber = 1;
-                }
-            } else {
-                $newNumber = 1;
-            }
-
-            $referenceNumber = $newNumber . $zoneName;
-
-            // Defensive backstop: keep bumping if the computed number is somehow already
-            // taken (e.g. irregular legacy data), so a collision is avoided rather than
-            // two different properties silently ending up with the same reference number.
-            while (Property::where('reference_number', $referenceNumber)->exists()) {
-                $newNumber++;
-                $referenceNumber = $newNumber . $zoneName;
-            }
-    
             // Format lat_long as (latitude,longitude):zoom_level
             $latLong = null;
             if (!empty($validated['latitude']) && !empty($validated['longitude'])) {

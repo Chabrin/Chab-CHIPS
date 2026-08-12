@@ -63,7 +63,13 @@ class Client extends Model
         'address_3',
         'promas_id',
         'properties',
-        'overdraft_penalty'
+        'overdraft_penalty',
+        'company_name',
+        'company_registration_number',
+        'contact_person_name',
+        'contact_person_title',
+        'contact_person_mobile',
+        'contact_person_email',
     ];
 
     protected $casts = [
@@ -179,6 +185,13 @@ class Client extends Model
     public function property()
     {
         return $this->belongsTo(Property::class, 'property_id');
+    }
+
+    // Landlord-side: properties this client owns (inverse of Property::client()).
+    // Distinct from property() above, which is a tenant's single assigned property.
+    public function properties()
+    {
+        return $this->hasMany(Property::class, 'client_id');
     }
 
     public function unit()
