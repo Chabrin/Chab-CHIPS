@@ -365,7 +365,6 @@
 
 @endsection
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         // Toggle between leave duration types

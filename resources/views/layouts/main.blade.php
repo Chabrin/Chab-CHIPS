@@ -266,6 +266,46 @@
 
             <!-- ######################## BODY START  ########################3 -->
             <div id="global-alert-container" style="position:fixed;top:50px;right:20px;z-index:10500;max-width:400px;"></div>
+
+            {{-- jQuery + the toastr-compatible alert shim load here, before page content, so every
+                 page's inline scripts (however they're placed in the child view) can rely on $/jQuery
+                 and toastr already being defined — avoids each view re-including its own copy of jQuery. --}}
+            <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
+            <script>
+                function showAlert(message, type) {
+                    type = type || 'success';
+                    var alertClass = (type === 'error') ? 'danger' : type;
+                    var labels = {
+                        success: 'Success!',
+                        danger: 'Error!',
+                        warning: 'Warning!',
+                        info: 'Info!'
+                    };
+                    var label = labels[alertClass] || '';
+                    var $alert = $('<div class="alert alert-' + alertClass + ' alert-dismissible fade show" role="alert" style="font-size:13px;padding:8px 14px;">' +
+                        '<strong>' + label + '</strong> ' + message +
+                        '<button type="button" class="btn-close" data-bs-dismiss="alert" style="padding:6px 10px;"></button></div>');
+                    $('#global-alert-container').append($alert);
+                    setTimeout(function() {
+                        $alert.alert('close');
+                    }, 5000);
+                }
+                var toastr = {
+                    success: function(msg) {
+                        showAlert(msg, 'success');
+                    },
+                    error: function(msg) {
+                        showAlert(msg, 'danger');
+                    },
+                    warning: function(msg) {
+                        showAlert(msg, 'warning');
+                    },
+                    info: function(msg) {
+                        showAlert(msg, 'info');
+                    }
+                };
+            </script>
+
             @yield('content')
             <!-- ####################### BODY END ################### -->
 
@@ -282,8 +322,6 @@
         </div>
     </div>
     <!-- Core JS -->
-    <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
-
     <script>
         // Ensure all AJAX requests include the CSRF token header
         $.ajaxSetup({
@@ -321,44 +359,7 @@
     <script src="{{ asset('assets/js/header-slick.js') }}"></script>
     <script src="{{ asset('assets/js/script.js') }}"></script>
 
-    <script>
-        // Global Bootstrap alert helper — replaces toastr
-        function showAlert(message, type) {
-            type = type || 'success';
-            var alertClass = (type === 'error') ? 'danger' : type;
-            var labels = {
-                success: 'Success!',
-                danger: 'Error!',
-                warning: 'Warning!',
-                info: 'Info!'
-            };
-            var label = labels[alertClass] || '';
-            var $alert = $('<div class="alert alert-' + alertClass + ' alert-dismissible fade show" role="alert" style="font-size:13px;padding:8px 14px;">' +
-                '<strong>' + label + '</strong> ' + message +
-                '<button type="button" class="btn-close" data-bs-dismiss="alert" style="padding:6px 10px;"></button></div>');
-            $('#global-alert-container').append($alert);
-            setTimeout(function() {
-                $alert.alert('close');
-            }, 5000);
-        }
-        // Alias so existing toastr calls still work
-        var toastr = {
-            success: function(msg) {
-                showAlert(msg, 'success');
-            },
-            error: function(msg) {
-                showAlert(msg, 'danger');
-            },
-            warning: function(msg) {
-                showAlert(msg, 'warning');
-            },
-            info: function(msg) {
-                showAlert(msg, 'info');
-            }
-        };
-    </script>
-
-    {{-- Auto-surface session flash messages app-wide, via the toastr shim above.
+    {{-- Auto-surface session flash messages app-wide, via the toastr shim loaded earlier.
          Individual pages no longer need their own session('success')/session('error')
          alert block — this is the single place that renders them now. --}}
     @if(session('success'))

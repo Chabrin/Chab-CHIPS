@@ -895,7 +895,6 @@
         color: #3598db;
     }
 </style>
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(function() {
         var unitsTable = null;

@@ -329,7 +329,6 @@
 @endsection
 
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 {{-- company-data removed; assign via add/edit views instead --}}
 
 <style>

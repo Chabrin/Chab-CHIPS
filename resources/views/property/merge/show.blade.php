@@ -291,7 +291,6 @@
 </div>
 @endif
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 $(document).ready(function() {
     @if((int)$merge->current_status_id === 2)

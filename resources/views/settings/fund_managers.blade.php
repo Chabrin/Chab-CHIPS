@@ -138,7 +138,6 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(function() {
         var table = $('#fund-managers-table').DataTable({

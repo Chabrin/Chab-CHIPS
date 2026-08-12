@@ -240,7 +240,6 @@
     </div>
 </div>
 @endsection
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <style>
     .staff-name-link,
     .text-link {

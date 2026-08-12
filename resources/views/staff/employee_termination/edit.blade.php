@@ -122,7 +122,6 @@
         </div>
     </div>
 </div>
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 $(document).ready(function() {
     // You can reuse most of the JS from create.blade.php, but pre-fill selects and values as needed.

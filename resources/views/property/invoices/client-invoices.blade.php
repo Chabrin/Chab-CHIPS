@@ -247,7 +247,6 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         let lineItemIndex = 1;

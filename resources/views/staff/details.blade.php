@@ -1133,7 +1133,6 @@ use Illuminate\Support\Facades\Crypt;
     </div>
 </div>
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 function openResponseModal(caseId, caseNumber, deadline) {
     $('#response_case_id').val(caseId);

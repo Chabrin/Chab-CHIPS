@@ -48,7 +48,6 @@ $canCreate = auth()->user()->isAbleTo('create_recurrent_client_remittances');
     </div>
 </div>
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 $(function () {
     var table = $('#remittancesTable').DataTable({

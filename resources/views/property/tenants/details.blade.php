@@ -335,7 +335,6 @@
         line-height: 1.5;
     }
 </style>
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(function() {
         var paymentsTable = null;

@@ -143,6 +143,17 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" role="switch"
+                                                       id="charge_registration_fee" name="charge_registration_fee" value="1"
+                                                       {{ old('charge_registration_fee', $sla->charge_registration_fee) ? 'checked' : '' }}>
+                                                <label class="form-check-label" for="charge_registration_fee">
+                                                    Charge Registration Fee
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -181,6 +192,96 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Billable Items & Returns Combination -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <h6 class="text-muted border-bottom pb-2">Billable Items</h6>
+                                    <table class="table table-sm mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <td style="width:32px;">
+                                                    <input class="form-check-input" type="checkbox" id="rent_selected" name="rent_selected" value="1"
+                                                           {{ old('rent_selected', $sla->rent_selected) ? 'checked' : '' }}>
+                                                </td>
+                                                <td>Rent</td>
+                                                <td></td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    <input class="form-check-input billable-item-toggle" type="checkbox"
+                                                           id="electricity_bill_selected" name="electricity_bill_selected" value="1"
+                                                           data-target="electricity_bill_cost" {{ old('electricity_bill_selected', $sla->electricity_bill_selected) ? 'checked' : '' }}>
+                                                </td>
+                                                <td>Electricity Bill</td>
+                                                <td>
+                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                                           id="electricity_bill_cost" name="electricity_bill_cost" placeholder="Cost per unit"
+                                                           value="{{ old('electricity_bill_cost', $sla->electricity_bill_cost) }}"
+                                                           {{ $sla->electricity_bill_selected ? '' : 'disabled' }}>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    <input class="form-check-input billable-item-toggle" type="checkbox"
+                                                           id="water_bill_selected" name="water_bill_selected" value="1"
+                                                           data-target="water_bill_cost" {{ old('water_bill_selected', $sla->water_bill_selected) ? 'checked' : '' }}>
+                                                </td>
+                                                <td>Water Bill</td>
+                                                <td>
+                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                                           id="water_bill_cost" name="water_bill_cost" placeholder="Cost per unit"
+                                                           value="{{ old('water_bill_cost', $sla->water_bill_cost) }}"
+                                                           {{ $sla->water_bill_selected ? '' : 'disabled' }}>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    <input class="form-check-input billable-item-toggle" type="checkbox"
+                                                           id="service_charges_selected" name="service_charges_selected" value="1"
+                                                           data-target="service_charges_cost" {{ old('service_charges_selected', $sla->service_charges_selected) ? 'checked' : '' }}>
+                                                </td>
+                                                <td>Service Charges</td>
+                                                <td>
+                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                                           id="service_charges_cost" name="service_charges_cost" placeholder="Cost per unit"
+                                                           value="{{ old('service_charges_cost', $sla->service_charges_cost) }}"
+                                                           {{ $sla->service_charges_selected ? '' : 'disabled' }}>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <h6 class="text-muted border-bottom pb-2">Returns Combination</h6>
+                                    <table class="table table-sm mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <td style="width:32px;">
+                                                    <input class="form-check-input" type="radio" name="returns_combination" id="rc_rent_separate"
+                                                           value="rent_separate_rest_combined" {{ old('returns_combination', $sla->returns_combination) == 'rent_separate_rest_combined' ? 'checked' : '' }}>
+                                                </td>
+                                                <td><label for="rc_rent_separate">Rent (Electricity Bill, Water Bill, Service Charges)</label></td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    <input class="form-check-input" type="radio" name="returns_combination" id="rc_each_separate"
+                                                           value="each_separate" {{ old('returns_combination', $sla->returns_combination) == 'each_separate' ? 'checked' : '' }}>
+                                                </td>
+                                                <td><label for="rc_each_separate">Rent, Electricity Bill, Water Bill, Service Charges (each separate)</label></td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    <input class="form-check-input" type="radio" name="returns_combination" id="rc_all_combined"
+                                                           value="all_combined" {{ old('returns_combination', $sla->returns_combination) == 'all_combined' ? 'checked' : '' }}>
+                                                </td>
+                                                <td><label for="rc_all_combined">Rent, Electricity Bill, Water Bill, Service Charges (all combined)</label></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -188,7 +289,6 @@
         </div>
     </div>
 </div>
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         // VATable change handler
@@ -242,6 +342,13 @@
                     toastr.error('Failed to delete document');
                 }
             });
+        });
+
+        // Billable Items: enable/disable Cost per Unit alongside its checkbox
+        $('.billable-item-toggle').on('change', function() {
+            const targetId = $(this).data('target');
+            if (!targetId) return; // Rent row has no cost field
+            $('#' + targetId).prop('disabled', !this.checked).val(this.checked ? $('#' + targetId).val() : '');
         });
     });
 </script>

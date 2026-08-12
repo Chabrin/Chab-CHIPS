@@ -222,7 +222,6 @@
     </div>
 </div>
 @endsection
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
 <script>

@@ -304,7 +304,6 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
 </div>
 @endif
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     var updateStatusRoute = '{{ route("staff.updateStatus", ":id") }}';
     var convertUserRoute = '{{ $canCreateUsers ? route("staff.convertToUser", ":id") : "" }}';

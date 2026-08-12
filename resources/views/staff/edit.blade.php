@@ -398,7 +398,6 @@
     }
     .btn-shake { animation: btnShake 0.4s ease; }
 </style>
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 

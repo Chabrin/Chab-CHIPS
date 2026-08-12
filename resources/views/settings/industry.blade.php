@@ -78,7 +78,6 @@
 </div>
 
 @endsection
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     // use toastr for notifications
     $(function() {
