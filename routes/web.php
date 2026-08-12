@@ -950,7 +950,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Zones Routes
     Route::get('/property/settings/zones', [App\Http\Controllers\PropertySettingsController::class, 'zonesIndex'])->name('property.settings.zones.index');
     Route::get('/property/settings/zones/data', [App\Http\Controllers\PropertySettingsController::class, 'getZones'])->name('property.settings.zones.data');
-    Route::get('/property/settings/zones/users', [App\Http\Controllers\PropertySettingsController::class, 'zonesUsersList'])->name('property.settings.zones.users');
     Route::post('/property/settings/zones', [App\Http\Controllers\PropertySettingsController::class, 'storeZone'])->name('property.settings.zones.store');
     Route::post('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateZone'])->name('property.settings.zones.update');
     Route::delete('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteZone'])->name('property.settings.zones.delete');

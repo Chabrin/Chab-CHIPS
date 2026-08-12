@@ -263,6 +263,12 @@
         let map;
         let marker;
 
+        $('#field_officer_id').select2({
+            placeholder: 'Search field officer...',
+            allowClear: true,
+            width: '100%'
+        });
+
         // Initialize Leaflet map (centered on Nairobi, Kenya)
         map = L.map('propertyMap').setView([-1.2921, 36.8219], 12);
 
@@ -523,33 +529,17 @@
                         $('#zone_supervisor_id').val(selectedZone.supervisor_id);
                         console.log('Auto-selected supervisor:', selectedZone.supervisor_name);
                     }
-
-                    // Populate field officers from the zone's field_officers array
-                    if (selectedZone.field_officers && selectedZone.field_officers.length > 0) {
-                        selectedZone.field_officers.forEach(function(officer) {
-                            if (officer.id && officer.name) {
-                                fieldOfficerSelect.append(`<option value="${officer.id}">${officer.name}</option>`);
-                            }
-                        });
-                        console.log('Populated field officers:', selectedZone.field_officers.length);
-                    } else {
-                        // If no field officers assigned to zone, populate with all staff
-                        if (staffData.length > 0) {
-                            staffData.forEach(function(staff) {
-                                fieldOfficerSelect.append(`<option value="${staff.id}">${staff.full_names}</option>`);
-                            });
-                            console.log('No field officers for zone, populated with all staff');
-                        }
-                    }
-                }
-            } else {
-                // If no zone selected, repopulate field officer with all staff
-                if (staffData.length > 0) {
-                    staffData.forEach(function(staff) {
-                        fieldOfficerSelect.append(`<option value="${staff.id}">${staff.full_names}</option>`);
-                    });
                 }
             }
+
+            // Field officers aren't assignable per-zone in this app today — always
+            // offer the full staff list, regardless of which (or whether a) zone is selected.
+            if (staffData.length > 0) {
+                staffData.forEach(function(staff) {
+                    fieldOfficerSelect.append(`<option value="${staff.id}">${staff.full_names}</option>`);
+                });
+            }
+            fieldOfficerSelect.trigger('change');
         });
 
     });

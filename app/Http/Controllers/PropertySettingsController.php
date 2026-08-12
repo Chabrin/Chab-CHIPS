@@ -488,7 +488,8 @@ class PropertySettingsController extends Controller
             $userId = Auth::id();
             $query = Zone::select(['id', 'zone_name', 'estates_id', 'zone_manager_id', 'zone_supervisor_id']);
 
-            // Non-global users only see zones they have assignments in
+            // Non-global users only see zones where they're the manager or supervisor
+            // (staff-based, same pattern as Property's own visibility scope).
             if (!$this->checkGlobalRole($userId)) {
                 $staffId = DB::table('sys_user_staff_links')
                     ->where('user_id', $userId)
@@ -498,15 +499,13 @@ class PropertySettingsController extends Controller
                     return response()->json(['data' => []]);
                 }
 
-                $query->whereIn('id', function ($sub) use ($staffId) {
-                    $sub->select('zone_id')
-                        ->from('sys_pm_zones_assignments')
-                        ->where('staff_id', $staffId)
-                        ->where('current_status_id', 1);
+                $query->where(function ($q) use ($staffId) {
+                    $q->where('zone_manager_id', $staffId)
+                        ->orWhere('zone_supervisor_id', $staffId);
                 });
             }
 
-            $zones = $query->with(['zoneManager:id,name', 'zoneSupervisor:id,name'])
+            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names'])
                 ->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
@@ -516,9 +515,9 @@ class PropertySettingsController extends Controller
                         'zone_name' => $zone->zone_name ?? '-',
                         'estates_id' => $zone->estates_id ?? '-',
                         'zone_manager_id' => $zone->zone_manager_id,
-                        'zone_manager_name' => $zone->zoneManager->name ?? '-',
+                        'zone_manager_name' => $zone->zoneManager->full_names ?? '-',
                         'zone_supervisor_id' => $zone->zone_supervisor_id,
-                        'zone_supervisor_name' => $zone->zoneSupervisor->name ?? '-',
+                        'zone_supervisor_name' => $zone->zoneSupervisor->full_names ?? '-',
                         'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
                         'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
                     ];
@@ -528,25 +527,6 @@ class PropertySettingsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading zones: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load zones'], 500);
-        }
-    }
-
-    /**
-     * List system users (josya_users) for the zone manager/supervisor selects
-     */
-    public function zonesUsersList()
-    {
-        try {
-            $users = DB::table('josya_users')
-                ->select('id', 'name', 'username')
-                ->orderBy('name')
-                ->get();
-
-            return response()->json(['data' => $users]);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading users for zones: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load users'], 500);
         }
     }
 
@@ -567,8 +547,8 @@ class PropertySettingsController extends Controller
                     Rule::unique('sys_set_zones', 'zone_name'),
                 ],
                 'estates_id' => 'nullable|integer',
-                'zone_manager_id' => 'nullable|integer|exists:josya_users,id',
-                'zone_supervisor_id' => 'nullable|integer|exists:josya_users,id',
+                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
@@ -608,8 +588,8 @@ class PropertySettingsController extends Controller
                     Rule::unique('sys_set_zones', 'zone_name')->ignore($id),
                 ],
                 'estates_id' => 'nullable|integer',
-                'zone_manager_id' => 'nullable|integer|exists:josya_users,id',
-                'zone_supervisor_id' => 'nullable|integer|exists:josya_users,id',
+                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);

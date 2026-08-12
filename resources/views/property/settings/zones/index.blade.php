@@ -154,10 +154,11 @@ $(document).ready(function() {
 
     // ============ ZONE CRUD ============
 
-    // Load zone manager / supervisor users (josya_users) into both selects
+    // Load staff (sys_staff) into both selects — zone manager/supervisor are staff
+    // identities, not system-login accounts.
     function loadZoneUsers(selectedManagerId, selectedSupervisorId) {
         return $.ajax({
-            url: '{{ route("property.settings.zones.users") }}',
+            url: '{{ route("ajax.staff.list") }}',
             type: 'GET',
             dataType: 'json',
             success: function(response) {
@@ -173,9 +174,9 @@ $(document).ready(function() {
                 $manager.empty().append($('<option>', { value: '', text: 'Select zone manager' }));
                 $supervisor.empty().append($('<option>', { value: '', text: 'Select zone supervisor' }));
 
-                (response.data || []).forEach(function(user) {
-                    $manager.append($('<option>', { value: user.id, text: user.name || user.username }));
-                    $supervisor.append($('<option>', { value: user.id, text: user.name || user.username }));
+                (response.staff || []).forEach(function(staff) {
+                    $manager.append($('<option>', { value: staff.id, text: staff.full_names }));
+                    $supervisor.append($('<option>', { value: staff.id, text: staff.full_names }));
                 });
 
                 $manager.val(selectedManagerId || '');
@@ -187,7 +188,7 @@ $(document).ready(function() {
                 usersLoaded = true;
             },
             error: function() {
-                toastr.error('Failed to load users.');
+                toastr.error('Failed to load staff.');
             }
         });
     }

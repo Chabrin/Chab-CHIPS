@@ -8,7 +8,6 @@ use App\Models\Client;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Models\LeaseAgreement;
-use App\Models\ZoneAssignment;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -84,13 +83,11 @@ class PropertiesController extends Controller
             // Get IDs of properties that are targets of completed merges for this client
             $mergedTargetIds = DB::table('cb_property_merges')
                 ->where('client_id', $ClientId)
-                ->where('current_status_id', 2) // Completed
                 ->pluck('target_property_id')
                 ->toArray();
 
             $properties = Property::withoutGlobalScope('user_properties')
                 ->where('client_id', $ClientId)
-                ->where('current_status_id', '!=', 0) // Exclude merged/inactive source properties
                 ->select(['id', 'property_name', 'reference_number'])
                 ->orderBy('property_name', 'asc')
                 ->get()
@@ -326,42 +323,21 @@ class PropertiesController extends Controller
     public function getZonesWithDetails()
     {
         try {
-            // Get all zones with their areas
-            $zones = Zone::with(['zone_areas'])
-                ->select(['id', 'zone_name'])
+            // zone_manager_id/zone_supervisor_id are sys_staff ids, same space as
+            // Property.zone_manager_id/zone_supervisor_id and this form's own selects
+            // — no translation needed, just read them straight through.
+            $zones = Zone::with(['zone_areas', 'zoneManager:id,full_names', 'zoneSupervisor:id,full_names'])
+                ->select(['id', 'zone_name', 'zone_manager_id', 'zone_supervisor_id'])
                 ->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
-                    // Get zone assignments for this zone through the pivot table
-                    $assignments = ZoneAssignment::with(['staff', 'zone_assignment_zone', 'assignment_type'])
-                        ->whereHas('zone_assignment_zone', function($query) use ($zone) {
-                            $query->where('zone_id', $zone->id);
-                        })
-                        ->get();
-
-    
-                    // Get manager (assigned_as = 13)
-                    $manager = $assignments->where('assigned_as', 13)->first();
-                    
-                    // Get supervisor (assigned_as = 2)
-                    $supervisor = $assignments->where('assigned_as', 34)->first();
-                    
-                    // Get field officers (assigned_as = 12)
-                    $fieldOfficers = $assignments->where('assigned_as', 12);
-                    
                     return [
                         'id' => $zone->id,
                         'zone_name' => $zone->zone_name,
-                        'manager_id' => $manager && $manager->staff ? $manager->staff->id : null,
-                        'manager_name' => $manager && $manager->staff ? $manager->staff->full_names : null,
-                        'supervisor_id' => $supervisor && $supervisor->staff ? $supervisor->staff->id : null,
-                        'supervisor_name' => $supervisor && $supervisor->staff ? $supervisor->staff->full_names : null,
-                        'field_officers' => $fieldOfficers->map(function($assignment) {
-                            return [
-                                'id' => $assignment->staff ? $assignment->staff->id : null,
-                                'name' => $assignment->staff ? $assignment->staff->full_names : null,
-                            ];
-                        }),
+                        'manager_id' => $zone->zone_manager_id,
+                        'manager_name' => $zone->zoneManager->full_names ?? null,
+                        'supervisor_id' => $zone->zone_supervisor_id,
+                        'supervisor_name' => $zone->zoneSupervisor->full_names ?? null,
                         'areas' => $zone->zone_areas->map(function ($area) {
                             return [
                                 'id' => $area->id,
@@ -371,7 +347,7 @@ class PropertiesController extends Controller
                         })
                     ];
                 });
-    
+
             return response()->json(['zones' => $zones]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);

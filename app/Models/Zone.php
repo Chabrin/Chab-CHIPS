@@ -43,12 +43,12 @@ class Zone extends Model
 
     public function zoneManager()
     {
-        return $this->belongsTo(User::class, 'zone_manager_id');
+        return $this->belongsTo(Staff::class, 'zone_manager_id');
     }
 
     public function zoneSupervisor()
     {
-        return $this->belongsTo(User::class, 'zone_supervisor_id');
+        return $this->belongsTo(Staff::class, 'zone_supervisor_id');
     }
 
 }
