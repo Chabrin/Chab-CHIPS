@@ -1,12 +1,15 @@
 (function ($) {
-  $(".notification-slider").slick({
-    slidesToShow: 1,
-    slidesToScroll: 1,
-    dots: false,
-    vertical: true,
-    variableWidth: false,
-    autoplay: true,
-    autoplaySpeed: 2500,
-    arrows: false,
-  });
+  var $slider = $(".notification-slider");
+  if ($slider.length && typeof $slider.slick === "function") {
+    $slider.slick({
+      slidesToShow: 1,
+      slidesToScroll: 1,
+      dots: false,
+      vertical: true,
+      variableWidth: false,
+      autoplay: true,
+      autoplaySpeed: 2500,
+      arrows: false,
+    });
+  }
 })(jQuery);

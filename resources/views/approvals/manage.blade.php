@@ -226,7 +226,6 @@
 
 @endsection
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 
 <script>
     // Function to get table columns

@@ -173,7 +173,16 @@ class SLAController extends Controller
                 'date_start'                   => 'required|date',
                 'duration_years'               => 'required|integer|min:1',
                 'move_in_inspection_required'  => 'nullable|boolean',
+                'charge_registration_fee'      => 'nullable|boolean',
+                'returns_combination'          => 'nullable|in:rent_separate_rest_combined,each_separate,all_combined',
                 'sla_documents.*'              => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+                'rent_selected'                => 'nullable|boolean',
+                'electricity_bill_selected'    => 'nullable|boolean',
+                'electricity_bill_cost'        => 'nullable|numeric|min:0',
+                'water_bill_selected'          => 'nullable|boolean',
+                'water_bill_cost'              => 'nullable|numeric|min:0',
+                'service_charges_selected'     => 'nullable|boolean',
+                'service_charges_cost'         => 'nullable|numeric|min:0',
             ]);
 
             // Calculate end date
@@ -226,13 +235,22 @@ class SLAController extends Controller
                 'current_status_id'           => 1, // Pending — awaiting maker-checker approval
                 'reference_number'            => null,
                 'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
+                'charge_registration_fee'     => !empty($validated['charge_registration_fee']),
+                'returns_combination'         => $validated['returns_combination'] ?? 'each_separate',
+                'rent_selected'               => !empty($validated['rent_selected']),
+                'electricity_bill_selected'   => !empty($validated['electricity_bill_selected']),
+                'electricity_bill_cost'       => !empty($validated['electricity_bill_selected']) ? ($validated['electricity_bill_cost'] ?? 0) : null,
+                'water_bill_selected'         => !empty($validated['water_bill_selected']),
+                'water_bill_cost'             => !empty($validated['water_bill_selected']) ? ($validated['water_bill_cost'] ?? 0) : null,
+                'service_charges_selected'    => !empty($validated['service_charges_selected']),
+                'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
             ]);
 
             Log::info('Service Agreement created with ID: ' . $serviceAgreement->id);
-            
+
             // Generate and update reference number after getting the ID
             $serviceAgreement->reference_number = $this->generateReferenceNumber(
-                $property->property_name, 
+                $property->property_name,
                 $serviceAgreement->id
             );
             $serviceAgreement->save();
@@ -406,9 +424,18 @@ class SLAController extends Controller
                 'date_start'                  => 'required|date',
                 'duration_years'              => 'required|integer|min:1',
                 'move_in_inspection_required' => 'nullable|boolean',
+                'charge_registration_fee'     => 'nullable|boolean',
+                'returns_combination'         => 'nullable|in:rent_separate_rest_combined,each_separate,all_combined',
                 'sla_documents.*'             => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+                'rent_selected'               => 'nullable|boolean',
+                'electricity_bill_selected'   => 'nullable|boolean',
+                'electricity_bill_cost'       => 'nullable|numeric|min:0',
+                'water_bill_selected'         => 'nullable|boolean',
+                'water_bill_cost'             => 'nullable|numeric|min:0',
+                'service_charges_selected'    => 'nullable|boolean',
+                'service_charges_cost'        => 'nullable|numeric|min:0',
             ]);
-    
+
             // Calculate end date
             $startDate = new \DateTime($validated['date_start']);
             $endDate = clone $startDate;
@@ -454,8 +481,17 @@ class SLAController extends Controller
                 'landlord_payment_date'       => $validated['payment_date'],
                 'auto_renewal'                => $validated['auto_renewal'],
                 'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
+                'charge_registration_fee'     => !empty($validated['charge_registration_fee']),
+                'returns_combination'         => $validated['returns_combination'] ?? $serviceAgreement->returns_combination,
+                'rent_selected'               => !empty($validated['rent_selected']),
+                'electricity_bill_selected'   => !empty($validated['electricity_bill_selected']),
+                'electricity_bill_cost'       => !empty($validated['electricity_bill_selected']) ? ($validated['electricity_bill_cost'] ?? 0) : null,
+                'water_bill_selected'         => !empty($validated['water_bill_selected']),
+                'water_bill_cost'             => !empty($validated['water_bill_selected']) ? ($validated['water_bill_cost'] ?? 0) : null,
+                'service_charges_selected'    => !empty($validated['service_charges_selected']),
+                'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
             ]);
-    
+
             Log::info('Service Agreement updated successfully', [
                 'sla_id' => $serviceAgreement->id,
                 'updated_by' => Auth::id()

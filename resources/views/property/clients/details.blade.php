@@ -962,7 +962,6 @@ COPY PERMISSIONS (paste when re-enabling checks):
     /* Leases: allow responsive wrapping (removed forced nowrap) */
 </style>
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {

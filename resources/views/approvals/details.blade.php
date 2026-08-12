@@ -1,9 +1,6 @@
 @extends('layouts.main')
 
 @section('content')
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">

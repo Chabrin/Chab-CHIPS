@@ -56,7 +56,6 @@ $canUpdateStaff = auth()->user()->hasPermission('update_contracts');
     </div>
 </div>
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         let table = document.querySelector('#contracts_table');

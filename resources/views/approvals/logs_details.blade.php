@@ -1,7 +1,6 @@
 @extends('layouts.main')
 
 @section('content')
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">

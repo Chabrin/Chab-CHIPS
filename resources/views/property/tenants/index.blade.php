@@ -50,7 +50,6 @@
         </div>
     </div>
 </div>
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         var table = $('#tenants-table').DataTable({

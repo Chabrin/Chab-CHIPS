@@ -269,7 +269,6 @@
                         </ul>
 
                         <div class="tab-content mt-3" id="caseStepsTabContent">
-                            <script src="{{ asset('assets/js/jquery.min.js') }}"></script>
                             @include('discipline_tracker.steps.step1_incident', ['case' => $case])
                             @include('discipline_tracker.steps.step2_register', ['case' => $case])
                             @include('discipline_tracker.steps.step3_investigator', ['case' => $case])
@@ -357,7 +356,6 @@
 </div>
 
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
 $(document).ready(function() {
     // Auto-scroll to current step tab

@@ -436,16 +436,19 @@
 
   // active link
   if (
-    $(".simplebar-wrapper .simplebar-content-wrapper") &&
+    $(".simplebar-wrapper .simplebar-content-wrapper").length &&
     $("#pageWrapper").hasClass("compact-wrapper")
   ) {
-    $(".simplebar-wrapper .simplebar-content-wrapper").animate(
-      {
-        scrollTop:
-          $(".simplebar-wrapper .simplebar-content-wrapper a.active").offset()
-            .top - 400,
-      },
-      1000
+    var $activeSidebarLink = $(
+      ".simplebar-wrapper .simplebar-content-wrapper a.active"
     );
+    if ($activeSidebarLink.length) {
+      $(".simplebar-wrapper .simplebar-content-wrapper").animate(
+        {
+          scrollTop: $activeSidebarLink.offset().top - 400,
+        },
+        1000
+      );
+    }
   }
 })(jQuery);

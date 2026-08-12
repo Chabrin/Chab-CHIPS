@@ -44,7 +44,6 @@
     </div>
 </div>
 
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script>
     $(document).ready(function() {
         let table = document.querySelector('#employee_termination_table');

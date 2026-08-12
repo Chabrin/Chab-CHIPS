@@ -187,7 +187,6 @@
 @endsection
 
 <!-- Select2 JS -->
-<script src="{{ asset('assets/js/jquery.min.js') }}"></script>
 <script src="{{ asset('assets/js/toastr.min.js') }}"></script>
 <script>
 $(document).ready(function() {

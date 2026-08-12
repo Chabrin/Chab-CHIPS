@@ -31,6 +31,15 @@ class ServiceAgreement extends Model
         'vat_per',
         'flat_rate_vat',
         'move_in_inspection_required',
+        'charge_registration_fee',
+        'returns_combination',
+        'rent_selected',
+        'electricity_bill_selected',
+        'electricity_bill_cost',
+        'water_bill_selected',
+        'water_bill_cost',
+        'service_charges_selected',
+        'service_charges_cost',
     ];
 
     protected $casts = [
@@ -38,6 +47,11 @@ class ServiceAgreement extends Model
         'created_at'                   => 'datetime',
         'updated_at'                   => 'datetime',
         'move_in_inspection_required'  => 'boolean',
+        'charge_registration_fee'      => 'boolean',
+        'rent_selected'                => 'boolean',
+        'electricity_bill_selected'    => 'boolean',
+        'water_bill_selected'          => 'boolean',
+        'service_charges_selected'     => 'boolean',
     ];
 
     public function property()
