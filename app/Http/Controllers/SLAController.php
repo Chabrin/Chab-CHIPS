@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Property;
-use App\Models\ReturnType;
 use Illuminate\Http\Request;
 use App\Models\InvoiceableItem;
 use App\Models\ServiceAgreement;
@@ -14,10 +13,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ServiceAgreementDocument;
-use App\Models\ServiceAgreementBillCharge;
-use App\Models\ServiceAgreementReturnItem;
-use App\Models\ServiceAgreementReturnType;
-use App\Models\ServiceAgreementInvoiceClient;
 use App\Traits\ClientSearchTrait;
 
 class SLAController extends Controller
@@ -107,7 +102,6 @@ class SLAController extends Controller
             $clientId = null;
             $client = null;
             $properties = [];
-            $returnTypes = ReturnType::all();
 
             // If client parameter is provided, decrypt it and load related data
             if ($request->has('client')) {
@@ -115,8 +109,8 @@ class SLAController extends Controller
                 $client = Client::findOrFail($clientId);
                 $properties = Property::where('client_id', $client->id)->get();
             }
-            
-            return view('property.properties.sla.create', compact('properties', 'client', 'returnTypes'));
+
+            return view('property.properties.sla.create', compact('properties', 'client'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA create form: ' . $e->getMessage());
@@ -180,9 +174,6 @@ class SLAController extends Controller
                 'duration_years'               => 'required|integer|min:1',
                 'move_in_inspection_required'  => 'nullable|boolean',
                 'sla_documents.*'              => 'nullable|file|mimes:pdf,doc,docx|max:10240',
-                'invoice_charges'              => 'nullable|array',
-                'billing_charges'              => 'nullable|array',
-                'return_groups'                => 'nullable|array',
             ]);
 
             // Calculate end date
@@ -257,25 +248,6 @@ class SLAController extends Controller
             }
 
             Log::info('SLA Documents stored for SLA ID: ' . $serviceAgreement->id);
-            // Store Invoice Charges (repeater data)
-            if ($request->has('invoice_charges') && is_array($request->invoice_charges)) {
-                $this->storeInvoiceCharges($serviceAgreement->id, $request->invoice_charges);
-                Log::info('Invoice charges stored for SLA ID: ' . $serviceAgreement->id);
-            }
-
-            Log::info('Storing additional SLA data for SLA ID: ' . $serviceAgreement->id);
-            // Store Billing Charges (repeater data)
-            if ($request->has('billing_charges') && is_array($request->billing_charges)) {
-                $this->storeBillingCharges($serviceAgreement->id, $request->billing_charges);
-                Log::info('Billing charges stored for SLA ID: ' . $serviceAgreement->id);
-            }
-
-            Log::info('Storing return groups for SLA ID: ' . $serviceAgreement->id);
-            // Store Return Groups (repeater data)
-            if ($request->has('return_groups') && is_array($request->return_groups)) {
-                $this->storeReturnGroups($serviceAgreement->id, $request->return_groups);
-                Log::info('Return groups stored for SLA ID: ' . $serviceAgreement->id);
-            }
 
             Log::info('Service Agreement created successfully', ['sla_id' => $serviceAgreement->id]);
 
@@ -298,95 +270,6 @@ class SLAController extends Controller
         }
     }
 
-    /**
-     * Store Invoice Charges (form repeater data)
-     * 
-     * @param int $serviceAgreementId
-     * @param array $invoiceCharges
-     */
-    protected function storeInvoiceCharges($serviceAgreementId, $invoiceCharges)
-    {
-        foreach ($invoiceCharges as $charge) {
-            if (isset($charge['type']) && isset($charge['amount']) && $charge['type'] !== '') {
-                ServiceAgreementInvoiceClient::create([
-                    'parent_id' => $serviceAgreementId,
-                    'item_id' => $charge['type'], // This is the invoiceable item ID
-                    'amount' => $charge['amount'],
-                ]);
-            }
-        }
-        
-        Log::info('Invoice charges stored successfully', [
-            'service_agreement_id' => $serviceAgreementId,
-            'charges_count' => count($invoiceCharges)
-        ]);
-    }
-
-    /**
-     * Store Billing Charges (form repeater data)
-     * 
-     * @param int $serviceAgreementId
-     * @param array $billingCharges
-     */
-    protected function storeBillingCharges($serviceAgreementId, $billingCharges)
-    {
-        foreach ($billingCharges as $charge) {
-            if (isset($charge['item']) && $charge['item'] !== '') {
-                // Get the invoiceable item to retrieve commission percentage
-                $invoiceableItem = InvoiceableItem::find($charge['item']);
-                
-                ServiceAgreementBillCharge::create([
-                    'parent_id' => $serviceAgreementId,
-                    'item_id' => $charge['item'],
-                    'cost_per_unit' => $charge['cost'] ?? 0,
-                    'commissionable' => $charge['commissionable'] ?? 'No',
-                    'comm_percentage' => $invoiceableItem->commissionable ?? 0,
-                ]);
-            }
-        }
-        
-        Log::info('Billing charges stored successfully', [
-            'service_agreement_id' => $serviceAgreementId,
-            'charges_count' => count($billingCharges)
-        ]);
-    }
-
-    /**
-     * Store Return Groups (form repeater data)
-     * 
-     * @param int $serviceAgreementId
-     * @param array $returnGroups
-     */
-    protected function storeReturnGroups($serviceAgreementId, $returnGroups)
-    {
-        foreach ($returnGroups as $group) {
-            if (isset($group['return_type']) && $group['return_type'] !== '') {
-                // First, create the return type record
-                $returnTypeRecord = ServiceAgreementReturnType::create([
-                    'parent_id' => $serviceAgreementId,
-                    'return_type_id' => $group['return_type'],
-                    'params' => null,
-                ]);
-                
-                // Then, store selected items for this return group
-                if (isset($group['items']) && is_array($group['items'])) {
-                    foreach ($group['items'] as $itemId) {
-                        ServiceAgreementReturnItem::create([
-                            'parent_id' => $returnTypeRecord->id, // Link to the return type record
-                            'return_items' => $itemId,
-                            'params' => null,
-                        ]);
-                    }
-                }
-            }
-        }
-        
-        Log::info('Return groups stored successfully', [
-            'service_agreement_id' => $serviceAgreementId,
-            'groups_count' => count($returnGroups)
-        ]);
-    }
-    
     /**
      * Generate a unique reference number for the SLA
      * Format: {PropertyDescription}-{5-digit-sequence}
@@ -488,19 +371,12 @@ class SLAController extends Controller
                 'property',
                 'client',
                 'serviceAgreementDocuments',
-                'invoiceClients.item',
-                'billCharges.item',
-                'returnTypes.returnType',
-                'returnTypes.invoiceableItems.invoiceableItem',
             ])->findOrFail($id);
-
-            // dd( $sla );
 
             $client = $sla->client;
             $properties = Property::where('client_id', $client->id)->get();
-            $returnTypes = ReturnType::all();
-    
-            return view('property.properties.sla.edit', compact('sla', 'properties', 'client', 'returnTypes'));
+
+            return view('property.properties.sla.edit', compact('sla', 'properties', 'client'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA edit form: ' . $e->getMessage());
@@ -531,9 +407,6 @@ class SLAController extends Controller
                 'duration_years'              => 'required|integer|min:1',
                 'move_in_inspection_required' => 'nullable|boolean',
                 'sla_documents.*'             => 'nullable|file|mimes:pdf,doc,docx|max:10240',
-                'invoice_charges'             => 'nullable|array',
-                'billing_charges'             => 'nullable|array',
-                'return_groups'               => 'nullable|array',
             ]);
     
             // Calculate end date
@@ -582,28 +455,6 @@ class SLAController extends Controller
                 'auto_renewal'                => $validated['auto_renewal'],
                 'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
             ]);
-    
-            // Delete and recreate Invoice Charges
-            ServiceAgreementInvoiceClient::where('parent_id', $serviceAgreement->id)->delete();
-            if ($request->has('invoice_charges') && is_array($request->invoice_charges)) {
-                $this->storeInvoiceCharges($serviceAgreement->id, $request->invoice_charges);
-            }
-    
-            // Delete and recreate Billing Charges
-            ServiceAgreementBillCharge::where('parent_id', $serviceAgreement->id)->delete();
-            if ($request->has('billing_charges') && is_array($request->billing_charges)) {
-                $this->storeBillingCharges($serviceAgreement->id, $request->billing_charges);
-            }
-    
-            // Delete and recreate Return Groups
-            $existingReturnTypes = ServiceAgreementReturnType::where('parent_id', $serviceAgreement->id)->get();
-            foreach ($existingReturnTypes as $returnType) {
-                ServiceAgreementReturnItem::where('parent_id', $returnType->id)->delete();
-            }
-            ServiceAgreementReturnType::where('parent_id', $serviceAgreement->id)->delete();
-            if ($request->has('return_groups') && is_array($request->return_groups)) {
-                $this->storeReturnGroups($serviceAgreement->id, $request->return_groups);
-            }
     
             Log::info('Service Agreement updated successfully', [
                 'sla_id' => $serviceAgreement->id,
