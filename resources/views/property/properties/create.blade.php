@@ -45,6 +45,16 @@
                             <input type="hidden" name="latitude" id="latitude" value="{{ old('latitude') }}">
                             <input type="hidden" name="longitude" id="longitude" value="{{ old('longitude') }}">
 
+                            <div class="alert alert-info d-flex align-items-start gap-2 mb-3">
+                                <span class="material-symbols-outlined">info</span>
+                                <div>
+                                    Before creating a property, make sure the <strong>Zone</strong> has been created and its
+                                    <strong>Zone Manager</strong> and <strong>Zone Supervisor</strong> have been assigned at
+                                    <a href="{{ route('property.settings.zones.index') }}" target="_blank">Property Settings &rarr; Zones</a>.
+                                    Selecting a zone below only auto-fills the manager/supervisor if this has been done.
+                                </div>
+                            </div>
+
                             <!-- Properties Details Section -->
                             <div class="card mb-3">
                                 <div class="card-header">
