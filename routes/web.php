@@ -605,7 +605,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     ###### HR SECTION END ########
 
 
-
     ####### PROPERTY MANAGEMENT SECTION START ########
 
     // Clients

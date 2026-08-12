@@ -45,7 +45,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         <div class="mb-3 d-flex flex-row justify-content-between align-items-center">
                             <p class="text-muted mb-0" style="font-size: 0.875rem;">
                                 <strong>Ref #:</strong> {{ $client->reference_number ?? 'N/A' }} |
+                                @if($client->client_type_id == 3)
+                                <strong>Reg No:</strong> {{ $client->company_registration_number ?? '-' }} |
+                                @else
                                 <strong>National ID:</strong> {{ $client->national_id ?? '-' }} |
+                                @endif
                                 <strong>Email:</strong> {{ $client->email_address ?? '-' }} |
                                 <strong>Phone:</strong> {{ $client->mobile_number ?? '-' }}
                             </p>
@@ -167,10 +171,15 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </div>
                                             <div class="card-body py-2">
                                                 <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">Full Names:</small></div>
+                                                    <div class="col-5"><small class="text-muted">{{ $client->client_type_id == 3 ? 'Company Name:' : 'Full Names:' }}</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->names ?? '-' }}</strong></small></div>
+                                                    @if($client->client_type_id == 3)
+                                                    <div class="col-5"><small class="text-muted">Registration No:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->company_registration_number ?? '-' }}</strong></small></div>
+                                                    @else
                                                     <div class="col-5"><small class="text-muted">National ID:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->national_id ?? '-' }}</strong></small></div>
+                                                    @endif
                                                     <div class="col-5"><small class="text-muted">Reference No:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->reference_number ?? '-' }}</strong></small></div>
                                                     <div class="col-5"><small class="text-muted">Mobile Number:</small></div>
@@ -186,6 +195,18 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                     <div class="col-7"><small><strong>{{ $client->vat_number ?? '-' }}</strong></small></div>
                                                     <div class="col-5"><small class="text-muted">PIN Number:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->pin_number ?? '-' }}</strong></small></div>
+                                                    @if($client->client_type_id == 3)
+                                                    <div class="col-12"><hr class="my-2"></div>
+                                                    <div class="col-12 mb-1"><small class="text-muted fw-bold">Contact Person</small></div>
+                                                    <div class="col-5"><small class="text-muted">Name:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->contact_person_name ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Title:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->contact_person_title ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Mobile:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->contact_person_mobile ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Email:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $client->contact_person_email ?? '-' }}</strong></small></div>
+                                                    @endif
                                                 </div>
                                             </div>
                                         </div>
