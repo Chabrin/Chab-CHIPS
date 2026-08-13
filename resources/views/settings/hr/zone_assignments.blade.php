@@ -223,7 +223,7 @@
                         <label class="form-label">Zone Supervisor</label>
                         <div class="form-control-plaintext py-0" id="allocate_zone_supervisor_name">-</div>
                     </div>
-                    <small class="text-muted d-block">Zone Manager/Supervisor are set per zone — change them from Property Settings &gt; Zones.</small>
+                    <small class="text-muted d-block">Zone Manager/Supervisor are assigned from the staff member's own record — change them under Employees &gt; Employment Details.</small>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">

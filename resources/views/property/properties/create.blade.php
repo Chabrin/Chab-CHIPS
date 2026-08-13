@@ -48,10 +48,11 @@
                             <div class="alert alert-info d-flex align-items-start gap-2 mb-3">
                                 <span class="material-symbols-outlined">info</span>
                                 <div>
-                                    Before creating a property, make sure the <strong>Zone</strong> has been created and its
-                                    <strong>Zone Manager</strong> and <strong>Zone Supervisor</strong> have been assigned at
-                                    <a href="{{ route('property.settings.zones.index') }}" target="_blank">Property Settings &rarr; Zones</a>.
-                                    Selecting a zone below only auto-fills the manager/supervisor if this has been done.
+                                    Before creating a property, make sure the <strong>Zone</strong> has been created at
+                                    <a href="{{ route('property.settings.zones.index') }}" target="_blank">Property Settings &rarr; Zones</a>,
+                                    and its <strong>Zone Manager</strong> and <strong>Zone Supervisor</strong> have been assigned via
+                                    <a href="{{ route('staff.index') }}" target="_blank">Employees &rarr; Employment Details</a>.
+                                    Selecting a zone below shows the manager/supervisor automatically once this has been done.
                                 </div>
                             </div>
 
@@ -119,24 +120,12 @@
 
                                         <div class="col-md-3 mb-3">
                                             <label for="zone_manager_id" class="form-label">Zone Manager</label>
-                                            <select class="form-select @error('zone_manager_id') is-invalid @enderror" id="zone_manager_id" name="zone_manager_id">
-                                                <option value="">Please select</option>
-                                                <!-- Staff will be populated via AJAX -->
-                                            </select>
-                                            @error('zone_manager_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
+                                            <input type="text" class="form-control" id="zone_manager_id" value="Select a zone first" readonly>
                                         </div>
 
                                         <div class="col-md-3 mb-3">
                                             <label for="zone_supervisor_id" class="form-label">Zone Supervisor</label>
-                                            <select class="form-select @error('zone_supervisor_id') is-invalid @enderror" id="zone_supervisor_id" name="zone_supervisor_id">
-                                                <option value="">Please select</option>
-                                                <!-- Staff will be populated via AJAX -->
-                                            </select>
-                                            @error('zone_supervisor_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
+                                            <input type="text" class="form-control" id="zone_supervisor_id" value="Select a zone first" readonly>
                                         </div>
 
                                         <div class="col-md-3 mb-3">
@@ -170,9 +159,8 @@
 
                                         <div class="col-md-3 mb-3">
                                             <label for="field_officer_id" class="form-label">Field Officer</label>
-                                            <select class="form-select @error('field_officer_id') is-invalid @enderror" id="field_officer_id" name="field_officer_id">
-                                                <option value="">Please select</option>
-                                                <!-- Staff will be populated via AJAX -->
+                                            <select class="form-select @error('field_officer_id') is-invalid @enderror" id="field_officer_id" name="field_officer_id" disabled>
+                                                <option value="">Select a zone first</option>
                                             </select>
                                             @error('field_officer_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -265,7 +253,6 @@
 <script>
     $(document).ready(function() {
         let zonesData = [];
-        let staffData = [];
         let clientsData = [];
         let selectedClientData = null;
         let isClientPreSelected = {{ $isClientPreSelected ? 'true' : 'false' }};
@@ -460,22 +447,6 @@
             }
         });
 
-        // Load staff list
-        $.ajax({
-            url: "{{ route('ajax.staff.list') }}",
-            type: 'GET',
-            success: function(response) {
-                if (response.staff) {
-                    staffData = response.staff;
-                    populateStaffDropdowns();
-                }
-            },
-            error: function(xhr) {
-                console.error('Failed to load staff:', xhr);
-                toastr.error('Failed to load staff. Please refresh the page.');
-            }
-        });
-
         // Populate zones dropdown
         function populateZones() {
             var zoneSelect = $('#zone_id');
@@ -485,17 +456,28 @@
             });
         }
 
-        // Populate staff dropdowns
-        function populateStaffDropdowns() {
-            var selects = ['#zone_manager_id', '#zone_supervisor_id', '#field_officer_id'];
-            selects.forEach(function(selector) {
-                var select = $(selector);
-                var currentValue = select.val(); // Preserve any existing value
-                select.empty().append('<option value="">Please select</option>');
-                staffData.forEach(function(staff) {
-                    var selected = currentValue == staff.id ? 'selected' : '';
-                    select.append(`<option value="${staff.id}" ${selected}>${staff.full_names}</option>`);
-                });
+        // Load field officers stationed in the given zone (Staff.zone_id) and
+        // repopulate the Field Officer select with just that set.
+        function loadFieldOfficersForZone(zoneId) {
+            var fieldOfficerSelect = $('#field_officer_id');
+            fieldOfficerSelect.prop('disabled', true).empty().append('<option value="">Loading...</option>').trigger('change');
+
+            $.ajax({
+                url: "{{ route('ajax.staff.list') }}",
+                type: 'GET',
+                data: { zone_id: zoneId },
+                success: function(response) {
+                    fieldOfficerSelect.empty().append('<option value="">Please select</option>');
+                    (response.staff || []).forEach(function(staff) {
+                        fieldOfficerSelect.append(`<option value="${staff.id}">${staff.full_names}</option>`);
+                    });
+                    fieldOfficerSelect.prop('disabled', false).trigger('change');
+                },
+                error: function(xhr) {
+                    console.error('Failed to load field officers:', xhr);
+                    toastr.error('Failed to load field officers for this zone.');
+                    fieldOfficerSelect.empty().append('<option value="">Please select</option>').prop('disabled', false).trigger('change');
+                }
             });
         }
 
@@ -503,13 +485,11 @@
         $('#zone_id').on('change', function() {
             var zoneId = $(this).val();
             var zoneAreaSelect = $('#zone_area_id');
-            var fieldOfficerSelect = $('#field_officer_id');
-            
+
             // Clear all dependent fields
             zoneAreaSelect.empty().append('<option value="">Please select</option>');
-            $('#zone_manager_id').val('');
-            $('#zone_supervisor_id').val('');
-            fieldOfficerSelect.empty().append('<option value="">Please select</option>');
+            $('#zone_manager_id').val('Not assigned');
+            $('#zone_supervisor_id').val('Not assigned');
 
             if (zoneId) {
                 // Find the selected zone
@@ -518,8 +498,6 @@
                 });
 
                 if (selectedZone) {
-                    console.log('Selected zone:', selectedZone);
-
                     // Populate zone areas
                     if (selectedZone.areas && selectedZone.areas.length > 0) {
                         selectedZone.areas.forEach(function(area) {
@@ -527,28 +505,14 @@
                         });
                     }
 
-                    // Auto-select manager if available
-                    if (selectedZone.manager_id) {
-                        $('#zone_manager_id').val(selectedZone.manager_id);
-                        console.log('Auto-selected manager:', selectedZone.manager_name);
-                    }
-
-                    // Auto-select supervisor if available
-                    if (selectedZone.supervisor_id) {
-                        $('#zone_supervisor_id').val(selectedZone.supervisor_id);
-                        console.log('Auto-selected supervisor:', selectedZone.supervisor_name);
-                    }
+                    $('#zone_manager_id').val(selectedZone.manager_name || 'Not assigned');
+                    $('#zone_supervisor_id').val(selectedZone.supervisor_name || 'Not assigned');
                 }
-            }
 
-            // Field officers aren't assignable per-zone in this app today — always
-            // offer the full staff list, regardless of which (or whether a) zone is selected.
-            if (staffData.length > 0) {
-                staffData.forEach(function(staff) {
-                    fieldOfficerSelect.append(`<option value="${staff.id}">${staff.full_names}</option>`);
-                });
+                loadFieldOfficersForZone(zoneId);
+            } else {
+                $('#field_officer_id').prop('disabled', true).empty().append('<option value="">Select a zone first</option>').trigger('change');
             }
-            fieldOfficerSelect.trigger('change');
         });
 
     });

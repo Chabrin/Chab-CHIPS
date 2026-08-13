@@ -236,6 +236,40 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="managed_zone_ids" class="form-label">Zones Managed</label>
+                                            <select class="form-select @error('managed_zone_ids') is-invalid @enderror @error('managed_zone_ids.*') is-invalid @enderror" id="managed_zone_ids" name="managed_zone_ids[]" multiple>
+                                                @foreach($zones as $zone)
+                                                <option value="{{ $zone->id }}" {{ collect(old('managed_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
+                                                    {{ $zone->zone_name }}
+                                                </option>
+                                                @endforeach
+                                            </select>
+                                            <small class="text-muted">Zones this staff member manages</small>
+                                            @error('managed_zone_ids')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                            @enderror
+                                            @error('managed_zone_ids.*')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="supervised_zone_ids" class="form-label">Zones Supervised</label>
+                                            <select class="form-select @error('supervised_zone_ids') is-invalid @enderror @error('supervised_zone_ids.*') is-invalid @enderror" id="supervised_zone_ids" name="supervised_zone_ids[]" multiple>
+                                                @foreach($zones as $zone)
+                                                <option value="{{ $zone->id }}" {{ collect(old('supervised_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
+                                                    {{ $zone->zone_name }}
+                                                </option>
+                                                @endforeach
+                                            </select>
+                                            <small class="text-muted">Zones this staff member supervises</small>
+                                            @error('supervised_zone_ids')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                            @enderror
+                                            @error('supervised_zone_ids.*')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                            @enderror
+                                        </div>
                                     </div>
                                 </div>
 
@@ -365,6 +399,9 @@
 </div>
 <script>
     $(document).ready(function() {
+        $('#managed_zone_ids').select2({ placeholder: 'Select zones managed', width: '100%' });
+        $('#supervised_zone_ids').select2({ placeholder: 'Select zones supervised', width: '100%' });
+
         // Handle form submission
         $('#staffCreateForm').on('submit', function() {
             var submitButton = $('#createButton');

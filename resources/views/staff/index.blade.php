@@ -79,6 +79,7 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                                 <th>Gender</th>
                                                 <th>Mobile Number</th>
                                                 <th>National ID</th>
+                                                <th>Zone Roles</th>
                                                 <th>Action</th>
                                             </tr>
                                         </thead>
@@ -100,6 +101,7 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                                 <td>{{ $member->gender ?? '-' }}</td>
                                                 <td>{{ $member->mobile_number ?? '-' }}</td>
                                                 <td>{{ $member->national_id ?? '-' }}</td>
+                                                <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
                                                 <td>
                                                     <div class="d-flex flex-row gap-1">
                                                         @if($canReadStaff)
@@ -152,6 +154,7 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                                 <th>Gender</th>
                                                 <th>Mobile Number</th>
                                                 <th>National ID</th>
+                                                <th>Zone Roles</th>
                                                 <th>Status</th>
                                                 <th>Action</th>
                                             </tr>
@@ -179,6 +182,7 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                                                 <td>{{ $member->gender ?? '-' }}</td>
                                                 <td>{{ $member->mobile_number ?? '-' }}</td>
                                                 <td>{{ $member->national_id ?? '-' }}</td>
+                                                <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
                                                 <td>
                                                     <span class="badge {{ $badgeClass }} status-badge" data-status-id="{{ $statusId }}">{{ $statusLabel }}</span>
                                                 </td>

@@ -371,8 +371,6 @@ class PropertiesController extends Controller
                 'zone_id' => 'required|integer',
                 'zone_area_id' => 'required|integer',
                 'lr_number' => 'nullable|string|max:100',
-                'zone_manager_id' => 'nullable|integer',
-                'zone_supervisor_id' => 'nullable|integer',
                 'property_type_id' => 'required|integer',
                 'field_officer_id' => 'nullable|integer',
                 'acquisition_date' => 'nullable|date',
@@ -381,7 +379,7 @@ class PropertiesController extends Controller
                 'longitude' => 'nullable|numeric|between:-180,180',
                 'settlement_account_id' => 'nullable|integer|exists:sys_pm_clients_17_repeat,id',
             ]);
-    
+
             // Generate reference number with zone suffix (e.g., 145A, 146A)
             $zone = Zone::findOrFail($validated['zone_id']);
             $referenceNumber = Property::generateReferenceNumber($zone);
@@ -399,8 +397,8 @@ class PropertiesController extends Controller
                 'zone_id' => $validated['zone_id'],
                 'zone_area_id' => $validated['zone_area_id'],
                 'lr_number' => $validated['lr_number'] ?? null,
-                'zone_manager_id' => $validated['zone_manager_id'] ?? null,
-                'zone_supervisor_id' => $validated['zone_supervisor_id'] ?? null,
+                'zone_manager_id' => $zone->zone_manager_id,
+                'zone_supervisor_id' => $zone->zone_supervisor_id,
                 'usage_type_id' => $validated['property_type_id'],
                 'field_officer_id' => $validated['field_officer_id'] ?? null,
                 'acquisition_date' => $validated['acquisition_date'] ?? now(),
@@ -471,8 +469,6 @@ class PropertiesController extends Controller
                 'zone_id' => 'required|integer',
                 'zone_area_id' => 'required|integer',
                 'lr_number' => 'nullable|string|max:100',
-                'zone_manager_id' => 'nullable|integer',
-                'zone_supervisor_id' => 'nullable|integer',
                 'property_type_id' => 'required|integer',
                 'field_officer_id' => 'nullable|integer',
                 'acquisition_date' => 'nullable|date',
@@ -481,21 +477,23 @@ class PropertiesController extends Controller
                 'longitude' => 'nullable|numeric|between:-180,180',
                 'settlement_account_id' => 'nullable|integer|exists:sys_pm_clients_17_repeat,id',
             ]);
-    
+
+            $zone = Zone::findOrFail($validated['zone_id']);
+
             // Format lat_long as (latitude,longitude):zoom_level
             $latLong = null;
             if (!empty($validated['latitude']) && !empty($validated['longitude'])) {
                 $latLong = '(' . $validated['latitude'] . ',' . $validated['longitude'] . '):12';
             }
-    
+
             $property->update([
                 'client_id' => $validated['client_id'],
                 'property_name' => $validated['property_name'],
                 'zone_id' => $validated['zone_id'],
                 'zone_area_id' => $validated['zone_area_id'],
                 'lr_number' => $validated['lr_number'] ?? null,
-                'zone_manager_id' => $validated['zone_manager_id'] ?? null,
-                'zone_supervisor_id' => $validated['zone_supervisor_id'] ?? null,
+                'zone_manager_id' => $zone->zone_manager_id,
+                'zone_supervisor_id' => $zone->zone_supervisor_id,
                 'usage_type_id' => $validated['property_type_id'],
                 'field_officer_id' => $validated['field_officer_id'] ?? null,
                 'acquisition_date' => $validated['acquisition_date'] ?? $property->acquisition_date,

@@ -8,6 +8,7 @@ use App\Models\InvoiceableItem;
 use App\Models\UnitTopology;
 use App\Models\UnitCategory;
 use App\Models\Zone;
+use App\Models\Staff;
 use App\Traits\GeneralTraits\Reusables;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -505,7 +506,7 @@ class PropertySettingsController extends Controller
                 });
             }
 
-            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names'])
+            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names', 'fieldOfficers:id,full_names,zone_id'])
                 ->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
@@ -518,6 +519,7 @@ class PropertySettingsController extends Controller
                         'zone_manager_name' => $zone->zoneManager->full_names ?? '-',
                         'zone_supervisor_id' => $zone->zone_supervisor_id,
                         'zone_supervisor_name' => $zone->zoneSupervisor->full_names ?? '-',
+                        'field_officers' => $zone->fieldOfficers->map(fn($s) => ['id' => $s->id, 'full_names' => $s->full_names])->values(),
                         'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
                         'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
                     ];
@@ -536,19 +538,12 @@ class PropertySettingsController extends Controller
     public function storeZone(Request $request)
     {
         try {
-            $request->merge([
-                'zone_manager_id' => $request->zone_manager_id ?: null,
-                'zone_supervisor_id' => $request->zone_supervisor_id ?: null,
-            ]);
-
             $validated = $request->validate([
                 'zone_name' => [
                     'required', 'string', 'max:255',
                     Rule::unique('sys_set_zones', 'zone_name'),
                 ],
                 'estates_id' => 'nullable|integer',
-                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
-                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
@@ -577,19 +572,12 @@ class PropertySettingsController extends Controller
             $id = Crypt::decrypt($encryptedId);
             $zone = Zone::findOrFail($id);
 
-            $request->merge([
-                'zone_manager_id' => $request->zone_manager_id ?: null,
-                'zone_supervisor_id' => $request->zone_supervisor_id ?: null,
-            ]);
-
             $validated = $request->validate([
                 'zone_name' => [
                     'required', 'string', 'max:255',
                     Rule::unique('sys_set_zones', 'zone_name')->ignore($id),
                 ],
                 'estates_id' => 'nullable|integer',
-                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
-                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
@@ -621,6 +609,42 @@ class PropertySettingsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error deleting zone: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to delete zone'], 500);
+        }
+    }
+
+    /**
+     * Mass-assign field officers to a zone. Staff.zone_id is the source of
+     * truth (same field the property form's Field Officer filter reads) —
+     * this replaces, per zone, the full set of staff stationed there: staff
+     * previously stationed here but not in the submitted list are cleared,
+     * and staff in the submitted list are moved here even if they were
+     * previously stationed in a different zone.
+     */
+    public function assignFieldOfficers(Request $request, $encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $zone = Zone::findOrFail($id);
+
+            $validated = $request->validate([
+                'staff_ids' => 'nullable|array',
+                'staff_ids.*' => 'integer|exists:sys_staff,id',
+            ]);
+
+            $staffIds = $validated['staff_ids'] ?? [];
+
+            Staff::where('zone_id', $zone->id)->whereNotIn('id', $staffIds)->update(['zone_id' => null]);
+            if (!empty($staffIds)) {
+                Staff::whereIn('id', $staffIds)->update(['zone_id' => $zone->id]);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Field officers updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error assigning field officers: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to assign field officers'], 500);
         }
     }
 

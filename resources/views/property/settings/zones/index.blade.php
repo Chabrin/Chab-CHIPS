@@ -26,6 +26,7 @@
                                         <th>Zone Name</th>
                                         <th>Zone Manager</th>
                                         <th>Zone Supervisor</th>
+                                        <th>Field Officers</th>
                                         <th style="width: 100px;">Actions</th>
                                     </tr>
                                 </thead>
@@ -54,19 +55,9 @@
                         <input type="text" class="form-control" id="zoneName" name="zone_name" required>
                         <div class="invalid-feedback"></div>
                     </div>
-                    <div class="mb-3">
-                        <label for="zoneManagerId" class="form-label">Zone Manager</label>
-                        <select class="form-select" id="zoneManagerId" name="zone_manager_id">
-                            <option value="">Select zone manager</option>
-                        </select>
-                        <div class="invalid-feedback"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="zoneSupervisorId" class="form-label">Zone Supervisor</label>
-                        <select class="form-select" id="zoneSupervisorId" name="zone_supervisor_id">
-                            <option value="">Select zone supervisor</option>
-                        </select>
-                        <div class="invalid-feedback"></div>
+                    <div class="alert alert-info py-2 px-3 mb-0" style="font-size:0.85rem;">
+                        Zone Manager and Zone Supervisor are now assigned from the staff member's own record —
+                        see <a href="{{ route('staff.index') }}" target="_blank">Employees &rarr; Employment Details</a>.
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -84,11 +75,42 @@
     </div>
 </div>
 
+<!-- Assign Field Officers Modal -->
+<div class="modal fade" id="fieldOfficersModal" tabindex="-1" aria-labelledby="fieldOfficersModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fieldOfficersModalLabel">Assign Field Officers</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="fieldOfficersForm">
+                <div class="modal-body">
+                    <input type="hidden" id="fieldOfficersZoneId" name="zone_id">
+                    <div class="mb-3">
+                        <label for="fieldOfficersSelect" class="form-label">Field Officers</label>
+                        <select class="form-select" id="fieldOfficersSelect" name="staff_ids[]" multiple>
+                        </select>
+                        <small class="text-muted">Staff already stationed in another zone are shown with their current zone — selecting them here moves them to this zone.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveFieldOfficersBtn">
+                        <span class="material-symbols-outlined">check_circle</span>
+                        <span class="ms-1">Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 $(document).ready(function() {
-    let usersLoaded = false;
-
     // ============ ZONES TABLE ============
     const zonesTable = $('#zonesTable').DataTable({
         processing: true,
@@ -112,14 +134,24 @@ $(document).ready(function() {
             {
                 data: 'zone_manager_name',
                 render: data => data && data !== '-' ?
-                    `<span class="d-flex align-items-center gap-1"><span class="material-symbols-outlined" style="font-size:16px;">supervisor_account</span>${data}</span>` :
+                    `<span class="badge badge-light-success">${data}</span>` :
                     '<span class="text-muted">-</span>'
             },
             {
                 data: 'zone_supervisor_name',
                 render: data => data && data !== '-' ?
-                    `<span class="d-flex align-items-center gap-1"><span class="material-symbols-outlined" style="font-size:16px;">manage_accounts</span>${data}</span>` :
+                    `<span class="badge badge-light-warning">${data}</span>` :
                     '<span class="text-muted">-</span>'
+            },
+            {
+                data: 'field_officers',
+                orderable: false,
+                render: function(officers) {
+                    if (!officers || officers.length === 0) {
+                        return '<span class="text-muted">-</span>';
+                    }
+                    return officers.map(o => `<span class="badge badge-light-info">${o.full_names}</span>`).join(' ');
+                }
             },
             {
                 data: null,
@@ -132,6 +164,11 @@ $(document).ready(function() {
                             data-id="${data.encrypted_id}"
                             data-zone='${JSON.stringify(data)}' title="Edit">
                             <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                        </a>`;
+                        actions += `<a href="javascript:void(0)" class="text-primary assign-field-officers"
+                            data-id="${data.encrypted_id}"
+                            data-zone='${JSON.stringify(data)}' title="Assign Field Officers">
+                            <span class="material-symbols-outlined" style="font-size:18px;">group_add</span>
                         </a>`;
                     }
                     if (data.can_delete) {
@@ -153,45 +190,6 @@ $(document).ready(function() {
 
     // ============ ZONE CRUD ============
 
-    // Load staff (sys_staff) into both selects — zone manager/supervisor are staff
-    // identities, not system-login accounts.
-    function loadZoneUsers(selectedManagerId, selectedSupervisorId) {
-        return $.ajax({
-            url: '{{ route("ajax.staff.list") }}',
-            type: 'GET',
-            dataType: 'json',
-            success: function(response) {
-                const $manager = $('#zoneManagerId');
-                const $supervisor = $('#zoneSupervisorId');
-
-                [$manager, $supervisor].forEach($select => {
-                    if ($select.hasClass('select2-hidden-accessible')) {
-                        $select.select2('destroy');
-                    }
-                });
-
-                $manager.empty().append($('<option>', { value: '', text: 'Select zone manager' }));
-                $supervisor.empty().append($('<option>', { value: '', text: 'Select zone supervisor' }));
-
-                (response.staff || []).forEach(function(staff) {
-                    $manager.append($('<option>', { value: staff.id, text: staff.full_names }));
-                    $supervisor.append($('<option>', { value: staff.id, text: staff.full_names }));
-                });
-
-                $manager.val(selectedManagerId || '');
-                $supervisor.val(selectedSupervisorId || '');
-
-                $manager.select2({ placeholder: 'Select zone manager', allowClear: true, dropdownParent: $('#zoneModal') });
-                $supervisor.select2({ placeholder: 'Select zone supervisor', allowClear: true, dropdownParent: $('#zoneModal') });
-
-                usersLoaded = true;
-            },
-            error: function() {
-                toastr.error('Failed to load staff.');
-            }
-        });
-    }
-
     // Add Zone
     $('#addZoneBtn').click(function() {
         $('#zoneForm')[0].reset();
@@ -200,7 +198,6 @@ $(document).ready(function() {
         $('.invalid-feedback').text('').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
         $('#zoneModal').modal('show');
-        loadZoneUsers(null, null);
     });
 
     // Edit Zone
@@ -214,7 +211,6 @@ $(document).ready(function() {
         $('.invalid-feedback').text('').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
         $('#zoneModal').modal('show');
-        loadZoneUsers(data.zone_manager_id, data.zone_supervisor_id);
     });
 
     // Submit Zone Form
@@ -301,6 +297,80 @@ $(document).ready(function() {
                     toastr.error(xhr.responseJSON?.message || 'Failed to delete zone');
                 }
             });
+        });
+    });
+
+    // ============ ASSIGN FIELD OFFICERS ============
+
+    // Assign Field Officers
+    $('#zonesTable').on('click', '.assign-field-officers', function() {
+        const data = $(this).data('zone');
+        const currentOfficerIds = (data.field_officers || []).map(o => o.id);
+
+        $('#fieldOfficersZoneId').val(data.encrypted_id);
+        $('#fieldOfficersModalLabel').text('Assign Field Officers — ' + data.zone_name);
+
+        const $select = $('#fieldOfficersSelect');
+        if ($select.hasClass('select2-hidden-accessible')) {
+            $select.select2('destroy');
+        }
+        $select.empty();
+
+        $.ajax({
+            url: '{{ route("ajax.staff.list") }}',
+            type: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                (response.staff || []).forEach(function(staff) {
+                    const inOtherZone = staff.zone_name && staff.zone_name !== data.zone_name;
+                    const label = inOtherZone ? `${staff.full_names} (currently: ${staff.zone_name})` : staff.full_names;
+                    const selected = currentOfficerIds.includes(staff.id) ? 'selected' : '';
+                    $select.append(`<option value="${staff.id}" ${selected}>${label}</option>`);
+                });
+
+                $select.select2({ placeholder: 'Select field officers', width: '100%', dropdownParent: $('#fieldOfficersModal') });
+                $('#fieldOfficersModal').modal('show');
+            },
+            error: function() {
+                toastr.error('Failed to load staff.');
+            }
+        });
+    });
+
+    // Submit Field Officers Form
+    $('#fieldOfficersForm').submit(function(e) {
+        e.preventDefault();
+
+        const zoneId = $('#fieldOfficersZoneId').val();
+        const $btn = $('#saveFieldOfficersBtn');
+        const $icon = $btn.find('.material-symbols-outlined');
+        const origText = $btn.find('span.ms-1').text();
+        $icon.addClass('spin');
+        $btn.find('span.ms-1').text('Saving...');
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: '{{ route("property.settings.zones.field-officers", "PLACEHOLDER") }}'.replace('PLACEHOLDER', zoneId),
+            method: 'POST',
+            data: $(this).serialize(),
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                $icon.removeClass('spin');
+                $btn.find('span.ms-1').text(origText);
+                $btn.prop('disabled', false);
+
+                $('#fieldOfficersModal').modal('hide');
+                zonesTable.ajax.reload();
+                toastr.success(response.message);
+            },
+            error: function(xhr) {
+                $icon.removeClass('spin');
+                $btn.find('span.ms-1').text(origText);
+                $btn.prop('disabled', false);
+                toastr.error(xhr.responseJSON?.message || 'Failed to assign field officers');
+            }
         });
     });
 });

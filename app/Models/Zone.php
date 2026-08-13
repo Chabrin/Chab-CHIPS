@@ -51,4 +51,9 @@ class Zone extends Model
         return $this->belongsTo(Staff::class, 'zone_supervisor_id');
     }
 
+    public function fieldOfficers()
+    {
+        return $this->hasMany(Staff::class, 'zone_id');
+    }
+
 }

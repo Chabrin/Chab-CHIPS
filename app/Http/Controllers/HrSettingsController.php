@@ -1252,17 +1252,23 @@ class HrSettingsController extends Controller
         }
     }
 
-    public function staffList()
+    public function staffList(Request $request)
     {
         try {
-            $staff = Staff::with('position:id,position_name')
-                ->select('id', 'full_names', 'position_id')
-                ->get()
+            $query = Staff::with(['position:id,position_name', 'zone:id,zone_name'])
+                ->select('id', 'full_names', 'position_id', 'zone_id');
+
+            if ($request->filled('zone_id')) {
+                $query->where('zone_id', $request->input('zone_id'));
+            }
+
+            $staff = $query->get()
                 ->map(function ($employee) {
                     return [
                         'id' => $employee->id,
                         'full_names' => $employee->full_names,
-                        'position' => $employee->position ? $employee->position->position_name : null
+                        'position' => $employee->position ? $employee->position->position_name : null,
+                        'zone_name' => $employee->zone->zone_name ?? null,
                     ];
                 });
 
@@ -1270,7 +1276,6 @@ class HrSettingsController extends Controller
                 'success' => true,
                 'staff' => $staff
             ]);
-            return response()->json(['success' => true, 'staff' => $staff]);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);

@@ -90,6 +90,17 @@ class Staff extends Model
         return $this->belongsTo(ZoneArea::class, 'zone_area_id');
     }
 
+    // Zones this staff member manages/supervises (inverse of Zone::zoneManager()/zoneSupervisor()).
+    public function zonesManaged()
+    {
+        return $this->hasMany(Zone::class, 'zone_manager_id');
+    }
+
+    public function zonesSupervised()
+    {
+        return $this->hasMany(Zone::class, 'zone_supervisor_id');
+    }
+
     public function zone_assignments()
     {
         return $this->hasMany(ZoneAssignment::class, 'staff_id');

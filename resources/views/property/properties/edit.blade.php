@@ -107,22 +107,12 @@
 
                                         <div class="col-md-3 mb-3">
                                             <label for="zone_manager_id" class="form-label">Zone Manager</label>
-                                            <select class="form-select @error('zone_manager_id') is-invalid @enderror" id="zone_manager_id" name="zone_manager_id">
-                                                <option value="">Please select</option>
-                                            </select>
-                                            @error('zone_manager_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
+                                            <input type="text" class="form-control" id="zone_manager_id" value="{{ $property->zoneManager->full_names ?? 'Not assigned' }}" readonly>
                                         </div>
 
                                         <div class="col-md-3 mb-3">
                                             <label for="zone_supervisor_id" class="form-label">Zone Supervisor</label>
-                                            <select class="form-select @error('zone_supervisor_id') is-invalid @enderror" id="zone_supervisor_id" name="zone_supervisor_id">
-                                                <option value="">Please select</option>
-                                            </select>
-                                            @error('zone_supervisor_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
+                                            <input type="text" class="form-control" id="zone_supervisor_id" value="{{ $property->zoneSupervisor->full_names ?? 'Not assigned' }}" readonly>
                                         </div>
 
                                         <div class="col-md-3 mb-3">
@@ -250,7 +240,6 @@
 <script>
     $(document).ready(function() {
         let zonesData = [];
-        let staffData = [];
         let map;
         let marker;
 
@@ -258,8 +247,6 @@
         let existingPropertyData = {
             zone_id: {{ $property->zone_id ?? 'null' }},
             zone_area_id: {{ $property->zone_area_id ?? 'null' }},
-            zone_manager_id: {{ $property->zone_manager_id ?? 'null' }},
-            zone_supervisor_id: {{ $property->zone_supervisor_id ?? 'null' }},
             field_officer_id: {{ $property->field_officer_id ?? 'null' }},
             latitude: {{ $latitude ?? 'null' }},
             longitude: {{ $longitude ?? 'null' }}
@@ -343,22 +330,6 @@
             }
         });
 
-        // Load staff list
-        $.ajax({
-            url: "{{ route('ajax.staff.list') }}",
-            type: 'GET',
-            success: function(response) {
-                if (response.staff) {
-                    staffData = response.staff;
-                    populateStaffDropdowns();
-                }
-            },
-            error: function(xhr) {
-                console.error('Failed to load staff:', xhr);
-                toastr.error('Failed to load staff. Please refresh the page.');
-            }
-        });
-
         // Populate zones dropdown
         function populateZones() {
             var zoneSelect = $('#zone_id');
@@ -374,19 +345,31 @@
             }
         }
 
-        // Populate staff dropdowns
-        function populateStaffDropdowns() {
-            var selects = ['#zone_manager_id', '#zone_supervisor_id', '#field_officer_id'];
-            selects.forEach(function(selector) {
-                var select = $(selector);
-                var fieldName = selector.replace('#', '').replace('_id', '_id');
-                var selectedValue = existingPropertyData[fieldName];
-                
-                select.empty().append('<option value="">Please select</option>');
-                staffData.forEach(function(staff) {
-                    var selected = selectedValue == staff.id ? 'selected' : '';
-                    select.append(`<option value="${staff.id}" ${selected}>${staff.full_names}</option>`);
-                });
+        // Load field officers stationed in the given zone (Staff.zone_id) and
+        // repopulate the Field Officer select with just that set, preselecting
+        // preselectId if it's among them (used to restore the property's
+        // currently-assigned field officer on initial load).
+        function loadFieldOfficersForZone(zoneId, preselectId) {
+            var fieldOfficerSelect = $('#field_officer_id');
+            fieldOfficerSelect.prop('disabled', true).empty().append('<option value="">Loading...</option>');
+
+            $.ajax({
+                url: "{{ route('ajax.staff.list') }}",
+                type: 'GET',
+                data: { zone_id: zoneId },
+                success: function(response) {
+                    fieldOfficerSelect.empty().append('<option value="">Please select</option>');
+                    (response.staff || []).forEach(function(staff) {
+                        var selected = preselectId && preselectId == staff.id ? 'selected' : '';
+                        fieldOfficerSelect.append(`<option value="${staff.id}" ${selected}>${staff.full_names}</option>`);
+                    });
+                    fieldOfficerSelect.prop('disabled', false);
+                },
+                error: function(xhr) {
+                    console.error('Failed to load field officers:', xhr);
+                    toastr.error('Failed to load field officers for this zone.');
+                    fieldOfficerSelect.empty().append('<option value="">Please select</option>').prop('disabled', false);
+                }
             });
         }
 
@@ -394,18 +377,12 @@
         $('#zone_id').on('change', function() {
             var zoneId = $(this).val();
             var zoneAreaSelect = $('#zone_area_id');
-            var fieldOfficerSelect = $('#field_officer_id');
             var isInitialLoad = (zoneId == existingPropertyData.zone_id);
-            
+
             // Clear dependent fields
             zoneAreaSelect.empty().append('<option value="">Please select</option>');
-            
-            if (!isInitialLoad) {
-                $('#zone_manager_id').val('');
-                $('#zone_supervisor_id').val('');
-            }
-            
-            fieldOfficerSelect.empty().append('<option value="">Please select</option>');
+            $('#zone_manager_id').val('Not assigned');
+            $('#zone_supervisor_id').val('Not assigned');
 
             if (zoneId) {
                 // Find the selected zone
@@ -422,46 +399,13 @@
                         });
                     }
 
-                    // Auto-select manager if available (only on initial load or if not already set)
-                    if (selectedZone.manager_id && !isInitialLoad) {
-                        $('#zone_manager_id').val(selectedZone.manager_id);
-                    } else if (isInitialLoad && existingPropertyData.zone_manager_id) {
-                        $('#zone_manager_id').val(existingPropertyData.zone_manager_id);
-                    }
-
-                    // Auto-select supervisor if available
-                    if (selectedZone.supervisor_id && !isInitialLoad) {
-                        $('#zone_supervisor_id').val(selectedZone.supervisor_id);
-                    } else if (isInitialLoad && existingPropertyData.zone_supervisor_id) {
-                        $('#zone_supervisor_id').val(existingPropertyData.zone_supervisor_id);
-                    }
-
-                    // Populate field officers from the zone's field_officers array
-                    if (selectedZone.field_officers && selectedZone.field_officers.length > 0) {
-                        selectedZone.field_officers.forEach(function(officer) {
-                            if (officer.id && officer.name) {
-                                var selected = existingPropertyData.field_officer_id == officer.id ? 'selected' : '';
-                                fieldOfficerSelect.append(`<option value="${officer.id}" ${selected}>${officer.name}</option>`);
-                            }
-                        });
-                    } else {
-                        // If no field officers assigned to zone, populate with all staff
-                        if (staffData.length > 0) {
-                            staffData.forEach(function(staff) {
-                                var selected = existingPropertyData.field_officer_id == staff.id ? 'selected' : '';
-                                fieldOfficerSelect.append(`<option value="${staff.id}" ${selected}>${staff.full_names}</option>`);
-                            });
-                        }
-                    }
+                    $('#zone_manager_id').val(selectedZone.manager_name || 'Not assigned');
+                    $('#zone_supervisor_id').val(selectedZone.supervisor_name || 'Not assigned');
                 }
+
+                loadFieldOfficersForZone(zoneId, isInitialLoad ? existingPropertyData.field_officer_id : null);
             } else {
-                // If no zone selected, repopulate field officer with all staff
-                if (staffData.length > 0) {
-                    staffData.forEach(function(staff) {
-                        var selected = existingPropertyData.field_officer_id == staff.id ? 'selected' : '';
-                        fieldOfficerSelect.append(`<option value="${staff.id}" ${selected}>${staff.full_names}</option>`);
-                    });
-                }
+                $('#field_officer_id').prop('disabled', true).empty().append('<option value="">Select a zone first</option>');
             }
         });
 

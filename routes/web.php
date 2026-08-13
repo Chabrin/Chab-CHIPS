@@ -952,6 +952,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/settings/zones', [App\Http\Controllers\PropertySettingsController::class, 'storeZone'])->name('property.settings.zones.store');
     Route::post('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateZone'])->name('property.settings.zones.update');
     Route::delete('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteZone'])->name('property.settings.zones.delete');
+    Route::post('/property/settings/zones/{encryptedId}/field-officers', [App\Http\Controllers\PropertySettingsController::class, 'assignFieldOfficers'])->name('property.settings.zones.field-officers');
 
     // Repairs Settings Routes
     Route::get('/property/settings/repairs', [App\Http\Controllers\PropertySettingsController::class, 'repairsIndex'])->name('property.settings.repairs.index');

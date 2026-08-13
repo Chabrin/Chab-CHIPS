@@ -37,8 +37,8 @@ class StaffController extends Controller
      */
     public function index()
     {
-        $activeStaff = Staff::with('position')
-            ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id')
+        $activeStaff = Staff::with(['position', 'zone:id,zone_name', 'zonesManaged:id,zone_name,zone_manager_id', 'zonesSupervised:id,zone_name,zone_supervisor_id'])
+            ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id', 'zone_id')
             ->orderBy('full_names', 'asc')
             ->where('current_status_id', 5)
             ->get()
@@ -47,8 +47,8 @@ class StaffController extends Controller
                 return $member;
             });
 
-        $otherStaff = Staff::with('position')
-            ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id', 'current_status_id')
+        $otherStaff = Staff::with(['position', 'zone:id,zone_name', 'zonesManaged:id,zone_name,zone_manager_id', 'zonesSupervised:id,zone_name,zone_supervisor_id'])
+            ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id', 'zone_id', 'current_status_id')
             ->orderBy('full_names', 'asc')
             ->where('current_status_id', '!=', 5)
             ->get()
@@ -261,6 +261,10 @@ class StaffController extends Controller
                 'hire_date' => 'nullable|date',
                 'zone_id' => 'nullable|integer',
                 'zone_area_id' => 'nullable|integer',
+                'managed_zone_ids' => 'nullable|array',
+                'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
+                'supervised_zone_ids' => 'nullable|array',
+                'supervised_zone_ids.*' => 'integer|exists:sys_set_zones,id',
                 'bank_name' => 'nullable|integer',
                 'account_name' => 'nullable|string|max:255',
                 'account_number' => 'nullable|string|max:255',
@@ -279,6 +283,11 @@ class StaffController extends Controller
                 'disability' => 'required|string',
             ]);
 
+            $managedZoneIds = $validated['managed_zone_ids'] ?? [];
+            $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
+            unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
+            $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
+
             // Uppercase names
             if (isset($validated['full_names'])) {
                 $validated['full_names'] = strtoupper($validated['full_names']);
@@ -287,11 +296,17 @@ class StaffController extends Controller
                 $validated['spouse_name'] = strtoupper($validated['spouse_name']);
             }
 
-            $staff = new Staff();
-            $staff->fill($validated);
-            $staff->date_time = now();
-            $staff->uid = uniqid('staff_', true);
-            $staff->save();
+            $staff = DB::transaction(function () use ($validated, $managedZoneIds, $supervisedZoneIds) {
+                $staff = new Staff();
+                $staff->fill($validated);
+                $staff->date_time = now();
+                $staff->uid = uniqid('staff_', true);
+                $staff->save();
+
+                $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
+
+                return $staff;
+            });
 
             return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member created successfully');
         } catch (ValidationException $e) {
@@ -307,13 +322,46 @@ class StaffController extends Controller
     }
 
     /**
+     * A zone can't have the same staff member as both manager and supervisor.
+     */
+    private function assertNoOverlappingZoneRoles(array $managedZoneIds, array $supervisedZoneIds): void
+    {
+        $overlap = array_intersect($managedZoneIds, $supervisedZoneIds);
+        if (!empty($overlap)) {
+            throw ValidationException::withMessages([
+                'supervised_zone_ids' => ['A zone cannot have the same staff member as both manager and supervisor.'],
+            ]);
+        }
+    }
+
+    /**
+     * Assign this staff member as manager/supervisor of the given zones, and
+     * clear them from any zone they previously held that role on but is no
+     * longer selected for. Zone.zone_manager_id/zone_supervisor_id remain the
+     * source of truth — this just lets the assignment be made from the staff
+     * record instead of the zone settings page.
+     */
+    private function syncZoneRoles(Staff $staff, array $managedZoneIds, array $supervisedZoneIds): void
+    {
+        Zone::where('zone_manager_id', $staff->id)->whereNotIn('id', $managedZoneIds)->update(['zone_manager_id' => null]);
+        if (!empty($managedZoneIds)) {
+            Zone::whereIn('id', $managedZoneIds)->update(['zone_manager_id' => $staff->id]);
+        }
+
+        Zone::where('zone_supervisor_id', $staff->id)->whereNotIn('id', $supervisedZoneIds)->update(['zone_supervisor_id' => null]);
+        if (!empty($supervisedZoneIds)) {
+            Zone::whereIn('id', $supervisedZoneIds)->update(['zone_supervisor_id' => $staff->id]);
+        }
+    }
+
+    /**
      * Show the form for editing staff
      */
     public function edit($encryptedId)
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $staff = Staff::findOrFail($id);
+            $staff = Staff::with(['zonesManaged', 'zonesSupervised'])->findOrFail($id);
             $departments = Department::orderBy('department_name')->get();
             $banks = Bank::orderBy('bank_name')->get();
             $positions = Position::orderBy('position_name')->get();
@@ -352,6 +400,10 @@ class StaffController extends Controller
                 'position_id' => 'nullable|integer',
                 'zone_id' => 'nullable|integer',
                 'zone_area_id' => 'nullable|integer',
+                'managed_zone_ids' => 'nullable|array',
+                'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
+                'supervised_zone_ids' => 'nullable|array',
+                'supervised_zone_ids.*' => 'integer|exists:sys_set_zones,id',
                 'hire_date' => 'nullable|date',
                 'bank_name' => 'nullable|integer',
                 'account_name' => 'nullable|string|max:255',
@@ -371,6 +423,11 @@ class StaffController extends Controller
                 'disability' => 'required|string',
             ]);
 
+            $managedZoneIds = $validated['managed_zone_ids'] ?? [];
+            $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
+            unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
+            $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
+
             $staff = Staff::findOrFail($id);
 
             // Convert names to uppercase
@@ -381,7 +438,10 @@ class StaffController extends Controller
                 $validated['spouse_name'] = strtoupper($validated['spouse_name']);
             }
 
-            $staff->update($validated);
+            DB::transaction(function () use ($staff, $validated, $managedZoneIds, $supervisedZoneIds) {
+                $staff->update($validated);
+                $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
+            });
 
             return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member updated successfully');
         } catch (ValidationException $e) {
