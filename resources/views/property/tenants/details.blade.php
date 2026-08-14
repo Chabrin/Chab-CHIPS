@@ -74,15 +74,17 @@
                                 <div class="row">
                                     <!-- Personal & Property Info - Left Column -->
                                     <div class="col-lg-6">
-                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">person</span> Personal Information</div>
+                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">person</span> {{ $tenant->client_type_id == 3 ? 'Company Information' : 'Personal Information' }}</div>
                                         <div class="info-row">
-                                            <span class="info-label">Full Names:</span>
+                                            <span class="info-label">{{ $tenant->client_type_id == 3 ? 'Company Name:' : 'Full Names:' }}</span>
                                             <span class="info-value">{{ $tenant->names ?? '-' }}</span>
                                         </div>
+                                        @if($tenant->client_type_id != 3)
                                         <div class="info-row">
                                             <span class="info-label">Gender:</span>
                                             <span class="info-value">{{ $tenant->gender ?? '-' }}</span>
                                         </div>
+                                        @endif
                                         <div class="info-row">
                                             <span class="info-label">Mobile Number:</span>
                                             <span class="info-value">
@@ -110,6 +112,17 @@
                                                 @endif
                                             </span>
                                         </div>
+                                        @if($tenant->client_type_id == 3)
+                                        <div class="info-row">
+                                            <span class="info-label">Registration Number:</span>
+                                            <span class="info-value">
+                                                {{ $tenant->company_registration_number ?? '-' }}
+                                                @if($tenant->company_registration_number)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->company_registration_number }}" title="Copy">content_copy</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        @else
                                         <div class="info-row">
                                             <span class="info-label">National ID:</span>
                                             <span class="info-value">
@@ -119,6 +132,28 @@
                                                 @endif
                                             </span>
                                         </div>
+                                        @endif
+
+                                        @if($tenant->client_type_id == 3)
+                                        <div class="section-divider"></div>
+                                        <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">badge</span> Contact Person</div>
+                                        <div class="info-row">
+                                            <span class="info-label">Name:</span>
+                                            <span class="info-value">{{ $tenant->contact_person_name ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Title:</span>
+                                            <span class="info-value">{{ $tenant->contact_person_title ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Mobile:</span>
+                                            <span class="info-value">{{ $tenant->contact_person_mobile ?? '-' }}</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Email:</span>
+                                            <span class="info-value">{{ $tenant->contact_person_email ?? '-' }}</span>
+                                        </div>
+                                        @endif
 
                                         <div class="section-divider"></div>
                                         <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">home</span> Property & Unit</div>

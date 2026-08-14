@@ -17,6 +17,9 @@
                                 <button type="button" class="btn btn-outline-secondary" data-status="exited">Exited</button>
                                 <button type="button" class="btn btn-outline-secondary" data-status="all">All</button>
                             </div>
+                            <a href="{{ route('move.in.inspections.index') }}" class="btn btn-sm btn-outline-secondary">
+                                <span class="material-symbols-outlined">search_check</span> Move-In Inspections
+                            </a>
                             <a href="{{ route('units.tenants.create') }}" class="btn btn-sm btn-outline-secondary">
                                 <span class="material-symbols-outlined">add_circle</span> Onboard tenant
                             </a>
@@ -135,8 +138,12 @@
                     orderable: false,
                     searchable: false,
                     render: function (d, t, r) {
-                        return '<a href="/tenants/' + r.encrypted_id + '" title="View Details">' +
-                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">folder_eye</span></a>';
+                        return '<div class="d-flex flex-row gap-2">' +
+                            '<a href="/tenants/' + r.encrypted_id + '" title="View Details">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">folder_eye</span></a>' +
+                            '<a href="' + '{{ route("move.in.inspections.create") }}?tenant=' + r.encrypted_id + '" title="Record Move-In Inspection">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;color:var(--accent);">search_check</span></a>' +
+                            '</div>';
                     }
                 }
             ],

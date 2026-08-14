@@ -660,6 +660,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/tenants/search', [App\Http\Controllers\UtilityController::class, 'searchTenants'])->name('utility.tenants.search');
     Route::get('/tenants/{id}/details', [App\Http\Controllers\UtilityController::class, 'getTenantDetails'])->name('utility.tenants.details');
 
+    // Move-In Inspections (MUST come before /tenants/{encryptedId} route)
+    Route::get('/tenants/move-in-inspections', [App\Http\Controllers\MoveInInspectionsController::class, 'index'])->name('move.in.inspections.index');
+    Route::get('/ajax/move-in-inspections', [App\Http\Controllers\MoveInInspectionsController::class, 'getInspections'])->name('ajax.move.in.inspections');
+    Route::get('/ajax/move-in-inspections/tenants', [App\Http\Controllers\MoveInInspectionsController::class, 'tenantsForPicker'])->name('ajax.move.in.inspections.tenants');
+    Route::get('/tenants/move-in-inspections/create', [App\Http\Controllers\MoveInInspectionsController::class, 'create'])->name('move.in.inspections.create');
+    Route::post('/tenants/move-in-inspections', [App\Http\Controllers\MoveInInspectionsController::class, 'store'])->name('move.in.inspections.store');
+    Route::get('/tenants/move-in-inspections/{encryptedId}', [App\Http\Controllers\MoveInInspectionsController::class, 'show'])->name('move.in.inspections.show');
+
     // Tenant Statements (MUST come before /tenants/{encryptedId} route)
     Route::get('/tenants/statements', [App\Http\Controllers\InvoicingController::class, 'tenantInvoices'])->name('invoices.tenant.index');
     Route::get('/tenants/statements/create', [App\Http\Controllers\InvoicingController::class, 'createTenantInvoice'])->name('invoices.tenant.create');

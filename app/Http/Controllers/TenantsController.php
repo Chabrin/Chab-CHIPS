@@ -229,6 +229,7 @@ class TenantsController extends Controller
         DB::beginTransaction();
         try {
             $validated = $this->validateTenantRequest($request);
+            $this->validateIndividualOrCompanyFields($validated);
             Log::info('Validated tenant data: ' . json_encode($validated));
 
             $referenceNumber = $this->generateTenantReferenceNumber();
@@ -286,7 +287,7 @@ class TenantsController extends Controller
             'lease_years' => 'required|integer|min:1',
             'rent_amount' => 'required|numeric|min:0',
             'escalation_rate' => 'nullable|numeric|min:0',
-            'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually',
+            'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually,Biennially',
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
             'overcraft_penalty' => 'nullable|numeric|min:0',
@@ -295,20 +296,31 @@ class TenantsController extends Controller
             'deposit_held_by' => 'required_with:deposit_amount|nullable|in:Company,Landlord',
 
             // Tenant Information
-            'title' => 'required|string|max:10',
-            'names' => 'required|string|max:255',
+            // Individual-only fields: not required here since a Company tenant doesn't fill
+            // these in. store() applies its own conditional requirement via
+            // validateIndividualOrCompanyFields().
+            'title' => 'nullable|string|max:10',
+            'names' => 'nullable|string|max:255',
             'gender' => 'nullable|in:Male,Female,Other',
-            'tenant_type' => 'required',
+            'tenant_type' => 'required|integer|in:1,3',
             'phone' => 'nullable|string|max:20',
             'mobile_number' => 'required',
             'email_address' => 'nullable|email|max:255',
             'pin_number' => 'nullable|string|max:50',
             'registered_date' => 'required|date',
-            'nationality_id' => 'required',
+            'nationality_id' => 'nullable|integer',
             'tenant_photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'passport_number' => 'nullable|string|max:50',
             'address' => 'nullable|string',
             'national_id' => 'nullable|string|max:50',
+
+            // Company-only fields (Tenant Type "Company")
+            'company_name' => 'nullable|string|max:255',
+            'company_registration_number' => 'nullable|string|max:255',
+            'contact_person_name' => 'nullable|string|max:255',
+            'contact_person_title' => 'nullable|string|max:255',
+            'contact_person_mobile' => 'nullable|string|max:20',
+            'contact_person_email' => 'nullable|email|max:255',
 
             // Bank Accounts (repeater)
             'bank_accounts.*.bank_id' => 'nullable|integer',
@@ -337,6 +349,34 @@ class TenantsController extends Controller
     }
 
     /**
+     * Individual vs Company are mutually exclusive on the create-tenant form
+     * (tenant_type 1 = Individual, 3 = Company). Their required fields can't
+     * live in validateTenantRequest()'s rule array since Company doesn't
+     * fill in Individual-only fields and vice versa.
+     */
+    private function validateIndividualOrCompanyFields(array $validated): void
+    {
+        if ((int) $validated['tenant_type'] === 3) {
+            if (empty($validated['company_name'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'company_name' => ['Company name is required for a Company tenant.'],
+                ]);
+            }
+        } else {
+            $missing = [];
+            if (empty($validated['names'])) {
+                $missing['names'] = ['Name is required for an Individual tenant.'];
+            }
+            if (empty($validated['nationality_id'])) {
+                $missing['nationality_id'] = ['Nationality is required for an Individual tenant.'];
+            }
+            if (!empty($missing)) {
+                throw \Illuminate\Validation\ValidationException::withMessages($missing);
+            }
+        }
+    }
+
+    /**
      * Validate the tenant edit form request (single "Names" field, no property/unit/SLA/rent editing)
      */
     private function validateTenantEditRequest(Request $request)
@@ -350,26 +390,37 @@ class TenantsController extends Controller
             'lease_years' => 'required|integer|min:1',
             'rent_amount' => 'required|numeric|min:0',
             'escalation_rate' => 'nullable|numeric|min:0',
-            'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually',
+            'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually,Biennially',
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
             'overcraft_penalty' => 'nullable|numeric|min:0',
 
             // Tenant Information
-            'title' => 'required|string|max:10',
-            'names' => 'required|string|max:255',
+            // Individual-only fields: not required here since a Company tenant doesn't fill
+            // these in. update() applies its own conditional requirement via
+            // validateIndividualOrCompanyFields().
+            'title' => 'nullable|string|max:10',
+            'names' => 'nullable|string|max:255',
             'gender' => 'nullable|in:Male,Female,Other',
             'preferred_language' => 'nullable|string|max:50',
-            'tenant_type' => 'required',
+            'tenant_type' => 'required|integer|in:1,3',
             'phone' => 'nullable|string|max:20',
             'mobile_number' => 'required',
             'email_address' => 'nullable|email|max:255',
             'pin_number' => 'nullable|string|max:50',
             'registered_date' => 'required|date',
-            'nationality_id' => 'required',
+            'nationality_id' => 'nullable|integer',
             'passport_number' => 'nullable|string|max:50',
             'address' => 'nullable|string',
             'national_id' => 'nullable|string|max:50',
+
+            // Company-only fields (Tenant Type "Company")
+            'company_name' => 'nullable|string|max:255',
+            'company_registration_number' => 'nullable|string|max:255',
+            'contact_person_name' => 'nullable|string|max:255',
+            'contact_person_title' => 'nullable|string|max:255',
+            'contact_person_mobile' => 'nullable|string|max:20',
+            'contact_person_email' => 'nullable|email|max:255',
 
             // Bank Accounts (single account only)
             'bank_accounts.*.bank_id' => 'nullable|integer',
@@ -398,27 +449,31 @@ class TenantsController extends Controller
     }
 
     /**
-     * Generate tenant reference number with TEN prefix
+     * Generate tenant reference number with TEN prefix (format: "TEN-000001",
+     * matching every existing tenant record). Computed in PHP rather than a
+     * raw SQL cast — the previous `CAST(... AS UNSIGNED)` was MySQL-only
+     * syntax that doesn't exist in this app's Postgres database and failed
+     * on every call; it also used a "TEN - " (with spaces) prefix that never
+     * matched real data ("TEN-000001", no spaces), so it always started back
+     * at 1 regardless.
      */
     private function generateTenantReferenceNumber()
     {
-        $prefix = "TEN - ";
+        $prefix = "TEN";
 
-        // Query for the last tenant with TEN prefix, ordered by the numeric part
-        $lastTenant = Client::where('reference_number', 'LIKE', "TEN -%")
-            ->orderByRaw('CAST(SUBSTRING(reference_number, 7) AS UNSIGNED) DESC')
-            ->first();
+        $lastNumber = Client::where('reference_number', 'LIKE', "{$prefix}-%")
+            ->pluck('reference_number')
+            ->map(function ($ref) use ($prefix) {
+                return preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/', $ref, $matches)
+                    ? (int) $matches[1]
+                    : null;
+            })
+            ->filter(fn ($number) => $number !== null)
+            ->max();
 
-        if ($lastTenant) {
-            // Extract number after "TEN - " (6 characters)
-            $lastNumber = (int) substr($lastTenant->reference_number, 6);
-            $newNumber = $lastNumber + 2;
-        } else {
-            // Start from 1 if no tenants exist
-            $newNumber = 1;
-        }
+        $newNumber = str_pad(($lastNumber ?? 0) + 1, 6, '0', STR_PAD_LEFT);
 
-        return "{$prefix}{$newNumber}";
+        return "{$prefix}-{$newNumber}";
     }
 
     /**
@@ -437,28 +492,43 @@ class TenantsController extends Controller
      */
     private function createTenant(array $validated, string $referenceNumber, ?string $photoPath)
     {
-        // Combine names
-        $names = trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
+        $isCompany = (int) $validated['tenant_type'] === 3;
+
+        // Combine title + names for Individual; Company has no title, just its own name.
+        $names = $isCompany
+            ? trim($validated['company_name'])
+            : trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
 
         $tenantData = [
             'reference_number' => $referenceNumber,
             'names' => $names,
-            'title' => $validated['title'],
-            'gender' => $validated['gender'] ?? null,
+            'title' => $isCompany ? null : ($validated['title'] ?? null),
+            'gender' => $isCompany ? null : ($validated['gender'] ?? null),
             'mobile_number' => $validated['mobile_number'],
-            'email_address' => $validated['email_address'],
+            'email_address' => $validated['email_address'] ?? null,
             'pin_number' => $validated['pin_number'] ?? null,
-            'national_id' => $validated['national_id'] ?? null,
-            'passport_number' => $validated['passport_number'] ?? null,
+            'national_id' => $isCompany ? null : ($validated['national_id'] ?? null),
+            'passport_number' => $isCompany ? null : ($validated['passport_number'] ?? null),
             'address' => $validated['address'] ?? null,
             'address_2' => $validated['address_2'] ?? null,
             'address_3' => $validated['address_3'] ?? null,
             'registered_date' => $validated['registered_date'],
-            'nationality_id' => $validated['nationality_id'] ?? null,
+            'nationality_id' => $isCompany ? null : ($validated['nationality_id'] ?? null),
             'prefered_messages_language_id' => 'English',
-            'client_type_id' => $validated['tenant_type'] ?? 'Individual',
+            'client_type_id' => $validated['tenant_type'],
+            // 2 = Tenant, per Client::tenants() scope used throughout the app — previously
+            // never set here, so every tenant created through this form got type_id = NULL
+            // and was invisible to that scope (mirrors the same bug already fixed for
+            // landlords in ClientsController::createClient()).
+            'type_id' => 2,
+            'company_name' => $isCompany ? $validated['company_name'] : null,
+            'company_registration_number' => $isCompany ? ($validated['company_registration_number'] ?? null) : null,
+            'contact_person_name' => $isCompany ? ($validated['contact_person_name'] ?? null) : null,
+            'contact_person_title' => $isCompany ? ($validated['contact_person_title'] ?? null) : null,
+            'contact_person_mobile' => $isCompany ? ($validated['contact_person_mobile'] ?? null) : null,
+            'contact_person_email' => $isCompany ? ($validated['contact_person_email'] ?? null) : null,
             'property_id' => $validated['property_id'],
-            'sla_id' => $validated['sla_ref'],
+            'sla_id' => $validated['sla_ref'] ?? null,
             'unit_id' => $validated['unit_id'],
             'lease_start_date' => $validated['lease_start_date'],
             'lease_years' => $validated['lease_years'],
@@ -696,6 +766,7 @@ class TenantsController extends Controller
 
             // Validate the request
             $validated = $this->validateTenantEditRequest($request);
+            $this->validateIndividualOrCompanyFields($validated);
 
             // Handle photo upload (if new photo provided)
             $photoPath = $tenant->photo;
@@ -736,27 +807,37 @@ class TenantsController extends Controller
      */
     private function updateTenant(Client $tenant, array $validated, ?string $photoPath)
     {
-        // Combine names
-        $names = trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
+        $isCompany = (int) $validated['tenant_type'] === 3;
+
+        // Combine title + names for Individual; Company has no title, just its own name.
+        $names = $isCompany
+            ? trim($validated['company_name'])
+            : trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
 
         $tenant->update([
             'names' => $names,
-            'title' => $validated['title'],
-            'gender' => $validated['gender'] ?? null,
+            'title' => $isCompany ? null : ($validated['title'] ?? null),
+            'gender' => $isCompany ? null : ($validated['gender'] ?? null),
             'mobile_number' => $validated['mobile_number'],
-            'email_address' => $validated['email_address'],
+            'email_address' => $validated['email_address'] ?? null,
             'pin_number' => $validated['pin_number'] ?? null,
-            'national_id' => $validated['national_id'] ?? null,
-            'passport_number' => $validated['passport_number'] ?? null,
+            'national_id' => $isCompany ? null : ($validated['national_id'] ?? null),
+            'passport_number' => $isCompany ? null : ($validated['passport_number'] ?? null),
             'address' => $validated['address'] ?? null,
             'address_2' => $validated['address_2'] ?? null,
             'address_3' => $validated['address_3'] ?? null,
             'registered_date' => $validated['registered_date'],
-            'nationality_id' => $validated['nationality_id'] ?? null,
+            'nationality_id' => $isCompany ? null : ($validated['nationality_id'] ?? null),
             'prefered_messages_language_id' => $validated['preferred_language'] ?? 'English',
-            'client_type_id' => $validated['tenant_type'] ?? 'Individual',
+            'client_type_id' => $validated['tenant_type'],
+            'company_name' => $isCompany ? $validated['company_name'] : null,
+            'company_registration_number' => $isCompany ? ($validated['company_registration_number'] ?? null) : null,
+            'contact_person_name' => $isCompany ? ($validated['contact_person_name'] ?? null) : null,
+            'contact_person_title' => $isCompany ? ($validated['contact_person_title'] ?? null) : null,
+            'contact_person_mobile' => $isCompany ? ($validated['contact_person_mobile'] ?? null) : null,
+            'contact_person_email' => $isCompany ? ($validated['contact_person_email'] ?? null) : null,
             'property_id' => $validated['property_id'],
-            'sla_id' => $validated['sla_ref'],
+            'sla_id' => $validated['sla_ref'] ?? null,
             'unit_id' => $validated['unit_id'],
             'lease_start_date' => $validated['lease_start_date'],
             'lease_years' => $validated['lease_years'],
