@@ -106,22 +106,13 @@ class Unit extends Model
     }
 
     /**
-     * Generate the next sequential unit code for a property, e.g. "145A-U004".
-     * Shared by UnitsController::store() and BulkUploadController::processUnits()
-     * so the two creation paths can't drift apart again.
+     * Build a unit's code from the property it belongs to and its own unit
+     * number, e.g. property "145A" + unit number "I2" -> "145A-I2". Shared by
+     * UnitsController::store() and BulkUploadController::processUnits() so
+     * the two creation paths can't drift apart again.
      */
-    public static function generateUnitCode(Property $property): string
+    public static function generateUnitCode(Property $property, string $unitNumber): string
     {
-        $lastUnit = static::where('property_id', $property->id)
-            ->orderBy('unit_code', 'desc')
-            ->first();
-
-        if ($lastUnit && preg_match('/(\d+)$/', $lastUnit->unit_code, $matches)) {
-            $newNumber = str_pad(intval($matches[1]) + 1, 3, '0', STR_PAD_LEFT);
-        } else {
-            $newNumber = '001';
-        }
-
-        return $property->reference_number . '-U' . $newNumber;
+        return $property->reference_number . '-' . trim($unitNumber);
     }
 }

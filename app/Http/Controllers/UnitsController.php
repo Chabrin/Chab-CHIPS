@@ -178,7 +178,7 @@ class UnitsController extends Controller
 
             // Generate unit code
             $property = Property::findOrFail($validated['property_id']);
-            $unitCode = Unit::generateUnitCode($property);
+            $unitCode = Unit::generateUnitCode($property, $validated['unit_number']);
             $zone_id = $property->zone_id;
 
             // Create the unit record

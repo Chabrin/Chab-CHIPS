@@ -546,7 +546,8 @@ class BulkUploadController extends Controller
             try {
                 // Skip empty rows
                 if (empty($row[0]) && !$scopedProperty) continue;
-                if ($scopedProperty && empty($row[1])) continue; // no unit number
+                // unit_code is now built from the unit number, so every row needs one.
+                if (empty($row[1])) continue;
 
                 $rowNum = $index + 2; // +2 because Excel is 1-indexed and has header row
 
@@ -591,7 +592,7 @@ class BulkUploadController extends Controller
 
                 // Generate unit code — shared with UnitsController::store() so the two
                 // paths can't drift apart again.
-                $unitCode = Unit::generateUnitCode($property);
+                $unitCode = Unit::generateUnitCode($property, $row[1]);
 
                 // Usage Type: Commercial/Residential/Hybrid. Unit Type (Normal/Owner
                 // Occupied/Caretaker) has no bulk column — every bulk-created unit
