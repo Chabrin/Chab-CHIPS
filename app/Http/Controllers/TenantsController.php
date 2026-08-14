@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Deposit;
 use App\Models\Property;
+use App\Models\Unit;
+use App\Models\ServiceAgreement;
 use Illuminate\Http\Request;
 use App\Models\SystemCountry;
 use App\Models\MoveInInspection;
@@ -230,6 +232,8 @@ class TenantsController extends Controller
         try {
             $validated = $this->validateTenantRequest($request);
             $this->validateIndividualOrCompanyFields($validated);
+            $validated['sla_ref'] = $this->resolveSlaId($validated['property_id']);
+            $validated['rent_amount'] = $this->resolveRentAmount($validated['unit_id']);
             Log::info('Validated tenant data: ' . json_encode($validated));
 
             $referenceNumber = $this->generateTenantReferenceNumber();
@@ -280,19 +284,17 @@ class TenantsController extends Controller
     {
         return $request->validate([
             // Unit Details
+            // sla_ref/rent_amount are no longer submitted — resolved server-side in store()
+            // from the property/unit (see resolveSlaId()/resolveRentAmount()).
             'property_id' => 'required|integer|exists:sys_pm_properties,id',
             'unit_id' => 'required|integer|exists:sys_pm_units,id',
-            'sla_ref' => 'nullable|integer|exists:sys_pm_service_agreements,id',
             'lease_start_date' => 'required|date',
             'lease_years' => 'required|integer|min:1',
-            'rent_amount' => 'required|numeric|min:0',
             'escalation_rate' => 'nullable|numeric|min:0',
             'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually,Biennially',
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
-            'overcraft_penalty' => 'nullable|numeric|min:0',
             'deposit_amount' => 'nullable|numeric|min:0',
-            'deposit_reference' => 'nullable|string|max:255',
             'deposit_held_by' => 'required_with:deposit_amount|nullable|in:Company,Landlord',
 
             // Tenant Information
@@ -383,17 +385,16 @@ class TenantsController extends Controller
     {
         return $request->validate([
             // Unit Details (read-only on the edit form; carried through as hidden fields)
+            // sla_ref/rent_amount are no longer submitted — resolved server-side in update()
+            // from the property/unit (see resolveSlaId()/resolveRentAmount()).
             'property_id' => 'required|integer|exists:sys_pm_properties,id',
             'unit_id' => 'required|integer|exists:sys_pm_units,id',
-            'sla_ref' => 'nullable|integer|exists:sys_pm_service_agreements,id',
             'lease_start_date' => 'required|date',
             'lease_years' => 'required|integer|min:1',
-            'rent_amount' => 'required|numeric|min:0',
             'escalation_rate' => 'nullable|numeric|min:0',
             'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually,Biennially',
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
-            'overcraft_penalty' => 'nullable|numeric|min:0',
 
             // Tenant Information
             // Individual-only fields: not required here since a Company tenant doesn't fill
@@ -477,6 +478,29 @@ class TenantsController extends Controller
     }
 
     /**
+     * A property's current SLA — no longer picked manually on the tenant
+     * form, since a property's SLA is already known once the property
+     * itself is selected. Most-recent-by-start-date matches both the old
+     * manual-picker's auto-select-when-only-one behavior and how the SLA
+     * dropdown for a property was always ordered.
+     */
+    private function resolveSlaId(int $propertyId): ?int
+    {
+        return ServiceAgreement::where('property_id', $propertyId)
+            ->orderBy('date_start', 'desc')
+            ->value('id');
+    }
+
+    /**
+     * A tenant's rent is the unit's own configured rent — no longer
+     * re-typed on the tenant form.
+     */
+    private function resolveRentAmount(int $unitId): float
+    {
+        return (float) (Unit::find($unitId)->rent_amount ?? 0);
+    }
+
+    /**
      * Handle photo upload
      */
     private function handlePhotoUpload(Request $request)
@@ -535,7 +559,7 @@ class TenantsController extends Controller
             'rent_amount' => $validated['rent_amount'],
             'escalation_rate' => $validated['escalation_rate'] ?? 0,
             'frequency' => $validated['frequency'],
-            'overdraft_penalty' => $validated['overcraft_penalty'] ?? 5,
+            'overdraft_penalty' => 5, // No longer user-entered — company-standard default
             'photo' => $photoPath,
             'created_by' => Auth::id(),
             'date_time' => now(),
@@ -767,6 +791,8 @@ class TenantsController extends Controller
             // Validate the request
             $validated = $this->validateTenantEditRequest($request);
             $this->validateIndividualOrCompanyFields($validated);
+            $validated['sla_ref'] = $this->resolveSlaId($validated['property_id']);
+            $validated['rent_amount'] = $this->resolveRentAmount($validated['unit_id']);
 
             // Handle photo upload (if new photo provided)
             $photoPath = $tenant->photo;
@@ -844,7 +870,7 @@ class TenantsController extends Controller
             'rent_amount' => $validated['rent_amount'],
             'escalation_rate' => $validated['escalation_rate'] ?? 0,
             'frequency' => $validated['frequency'],
-            'overdraft_penalty' => $validated['overcraft_penalty'] ?? 5,
+            // overdraft_penalty no longer user-editable — leave whatever value is already there.
             'photo' => $photoPath,
             'updated_by' => Auth::id(),
         ]);

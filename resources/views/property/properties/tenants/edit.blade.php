@@ -108,17 +108,6 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label class="form-label">Rent Amount</label>
-                                            <input type="number" step="0.01" class="form-control" id="rent_amount" name="rent_amount" value="{{ $tenant->rent_amount }}" readonly>
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label class="form-label">SLA Ref</label>
-                                            <input type="text" class="form-control" value="{{ optional($tenant->sla)->reference_number ?? optional($tenant)->sla_id ?? '-' }}" readonly>
-                                            <input type="hidden" name="sla_ref" value="{{ $tenant->sla_id }}">
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
                                             <label for="lease_start_date" class="form-label">Lease Start Date <span class="text-danger">*</span></label>
                                             <input type="date" class="form-control @error('lease_start_date') is-invalid @enderror" id="lease_start_date" name="lease_start_date" value="{{ old('lease_start_date', $tenant->lease_start_date ? $tenant->lease_start_date->format('Y-m-d') : '') }}" required>
                                             @error('lease_start_date')
@@ -152,14 +141,6 @@
                                             <label for="escalation_rate" class="form-label">Escalation Rate(%)</label>
                                             <input type="number" step="0.01" class="form-control @error('escalation_rate') is-invalid @enderror" id="escalation_rate" name="escalation_rate" value="{{ old('escalation_rate', $tenant->escalation_rate ?? '0') }}" placeholder="0">
                                             @error('escalation_rate')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="overcraft_penalty" class="form-label">Overcraft Penalty(%)</label>
-                                            <input type="number" step="0.01" class="form-control @error('overcraft_penalty') is-invalid @enderror" id="overcraft_penalty" name="overcraft_penalty" value="{{ old('overcraft_penalty', $tenant->overdraft_penalty ?? '5') }}" placeholder="5">
-                                            @error('overcraft_penalty')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>

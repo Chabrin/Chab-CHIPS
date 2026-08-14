@@ -127,16 +127,6 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="sla_ref" class="form-label">SLA Ref <span class="text-danger">*</span></label>
-                                            <select class="form-select @error('sla_ref') is-invalid @enderror" id="sla_ref" name="sla_ref" required>
-                                                <option value="">Please select</option>
-                                            </select>
-                                            @error('sla_ref')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
                                             <label for="unit_id" class="form-label">Unit <span class="text-danger">*</span></label>
                                             <select class="form-select @error('unit_id') is-invalid @enderror" id="unit_id" name="unit_id" required>
                                                 <option value="">Please select</option>
@@ -162,16 +152,6 @@
                                                    id="lease_years" name="lease_years" 
                                                    value="{{ old('lease_years', '1') }}">
                                             @error('lease_years')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="rent_amount" class="form-label">Rent Amount <span class="text-danger">*</span></label>
-                                            <input type="number" step="0.01" class="form-control @error('rent_amount') is-invalid @enderror" 
-                                                   id="rent_amount" name="rent_amount" 
-                                                   value="{{ old('rent_amount', '0.00') }}" required>
-                                            @error('rent_amount')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
@@ -221,31 +201,11 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="overcraft_penalty" class="form-label">Overcraft Penalty(%)</label>
-                                            <input type="number" step="0.01" class="form-control @error('overcraft_penalty') is-invalid @enderror"
-                                                   id="overcraft_penalty" name="overcraft_penalty"
-                                                   value="{{ old('overcraft_penalty', '5') }}" placeholder="5">
-                                            @error('overcraft_penalty')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
                                             <label for="deposit_amount" class="form-label">Deposit Amount</label>
                                             <input type="number" step="0.01" class="form-control @error('deposit_amount') is-invalid @enderror"
                                                    id="deposit_amount" name="deposit_amount"
                                                    value="{{ old('deposit_amount') }}" placeholder="0.00">
                                             @error('deposit_amount')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="deposit_reference" class="form-label">Deposit Reference</label>
-                                            <input type="text" class="form-control @error('deposit_reference') is-invalid @enderror"
-                                                   id="deposit_reference" name="deposit_reference"
-                                                   value="{{ old('deposit_reference') }}" placeholder="Receipt / transaction number">
-                                            @error('deposit_reference')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
@@ -975,7 +935,6 @@
             $('#landlordSearch').val('').show().focus();
             // Reset property and downstream
             $('#property_id').html('<option value="">Select a landlord first</option>').prop('disabled', true);
-            $('#sla_ref').html('<option value="">Please select</option>').prop('disabled', true);
             $('#unit_id').html('<option value="">Please select</option>').prop('disabled', true);
             updateInspectionState(0);
         });
@@ -1019,54 +978,33 @@
         $('#property_id').on('change', function() {
             var propertyId = $(this).val();
             var unitSelect = $('#unit_id');
-            var slaSelect = $('#sla_ref');
-        
-            // Reset units and SLA
+
+            // Reset units
             unitSelect.html('<option value="">Please select</option>').prop('disabled', true);
-            slaSelect.html('<option value="">Please select</option>').prop('disabled', true);
-        
+            updateInspectionState(0);
+
             if (propertyId) {
-                // Load SLA for the property
-                slaSelect.html('<option value="">Loading SLA...</option>');
-                
+                // The property's SLA is resolved server-side on save (no manual picker
+                // here) — still fetched client-side so the move-in-inspection-required
+                // alert reflects the same SLA the server will use (most recent by start
+                // date, matching resolveSlaId()).
                 $.ajax({
                     url: `/property/${propertyId}/sla`,
                     method: 'GET',
                     dataType: 'json',
                     success: function(response) {
-                        console.log('SLA loaded:', response);
-                        slaSelect.empty().prop('disabled', false);
-                        slaSelect.append('<option value="">Please select</option>');
-                        
                         if (response.sla && response.sla.length > 0) {
-                            response.sla.forEach(function(sla) {
-                                slaSelect.append(`<option value="${sla.id}" data-inspection-required="${sla.move_in_inspection_required ? '1' : '0'}">${sla.sla_reference || sla.reference_number}</option>`);
-                            });
-                            // If only one SLA, auto-select and trigger inspection update
-                            if (response.sla.length === 1) {
-                                slaSelect.val(response.sla[0].id);
-                                updateInspectionState(response.sla[0].move_in_inspection_required ? 1 : 0);
-                            } else {
-                                updateInspectionState(0);
-                            }
+                            updateInspectionState(response.sla[0].move_in_inspection_required ? 1 : 0);
                         } else {
-                            slaSelect.append('<option value="">No SLA found for this property</option>');
                             updateInspectionState(0);
                         }
                     },
                     error: function(xhr, status, error) {
                         console.error('Error loading SLA:', xhr.responseText);
-                        slaSelect.empty().prop('disabled', false);
-                        slaSelect.append('<option value="">Error loading SLA</option>');
+                        updateInspectionState(0);
                     }
                 });
 
-                // When SLA is manually changed, update inspection state
-                slaSelect.off('change.inspection').on('change.inspection', function() {
-                    const req = parseInt($(this).find(':selected').data('inspection-required') || 0);
-                    updateInspectionState(req);
-                });
-        
                 // Load units
                 unitSelect.html('<option value="">Loading units...</option>');
                 
