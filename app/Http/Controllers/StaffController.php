@@ -237,6 +237,7 @@ class StaffController extends Controller
         $positions = Position::orderBy('position_name')->get();
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
+
         return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas'));
     }
 
@@ -260,7 +261,6 @@ class StaffController extends Controller
                 'position_id' => 'nullable|integer',
                 'hire_date' => 'nullable|date',
                 'zone_id' => 'nullable|integer',
-                'zone_area_id' => 'nullable|integer',
                 'managed_zone_ids' => 'nullable|array',
                 'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
                 'supervised_zone_ids' => 'nullable|array',
@@ -399,7 +399,6 @@ class StaffController extends Controller
                 'department_id' => 'nullable|integer',
                 'position_id' => 'nullable|integer',
                 'zone_id' => 'nullable|integer',
-                'zone_area_id' => 'nullable|integer',
                 'managed_zone_ids' => 'nullable|array',
                 'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
                 'supervised_zone_ids' => 'nullable|array',

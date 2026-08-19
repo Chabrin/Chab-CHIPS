@@ -6,7 +6,7 @@ use App\Models\Client;
 use App\Models\Deposit;
 use App\Models\Property;
 use App\Models\Unit;
-use App\Models\ServiceAgreement;
+use App\Traits\TenantRecordHelperTrait;
 use Illuminate\Http\Request;
 use App\Models\SystemCountry;
 use App\Models\MoveInInspection;
@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Storage;
 
 class TenantsController extends Controller
 {
+    use TenantRecordHelperTrait;
 
     public function getTenantBalance(Request $request, $tenantId = null)
     {
@@ -224,6 +225,48 @@ class TenantsController extends Controller
     }
 
     /**
+     * Check whether a tenant already exists with the given National ID
+     * (Individual) or Registration Number (Company). Used for the live
+     * on-blur "duplicate — continue anyway?" confirmation on the create/edit
+     * forms — this is advisory only, not enforced server-side beyond
+     * presence (see validateIndividualOrCompanyFields()).
+     */
+    public function checkIdentifierExists(Request $request)
+    {
+        $tenantType = (int) $request->input('tenant_type');
+        $value = trim((string) $request->input('value', ''));
+
+        if ($value === '') {
+            return response()->json(['exists' => false]);
+        }
+
+        $column = $tenantType === 3 ? 'company_registration_number' : 'national_id';
+
+        // When checking from the edit form, exclude the record being edited so it
+        // doesn't get flagged as a duplicate of itself.
+        $excludeId = null;
+        if ($request->filled('exclude_id')) {
+            try {
+                $excludeId = Crypt::decrypt($request->input('exclude_id'));
+            } catch (\Exception $e) {
+                $excludeId = null;
+            }
+        }
+
+        $match = Client::tenants()
+            ->where($column, $value)
+            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->select(['id', 'names', 'reference_number'])
+            ->first();
+
+        return response()->json([
+            'exists' => (bool) $match,
+            'name' => $match->names ?? null,
+            'reference_number' => $match->reference_number ?? null,
+        ]);
+    }
+
+    /**
      * Store a newly created tenant
      */
     public function store(Request $request)
@@ -274,6 +317,171 @@ class TenantsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating tenant: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to create tenant: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * Search landlords for the "Assign Unit" picker's optional landlord-first
+     * narrowing step. Same query/response shape as
+     * LeaseEscalationController::searchLandlords() (landlord-typed clients,
+     * reused here rather than duplicated with different behavior).
+     */
+    public function searchLandlordsForUnitPicker(Request $request)
+    {
+        try {
+            $term = $request->get('q', '');
+
+            $landlords = Client::where('reference_number', 'LIKE', 'LAN%')
+                ->where(function ($q) use ($term) {
+                    $q->where('names', 'ILIKE', "%{$term}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
+                })
+                ->select('id', 'names', 'reference_number')
+                ->limit(30)
+                ->get()
+                ->map(fn ($c) => ['id' => $c->id, 'text' => $c->names . ' (' . $c->reference_number . ')']);
+
+            return response()->json(['results' => $landlords]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching landlords for unit picker: ' . $e->getMessage());
+            return response()->json(['results' => []], 500);
+        }
+    }
+
+    /**
+     * Search properties for the "Assign Unit" picker, optionally narrowed to
+     * one landlord's properties (client_id, from searchLandlordsForUnitPicker()
+     * above). Property ids are plain (not encrypted) throughout this cascade,
+     * matching every other landlord→property→unit picker in the codebase
+     * (e.g. LeaseEscalationController::getLandlordProperties()/getPropertyUnits()).
+     *
+     * Once a landlord is chosen, the client-side field switches to listing
+     * their full property set on open rather than requiring a search term
+     * (a landlord rarely owns enough properties to need one) — so the limit
+     * only applies to the unscoped, type-to-search-everything case.
+     */
+    public function searchPropertiesForUnitPicker(Request $request)
+    {
+        try {
+            $query = Property::select(['id', 'property_name', 'reference_number']);
+
+            $scopedToLandlord = $request->filled('client_id');
+            if ($scopedToLandlord) {
+                $query->where('client_id', $request->input('client_id'));
+            }
+
+            if ($request->filled('term')) {
+                $term = $request->input('term');
+                $query->where(function ($q) use ($term) {
+                    $q->where('property_name', 'ILIKE', "%{$term}%")
+                        ->orWhere('reference_number', 'ILIKE', "%{$term}%");
+                });
+            }
+
+            $query->orderBy('property_name');
+            if (!$scopedToLandlord) {
+                $query->limit(30);
+            }
+
+            $properties = $query->get()
+                ->map(fn ($p) => ['id' => $p->id, 'text' => $p->property_name . ' (' . $p->reference_number . ')']);
+
+            return response()->json(['results' => $properties]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching properties for unit picker: ' . $e->getMessage());
+            return response()->json(['results' => []], 500);
+        }
+    }
+
+    /**
+     * Vacant units for a chosen property — the final step of the "Assign
+     * Unit" picker cascade (Landlord → Property → Unit). Property-scoped and
+     * loads immediately (minimumInputLength: 0 client-side) rather than
+     * requiring a search term, since a single property's vacant units are
+     * few enough to list in full.
+     *
+     * "Vacant" here is Unit::scopeVacant() — no Pending/Approved lease — not
+     * occupancy_status_id, which turned out to carry conflicting numbering
+     * schemes across the codebase and couldn't be trusted (see the docblock
+     * on Unit::activeLeaseAgreement() for the full finding).
+     */
+    public function searchVacantUnits(Request $request)
+    {
+        try {
+            $request->validate(['property_id' => 'required|integer']);
+
+            $units = Unit::where('property_id', $request->input('property_id'))
+                ->vacant()
+                ->select(['id', 'unit_code', 'unit_number', 'unit_name'])
+                ->orderBy('unit_code')
+                ->limit(100)
+                ->get()
+                ->map(function ($unit) {
+                    $label = $unit->unit_code;
+                    if ($unit->unit_name) {
+                        $label .= ' (' . $unit->unit_name . ')';
+                    }
+
+                    return ['id' => $unit->id, 'text' => $label];
+                });
+
+            return response()->json(['results' => $units]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching vacant units: ' . $e->getMessage());
+            return response()->json(['results' => []], 500);
+        }
+    }
+
+    /**
+     * Manually assign a unit to a tenant created without one — the second
+     * step of the bulk-upload flow (rows uploaded with a blank Unit Code land
+     * in the "Pending Unit" queue on the tenant listing until this runs).
+     * Sets property_id from the unit's own property and re-derives
+     * sla_id/rent_amount exactly like the interactive create-tenant form.
+     * Deliberately leaves the unit's occupancy_status_id untouched, matching
+     * store()/createTenant(), which never flip it either.
+     *
+     * The re-check below (isVacant()) is lease-based for the same reason
+     * searchVacantUnits() above is — occupancy_status_id is not a reliable
+     * signal in this codebase (see Unit::activeLeaseAgreement()).
+     */
+    public function assignUnit(Request $request, $encryptedId)
+    {
+        try {
+            $tenantId = Crypt::decrypt($encryptedId);
+            // withAll(): a pending-unit tenant has no property yet, so the model's
+            // user_clients_properties global scope (which requires an existing
+            // property assignment to grant visibility) would never match it —
+            // bypass it here the same way generateTenantReferenceNumber() does.
+            $tenant = Client::withAll()->tenants()->findOrFail($tenantId);
+
+            $validated = $request->validate([
+                'unit_id' => 'required|integer|exists:sys_pm_units,id',
+            ]);
+
+            $unit = Unit::findOrFail($validated['unit_id']);
+
+            if (!$unit->isVacant()) {
+                return response()->json(['success' => false, 'message' => 'Selected unit is no longer vacant.'], 422);
+            }
+
+            $tenant->update([
+                'property_id' => $unit->property_id,
+                'unit_id' => $unit->id,
+                'sla_id' => $this->resolveSlaId($unit->property_id),
+                'rent_amount' => $this->resolveRentAmount($unit->id),
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Unit assigned to tenant successfully!']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->flatten()->first()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error assigning unit to tenant: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to assign unit: ' . $e->getMessage()], 500);
         }
     }
 
@@ -372,6 +580,9 @@ class TenantsController extends Controller
             if (empty($validated['nationality_id'])) {
                 $missing['nationality_id'] = ['Nationality is required for an Individual tenant.'];
             }
+            if (empty($validated['national_id'])) {
+                $missing['national_id'] = ['National ID is required for an Individual tenant.'];
+            }
             if (!empty($missing)) {
                 throw \Illuminate\Validation\ValidationException::withMessages($missing);
             }
@@ -447,57 +658,6 @@ class TenantsController extends Controller
             'next_of_kin.*.second_name' => 'nullable|string|max:255',
             'next_of_kin.*.last_name' => 'nullable|string|max:255',
         ]);
-    }
-
-    /**
-     * Generate tenant reference number with TEN prefix (format: "TEN-000001",
-     * matching every existing tenant record). Computed in PHP rather than a
-     * raw SQL cast — the previous `CAST(... AS UNSIGNED)` was MySQL-only
-     * syntax that doesn't exist in this app's Postgres database and failed
-     * on every call; it also used a "TEN - " (with spaces) prefix that never
-     * matched real data ("TEN-000001", no spaces), so it always started back
-     * at 1 regardless.
-     */
-    private function generateTenantReferenceNumber()
-    {
-        $prefix = "TEN";
-
-        $lastNumber = Client::where('reference_number', 'LIKE', "{$prefix}-%")
-            ->pluck('reference_number')
-            ->map(function ($ref) use ($prefix) {
-                return preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/', $ref, $matches)
-                    ? (int) $matches[1]
-                    : null;
-            })
-            ->filter(fn ($number) => $number !== null)
-            ->max();
-
-        $newNumber = str_pad(($lastNumber ?? 0) + 1, 6, '0', STR_PAD_LEFT);
-
-        return "{$prefix}-{$newNumber}";
-    }
-
-    /**
-     * A property's current SLA — no longer picked manually on the tenant
-     * form, since a property's SLA is already known once the property
-     * itself is selected. Most-recent-by-start-date matches both the old
-     * manual-picker's auto-select-when-only-one behavior and how the SLA
-     * dropdown for a property was always ordered.
-     */
-    private function resolveSlaId(int $propertyId): ?int
-    {
-        return ServiceAgreement::where('property_id', $propertyId)
-            ->orderBy('date_start', 'desc')
-            ->value('id');
-    }
-
-    /**
-     * A tenant's rent is the unit's own configured rent — no longer
-     * re-typed on the tenant form.
-     */
-    private function resolveRentAmount(int $unitId): float
-    {
-        return (float) (Unit::find($unitId)->rent_amount ?? 0);
     }
 
     /**
@@ -630,6 +790,28 @@ class TenantsController extends Controller
         }
 
         $isFirst = ClientBankDetail::where('client_id', $tenantId)->count() === 0;
+
+        if($bankData = $request->input('bank_accounts')[0] ?? null) {
+            $bankId = $bankData['bank_id'] ?? null;
+            $branchId = $bankData['branch_id'] ?? null;
+            $accountName = $bankData['account_name'] ?? null;
+            $accountNumber = $bankData['account_number'] ?? null;
+
+            // Skip only if the entire row is blank
+            if (!empty($bankId) || !empty($branchId) || !empty($accountName) || !empty($accountNumber)) {
+                ClientBankDetail::create([
+                    'client_id' => $tenantId,
+                    'bank_id' => $bankId ?: null,
+                    'branch_id' => $branchId ?: null,
+                    'account_name' => $accountName ?: null,
+                    'account_number' => $accountNumber ?: null,
+                    'is_default' => 1, // First account is default
+                    'added_by' => Auth::id(),
+                    'added_on' => now(),
+                ]);
+                $isFirst = false; // Mark that the first account has been added
+            }
+        }
 
         foreach ($request->input('bank_accounts') as $bankData) {
             $bankId = $bankData['bank_id'] ?? null;

@@ -463,7 +463,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                     <div class="col-5">
                                         <label for="propertySelect" class="form-label">Select Property</label>
                                         <select id="propertySelect" class="form-select">
-                                            <option value="">-- Select Property --</option>
+                                            <option value="">All Properties</option>
                                         </select>
                                     </div>
                                     <div class="col-auto">
@@ -477,6 +477,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         <thead>
                                             <tr>
                                                 <th>#</th>
+                                                <th>Property</th>
                                                 <th>Unit Code</th>
                                                 <th>Unit Name</th>
                                                 <th>Unit Number</th>
@@ -484,6 +485,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Rent Amount</th>
                                                 <th>Zone</th>
                                                 <th>Status</th>
+                                                <th>Tenants</th>
                                                 {{-- <th>Action</th> --}}
                                             </tr>
                                         </thead>
@@ -1155,6 +1157,9 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     }
                 },
                 {
+                    data: 'property'
+                },
+                {
                     data: 'unit_code'
                 },
                 {
@@ -1174,6 +1179,18 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 },
                 {
                     data: 'occupancy_status'
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(d, type, row) {
+                        var count = (row.tenants || []).length;
+                        return '<span class="d-flex align-items-center gap-1">' +
+                            '<span class="material-symbols-outlined text-primary toggle-chevron" style="font-size:18px;">chevron_right</span>' +
+                            '<span class="small text-muted">' + count + ' tenant' + (count === 1 ? '' : 's') + '</span>' +
+                            '</span>';
+                    }
                 }
                 // {
                 //     data: 'id',
@@ -1188,10 +1205,58 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 //     }
                 // }
             ],
+            createdRow: function(row) {
+                $(row).addClass('group-parent-row table-light').css('cursor', 'pointer');
+            },
             pageLength: 10,
             responsive: true,
             language: {
-                emptyTable: "Please select a property to view units"
+                emptyTable: "No units found"
+            }
+        });
+
+        // Expand/collapse a unit row to show who has ever leased it — data is
+        // already embedded per row (getUnits()'s `tenants` array), no extra AJAX.
+        function buildUnitTenantsTable(tenants) {
+            if (!tenants || tenants.length === 0) {
+                return '<div class="ps-4 py-2 border-start border-2 text-muted small">No tenants recorded for this unit.</div>';
+            }
+            var rows = '';
+            tenants.forEach(function(t) {
+                rows += '<tr>' +
+                    '<td class="small fw-semibold">' + t.tenant_name + '</td>' +
+                    '<td class="small">' + t.ref_number + '</td>' +
+                    '<td class="small">' + t.date_start + '</td>' +
+                    '<td class="small">' + t.date_end + '</td>' +
+                    '<td class="small"><span class="badge bg-secondary">' + t.status + '</span></td>' +
+                    '</tr>';
+            });
+            return '<div class="ps-4 py-2 border-start border-2">' +
+                '<table class="table table-sm table-bordered table-hover mb-0">' +
+                '<thead><tr>' +
+                '<th class="bg-light text-secondary small">Tenant</th>' +
+                '<th class="bg-light text-secondary small">Lease Ref</th>' +
+                '<th class="bg-light text-secondary small">Start</th>' +
+                '<th class="bg-light text-secondary small">End</th>' +
+                '<th class="bg-light text-secondary small">Status</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+        }
+
+        $('#unitsTable').on('click', 'tr.group-parent-row', function() {
+            var tr = $(this);
+            var dtRow = unitsTable.row(this);
+            var data = dtRow.data();
+            if (!data) return;
+
+            var icon = tr.find('.toggle-chevron');
+            if (dtRow.child.isShown()) {
+                dtRow.child.hide();
+                icon.text('chevron_right');
+                tr.removeClass('table-primary').addClass('table-light');
+            } else {
+                dtRow.child(buildUnitTenantsTable(data.tenants)).show();
+                icon.text('expand_more');
+                tr.removeClass('table-light').addClass('table-primary');
             }
         });
 
@@ -1611,22 +1676,21 @@ COPY PERMISSIONS (paste when re-enabling checks):
             $('#relatedPropertyModal').modal('show');
         });
 
-        // Load properties dropdown when units tab is clicked
+        // Load properties dropdown when units tab is clicked, and default to
+        // "All Properties" (loadUnits('') below resolves that to client_id-scoped)
+        // rather than leaving the table empty until a property is picked.
         $('#units-tab').on('click', function() {
             if (!propertiesDropdownLoaded) {
                 loadPropertiesDropdown();
+                loadUnits('');
                 propertiesDropdownLoaded = true;
             }
         });
 
-        // Load units when property is selected
+        // Load units when property is selected — "All Properties" (empty value)
+        // loads every unit across the landlord's properties, same as the initial load
         $('#propertySelect').on('change', function() {
-            var propertyId = $(this).val();
-            if (propertyId) {
-                loadUnits(propertyId);
-            } else {
-                unitsTable.clear().draw();
-            }
+            loadUnits($(this).val());
         });
 
         // Initialize Bootstrap dropdowns (if needed)
@@ -2042,12 +2106,13 @@ COPY PERMISSIONS (paste when re-enabling checks):
             // Show spinner
             $('#propertySpinner').show();
 
+            // Empty propertyId = "All Properties" — scope by landlord instead
+            var params = propertyId ? { property_id: propertyId } : { client_id: '{{ $client->id }}' };
+
             $.ajax({
                 url: "{{ route('property.units.get') }}",
                 type: 'GET',
-                data: {
-                    property_id: propertyId
-                },
+                data: params,
                 dataType: 'json',
                 success: function(response) {
                     unitsTable.clear();
@@ -2056,7 +2121,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         unitsTable.draw();
                     } else {
                         unitsTable.draw();
-                        toastr.info('No units found for this property.');
+                        toastr.info('No units found.');
                     }
                 },
                 error: function(xhr, status, error) {

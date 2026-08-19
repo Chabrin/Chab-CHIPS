@@ -91,11 +91,25 @@ class InspectionsController extends Controller
     //     }
     // }
 
+    /**
+     * Powers the Unit dropdown on the tenant-create form (property/properties/
+     * tenants/create.blade.php), tagging each unit Occupied/Vacant.
+     *
+     * That tag used to be `occupancy_status_id == 1 ? 'Occupied' : 'Vacant'`,
+     * which only recognized the legacy-migration numbering scheme (1 =
+     * Occupied) and silently mislabeled every app-native occupied unit (which
+     * uses 38) as "Vacant". occupancy_status_id carries two overlapping,
+     * conflicting numbering schemes across this codebase and isn't a reliable
+     * signal at all — switched to the lease-based check instead (see
+     * Unit::activeLeaseAgreement()'s docblock for the full finding, including
+     * why current_status_id 1 *and* 5 both count and why there's no date
+     * window).
+     */
     public function getUnitsByProperty($propertyId)
     {
         try {
 
-            $units = Unit::with(['property', 'zone'])
+            $units = Unit::with(['property', 'zone', 'activeLeaseAgreement'])
                 ->select([
                     'id',
                     'unit_code',
@@ -120,7 +134,7 @@ class InspectionsController extends Controller
                         'rent_amount' => $unit->rent_amount ? number_format($unit->rent_amount, 2) : '0.00',
                         'property' => $unit->property->property_name ?? '-',
                         'zone' => $unit->zone->zone_name ?? '-',
-                        'status' => $unit->occupancy_status_id == 1 ? 'Occupied' : 'Vacant',
+                        'status' => $unit->activeLeaseAgreement ? 'Occupied' : 'Vacant',
                     ];
                 });
                 

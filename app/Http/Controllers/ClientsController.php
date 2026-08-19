@@ -942,16 +942,27 @@ class ClientsController extends Controller
     }
 
     /**
-     * Get units for a specific property (AJAX)
+     * Get units for a property, or every unit across a landlord's properties
+     * (AJAX). Shared by the property show page (always passes property_id)
+     * and the landlord show page's Units tab (passes property_id when a
+     * specific property is picked, or client_id alone for its "All
+     * Properties" view).
+     *
+     * occupancy_status used to be `occupancy_status_id == 38 ? 'Occupied' :
+     * 'Vacant'` — the same unreliable signal replaced elsewhere this session
+     * (occupancy_status_id carries conflicting numbering schemes across the
+     * codebase; see Unit::activeLeaseAgreement()'s docblock for the full
+     * finding). Now lease-based, consistent with every other vacancy check.
      */
     public function getUnits(Request $request)
     {
         try {
             $propertyId = $request->property_id;
+            $clientId = $request->client_id;
 
             $canEdit = Auth::user()->hasPermission('update_units');
 
-            $units = Unit::with(['property', 'zone'])
+            $query = Unit::with(['property', 'zone', 'activeLeaseAgreement'])
                 ->select([
                     'id',
                     'unit_code',
@@ -969,37 +980,76 @@ class ClientsController extends Controller
                     'category_id',
                     'vat_able',
                     'initial_water_meter_reading',
-                ])
-                ->where('property_id', $propertyId)
-                ->get()
-                ->map(function ($unit) use ($canEdit) {
+                ]);
+
+            if ($propertyId) {
+                $query->where('property_id', $propertyId);
+            } elseif ($clientId) {
+                $query->whereIn('property_id', Property::where('client_id', $clientId)->pluck('id'));
+            } else {
+                return response()->json(['data' => []]);
+            }
+
+            $units = $query->get();
+
+            // Tenant history per unit — every lease except Withdrawn (29): a real
+            // tenant was, or is, associated with the unit for Pending/Approved/
+            // Renewed-out/Terminated. Bulk-fetched, not per-unit, to avoid N+1.
+            $unitIds = $units->pluck('id');
+            $leasesByUnit = LeaseAgreement::whereIn('unit_id', $unitIds)
+                ->whereIn('current_status_id', [1, 5, 2, 28])
+                ->orderBy('date_start', 'desc')
+                ->get(['id', 'unit_id', 'tenant_id', 'ref_number', 'date_start', 'date_end', 'current_status_id'])
+                ->groupBy('unit_id');
+
+            // withAll(): plain Client::whereIn()/eager-loaded tenant relations get
+            // silently filtered by user_clients_properties, hiding real tenants
+            // outside the current user's assigned properties — same gotcha already
+            // fixed in UnitsController::getAvailableUnits() this session.
+            $tenantIds = $leasesByUnit->flatten()->pluck('tenant_id')->filter()->unique();
+            $tenantNames = Client::withAll()->whereIn('id', $tenantIds)->pluck('names', 'id');
+
+            $leaseStatusLabels = [1 => 'Pending Approval', 5 => 'Active', 2 => 'Renewed', 28 => 'Terminated'];
+
+            $units = $units->map(function ($unit) use ($canEdit, $leasesByUnit, $tenantNames, $leaseStatusLabels) {
+                $tenants = ($leasesByUnit->get($unit->id) ?? collect())->map(function ($lease) use ($tenantNames, $leaseStatusLabels) {
                     return [
-                        'id' => $unit->id,
-                        'encrypted_id' => Crypt::encrypt($unit->id),
-                        'unit_code' => $unit->unit_code ?? '-',
-                        'unit_name' => $unit->unit_name ?? '-',
-                        'unit_number' => $unit->unit_number ?? '-',
-                        'description' => $unit->description ?? '-',
-                        'rent_amount' => $unit->rent_amount ? number_format($unit->rent_amount, 2) : '0.00',
-                        'property' => $unit->property->property_name ?? '-',
-                        'zone' => $unit->zone->zone_name ?? '-',
-                        'occupancy_status' => $unit->occupancy_status_id == 38 ? 'Occupied' : 'Vacant',
-                        'can_edit' => $canEdit,
-                        // Raw values for pre-filling the edit modal
-                        'unit_name_raw' => $unit->unit_name,
-                        'unit_number_raw' => $unit->unit_number,
-                        'description_raw' => $unit->description,
-                        'rent_amount_raw' => $unit->rent_amount,
-                        'unit_type_id' => $unit->unit_type_id,
-                        'usage_type_id' => $unit->usage_type_id,
-                        'unit_condition_id' => $unit->unit_condition_id,
-                        'topology_id' => $unit->topology_id,
-                        'category_id' => $unit->category_id,
-                        'vat_able' => $unit->vat_able,
-                        'initial_water_meter_reading' => $unit->initial_water_meter_reading,
-                        'occupancy_status_id' => $unit->occupancy_status_id,
+                        'ref_number' => $lease->ref_number ?? '-',
+                        'tenant_name' => $tenantNames->get($lease->tenant_id, 'N/A'),
+                        'date_start' => $lease->date_start ? $lease->date_start->format('d M Y') : '-',
+                        'date_end' => $lease->date_end ? $lease->date_end->format('d M Y') : 'Ongoing',
+                        'status' => $leaseStatusLabels[$lease->current_status_id] ?? 'Unknown',
                     ];
-                });
+                })->values();
+
+                return [
+                    'id' => $unit->id,
+                    'encrypted_id' => Crypt::encrypt($unit->id),
+                    'unit_code' => $unit->unit_code ?? '-',
+                    'unit_name' => $unit->unit_name ?? '-',
+                    'unit_number' => $unit->unit_number ?? '-',
+                    'description' => $unit->description ?? '-',
+                    'rent_amount' => $unit->rent_amount ? number_format($unit->rent_amount, 2) : '0.00',
+                    'property' => $unit->property->property_name ?? '-',
+                    'zone' => $unit->zone->zone_name ?? '-',
+                    'occupancy_status' => $unit->activeLeaseAgreement ? 'Occupied' : 'Vacant',
+                    'can_edit' => $canEdit,
+                    'tenants' => $tenants,
+                    // Raw values for pre-filling the edit modal
+                    'unit_name_raw' => $unit->unit_name,
+                    'unit_number_raw' => $unit->unit_number,
+                    'description_raw' => $unit->description,
+                    'rent_amount_raw' => $unit->rent_amount,
+                    'unit_type_id' => $unit->unit_type_id,
+                    'usage_type_id' => $unit->usage_type_id,
+                    'unit_condition_id' => $unit->unit_condition_id,
+                    'topology_id' => $unit->topology_id,
+                    'category_id' => $unit->category_id,
+                    'vat_able' => $unit->vat_able,
+                    'initial_water_meter_reading' => $unit->initial_water_meter_reading,
+                    'occupancy_status_id' => $unit->occupancy_status_id,
+                ];
+            });
 
             return response()->json(['data' => $units]);
         } catch (\Exception $e) {
@@ -1215,7 +1265,7 @@ class ClientsController extends Controller
     public function getTenantsListingData(Request $request)
     {
         try {
-            $status = $request->input('status', 'active'); // active | exited | all
+            $status = $request->input('status', 'active'); // active | exited | pending_unit | all
 
             $query = Client::withoutGlobalScope('user_clients_properties')
                 ->where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
@@ -1230,6 +1280,7 @@ class ClientsController extends Controller
                     'sys_pm_clients.names',
                     'sys_pm_clients.mobile_number',
                     'sys_pm_clients.national_id',
+                    'sys_pm_clients.property_id',
                     'sys_pm_properties.property_name',
                     'landlord.names as landlord_name',
                     'cb_tenant_exits.actual_exit_date',
@@ -1250,8 +1301,12 @@ class ClientsController extends Controller
                 $query->whereNull('cb_tenant_exits.id');
             } elseif ($status === 'exited') {
                 $query->whereNotNull('cb_tenant_exits.id');
+            } elseif ($status === 'pending_unit') {
+                // Bulk-uploaded tenants whose row had no Unit Code — awaiting manual
+                // assignment via TenantsController::assignUnit().
+                $query->whereNull('sys_pm_clients.property_id');
             }
-                
+
 
             // Scope tenants to properties assigned to the logged-in user (unless role is_global)
             $userId = Auth::id();
@@ -1309,6 +1364,7 @@ class ClientsController extends Controller
                         'national_id'    => $t->national_id ?? '-',
                         'property_name'  => $t->property_name ?? '-',
                         'landlord_name'  => $t->landlord_name ?? '-',
+                        'pending_unit'   => is_null($t->property_id),
                         'is_exited'      => (bool) $t->is_exited,
                         'exit_date'      => $t->actual_exit_date
                             ? \Carbon\Carbon::parse($t->actual_exit_date)->format('d M Y')

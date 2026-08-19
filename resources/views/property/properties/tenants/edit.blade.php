@@ -196,6 +196,7 @@
                                             @error('company_registration_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <small class="text-danger d-none duplicate-check-message" id="company_registration_number_duplicate"></small>
                                         </div>
 
                                         <!-- Contact Person Section (Company only) -->
@@ -342,11 +343,12 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3 individual-only">
-                                            <label for="national_id" class="form-label">National ID</label>
+                                            <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id', $tenant->national_id) }}" placeholder="e.g., 12345678">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <small class="text-danger d-none duplicate-check-message" id="national_id_duplicate"></small>
                                         </div>
 
                                         <div class="col-md-12 mb-3">
@@ -630,12 +632,119 @@
             $('.individual-only').toggle(!isCompany);
             $('.company-only').toggle(isCompany);
 
-            $('#names, #nationality_id').prop('required', !isCompany);
+            $('#names, #nationality_id, #national_id').prop('required', !isCompany);
             $('#company_name').prop('required', isCompany);
         }
 
         $('#tenant_type').on('change', toggleTenantTypeFields);
         toggleTenantTypeFields();
+
+        // Live duplicate-identifier checker — warns (rather than blocks outright) when
+        // a PIN Number (Individual) or Registration Number (Company) already belongs
+        // to a DIFFERENT tenant, and requires an explicit confirmation to proceed.
+        // exclude_id keeps this tenant's own existing value from flagging itself.
+        function checkDuplicateIdentifier(fieldId, tenantType, label) {
+            var $field = $('#' + fieldId);
+            var $msg = $('#' + fieldId + '_duplicate');
+            var value = $field.val().trim();
+
+            if (!value) {
+                $msg.addClass('d-none').text('');
+                $field.removeData('duplicate-flagged').removeData('duplicate-confirmed');
+                return;
+            }
+
+            if ($field.data('duplicate-confirmed') === value) {
+                return;
+            }
+
+            $.ajax({
+                url: "{{ route('units.tenants.check-identifier') }}",
+                type: 'GET',
+                data: {
+                    tenant_type: tenantType,
+                    value: value,
+                    exclude_id: '{{ Crypt::encrypt($tenant->id) }}'
+                },
+                success: function(response) {
+                    if ($field.val().trim() !== value) {
+                        return;
+                    }
+                    if (response.exists) {
+                        var details = [response.name, response.reference_number].filter(Boolean).join(' — ');
+                        var text = 'A tenant with this ' + label + ' already exists' + (details ? ': ' + details : '') + '.';
+                        $msg.removeClass('d-none').text(text);
+                        $field.data('duplicate-flagged', value);
+
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Duplicate ' + label,
+                            text: text + ' Do you want to continue anyway?',
+                            showCancelButton: true,
+                            confirmButtonText: 'Continue Anyway',
+                            cancelButtonText: 'Change Value'
+                        }).then(function(result) {
+                            if (result.isConfirmed) {
+                                $field.data('duplicate-confirmed', value);
+                            } else {
+                                $field.focus();
+                            }
+                        });
+                    } else {
+                        $msg.addClass('d-none').text('');
+                        $field.removeData('duplicate-flagged').removeData('duplicate-confirmed');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Duplicate identifier check failed:', xhr);
+                }
+            });
+        }
+
+        $('#national_id').on('blur', function() {
+            checkDuplicateIdentifier('national_id', 1, 'National ID');
+        });
+
+        $('#company_registration_number').on('blur', function() {
+            checkDuplicateIdentifier('company_registration_number', 3, 'Registration Number');
+        });
+
+        // Live check as they type — debounced so it fires ~500ms after they pause,
+        // not on every keystroke.
+        var duplicateCheckTimers = {};
+        function liveDuplicateCheck(fieldId, tenantType, label) {
+            clearTimeout(duplicateCheckTimers[fieldId]);
+            duplicateCheckTimers[fieldId] = setTimeout(function() {
+                checkDuplicateIdentifier(fieldId, tenantType, label);
+            }, 500);
+        }
+
+        $('#national_id').on('input', function() {
+            liveDuplicateCheck('national_id', 1, 'National ID');
+        });
+
+        $('#company_registration_number').on('input', function() {
+            liveDuplicateCheck('company_registration_number', 3, 'Registration Number');
+        });
+
+        // Block submission while a flagged-but-unconfirmed duplicate is showing for
+        // the active tenant type.
+        $('#unitTenantForm').on('submit', function(e) {
+            var isCompany = $('#tenant_type').val() === '3';
+            var $field = isCompany ? $('#company_registration_number') : $('#national_id');
+            var value = $field.val().trim();
+
+            if ($field.data('duplicate-flagged') === value && $field.data('duplicate-confirmed') !== value) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                var tabButton = document.getElementById('tenant-info-tab');
+                if (tabButton) {
+                    bootstrap.Tab.getOrCreateInstance(tabButton).show();
+                }
+                toastr.error('Please resolve the duplicate ' + (isCompany ? 'registration number' : 'National ID') + ' before submitting.');
+                $field.trigger('blur');
+            }
+        });
 
         // Reset spinner on page load if there are errors
         if ($('.is-invalid').length > 0) {
@@ -911,18 +1020,18 @@
         }
 
         // Auto-populate account name from tenant name
-        $('#names').on('blur', function() {
-            let fullName = $('#names').val();
+        // $('#names').on('blur', function() {
+        //     let fullName = $('#names').val();
 
-            if (fullName && $('.bank-account-entry').length > 0) {
-                $('.bank-account-entry').each(function(index) {
-                    let accountNameField = $(this).find(`#account_name_${index}`);
-                    if (!accountNameField.val()) {
-                        accountNameField.val(fullName);
-                    }
-                });
-            }
-        });
+        //     if (fullName && $('.bank-account-entry').length > 0) {
+        //         $('.bank-account-entry').each(function(index) {
+        //             let accountNameField = $(this).find(`#account_name_${index}`);
+        //             if (!accountNameField.val()) {
+        //                 accountNameField.val(fullName);
+        //             }
+        //         });
+        //     }
+        // });
 
         // If there are validation errors, find which tab has errors and activate it
         var firstErrorField = $('.is-invalid').first();

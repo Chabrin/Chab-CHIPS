@@ -9,6 +9,10 @@
                         <h5 class="mb-0">Lease Management</h5>
                         {{-- @permission('create_lease_agreements') --}}
                         <div class="ms-auto d-flex gap-2">
+                            <a href="{{ route('property.leases.setup') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center" title="Clean up and activate migrated leases">
+                                <span class="material-symbols-outlined">build</span>
+                                <span class="ms-1">Lease Setup</span>
+                            </a>
                             <a href="{{ route('property.lease-settings.contract-templates.index') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center" title="Manage contract templates">
                                 <span class="material-symbols-outlined">article</span>
                                 <span class="ms-1">Contract Templates</span>

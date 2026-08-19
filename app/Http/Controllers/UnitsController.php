@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Unit;
+use App\Models\Client;
 use App\Models\Property;
 use App\Models\UnitDocument;
 use Illuminate\Http\Request;
@@ -32,30 +33,77 @@ class UnitsController extends Controller
     }
 
     /**
-     * Get non-occupied units for a property, for lease creation (AJAX).
+     * Get units for a property, for lease creation (AJAX). Returns every unit
+     * (not just vacant ones) so an already-assigned-but-not-yet-leased unit
+     * still shows up with its tenant attached — the Lease creation page picks
+     * the tenant from the chosen unit rather than a separate tenant search.
      *
-     * occupancy_status_id carries two overlapping numbering schemes in the data:
-     *   - Legacy-migrated units: 1 = Occupied, 2 = Vacant, 3 = unclassified (from
-     *     the migration's `CASE WHEN USTATUS=1 THEN 1 WHEN USTATUS=2 THEN 2 ELSE 3 END`)
-     *   - Units created directly in this app: 31 = Vacant, 38 = Occupied
-     * Excluding both "Occupied" values covers units from either origin.
+     * Used to exclude occupied units via
+     * `whereNotIn('occupancy_status_id', [1, 38])`, covering the two
+     * conflicting numbering schemes that column carries in this codebase
+     * (legacy-migrated units: 1=Occupied/2=Vacant/3=unclassified; app-native
+     * units: 31=Vacant/38=Occupied). Replaced with the lease-based check
+     * (Unit::activeLeaseAgreement()) after finding occupancy_status_id isn't
+     * reliable for this at all — different controllers already disagreed on
+     * which value meant what.
+     *
+     * Status per unit (see Unit::activeLeaseAgreement()/assignedTenant()):
+     *   - 'Taken': has a Pending or Approved lease already — tenant shown is
+     *     the lease's own tenant (LeaseAgreement.tenant_id), NOT
+     *     assignedTenant()/Client.unit_id — lease creation never syncs that
+     *     column back onto the tenant record, so it's usually empty here.
+     *   - 'Pending Lease': a tenant is assigned (Client.unit_id) but has no
+     *     lease yet — exactly the units this page exists to create leases for
+     *   - 'Vacant': no tenant assigned, nothing to attach a lease to
+     *
+     * Tenant names are looked up via two bulk Client::withAll() queries rather
+     * than eager-loaded relations — Client's user_clients_properties global
+     * scope would otherwise silently hide tenants outside the current (non-
+     * global-role) user's assigned properties, showing a real tenant as blank.
      */
     public function getAvailableUnits($propertyId)
     {
         try {
-            $units = Unit::where('property_id', $propertyId)
-                ->whereNotIn('occupancy_status_id', [1, 38])
+            $units = Unit::with('activeLeaseAgreement')
+                ->where('property_id', $propertyId)
                 ->orderBy('unit_number')
-                ->get(['id', 'unit_name', 'unit_number', 'unit_code', 'occupancy_status_id']);
+                ->get(['id', 'unit_name', 'unit_number', 'unit_code']);
 
-            $units = $units->map(function ($unit) {
+            $leaseTenantIds = $units->pluck('activeLeaseAgreement.tenant_id')->filter()->unique();
+            $leaseTenants = Client::withAll()->whereIn('id', $leaseTenantIds)->pluck('names', 'id');
+
+            $unitIdsWithNoLease = $units->reject(fn ($u) => $u->activeLeaseAgreement)->pluck('id');
+            $assignedTenants = Client::withAll()->tenants()
+                ->whereIn('unit_id', $unitIdsWithNoLease)
+                ->get(['id', 'unit_id', 'names'])
+                ->keyBy('unit_id');
+
+            $units = $units->map(function ($unit) use ($leaseTenants, $assignedTenants) {
+                $lease = $unit->activeLeaseAgreement;
+                $tenantId = null;
+                $tenantName = null;
+                $status = 'Vacant';
+
+                if ($lease) {
+                    $status = 'Taken';
+                    $tenantId = $lease->tenant_id;
+                    $tenantName = $leaseTenants->get($lease->tenant_id);
+                } elseif ($assignedTenants->has($unit->id)) {
+                    $status = 'Pending Lease';
+                    $tenant = $assignedTenants->get($unit->id);
+                    $tenantId = $tenant->id;
+                    $tenantName = $tenant->names;
+                }
+
                 return [
                     'id' => $unit->id,
                     'unit_name' => $unit->unit_name,
                     'unit_number' => $unit->unit_number,
                     'unit_code' => $unit->unit_code,
-                    'occupancy_status_id' => $unit->occupancy_status_id,
-                    'status' => $this->occupancyStatusLabel($unit->occupancy_status_id),
+                    'is_vacant' => $status === 'Vacant',
+                    'tenant_id' => $tenantId,
+                    'tenant_name' => $tenantName,
+                    'status' => $status,
                 ];
             });
 
@@ -65,17 +113,6 @@ class UnitsController extends Controller
             Log::error('Error loading available units for property: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load units'], 500);
         }
-    }
-
-    private function occupancyStatusLabel($statusId)
-    {
-        if (in_array((int) $statusId, [1, 38], true)) {
-            return 'Occupied';
-        }
-        if (in_array((int) $statusId, [2, 31], true)) {
-            return 'Vacant';
-        }
-        return 'Available';
     }
 
     /**

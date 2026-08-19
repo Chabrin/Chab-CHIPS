@@ -38,6 +38,7 @@ class LeaseAgreement extends Model
         'signer_name',
         'contract_sent_at',
         'contract_signed_at',
+        'tenant_verified_at',
     ];
 
     protected $casts = [
@@ -47,6 +48,7 @@ class LeaseAgreement extends Model
         'escalation_rate' => 'decimal:2',
         'contract_sent_at' => 'datetime',
         'contract_signed_at' => 'datetime',
+        'tenant_verified_at' => 'datetime',
     ];
 
     public function tenant()

@@ -531,6 +531,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/zone/assignments/unallocated', [HrSettingsController::class, 'unallocatedPropertiesReport'])->name('ajax.zoneAssignments.unallocated');
     Route::get('/ajax/hr/zone/assignments/property-details/{id}', [HrSettingsController::class, 'propertyAllocationDetails'])->name('ajax.zoneAssignments.propertyDetails');
     Route::post('/ajax/hr/zone/assignments/allocate/{id}', [HrSettingsController::class, 'allocatePropertyZoneRoles'])->name('ajax.zoneAssignments.allocate');
+    Route::post('/ajax/hr/zone/assignments/bulk-reassign', [HrSettingsController::class, 'bulkReassignFieldOfficer'])->name('ajax.zoneAssignments.bulkReassign');
 
     Route::get('/ajax/hr/properties/by-zone/{zoneId}', [HrSettingsController::class, 'propertiesByZone'])->name('ajax.properties.byZone');
     Route::get('/ajax/hr/staff/list', [HrSettingsController::class, 'staffList'])->name('ajax.staff.list');
@@ -717,6 +718,17 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/leases/{id}/cancel', [App\Http\Controllers\LeasesController::class, 'cancel'])->name('property.leases.cancel');
     Route::get('/tenants/lease/create', [App\Http\Controllers\LeasesController::class, 'create'])->name('tenant.lease.create');
 
+    // Lease Setup — cleaning up and activating migrated leases (static routes
+    // before the {id} ones below, so "stats"/"data"/etc. aren't swallowed by {id})
+    Route::get('/property/leases/setup', [App\Http\Controllers\LeasesController::class, 'setupIndex'])->name('property.leases.setup');
+    Route::get('/property/leases/setup/stats', [App\Http\Controllers\LeasesController::class, 'getSetupStats'])->name('property.leases.setup.stats');
+    Route::get('/property/leases/setup/data', [App\Http\Controllers\LeasesController::class, 'getSetupLeases'])->name('property.leases.setup.data');
+    Route::post('/property/leases/setup/bulk-fill-sla', [App\Http\Controllers\LeasesController::class, 'bulkFillSla'])->name('property.leases.setup.bulk-fill-sla');
+    Route::post('/property/leases/setup/bulk-compute-end-date', [App\Http\Controllers\LeasesController::class, 'bulkComputeEndDate'])->name('property.leases.setup.bulk-compute-end-date');
+    Route::post('/property/leases/setup/bulk-activate', [App\Http\Controllers\LeasesController::class, 'bulkActivate'])->name('property.leases.setup.bulk-activate');
+    Route::post('/property/leases/setup/{id}/activate', [App\Http\Controllers\LeasesController::class, 'activateSetupLease'])->name('property.leases.setup.activate');
+    Route::post('/property/leases/setup/{id}', [App\Http\Controllers\LeasesController::class, 'updateSetupLease'])->name('property.leases.setup.update');
+
     // Lease Contract Template Management
     Route::get('/property/lease-settings/contract-templates', [App\Http\Controllers\LeaseContractTemplateController::class, 'index'])->name('property.lease-settings.contract-templates.index');
     Route::get('/property/lease-settings/contract-templates/create', [App\Http\Controllers\LeaseContractTemplateController::class, 'create'])->name('property.lease-settings.contract-templates.create');
@@ -780,6 +792,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/tenants/{encryptedId}/edit', [TenantsController::class, 'edit'])->name('units.tenants.edit');
     Route::put('/property/tenants/{encryptedId}', [TenantsController::class, 'update'])->name('units.tenants.update');
     Route::delete('/property/tenants/documents/{id}', [TenantsController::class, 'deleteDocument'])->name('units.tenants.documents.delete');
+    Route::post('/property/tenants/{encryptedId}/assign-unit', [TenantsController::class, 'assignUnit'])->name('property.tenants.assign-unit');
 
     // Tenant payments (AJAX)
     Route::get('/tenants/{encryptedId}/payments', [App\Http\Controllers\TenantsController::class, 'payments'])->name('tenants.payments');
@@ -788,6 +801,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/tenants/{encryptedId}/leases', [App\Http\Controllers\TenantsController::class, 'leases'])->name('tenants.leases');
     Route::post('/units/tenants', [App\Http\Controllers\TenantsController::class, 'store'])->name('units.tenants.store');
     Route::get('/units/tenants/create', [App\Http\Controllers\TenantsController::class, 'create'])->name('units.tenants.create');
+    Route::get('/units/tenants/check-identifier', [App\Http\Controllers\TenantsController::class, 'checkIdentifierExists'])->name('units.tenants.check-identifier');
+    Route::get('/units/tenants/vacant-units', [App\Http\Controllers\TenantsController::class, 'searchVacantUnits'])->name('units.tenants.vacant-units');
+    Route::get('/units/tenants/search-landlords', [App\Http\Controllers\TenantsController::class, 'searchLandlordsForUnitPicker'])->name('units.tenants.search-landlords');
+    Route::get('/units/tenants/search-properties', [App\Http\Controllers\TenantsController::class, 'searchPropertiesForUnitPicker'])->name('units.tenants.search-properties');
 
     // Tenant Payments Management
     Route::get('/tenant/payments', [App\Http\Controllers\TenantPaymentsController::class, 'index'])->name('tenant.payments.index');
@@ -961,6 +978,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateZone'])->name('property.settings.zones.update');
     Route::delete('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteZone'])->name('property.settings.zones.delete');
     Route::post('/property/settings/zones/{encryptedId}/field-officers', [App\Http\Controllers\PropertySettingsController::class, 'assignFieldOfficers'])->name('property.settings.zones.field-officers');
+    Route::post('/property/settings/zones/{encryptedId}/roles', [App\Http\Controllers\PropertySettingsController::class, 'assignZoneRoles'])->name('property.settings.zones.roles');
 
     // Repairs Settings Routes
     Route::get('/property/settings/repairs', [App\Http\Controllers\PropertySettingsController::class, 'repairsIndex'])->name('property.settings.repairs.index');

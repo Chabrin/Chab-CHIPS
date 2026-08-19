@@ -1222,6 +1222,42 @@ class HrSettingsController extends Controller
         }
     }
 
+    /**
+     * Bulk-reassign a set of already-allocated properties to a different
+     * field officer in one action. Updated one at a time (not a single
+     * whereIn(...)->update()) so AuditLogsObserver still fires per property,
+     * matching the audit trail a single allocatePropertyZoneRoles() call
+     * would leave.
+     */
+    public function bulkReassignFieldOfficer(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'property_ids' => 'required|array|min:1',
+                'property_ids.*' => 'integer|exists:sys_pm_properties,id',
+                'field_officer_id' => 'required|integer|exists:sys_staff,id',
+            ]);
+
+            DB::transaction(function () use ($validated) {
+                $properties = Property::withAll()->withInactive()
+                    ->whereIn('id', $validated['property_ids'])
+                    ->get();
+
+                foreach ($properties as $property) {
+                    $property->update(['field_officer_id' => $validated['field_officer_id']]);
+                }
+            });
+
+            return response()->json(['success' => true, 'message' => 'Properties reassigned successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk reassigning field officer: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to reassign properties'], 500);
+        }
+    }
+
     public function assignmentTypesList()
     {
         try {

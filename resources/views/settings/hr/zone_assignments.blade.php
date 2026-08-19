@@ -9,6 +9,16 @@
                         <h5 class="mb-0">Zone Assignments</h5>
                     </div>
                     <div class="card-body">
+                        <div class="alert alert-info py-2 px-3" style="font-size:0.85rem;">
+                            <strong>What you can do here:</strong> the <em>Unallocated</em> tab lists properties with no
+                            Field Officer yet — click <em>Allocate</em> to assign one. The <em>Field Officers</em>,
+                            <em>Zone Managers</em>, <em>Zone Supervisors</em> and <em>Property Managers</em> tabs show who
+                            is currently assigned what; click a name or <em>Details</em> to see their properties. On the
+                            Field Officers list, that Details view also lets you
+                            <span class="material-symbols-outlined align-middle" style="font-size:15px;">swap_horiz</span>
+                            reassign a property to a different officer one at a time, or select several with the
+                            checkboxes and use <em>Reassign Selected</em> to move them all at once.
+                        </div>
                         <!-- Nav tabs -->
                         <ul class="nav nav-tabs mb-3" id="zoneAssignmentsTab" role="tablist">
                             <li class="nav-item" role="presentation">
@@ -173,21 +183,54 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div id="staffPropertiesBulkBar" class="d-none align-items-center justify-content-between gap-2 mb-2 p-2" style="background:#f0f7fd;border:1px solid #d9ebf7;border-radius:6px;">
+                    <span class="small fw-semibold" style="color:#212529;"><strong id="staffPropertiesSelectedCount">0</strong> selected</span>
+                    <button type="button" class="btn btn-sm btn-primary" id="reassignSelectedBtn">
+                        <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">swap_horiz</span>
+                        Reassign Selected
+                    </button>
+                </div>
                 <div class="table-responsive custom-scrollbar">
                     <table id="staffPropertiesTable" class="display" style="width:100%;">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Property Name</th>
-                                <th>Reference Number</th>
-                                <th>Client Name</th>
-                                <th>Zone</th>
-                            </tr>
-                        </thead>
+                        <thead><tr></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Reassign modal -->
+<div class="modal fade" id="bulkReassignModal" tabindex="-1" aria-labelledby="bulkReassignModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkReassignModalLabel">Reassign Properties</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="bulkReassignForm">
+                <div class="modal-body">
+                    <p class="text-muted small mb-3"><strong id="bulkReassignCount">0</strong> propert(ies) will be moved to the field officer selected below.</p>
+                    <div class="mb-3">
+                        <label for="bulk_reassign_field_officer_id" class="form-label">New Field Officer <span class="text-danger">*</span></label>
+                        <select class="form-select" id="bulk_reassign_field_officer_id" name="field_officer_id" required>
+                            <option value="">Select field officer</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveBulkReassignBtn">
+                        <span class="material-symbols-outlined">check_circle</span>
+                        <span class="ms-1">Reassign</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -351,7 +394,33 @@
         ]);
 
         // ===== Properties drill-down modal (Field Officers / Zone Managers / Zone Supervisors) =====
+        // Only Field Officer allocations support reassignment here — Zone Manager/
+        // Supervisor are set from the staff record or the Zones page instead.
+        let staffPropertiesType = null;
+        let staffPropertiesTable = null;
+        let selectedProperties = new Map();
+
+        function updateStaffPropertiesBulkBar() {
+            const count = selectedProperties.size;
+            $('#staffPropertiesSelectedCount').text(count);
+            $('#staffPropertiesBulkBar').toggleClass('d-none', count === 0).toggleClass('d-flex', count > 0);
+        }
+
+        // Header checkbox reflects selection across ALL pages, not just the visible one.
+        function updateSelectAllStaffPropertiesHeader() {
+            const $selectAll = $('#selectAllStaffProperties');
+            if (!$selectAll.length || !staffPropertiesTable) return;
+            const total = staffPropertiesTable.rows().count();
+            const selected = selectedProperties.size;
+            $selectAll.prop('checked', total > 0 && selected === total);
+            $selectAll.prop('indeterminate', selected > 0 && selected < total);
+        }
+
         function openStaffPropertiesModal(type, staffId, staffName) {
+            staffPropertiesType = type;
+            selectedProperties = new Map();
+            updateStaffPropertiesBulkBar();
+
             $('#staffPropertiesModalLabel').text('Properties — ' + (staffName || ''));
             $('#staffPropertiesModal').modal('show');
 
@@ -360,7 +429,42 @@
                 $('#staffPropertiesTable tbody').empty();
             }
 
-            $('#staffPropertiesTable').DataTable({
+            const isFieldOfficer = type === 'field_officer';
+
+            const headerCells = ['#', 'Property Name', 'Reference Number', 'Client Name', 'Zone'];
+            if (isFieldOfficer) {
+                headerCells.unshift('<input type="checkbox" id="selectAllStaffProperties" class="form-check-input">');
+                headerCells.push('Action');
+            }
+            $('#staffPropertiesTable thead tr').html(headerCells.map(h => `<th>${h}</th>`).join(''));
+
+            const columns = [
+                rowNumberColumn,
+                { data: 'property_name', render: data => data || '-' },
+                { data: 'reference_number', render: data => data || '-' },
+                { data: 'client_name', render: data => data || '-' },
+                { data: 'zone_name', render: data => data || '-' }
+            ];
+            if (isFieldOfficer) {
+                columns.unshift({
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    // Reflects selectedProperties on every render, so paginating (which
+                    // destroys/rebuilds row DOM) or a redraw after "select all" both show
+                    // the correct checked state without a separate manual sync step.
+                    render: (data, t, row) => `<input type="checkbox" class="form-check-input row-select-property" data-id="${row.id}" ${selectedProperties.has(row.id) ? 'checked' : ''}>`
+                });
+                columns.push({
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: (data, t, row) => `<a href="javascript:void(0)" class="reassign-property-link" data-property-id="${row.id}" title="Reassign">
+                        <span class="material-symbols-outlined" style="font-size:18px;color:var(--accent, #3598db);">swap_horiz</span></a>`
+                });
+            }
+
+            staffPropertiesTable = $('#staffPropertiesTable').DataTable({
                 processing: true,
                 serverSide: false,
                 ajax: {
@@ -373,18 +477,17 @@
                     dataType: 'json',
                     dataSrc: 'data'
                 },
-                columns: [
-                    rowNumberColumn,
-                    { data: 'property_name', render: data => data || '-' },
-                    { data: 'reference_number', render: data => data || '-' },
-                    { data: 'client_name', render: data => data || '-' },
-                    { data: 'zone_name', render: data => data || '-' }
-                ],
+                columns: columns,
                 paging: true,
                 pageLength: 10,
                 searching: true,
                 info: true,
-                lengthChange: true
+                lengthChange: true,
+                drawCallback: function() {
+                    if (isFieldOfficer) {
+                        updateSelectAllStaffPropertiesHeader();
+                    }
+                }
             });
         }
 
@@ -401,6 +504,131 @@
                 $('#staffPropertiesTable').DataTable().destroy();
                 $('#staffPropertiesTable tbody').empty();
             }
+            selectedProperties = new Map();
+            updateStaffPropertiesBulkBar();
+        });
+
+        // Row selection
+        $(document).on('change', '#staffPropertiesTable .row-select-property', function() {
+            const id = $(this).data('id');
+            if ($(this).is(':checked')) {
+                selectedProperties.set(id, true);
+            } else {
+                selectedProperties.delete(id);
+            }
+            updateStaffPropertiesBulkBar();
+            updateSelectAllStaffPropertiesHeader();
+        });
+
+        // Select all — across every page, not just the one currently visible. This
+        // DataTable loads its full dataset client-side, so .rows() already has every
+        // row's data regardless of pagination; draw(false) re-renders checkboxes
+        // (keeping the current page) so the visible ones reflect the new state.
+        $(document).on('change', '#selectAllStaffProperties', function() {
+            const checked = $(this).is(':checked');
+            if (staffPropertiesTable) {
+                staffPropertiesTable.rows().every(function() {
+                    const id = this.data().id;
+                    if (checked) {
+                        selectedProperties.set(id, true);
+                    } else {
+                        selectedProperties.delete(id);
+                    }
+                });
+                staffPropertiesTable.draw(false);
+            }
+            updateStaffPropertiesBulkBar();
+        });
+
+        // Per-row reassign — reuses the same Allocate modal the Unallocated tab uses.
+        $(document).on('click', '.reassign-property-link', function() {
+            const propertyId = $(this).data('property-id');
+            fetchAndOpenAllocateModal(propertyId);
+        });
+
+        // Open the bulk reassign modal
+        $('#reassignSelectedBtn').on('click', function() {
+            const count = selectedProperties.size;
+            if (count === 0) return;
+
+            $('#bulkReassignCount').text(count);
+            $('#bulkReassignForm .invalid-feedback').text('').hide();
+            $('#bulkReassignForm .form-select').removeClass('is-invalid');
+
+            loadStaffOptions().then(function(staffList) {
+                populateStaffSelect($('#bulk_reassign_field_officer_id'), staffList, null, 'Select field officer');
+                $('#bulk_reassign_field_officer_id').select2({
+                    placeholder: 'Select field officer',
+                    allowClear: true,
+                    dropdownParent: $('#bulkReassignModal')
+                });
+                $('#bulkReassignModal').modal('show');
+            }, function() {
+                toastr.error('Failed to load staff list');
+            });
+        });
+
+        // Submit bulk reassignment
+        $('#bulkReassignForm').submit(function(e) {
+            e.preventDefault();
+
+            const fieldOfficerId = $('#bulk_reassign_field_officer_id').val();
+            if (!fieldOfficerId) {
+                $('#bulk_reassign_field_officer_id').addClass('is-invalid');
+                return;
+            }
+
+            const $btn = $('#saveBulkReassignBtn');
+            const $icon = $btn.find('.material-symbols-outlined');
+            const origText = $btn.find('span.ms-1').text();
+            $icon.addClass('spin');
+            $btn.find('span.ms-1').text('Reassigning...');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: "{{ route('ajax.zoneAssignments.bulkReassign') }}",
+                method: 'POST',
+                data: {
+                    property_ids: Array.from(selectedProperties.keys()),
+                    field_officer_id: fieldOfficerId
+                },
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    $icon.removeClass('spin');
+                    $btn.find('span.ms-1').text(origText);
+                    $btn.prop('disabled', false);
+
+                    $('#bulkReassignModal').modal('hide');
+                    toastr.success(response.message);
+
+                    selectedProperties = new Map();
+                    updateStaffPropertiesBulkBar();
+
+                    if ($.fn.DataTable.isDataTable('#staffPropertiesTable')) {
+                        $('#staffPropertiesTable').DataTable().ajax.reload(null, false);
+                    }
+                    if ($.fn.DataTable.isDataTable('#unallocatedPropertiesTable')) {
+                        $('#unallocatedPropertiesTable').DataTable().ajax.reload(null, false);
+                    }
+                    if ($.fn.DataTable.isDataTable('#fieldOfficersTable')) {
+                        $('#fieldOfficersTable').DataTable().ajax.reload(null, false);
+                    }
+                    if ($.fn.DataTable.isDataTable('#zoneManagersTable')) {
+                        $('#zoneManagersTable').DataTable().ajax.reload(null, false);
+                    }
+                    if ($.fn.DataTable.isDataTable('#zoneSupervisorsTable')) {
+                        $('#zoneSupervisorsTable').DataTable().ajax.reload(null, false);
+                    }
+                },
+                error: function(xhr) {
+                    $icon.removeClass('spin');
+                    $btn.find('span.ms-1').text(origText);
+                    $btn.prop('disabled', false);
+                    toastr.error(xhr.responseJSON?.message || xhr.responseJSON?.error || 'Failed to reassign properties');
+                }
+            });
         });
 
         // ===== Allocate Property modal =====

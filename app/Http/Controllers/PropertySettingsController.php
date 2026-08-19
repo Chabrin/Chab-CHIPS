@@ -648,6 +648,56 @@ class PropertySettingsController extends Controller
         }
     }
 
+    /**
+     * Set this zone's Manager/Supervisor directly from the Zones page — a
+     * second entry point alongside Staff editing (StaffController::
+     * syncZoneRoles()), which stays the source of truth for the same
+     * Zone.zone_manager_id/zone_supervisor_id columns. Unlike Field
+     * Officers (Staff.zone_id, single-valued per staff), manager/supervisor
+     * is zone-owned, so setting it here doesn't need to touch any other
+     * zone this staff member already manages/supervises elsewhere.
+     */
+    public function assignZoneRoles(Request $request, $encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $zone = Zone::findOrFail($id);
+
+            $validated = $request->validate([
+                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
+            ]);
+
+            $this->assertNoOverlappingZoneRoles($validated);
+
+            $zone->update([
+                'zone_manager_id' => $validated['zone_manager_id'] ?? null,
+                'zone_supervisor_id' => $validated['zone_supervisor_id'] ?? null,
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Zone roles updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error assigning zone roles: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to assign zone roles'], 500);
+        }
+    }
+
+    /**
+     * A zone can't have the same staff member as both manager and supervisor.
+     */
+    private function assertNoOverlappingZoneRoles(array $validated): void
+    {
+        if (!empty($validated['zone_manager_id']) && !empty($validated['zone_supervisor_id'])
+            && $validated['zone_manager_id'] === $validated['zone_supervisor_id']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'zone_supervisor_id' => ['A zone cannot have the same staff member as both manager and supervisor.'],
+            ]);
+        }
+    }
+
     // ============ PROPERTY ELEMENTS METHODS ============
 
     /**

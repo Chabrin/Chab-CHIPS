@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Unit;
 use App\Models\Client;
 use App\Models\Property;
+use App\Traits\TenantRecordHelperTrait;
 use Illuminate\Http\Request;
 use App\Models\LeaseAgreement;
 use App\Services\ErrorDispatcher;
@@ -18,6 +19,8 @@ use App\Services\LeaseContractService;
 
 class LeasesController extends Controller
 {
+    use TenantRecordHelperTrait;
+
     /**
      * Display a listing of lease agreements
      */
@@ -611,17 +614,26 @@ class LeasesController extends Controller
     }
 
     /**
-     * Store a newly created lease agreement
+     * Store a newly created lease agreement.
+     *
+     * Tenant is no longer picked via a separate search — by the time a lease
+     * is created, a tenant has typically already been created and assigned to
+     * a unit (interactively, via bulk upload, or via TenantsController::
+     * assignUnit()). The Unit dropdown on the create form now shows that
+     * assigned tenant directly and submits tenant_id in a hidden field, so
+     * this validation rule is unchanged in shape, just no longer filled in by
+     * a manual search widget. sla_ref is similarly gone — resolved below from
+     * the property's own SLA via resolveSlaId() (TenantRecordHelperTrait),
+     * the same helper the interactive tenant form already uses, so a lease
+     * and a tenant created for the same property can't disagree on SLA.
      */
     public function store(Request $request)
     {
         DB::beginTransaction();
         try {
-            // Validate the request
             $validated = $request->validate([
                 'client_id' => 'required|exists:sys_pm_clients,id',
                 'property_id' => 'required|exists:sys_pm_properties,id',
-                'sla_ref' => 'required|exists:sys_pm_service_agreements,id',
                 'unit_id' => 'required|exists:sys_pm_units,id',
                 'tenant_id' => 'required|exists:sys_pm_clients,id',
                 'linked_lease' => 'nullable|exists:sys_pm_lease_agreements,id',
@@ -646,6 +658,15 @@ class LeasesController extends Controller
             // Get property to retrieve zone_id
             $property = Property::findOrFail($validated['property_id']);
 
+            // A lease always needs an SLA — same guarantee the old required "SLA Ref"
+            // dropdown gave, just enforced here now that it's derived, not picked.
+            $slaId = $this->resolveSlaId($validated['property_id']);
+            if (!$slaId) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'property_id' => ['This property has no service agreement (SLA) configured — a lease cannot be created until one exists.'],
+                ]);
+            }
+
             // Get unit's initial water meter reading
             $unit = Unit::findOrFail($validated['unit_id']);
 
@@ -665,7 +686,7 @@ class LeasesController extends Controller
                 'property_id' => $validated['property_id'],
                 'unit_id' => $validated['unit_id'],
                 'tenant_id' => $validated['tenant_id'],
-                'sla_id' => $validated['sla_ref'],
+                'sla_id' => $slaId,
                 'zone_id' => $property->zone_id ?? null,
                 'date_start' => $validated['date_start'],
                 'date_end' => $endDate->format('Y-m-d'),
@@ -676,7 +697,7 @@ class LeasesController extends Controller
                 'linked_lease_id' => $validated['linked_lease'] ?? null,
                 'initial_water_meter_reading' => $unit->initial_water_meter_reading ?? 0,
                 'created_by_id' => Auth::id(),
-                'current_status_id' => 1, // Active status
+                'current_status_id' => 1, // Pending — awaiting maker-checker approval (bumped to 5/Approved by PropertyConfirmationController)
                 'lease_status' => 'Active',
                 'ref_number' => null, // Will be updated below
             ]);
@@ -866,6 +887,361 @@ class LeasesController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error cancelling lease agreement: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to cancel lease'], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Lease Setup — cleaning up and activating the 73k+ migrated leases.
+    //
+    // Every migrated lease landed at current_status_id = 1 (Pending) with no
+    // sla_id, and most with no date_end — none have ever gone through the
+    // maker-checker approval step (5, Approved) a normally-created lease
+    // would. Worse: for a large share of them, LeaseAgreement.tenant_id
+    // disagrees with whoever Client.unit_id currently says occupies that
+    // unit — could mean the lease is stale (tenant moved out) or the unit
+    // record is stale; not safe to resolve automatically. This section is a
+    // dedicated backlog-clearing workspace: bulk-fill what's mechanical (SLA,
+    // computed end dates), surface tenant conflicts for manual review, then
+    // gate activation (Pending -> Approved) on the lease actually being
+    // complete — same requirement LeasesController::store() already enforces
+    // for a lease created normally.
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Applies (or excludes) the "has an unresolved tenant mismatch" condition
+     * to a query already aliasing sys_pm_lease_agreements as `l`. A mismatch
+     * is a differing type_id=2 Client whose unit_id points at the same unit
+     * as the lease, that hasn't been reviewed yet (tenant_verified_at null).
+     * Shared by getSetupStats(), getSetupLeases()'s 'ready'/'tenant_mismatch'
+     * filters, and bulkActivate() so the definition can't drift between them.
+     */
+    private function scopeUnresolvedMismatch($query, bool $wantMismatched)
+    {
+        $mismatchExists = function ($q) {
+            $q->select(DB::raw(1))
+                ->from('sys_pm_clients as ut')
+                ->whereColumn('ut.unit_id', 'l.unit_id')
+                ->where('ut.type_id', 2)
+                ->whereColumn('ut.id', '!=', 'l.tenant_id');
+        };
+
+        if ($wantMismatched) {
+            return $query->whereExists($mismatchExists)->whereNull('l.tenant_verified_at');
+        }
+
+        return $query->where(function ($q) use ($mismatchExists) {
+            $q->whereNotExists($mismatchExists)->orWhereNotNull('l.tenant_verified_at');
+        });
+    }
+
+    /**
+     * Render the Lease Setup page.
+     */
+    public function setupIndex()
+    {
+        try {
+            return view('property.properties.lease.setup');
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading lease setup page: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load lease setup page');
+        }
+    }
+
+    /**
+     * Counts for the Lease Setup page's stat cards. Scoped to Pending leases
+     * only — Terminated ones are already resolved/historical and aren't part
+     * of this "finish setting up, then activate" workflow.
+     */
+    public function getSetupStats()
+    {
+        try {
+            $base = fn () => DB::table('sys_pm_lease_agreements as l')->where('l.current_status_id', 1);
+
+            $missingSla = $base()->whereNull('l.sla_id')->count();
+            $missingEndDate = $base()->whereNull('l.date_end')->count();
+            $tenantMismatch = $this->scopeUnresolvedMismatch($base(), true)->count();
+            $ready = $this->scopeUnresolvedMismatch(
+                $base()->whereNotNull('l.sla_id')->whereNotNull('l.date_end'),
+                false
+            )->count();
+
+            return response()->json([
+                'missing_sla' => $missingSla,
+                'missing_end_date' => $missingEndDate,
+                'tenant_mismatch' => $tenantMismatch,
+                'ready' => $ready,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading lease setup stats: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * Listing for the Lease Setup page's table (AJAX). `filter`: missing_sla |
+     * missing_end_date | tenant_mismatch | ready | all.
+     */
+    public function getSetupLeases(Request $request)
+    {
+        try {
+            $filter = $request->input('filter', 'all');
+
+            $query = DB::table('sys_pm_lease_agreements as l')
+                ->where('l.current_status_id', 1)
+                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'l.property_id')
+                ->leftJoin('sys_pm_units as u', 'u.id', '=', 'l.unit_id')
+                ->leftJoin('sys_pm_clients as ut', function ($join) {
+                    $join->on('ut.unit_id', '=', 'l.unit_id')->where('ut.type_id', 2);
+                })
+                ->select([
+                    'l.id', 'l.ref_number', 'l.tenant_id', 'l.property_id', 'l.unit_id',
+                    'l.sla_id', 'l.date_start', 'l.date_end', 'l.years', 'l.tenant_verified_at',
+                    'p.property_name',
+                    'u.unit_code',
+                    DB::raw('ut.id as unit_tenant_id'),
+                ]);
+
+            switch ($filter) {
+                case 'missing_sla':
+                    $query->whereNull('l.sla_id');
+                    break;
+                case 'missing_end_date':
+                    $query->whereNull('l.date_end');
+                    break;
+                case 'tenant_mismatch':
+                    $this->scopeUnresolvedMismatch($query, true);
+                    break;
+                case 'ready':
+                    $query->whereNotNull('l.sla_id')->whereNotNull('l.date_end');
+                    $this->scopeUnresolvedMismatch($query, false);
+                    break;
+                // 'all': no extra filter
+            }
+
+            $leases = $query->orderBy('l.date_start', 'desc')->limit(500)->get();
+
+            // withAll(): plain Client lookups get silently filtered by
+            // user_clients_properties, hiding real tenants outside the current
+            // user's assigned properties — same fix applied everywhere else
+            // this session (e.g. UnitsController::getAvailableUnits()).
+            $tenantIds = $leases->pluck('tenant_id')->merge($leases->pluck('unit_tenant_id'))->filter()->unique();
+            $tenantNames = Client::withAll()->whereIn('id', $tenantIds)->pluck('names', 'id');
+
+            $data = $leases->map(function ($l) use ($tenantNames) {
+                $hasMismatch = $l->unit_tenant_id && $l->unit_tenant_id != $l->tenant_id;
+                $suggestedEndDate = null;
+                if (!$l->date_end && $l->date_start && (float) $l->years > 0) {
+                    $suggestedEndDate = \Carbon\Carbon::parse($l->date_start)->addYears((int) $l->years)->toDateString();
+                }
+
+                return [
+                    'id' => $l->id,
+                    'ref_number' => $l->ref_number ?? '-',
+                    'property_name' => $l->property_name ?? '-',
+                    'unit_code' => $l->unit_code ?? '-',
+                    'tenant_id' => $l->tenant_id,
+                    'tenant_name' => $tenantNames->get($l->tenant_id, 'N/A'),
+                    'unit_tenant_id' => $l->unit_tenant_id,
+                    'unit_tenant_name' => $l->unit_tenant_id ? $tenantNames->get($l->unit_tenant_id, 'N/A') : null,
+                    'has_mismatch' => (bool) $hasMismatch,
+                    'tenant_verified' => (bool) $l->tenant_verified_at,
+                    'sla_id' => $l->sla_id,
+                    'date_start' => $l->date_start ? \Carbon\Carbon::parse($l->date_start)->format('d M Y') : '-',
+                    'date_end' => $l->date_end ? \Carbon\Carbon::parse($l->date_end)->format('d M Y') : null,
+                    'suggested_end_date' => $suggestedEndDate,
+                    'years' => $l->years,
+                ];
+            });
+
+            return response()->json(['data' => $data]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading setup leases: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load leases'], 500);
+        }
+    }
+
+    /**
+     * Auto-fill sla_id for every Pending lease still missing one, via the
+     * same resolveSlaId() every other creation path already uses — one
+     * button, acts on the whole matching set server-side since it's
+     * mechanical/deterministic (every property already has an SLA).
+     * Optionally scoped to specific lease_ids.
+     */
+    public function bulkFillSla(Request $request)
+    {
+        try {
+            $query = DB::table('sys_pm_lease_agreements as l')
+                ->where('l.current_status_id', 1)
+                ->whereNull('l.sla_id');
+
+            $leaseIds = $request->input('lease_ids');
+            if (is_array($leaseIds) && count($leaseIds)) {
+                $query->whereIn('l.id', $leaseIds);
+            }
+
+            $leases = $query->select('l.id', 'l.property_id')->get();
+            $updated = 0;
+            foreach ($leases as $lease) {
+                $slaId = $this->resolveSlaId($lease->property_id);
+                if ($slaId) {
+                    DB::table('sys_pm_lease_agreements')->where('id', $lease->id)->update(['sla_id' => $slaId]);
+                    $updated++;
+                }
+            }
+
+            return response()->json(['success' => true, 'updated' => $updated, 'skipped' => $leases->count() - $updated]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk-filling lease SLA: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to auto-fill SLA'], 500);
+        }
+    }
+
+    /**
+     * Compute date_end = date_start + years for every Pending lease still
+     * missing one, where both date_start and a valid years figure exist.
+     * Leases that don't qualify are left for manual entry — reported back so
+     * the UI can say how many still need a date picked by hand.
+     */
+    public function bulkComputeEndDate(Request $request)
+    {
+        try {
+            $query = DB::table('sys_pm_lease_agreements as l')
+                ->where('l.current_status_id', 1)
+                ->whereNull('l.date_end')
+                ->whereNotNull('l.date_start');
+
+            $leaseIds = $request->input('lease_ids');
+            if (is_array($leaseIds) && count($leaseIds)) {
+                $query->whereIn('l.id', $leaseIds);
+            }
+
+            $leases = $query->select('l.id', 'l.date_start', 'l.years')->get();
+            $updated = 0;
+            $skipped = 0;
+            foreach ($leases as $lease) {
+                $years = (float) $lease->years;
+                if ($years <= 0) {
+                    $skipped++;
+                    continue;
+                }
+                $endDate = \Carbon\Carbon::parse($lease->date_start)->addYears((int) $years)->toDateString();
+                DB::table('sys_pm_lease_agreements')->where('id', $lease->id)->update(['date_end' => $endDate]);
+                $updated++;
+            }
+
+            return response()->json(['success' => true, 'updated' => $updated, 'skipped' => $skipped]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk-computing lease end dates: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to compute end dates'], 500);
+        }
+    }
+
+    /**
+     * General-purpose "update lease details" endpoint for the Setup page.
+     * Backs the three tenant-mismatch resolution actions (Keep — pass the
+     * lease's own current tenant_id back; Use Unit's Tenant — pass the
+     * unit-assigned tenant's id; Search a different tenant — pass whichever
+     * id was picked) as well as manual SLA/end-date edits. Any tenant_id
+     * submitted here stamps tenant_verified_at, since reaching this endpoint
+     * at all means the team looked at and confirmed it.
+     */
+    public function updateSetupLease(Request $request, $id)
+    {
+        try {
+            $lease = LeaseAgreement::findOrFail($id);
+
+            $validated = $request->validate([
+                'tenant_id' => 'nullable|integer|exists:sys_pm_clients,id',
+                'sla_id' => 'nullable|integer|exists:sys_pm_service_agreements,id',
+                'date_end' => 'nullable|date',
+            ]);
+
+            $update = [];
+            if (!empty($validated['tenant_id'])) {
+                $update['tenant_id'] = $validated['tenant_id'];
+                $update['tenant_verified_at'] = now();
+            }
+            if (!empty($validated['sla_id'])) {
+                $update['sla_id'] = $validated['sla_id'];
+            }
+            if (!empty($validated['date_end'])) {
+                $update['date_end'] = $validated['date_end'];
+            }
+
+            if (empty($update)) {
+                return response()->json(['success' => false, 'message' => 'Nothing to update.'], 422);
+            }
+
+            $lease->update($update);
+
+            return response()->json(['success' => true, 'message' => 'Lease updated successfully.']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->flatten()->first()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating setup lease: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update lease'], 500);
+        }
+    }
+
+    /**
+     * Activate a single Pending lease (-> Approved, current_status_id 5) —
+     * gated on SLA and end date already being set, the same requirement
+     * store() enforces for a lease created normally. No occupancy-flip
+     * needed: Unit::activeLeaseAgreement() already treats current_status_id
+     * 1 and 5 as equally occupying the unit.
+     */
+    public function activateSetupLease($id)
+    {
+        try {
+            $lease = LeaseAgreement::findOrFail($id);
+
+            if (!$lease->sla_id || !$lease->date_end) {
+                return response()->json(['success' => false, 'message' => 'This lease needs an SLA and an end date before it can be activated.'], 422);
+            }
+
+            $lease->update(['current_status_id' => 5]);
+
+            return response()->json(['success' => true, 'message' => 'Lease activated.']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error activating lease: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to activate lease'], 500);
+        }
+    }
+
+    /**
+     * Bulk-activate every lease that's actually ready — SLA set, end date
+     * set, no unresolved tenant mismatch — safe as a single "Activate all"
+     * button specifically because the "ready" definition already excludes
+     * anything that still needs a human decision.
+     */
+    public function bulkActivate(Request $request)
+    {
+        try {
+            $query = DB::table('sys_pm_lease_agreements as l')
+                ->where('l.current_status_id', 1)
+                ->whereNotNull('l.sla_id')
+                ->whereNotNull('l.date_end');
+            $this->scopeUnresolvedMismatch($query, false);
+
+            $leaseIds = $request->input('lease_ids');
+            if (is_array($leaseIds) && count($leaseIds)) {
+                $query->whereIn('l.id', $leaseIds);
+            }
+
+            $count = $query->update(['current_status_id' => 5]);
+
+            return response()->json(['success' => true, 'updated' => $count]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk-activating leases: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to activate leases'], 500);
         }
     }
 

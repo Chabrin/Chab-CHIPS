@@ -18,6 +18,14 @@
                         @endpermission
                     </div>
                     <div class="card-body custom-scrollbar">
+                        <div class="alert alert-info py-2 px-3" style="font-size:0.85rem;">
+                            <strong>What you can do here:</strong> use <em>Add Zone</em> to create a zone (just a name).
+                            For each zone, use the <span class="material-symbols-outlined align-middle" style="font-size:15px;">manage_accounts</span>
+                            <em>Assign Zone Roles</em> action to set or clear its Zone Manager and Zone Supervisor
+                            (you can also do this from a staff member's own record under Employees &rarr; Employment Details),
+                            and the <span class="material-symbols-outlined align-middle" style="font-size:15px;">group_add</span>
+                            <em>Assign Field Officers</em> action to set which staff are stationed in that zone.
+                        </div>
                         <div class="table-responsive">
                             <table id="zonesTable" class="display" style="width:100%;">
                                 <thead>
@@ -56,7 +64,8 @@
                         <div class="invalid-feedback"></div>
                     </div>
                     <div class="alert alert-info py-2 px-3 mb-0" style="font-size:0.85rem;">
-                        Zone Manager and Zone Supervisor are now assigned from the staff member's own record —
+                        Zone Manager and Zone Supervisor can be set here via the "Assign Zone Roles" action once the
+                        zone is saved, or from the staff member's own record —
                         see <a href="{{ route('staff.index') }}" target="_blank">Employees &rarr; Employment Details</a>.
                     </div>
                 </div>
@@ -99,6 +108,47 @@
                         <span class="ms-1">Cancel</span>
                     </button>
                     <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveFieldOfficersBtn">
+                        <span class="material-symbols-outlined">check_circle</span>
+                        <span class="ms-1">Save</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Zone Roles Modal -->
+<div class="modal fade" id="zoneRolesModal" tabindex="-1" aria-labelledby="zoneRolesModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="zoneRolesModalLabel">Assign Zone Roles</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="zoneRolesForm">
+                <div class="modal-body">
+                    <input type="hidden" id="zoneRolesZoneId" name="zone_id">
+                    <div class="mb-3">
+                        <label for="zoneRolesManagerSelect" class="form-label">Zone Manager</label>
+                        <select class="form-select @error('zone_manager_id') is-invalid @enderror" id="zoneRolesManagerSelect" name="zone_manager_id">
+                            <option value="">Select zone manager</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="zoneRolesSupervisorSelect" class="form-label">Zone Supervisor</label>
+                        <select class="form-select @error('zone_supervisor_id') is-invalid @enderror" id="zoneRolesSupervisorSelect" name="zone_supervisor_id">
+                            <option value="">Select zone supervisor</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined">close</span>
+                        <span class="ms-1">Cancel</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveZoneRolesBtn">
                         <span class="material-symbols-outlined">check_circle</span>
                         <span class="ms-1">Save</span>
                     </button>
@@ -169,6 +219,11 @@ $(document).ready(function() {
                             data-id="${data.encrypted_id}"
                             data-zone='${JSON.stringify(data)}' title="Assign Field Officers">
                             <span class="material-symbols-outlined" style="font-size:18px;">group_add</span>
+                        </a>`;
+                        actions += `<a href="javascript:void(0)" class="text-primary assign-zone-roles"
+                            data-id="${data.encrypted_id}"
+                            data-zone='${JSON.stringify(data)}' title="Assign Zone Roles">
+                            <span class="material-symbols-outlined" style="font-size:18px;">manage_accounts</span>
                         </a>`;
                     }
                     if (data.can_delete) {
@@ -370,6 +425,103 @@ $(document).ready(function() {
                 $btn.find('span.ms-1').text(origText);
                 $btn.prop('disabled', false);
                 toastr.error(xhr.responseJSON?.message || 'Failed to assign field officers');
+            }
+        });
+    });
+
+    // ============ ASSIGN ZONE ROLES ============
+
+    // Assign Zone Roles
+    $('#zonesTable').on('click', '.assign-zone-roles', function() {
+        const data = $(this).data('zone');
+
+        $('#zoneRolesZoneId').val(data.encrypted_id);
+        $('#zoneRolesModalLabel').text('Assign Zone Roles — ' + data.zone_name);
+        $('.invalid-feedback').text('').hide();
+        $('.form-select').removeClass('is-invalid');
+
+        const $manager = $('#zoneRolesManagerSelect');
+        const $supervisor = $('#zoneRolesSupervisorSelect');
+
+        [$manager, $supervisor].forEach($select => {
+            if ($select.hasClass('select2-hidden-accessible')) {
+                $select.select2('destroy');
+            }
+        });
+
+        $.ajax({
+            url: '{{ route("ajax.staff.list") }}',
+            type: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                $manager.empty().append($('<option>', { value: '', text: 'Select zone manager' }));
+                $supervisor.empty().append($('<option>', { value: '', text: 'Select zone supervisor' }));
+
+                (response.staff || []).forEach(function(staff) {
+                    $manager.append($('<option>', { value: staff.id, text: staff.full_names }));
+                    $supervisor.append($('<option>', { value: staff.id, text: staff.full_names }));
+                });
+
+                $manager.val(data.zone_manager_id || '');
+                $supervisor.val(data.zone_supervisor_id || '');
+
+                $manager.select2({ placeholder: 'Select zone manager', allowClear: true, width: '100%', dropdownParent: $('#zoneRolesModal') });
+                $supervisor.select2({ placeholder: 'Select zone supervisor', allowClear: true, width: '100%', dropdownParent: $('#zoneRolesModal') });
+
+                $('#zoneRolesModal').modal('show');
+            },
+            error: function() {
+                toastr.error('Failed to load staff.');
+            }
+        });
+    });
+
+    // Submit Zone Roles Form
+    $('#zoneRolesForm').submit(function(e) {
+        e.preventDefault();
+
+        const zoneId = $('#zoneRolesZoneId').val();
+        const $btn = $('#saveZoneRolesBtn');
+        const $icon = $btn.find('.material-symbols-outlined');
+        const origText = $btn.find('span.ms-1').text();
+        $icon.addClass('spin');
+        $btn.find('span.ms-1').text('Saving...');
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: '{{ route("property.settings.zones.roles", "PLACEHOLDER") }}'.replace('PLACEHOLDER', zoneId),
+            method: 'POST',
+            data: $(this).serialize(),
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                $icon.removeClass('spin');
+                $btn.find('span.ms-1').text(origText);
+                $btn.prop('disabled', false);
+
+                $('#zoneRolesModal').modal('hide');
+                zonesTable.ajax.reload();
+                toastr.success(response.message);
+            },
+            error: function(xhr) {
+                $icon.removeClass('spin');
+                $btn.find('span.ms-1').text(origText);
+                $btn.prop('disabled', false);
+
+                if (xhr.status === 422) {
+                    const errors = xhr.responseJSON.errors;
+                    $('.form-select').removeClass('is-invalid');
+                    $('.invalid-feedback').text('').hide();
+
+                    $.each(errors, function(field, messages) {
+                        const input = $(`[name="${field}"]`);
+                        input.addClass('is-invalid');
+                        input.siblings('.invalid-feedback').text(messages[0]).show();
+                    });
+                } else {
+                    toastr.error(xhr.responseJSON?.message || 'Failed to assign zone roles');
+                }
             }
         });
     });
