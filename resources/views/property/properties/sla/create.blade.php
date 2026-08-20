@@ -68,6 +68,7 @@
                                     @error('property_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                    <small class="text-danger d-none" id="currentSlaWarning"></small>
                                 </div>
 
                                 <div class="col-md-6 mb-3">
@@ -382,6 +383,40 @@
                 }
             });
         }
+
+        // Warn immediately if the selected property already has a current SLA,
+        // rather than letting the team fill out the whole form only to be
+        // rejected on submit. Hard block, not overridable — matches
+        // SLAController::findCurrentSlaForProperty()'s server-side check exactly.
+        $('#property_id').on('change', function() {
+            const propertyId = $(this).val();
+            const $warning = $('#currentSlaWarning');
+            const $saveButton = $('#saveButton');
+
+            $warning.addClass('d-none').text('');
+            $saveButton.prop('disabled', false);
+
+            if (!propertyId) return;
+
+            $.ajax({
+                url: '{{ route("ajax.sla.check-current") }}',
+                method: 'GET',
+                data: { property_id: propertyId },
+                success: function(response) {
+                    if (response.exists) {
+                        $warning.removeClass('d-none').text(
+                            'This property already has a current SLA (' + response.reference_number +
+                            ', ends ' + (response.date_end || 'never') +
+                            ') — edit it instead, or wait until it ends to create a new one.'
+                        );
+                        $saveButton.prop('disabled', true);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error checking for a current SLA:', xhr.responseText);
+                }
+            });
+        });
 
         // Calculate duration end date
         $('#date_start, #duration_years').on('change', function() {

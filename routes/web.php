@@ -1033,6 +1033,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Get SLA for a property
     Route::get('/property/{propertyId}/sla', [SLAController::class, 'getSLAForProperty'])->name('property.sla');
+    Route::get('/ajax/sla/check-current', [SLAController::class, 'checkCurrentSla'])->name('ajax.sla.check-current');
 
     // Get tenant for a unit in a property
     Route::get('/property/{propertyId}/unit/{unitId}/tenant', [TenantsController::class, 'getTenantForUnit'])->name('property.unit.tenant');

@@ -200,6 +200,64 @@ class SLAController extends Controller
     }
 
     /**
+     * The property's SLA that's still blocking a new one from being created for
+     * it, if any. "Current" is date-based: date_end null or >= today. SLAs
+     * always get a computed date_end (date_start + duration_years) through the
+     * normal create/edit forms, so null is defensive-only — treated as still
+     * current rather than assuming an undated SLA has ended. Deliberately not
+     * current_status_id-based: unlike leases, its meaning for SLAs hasn't been
+     * verified, and "once the old one's date_end has passed" is unambiguous on
+     * its own. Shared by store()/update()/checkCurrentSla() so the definition
+     * can't drift between the live check and the actual server-side block.
+     */
+    private function findCurrentSlaForProperty(int $propertyId, ?int $excludeId = null): ?ServiceAgreement
+    {
+        return ServiceAgreement::where('property_id', $propertyId)
+            ->where(function ($q) {
+                $q->whereNull('date_end')->orWhereDate('date_end', '>=', now());
+            })
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+            ->first();
+    }
+
+    /**
+     * date_end on ServiceAgreement isn't cast to a Carbon instance (unlike
+     * LeaseAgreement's date_end) — it comes back from Eloquent as a plain
+     * string, so it needs parsing before it can be formatted. Shared so this
+     * doesn't get re-broken in more than one place.
+     */
+    private function formatSlaDateEnd(?string $dateEnd): ?string
+    {
+        return $dateEnd ? \Carbon\Carbon::parse($dateEnd)->format('d M Y') : null;
+    }
+
+    /**
+     * Live check (AJAX) for the create/edit forms — warns as soon as a property
+     * is picked, before the team fills out the rest of the form only to be
+     * rejected on submit. Mirrors the shape of TenantsController::
+     * checkIdentifierExists() (the National ID duplicate check built earlier),
+     * though this one is a hard block, not an overridable warning.
+     */
+    public function checkCurrentSla(Request $request)
+    {
+        $request->validate([
+            'property_id' => 'required|integer',
+            'exclude_id' => 'nullable|integer',
+        ]);
+
+        $existing = $this->findCurrentSlaForProperty(
+            (int) $request->input('property_id'),
+            $request->filled('exclude_id') ? (int) $request->input('exclude_id') : null
+        );
+
+        return response()->json([
+            'exists' => (bool) $existing,
+            'reference_number' => $existing->reference_number ?? null,
+            'date_end' => $existing ? $this->formatSlaDateEnd($existing->date_end) : null,
+        ]);
+    }
+
+    /**
      * Store a newly created service agreement
      */
     public function store(Request $request)
@@ -229,6 +287,13 @@ class SLAController extends Controller
                 'service_charges_selected'     => 'nullable|boolean',
                 'service_charges_cost'         => 'nullable|numeric|min:0',
             ]);
+
+            $currentSla = $this->findCurrentSlaForProperty((int) $validated['property_id']);
+            if ($currentSla) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'property_id' => ["This property already has a current SLA ({$currentSla->reference_number}, ends " . ($this->formatSlaDateEnd($currentSla->date_end) ?? 'never') . ") — edit it instead, or wait until it ends to create a new one."],
+                ]);
+            }
 
             // Calculate end date
             $startDate = new \DateTime($validated['date_start']);
@@ -519,11 +584,18 @@ class SLAController extends Controller
                 'service_charges_cost'        => 'nullable|numeric|min:0',
             ]);
 
+            $currentSla = $this->findCurrentSlaForProperty((int) $validated['property_id'], $serviceAgreement->id);
+            if ($currentSla) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'property_id' => ["This property already has a current SLA ({$currentSla->reference_number}, ends " . ($this->formatSlaDateEnd($currentSla->date_end) ?? 'never') . ") — edit it instead, or wait until it ends to create a new one."],
+                ]);
+            }
+
             // Calculate end date
             $startDate = new \DateTime($validated['date_start']);
             $endDate = clone $startDate;
             $endDate->modify('+' . $validated['duration_years'] . ' years');
-    
+
             // Handle file uploads (new documents)
             if ($request->hasFile('sla_documents')) {
                 foreach ($request->file('sla_documents') as $document) {

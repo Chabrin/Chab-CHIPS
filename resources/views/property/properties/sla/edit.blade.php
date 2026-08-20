@@ -62,6 +62,7 @@
                                             @error('property_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <small class="text-danger d-none" id="currentSlaWarning"></small>
                                         </div>
 
                                         <div class="col-md-4 mb-3">
@@ -309,6 +310,41 @@
 
         // Initialize VAT fields on page load
         $('#vat_able').trigger('change');
+
+        // Warn immediately if the selected property already has a DIFFERENT
+        // current SLA — excludes this SLA's own id so picking the property it's
+        // already on (the default) never false-positives against itself. Hard
+        // block, not overridable — matches SLAController::
+        // findCurrentSlaForProperty()'s server-side check exactly.
+        $('#property_id').on('change', function() {
+            const propertyId = $(this).val();
+            const $warning = $('#currentSlaWarning');
+            const $saveButton = $('#saveButton');
+
+            $warning.addClass('d-none').text('');
+            $saveButton.prop('disabled', false);
+
+            if (!propertyId) return;
+
+            $.ajax({
+                url: '{{ route("ajax.sla.check-current") }}',
+                method: 'GET',
+                data: { property_id: propertyId, exclude_id: {{ $sla->id }} },
+                success: function(response) {
+                    if (response.exists) {
+                        $warning.removeClass('d-none').text(
+                            'This property already has a current SLA (' + response.reference_number +
+                            ', ends ' + (response.date_end || 'never') +
+                            ') — edit it instead, or wait until it ends to create a new one.'
+                        );
+                        $saveButton.prop('disabled', true);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error checking for a current SLA:', xhr.responseText);
+                }
+            });
+        });
 
         // Form submission with spinner
         $('#serviceAgreementForm').on('submit', function(e) {
