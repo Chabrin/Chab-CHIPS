@@ -129,6 +129,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tenant-history-tab" data-bs-toggle="tab" data-bs-target="#tenant-history" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">history</span> Tenant History
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="leases-tab" data-bs-toggle="tab" data-bs-target="#leases" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">description</span> Leases
                                 </button>
@@ -387,8 +392,24 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="cs-card" id="cs-sla-card" style="--cs-accent:#0ca30c; --cs-icon-bg:#dcf3dc;">
+                                            <div class="cs-icon"><span class="material-symbols-outlined">verified</span></div>
+                                            <div class="cs-body">
+                                                <div class="cs-value" id="cs-sla-coverage"><span class="cs-skeleton" style="width:28px;height:18px;"></span></div>
+                                                <div class="cs-label">Properties with SLA</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
+                                <div id="cs-sla-gap-wrap" class="mb-4" style="display:none;">
+                                    <div class="alert alert-light-warning py-2 px-3 mb-0">
+                                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">warning</span>
+                                        <strong>No current SLA:</strong>
+                                        <span id="cs-sla-gap-list"></span>
+                                    </div>
+                                </div>
 
                             </div>
 
@@ -521,6 +542,30 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Reference Number</th>
                                                 <th>Registered Date</th>
                                                 <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Tenant History Tab — every tenant (current or past) across every
+                                 property/unit this landlord owns, in one flat list. Not scoped to a
+                                 single property/unit like the Units tab's per-row expand — this is
+                                 the portfolio-wide view. -->
+                            <div class="tab-pane fade" id="tenant-history" role="tabpanel" aria-labelledby="tenant-history-tab">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="tenantHistoryTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Tenant</th>
+                                                <th>Property</th>
+                                                <th>Unit</th>
+                                                <th>Lease Ref</th>
+                                                <th>Start Date</th>
+                                                <th>End Date</th>
+                                                <th>Status</th>
                                             </tr>
                                         </thead>
                                         <tbody></tbody>
@@ -1317,6 +1362,54 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
+        // Tenant History — every tenant across every property this landlord owns,
+        // loaded once on first click of the tab (same lazy-load pattern as every
+        // other tab here)
+        var tenantHistoryLoaded = false;
+        var tenantHistoryTable = $('#tenantHistoryTable').DataTable({
+            data: [],
+            columns: [
+                { data: null, orderable: false, searchable: false, render: (d, t, r, m) => m.row + 1 },
+                { data: 'tenant_name' },
+                { data: 'property_name' },
+                { data: 'unit_code' },
+                { data: 'ref_number' },
+                { data: 'date_start' },
+                { data: 'date_end' },
+                {
+                    data: 'status',
+                    render: function(status) {
+                        var badgeClass = status === 'Active' ? 'bg-success-light text-success'
+                            : status === 'Terminated' ? 'bg-danger-light text-danger'
+                            : 'bg-secondary-light text-secondary';
+                        return '<span class="badge ' + badgeClass + ' fw-normal">' + status + '</span>';
+                    }
+                }
+            ],
+            pageLength: 25,
+            responsive: true,
+            language: { emptyTable: 'No tenant history found for this landlord.' }
+        });
+
+        $('#tenant-history-tab').on('click', function() {
+            if (tenantHistoryLoaded) return;
+            tenantHistoryLoaded = true;
+
+            $.ajax({
+                url: '{{ route("property.clients.tenant-history", $client->encrypted_id) }}',
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.data) {
+                        tenantHistoryTable.rows.add(response.data).draw();
+                    }
+                },
+                error: function() {
+                    toastr.error('Failed to load tenant history.');
+                }
+            });
+        });
+
         // Initialize SLA DataTable immediately but with empty data
         var slaTable = $('#slaTable').DataTable({
             data: [],
@@ -1555,10 +1648,19 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     $('#cs-occupancy-rate').text(r.occupancyRate + '%');
                     $('#cs-active-leases').text(r.activeLeases);
                     $('#cs-total-tenants').text(r.totalTenants);
+                    $('#cs-sla-coverage').text(r.propertiesWithSla + '/' + r.totalProperties);
+
+                    if (r.propertiesMissingSla && r.propertiesMissingSla.length > 0) {
+                        $('#cs-sla-card').css('--cs-accent', '#fab219').css('--cs-icon-bg', '#fef3da');
+                        $('#cs-sla-gap-list').text(r.propertiesMissingSla.join(', '));
+                        $('#cs-sla-gap-wrap').show();
+                    } else {
+                        $('#cs-sla-gap-wrap').hide();
+                    }
                 },
                 error: function() {
                     ['cs-total-properties','cs-total-units','cs-vacant-units','cs-occupancy-rate',
-                     'cs-active-leases','cs-total-tenants'
+                     'cs-active-leases','cs-total-tenants','cs-sla-coverage'
                     ].forEach(function(id) { $('#' + id).html('<span style="color:#dc3545;font-size:12px;">—</span>'); });
                 }
             });

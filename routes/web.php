@@ -621,6 +621,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/clients', [ClientsController::class, 'store'])->name('property.clients.store');
     Route::get('/property/clients/{encryptedId}', [App\Http\Controllers\ClientsController::class, 'show'])->name('property.clients.show');
     Route::get('/property/clients/{encryptedId}/stats', [App\Http\Controllers\ClientsController::class, 'getStats'])->name('property.clients.stats');
+    Route::get('/property/clients/{encryptedId}/tenant-history', [App\Http\Controllers\ClientsController::class, 'getTenantHistory'])->name('property.clients.tenant-history');
     Route::get('/property/clients/{encryptedId}/properties', [App\Http\Controllers\ClientsController::class, 'getProperties'])->name('property.clients.properties');
     Route::get('/property/clients/{encryptedId}/related-properties', [App\Http\Controllers\ClientsController::class, 'getRelatedProperties'])->name('property.clients.related-properties');
     Route::get('/property/clients/{encryptedId}/properties-dropdown', [App\Http\Controllers\ClientsController::class, 'getClientProperties'])->name('property.clients.properties.dropdown');

@@ -413,34 +413,55 @@ class ClientsController extends Controller
 
             $totalProperties = $propertyIds->count();
 
-            // Unit counts
-            $unitCounts = DB::table('sys_pm_units')
-                ->whereIn('property_id', $propertyIds)
-                ->selectRaw('
-                    COUNT(*) as total,
-                    SUM(CASE WHEN occupancy_status_id = 1 THEN 1 ELSE 0 END) as occupied,
-                    SUM(CASE WHEN occupancy_status_id = 3 THEN 1 ELSE 0 END) as vacant
-                ')
-                ->first();
-
-            $totalUnits    = (int) ($unitCounts->total    ?? 0);
-            $occupiedUnits = (int) ($unitCounts->occupied ?? 0);
-            $vacantUnits   = (int) ($unitCounts->vacant   ?? 0);
+            // Unit counts — was occupancy_status_id = 1/3, the legacy-migration
+            // numbering scheme (and wrong even under it: legacy 3 is
+            // "unclassified", not vacant; app-native units aren't counted at all).
+            // Lease-based instead, matching Unit::activeLeaseAgreement()'s
+            // docblock/scopeVacant() — the single source of truth for this
+            // established repeatedly this session.
+            $totalUnits    = Unit::whereIn('property_id', $propertyIds)->count();
+            $occupiedUnits = Unit::whereIn('property_id', $propertyIds)->whereHas('activeLeaseAgreement')->count();
+            $vacantUnits   = $totalUnits - $occupiedUnits;
             $occupancyRate = $totalUnits > 0 ? round(($occupiedUnits / $totalUnits) * 100, 1) : 0;
 
-            // Active leases (client_id = landlord, status 5, not expired)
+            // Active leases / total tenants. Was scoped by client_id (the
+            // landlord column on the lease itself) — checked live data:
+            // client_id is NULL on 44,909 of 73,619 leases (61%), including
+            // every single lease for the landlord this was tested against, so
+            // that scoping alone zeroed these two cards regardless of the
+            // status filter. property_id is reliably populated (confirmed:
+            // getTenantHistory() below already relies on it), so scope through
+            // this landlord's properties instead. Also was current_status_id
+            // = 5 AND date_end >= now() — virtually every migrated lease sits
+            // at 1 (Pending) or 2 (Terminated-equivalent), never 5, and
+            // 56,000+ have a null date_end — matches the current_status_id IN
+            // (1, 5), no-date-filter convention established this session.
             $activeLeases = DB::table('sys_pm_lease_agreements')
-                ->where('client_id', $clientId)
-                ->where('current_status_id', 5)
-                ->where('date_end', '>=', now())
+                ->whereIn('property_id', $propertyIds)
+                ->whereIn('current_status_id', [1, 5])
                 ->count();
 
             $totalTenants = DB::table('sys_pm_lease_agreements')
-                ->where('client_id', $clientId)
-                ->where('current_status_id', 5)
-                ->where('date_end', '>=', now())
+                ->whereIn('property_id', $propertyIds)
+                ->whereIn('current_status_id', [1, 5])
                 ->distinct('tenant_id')
                 ->count('tenant_id');
+
+            // SLA coverage — same "current" definition as
+            // SLAController::findCurrentSlaForProperty(): date_end null or
+            // still in the future.
+            $propertiesWithCurrentSla = DB::table('sys_pm_service_agreements')
+                ->whereIn('property_id', $propertyIds)
+                ->where(function ($q) {
+                    $q->whereNull('date_end')->orWhereDate('date_end', '>=', now());
+                })
+                ->distinct()
+                ->pluck('property_id');
+
+            $propertiesMissingSla = Property::whereIn('id', $propertyIds)
+                ->whereNotIn('id', $propertiesWithCurrentSla)
+                ->orderBy('property_name')
+                ->pluck('property_name');
 
             // Financial — from debtors invoices
             $fin = DB::table('sys_pm_debtors_invoices')
@@ -457,22 +478,72 @@ class ClientsController extends Controller
             $collectionRate = $invoiced > 0 ? round(($collected / $invoiced) * 100, 1) : 0;
 
             return response()->json([
-                'success'         => true,
-                'totalProperties' => $totalProperties,
-                'totalUnits'      => $totalUnits,
-                'vacantUnits'     => $vacantUnits,
-                'occupiedUnits'   => $occupiedUnits,
-                'occupancyRate'   => $occupancyRate,
-                'activeLeases'    => $activeLeases,
-                'totalTenants'    => $totalTenants,
-                'invoiced'        => $invoiced,
-                'collected'       => $collected,
-                'arrears'         => $arrears,
-                'collectionRate'  => $collectionRate,
+                'success'              => true,
+                'totalProperties'      => $totalProperties,
+                'totalUnits'           => $totalUnits,
+                'vacantUnits'          => $vacantUnits,
+                'occupiedUnits'        => $occupiedUnits,
+                'occupancyRate'        => $occupancyRate,
+                'activeLeases'         => $activeLeases,
+                'totalTenants'         => $totalTenants,
+                'propertiesWithSla'    => $propertiesWithCurrentSla->count(),
+                'propertiesMissingSla' => $propertiesMissingSla->values(),
+                'invoiced'             => $invoiced,
+                'collected'            => $collected,
+                'arrears'              => $arrears,
+                'collectionRate'       => $collectionRate,
             ]);
         } catch (\Exception $e) {
             Log::error('Error loading client stats: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to load stats'], 500);
+        }
+    }
+
+    /**
+     * Every tenant (current or past) across this landlord's entire portfolio —
+     * one flat table, not nested per unit (see getUnits() for the per-unit
+     * version, built last session for the property/landlord show pages' Units
+     * tabs). Excludes Withdrawn (29) leases — same convention as getUnits().
+     */
+    public function getTenantHistory($encryptedId)
+    {
+        try {
+            $clientId = Crypt::decrypt($encryptedId);
+
+            $propertyIds = DB::table('sys_pm_properties')
+                ->where('client_id', $clientId)
+                ->pluck('id');
+
+            $leases = DB::table('sys_pm_lease_agreements')
+                ->whereIn('property_id', $propertyIds)
+                ->whereIn('current_status_id', [1, 5, 2, 28])
+                ->orderBy('date_start', 'desc')
+                ->limit(500)
+                ->get(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'current_status_id']);
+
+            $tenantNames = Client::withAll()->whereIn('id', $leases->pluck('tenant_id')->filter()->unique())->pluck('names', 'id');
+            $propertyNames = DB::table('sys_pm_properties')->whereIn('id', $leases->pluck('property_id')->filter()->unique())->pluck('property_name', 'id');
+            $unitCodes = DB::table('sys_pm_units')->whereIn('id', $leases->pluck('unit_id')->filter()->unique())->pluck('unit_code', 'id');
+
+            $statusLabels = [1 => 'Pending Approval', 5 => 'Active', 2 => 'Renewed', 28 => 'Terminated'];
+
+            $data = $leases->map(function ($lease) use ($tenantNames, $propertyNames, $unitCodes, $statusLabels) {
+                return [
+                    'ref_number' => $lease->ref_number ?? '-',
+                    'tenant_name' => $tenantNames->get($lease->tenant_id, 'N/A'),
+                    'property_name' => $propertyNames->get($lease->property_id, 'N/A'),
+                    'unit_code' => $unitCodes->get($lease->unit_id, 'N/A'),
+                    'date_start' => $lease->date_start ? \Carbon\Carbon::parse($lease->date_start)->format('d M Y') : '-',
+                    'date_end' => $lease->date_end ? \Carbon\Carbon::parse($lease->date_end)->format('d M Y') : 'Ongoing',
+                    'status' => $statusLabels[$lease->current_status_id] ?? 'Unknown',
+                ];
+            });
+
+            return response()->json(['success' => true, 'data' => $data]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenant history: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to load tenant history'], 500);
         }
     }
 
