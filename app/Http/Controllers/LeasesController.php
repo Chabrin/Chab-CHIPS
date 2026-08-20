@@ -81,6 +81,12 @@ class LeasesController extends Controller
 
             $leases = $query->select(['id', 'tenant_id', 'property_id', 'unit_id', 'client_id', 'ref_number', 'date_start', 'date_end', 'current_status_id', 'contract_sent_at', 'contract_signed_at', 'signed_pdf_path'])
                 ->orderBy('date_start', 'desc')
+                // 56,000+ leases currently have no end date — with no cap this loads every
+                // one of them plus four eager-loaded relations each, reliably exhausting
+                // PHP's memory limit (confirmed: fatal "Allowed memory size exhausted",
+                // not a catchable exception, so it never even reached this method's own
+                // try/catch or the logs). Matches getAllLeases()'s existing limit(500).
+                ->limit(500)
                 ->get()
                 ->map(function ($lease) {
                     return [
@@ -284,15 +290,21 @@ class LeasesController extends Controller
     public function getTenantsWithoutLeases()
     {
         try {
-            // Get all tenant IDs that have leases
-            $tenantsWithLeases = LeaseAgreement::pluck('tenant_id')->unique();
-            Log::info('Tenants with leases: ' . $tenantsWithLeases->implode(', '));
-    
-            // Get all tenants (reference_number starts with TEN-) that are NOT in the leases table
+            // Was: LeaseAgreement::pluck('tenant_id')->unique() materialized into a
+            // whereNotIn('id', [...]) literal list — with 73,000+ leases this built a
+            // NOT IN clause with tens of thousands of bound parameters, past Postgres's
+            // 65,535 parameter limit (confirmed via a real "number of parameters must be
+            // between 0 and 65535" SQLSTATE error in the logs). A subquery form sends the
+            // same logic as a single correlated NOT IN (SELECT ...), no parameter list at all.
             $tenantsWithoutLeases = Client::where('reference_number', 'LIKE', 'TEN-%')
-                ->whereNotIn('id', $tenantsWithLeases)
+                ->whereNotIn('id', function ($query) {
+                    $query->select('tenant_id')
+                        ->from('sys_pm_lease_agreements')
+                        ->whereNotNull('tenant_id');
+                })
                 ->select(['id', 'names', 'reference_number', 'mobile_number', 'email_address'])
                 ->orderBy('names', 'asc')
+                ->limit(500)
                 ->get()
                 ->map(function ($tenant) {
                     return [
@@ -304,8 +316,7 @@ class LeasesController extends Controller
                         'email_address' => $tenant->email_address ?? 'N/A',
                     ];
                 });
-            Log::info('Tenants without leases: ' . $tenantsWithoutLeases->pluck('id')->implode(', '));
-    
+
             return response()->json(['data' => $tenantsWithoutLeases]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -643,7 +654,11 @@ class LeasesController extends Controller
                 'escalation_rate' => 'required|numeric|min:0|max:100',
                 'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
                 'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
-                'invoicable_items' => 'required|array|min:1',
+                // No longer required|min:1 — Invoiceable Items is now driven by the
+                // property's SLA billable items (see lease/create.blade.php), and a
+                // property whose SLA only bills rent (handled automatically,
+                // separately, from the unit's rent_amount) legitimately has none.
+                'invoicable_items' => 'nullable|array',
                 'invoicable_items.*.item' => 'required|exists:sys_set_invoiceable_items,id',
                 'invoicable_items.*.amount' => 'required|numeric|min:0',
                 'invoicable_items.*.cycle' => 'required|exists:sys_set_invoiceable_items_cycles,id',
@@ -791,7 +806,30 @@ class LeasesController extends Controller
                 'client:id,names',
             ])->findOrFail($id);
 
-            return view('property.properties.lease.edit', compact('lease'));
+            // This lease's current invoiceable items — shown editable-in-place on the
+            // edit page, seeding the same row UI store()/getSLAForProperty()'s
+            // SLA-driven rows use (see create.blade.php), rather than the free-choice
+            // picker these older leases were actually created with. Shaped here to
+            // exactly what the view's JS needs ({item_id, name, amount, cycle_id,
+            // prepay_client}) so the Blade template can @json() it directly — a
+            // ->map(function...) closure inline inside @json() confuses Blade's
+            // directive-argument parser (nested [] inside a multi-line closure), so
+            // that transformation belongs here, not in the view.
+            $existingItems = LeaseAgreementInvoiceableItem::where('parent_id', $lease->id)
+                ->with('item:id,item_name')
+                ->get(['id', 'item_id', 'amount', 'cycle_id', 'prepay_client']);
+
+            $invoiceableItems = $existingItems->map(function ($row) {
+                return [
+                    'item_id' => $row->item_id,
+                    'name' => $row->item->item_name ?? 'Unknown item',
+                    'amount' => $row->amount,
+                    'cycle_id' => $row->cycle_id,
+                    'prepay_client' => $row->prepay_client === 'Yes',
+                ];
+            })->values();
+
+            return view('property.properties.lease.edit', compact('lease', 'invoiceableItems'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading lease edit form: ' . $e->getMessage());
@@ -803,6 +841,14 @@ class LeasesController extends Controller
      * Update an existing lease agreement's terms. Structural fields (tenant, property,
      * unit, client, SLA) are intentionally not editable here — reassigning those goes
      * through the Tenant Movement flow instead, not a plain edit.
+     *
+     * Invoiceable items ARE editable here (unlike the fields above) — either in place
+     * (amount/cycle/prepay/remove) or wholesale via the edit page's "Switch to
+     * SLA-driven Billable Items" action. Whatever's submitted is treated as the
+     * complete, authoritative set: existing rows are deleted and replaced with it,
+     * rather than diffed — simplest correct behaviour for "what's on screen when you
+     * hit Save is the truth", and reuses storeInvoiceableItems() so this can't drift
+     * from how store() writes the exact same rows.
      */
     public function update(Request $request, $id)
     {
@@ -816,6 +862,14 @@ class LeasesController extends Controller
                 'auto_renewal' => 'required|in:Yes,No',
                 'escalation_rate' => 'required|numeric|min:0|max:100',
                 'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
+                // Matches store()'s already-relaxed rule — a lease can legitimately end
+                // up with zero items (e.g. every row unchecked, or switched to an SLA
+                // with nothing beyond rent enabled).
+                'invoicable_items' => 'nullable|array',
+                'invoicable_items.*.item' => 'required|exists:sys_set_invoiceable_items,id',
+                'invoicable_items.*.amount' => 'required|numeric|min:0',
+                'invoicable_items.*.cycle' => 'required|exists:sys_set_invoiceable_items_cycles,id',
+                'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
             ]);
 
             $startDate = new \DateTime($validated['date_start']);
@@ -830,6 +884,11 @@ class LeasesController extends Controller
                 'escalation_rate' => $validated['escalation_rate'],
                 'escalation_frequency' => $validated['escalation_frequency'],
             ]);
+
+            LeaseAgreementInvoiceableItem::where('parent_id', $lease->id)->delete();
+            if ($request->has('invoicable_items') && is_array($request->invoicable_items)) {
+                $this->storeInvoiceableItems($lease->id, $request->invoicable_items);
+            }
 
             DB::commit();
 

@@ -124,12 +124,57 @@ class SLAController extends Controller
     public function getSLAForProperty($propertyId)
     {
         try {
+            // orderByRaw NULLS LAST: plain orderBy() puts a NULL date_start first on
+            // Postgres, which would make an undated SLA outrank a real, later-dated
+            // one — must match resolveSlaId()'s ordering exactly (TenantRecordHelperTrait)
+            // so "the SLA whose items we show" and "the SLA the lease actually gets"
+            // can't disagree.
             $sla = ServiceAgreement::where('property_id', $propertyId)
                 // ->where('current_status_id', 2)
-                ->orderBy('date_start', 'desc')
-                ->get(['id', 'reference_number', 'date_start', 'date_end', 'commission_percentage', 'move_in_inspection_required']);
-            
-            return response()->json(['sla' => $sla]);
+                ->orderByRaw('date_start DESC NULLS LAST')
+                ->get([
+                    'id', 'reference_number', 'date_start', 'date_end', 'commission_percentage', 'move_in_inspection_required',
+                    'rent_selected',
+                    'electricity_bill_selected', 'electricity_bill_cost',
+                    'water_bill_selected', 'water_bill_cost',
+                    'service_charges_selected', 'service_charges_cost',
+                ]);
+
+            // billable_items: only the additional (non-Rent) items the property's
+            // most-recent SLA has enabled — same ordering resolveSlaId() uses, so
+            // "the SLA whose items we show" and "the SLA the lease actually gets"
+            // can't disagree. Rent is deliberately excluded: it's already billed
+            // automatically from the unit's own rent_amount elsewhere
+            // (InvoicingController), not through the lease's invoiceable items.
+            $billableItems = [];
+            $mostRecent = $sla->first();
+            if ($mostRecent) {
+                $candidates = [
+                    'electricity_bill_selected' => ['name' => 'Electricity Bill', 'cost' => $mostRecent->electricity_bill_cost],
+                    'water_bill_selected' => ['name' => 'Water Bill', 'cost' => $mostRecent->water_bill_cost],
+                    'service_charges_selected' => ['name' => 'Service Charges', 'cost' => $mostRecent->service_charges_cost],
+                ];
+
+                $enabledNames = collect($candidates)
+                    ->filter(fn ($c, $flag) => (bool) $mostRecent->{$flag})
+                    ->pluck('name');
+
+                if ($enabledNames->isNotEmpty()) {
+                    $itemIds = InvoiceableItem::whereIn('item_name', $enabledNames)->pluck('id', 'item_name');
+
+                    foreach ($candidates as $flag => $c) {
+                        if ($mostRecent->{$flag} && $itemIds->has($c['name'])) {
+                            $billableItems[] = [
+                                'item_id' => $itemIds->get($c['name']),
+                                'name' => $c['name'],
+                                'cost' => $c['cost'],
+                            ];
+                        }
+                    }
+                }
+            }
+
+            return response()->json(['sla' => $sla, 'billable_items' => $billableItems]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA for property: ' . $e->getMessage());

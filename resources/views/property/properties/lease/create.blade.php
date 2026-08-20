@@ -293,61 +293,27 @@
                                 </div>
                             </div>
 
-                            <!-- Invoicable Items Section -->
+                            <!-- Invoicable Items Section — driven by the selected property's SLA
+                                 billable items (Electricity/Water/Service Charges, whichever it has
+                                 enabled). Rent is never listed here: it's already billed automatically
+                                 from the unit's own rent_amount elsewhere, so including it here risks
+                                 billing it twice. -->
                             <div class="row mb-4">
                                 <div class="col-12 mb-3">
                                     <h6 class="text-muted border-bottom pb-2">Invoicable Items</h6>
                                 </div>
 
-                                <div class="col-12 mb-3">
-                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addInvoicableItem">
-                                        <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
-                                        Add Item
-                                    </button>
-                                </div>
-
-                                <div id="invoicableItemsContainer">
-                                    <div class="invoicable-item-entry mb-3 p-3 border rounded">
-                                        <div class="row align-items-end">
-                                            <div class="col-md-4 mb-3">
-                                                <label for="item_0" class="form-label">Item <span class="text-danger">*</span></label>
-                                                <select class="form-select" id="item_0" name="invoicable_items[0][item]" required>
-                                                </select>
-                                            </div>
-
-                                            <div class="col-md-4 mb-3">
-                                                <label for="amount_0" class="form-label">Amount <span class="text-danger">*</span></label>
-                                                <input type="number" step="0.01" class="form-control"
-                                                    id="amount_0" name="invoicable_items[0][amount]"
-                                                    value="0.00" required>
-                                            </div>
-
-                                            <div class="col-md-4 mb-3">
-                                                <label for="cycle_0" class="form-label">Cycle <span class="text-danger">*</span></label>
-                                                <select class="form-select" id="cycle_0" name="invoicable_items[0][cycle]" required>
-                                                    <option value="">Please select</option>
-                                                </select>
-                                            </div>
-
-                                            <div class="col-md-3 mb-3">
-                                                <label class="form-label d-block">Prepay Client</label>
-                                                <div class="form-check form-check-inline">
-                                                    <input class="form-check-input" type="checkbox" id="prepay_client_0" name="invoicable_items[0][prepay_client]" value="Yes">
-                                                    <label class="form-check-label" for="prepay_client_0">Yes</label>
-                                                </div>
-                                            </div>
-
-                                            <div class="d-flex gap-1">
-                                                <button type="button" class="btn btn-primary btn-sm add-item-inline d-none">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                                </button>
-                                                <button type="button" class="btn btn-light btn-sm remove-invoicable-item d-none">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
-                                                </button>
-                                            </div>
-                                        </div>
+                                <div class="col-12">
+                                    <div class="alert alert-light-info py-2 px-3 mb-3" id="rentInfoNote" style="display:none;">
+                                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span>
+                                        Rent is billed automatically from the unit's rent amount — not listed here.
+                                    </div>
+                                    <div class="text-muted small mb-3" id="noBillableItemsNote" style="display:none;">
+                                        No additional billable items are configured for this property's SLA.
                                     </div>
                                 </div>
+
+                                <div id="invoicableItemsContainer"></div>
                             </div>
 
                         </form>
@@ -707,6 +673,7 @@
 
             if (propertyId) {
                 loadUnitsForProperty(propertyId);
+                loadBillableItemsForProperty(propertyId);
                 @if(!$client)
                 if ($('input[name="search_mode"]:checked').val() === 'property') {
                     loadLandlordForProperty(propertyId);
@@ -717,6 +684,9 @@
                 $('#unit_id').html('<option value="">Please select a property first</option>').prop('disabled', false);
                 $('#tenant_id').val('');
                 $('#tenant_existing_lease_note').hide();
+                $('#invoicableItemsContainer').empty();
+                $('#rentInfoNote').hide();
+                $('#noBillableItemsNote').hide();
             }
         });
 
@@ -794,35 +764,11 @@
         });
 
 
-        let invoiceableItems = []; // Store all invoiceable items
         let invoiceableCycles = []; // Store all billing cycles
 
-        // Load invoiceable items and cycles on page load
-        loadInvoiceableItems();
         loadInvoiceableCycles();
 
-        // Function to load invoiceable items
-        function loadInvoiceableItems() {
-            $.ajax({
-                url: '/invoiceable-items',
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Invoiceable items loaded:', response);
-                    if (response.items && response.items.length > 0) {
-                        invoiceableItems = response.items;
-
-                        // Populate the first dropdown
-                        populateInvoiceableItems('#item_0');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading invoiceable items:', xhr.responseText);
-                }
-            });
-        }
-
-        // Function to load billing cycles
+        // Function to load billing cycles — still needed per SLA-driven item row below
         function loadInvoiceableCycles() {
             $.ajax({
                 url: "{{ route('property.settings.cycles.data') }}",
@@ -831,7 +777,6 @@
                 success: function(response) {
                     if (response && response.length > 0) {
                         invoiceableCycles = response;
-                        populateCycleSelect('#cycle_0');
                     }
                 },
                 error: function(xhr, status, error) {
@@ -840,101 +785,86 @@
             });
         }
 
-        // Function to populate a cycle dropdown
-        function populateCycleSelect(selectId) {
-            $(selectId).empty().append('<option value="">Please select</option>');
-            invoiceableCycles.forEach(function(cycle) {
-                $(selectId).append(`<option value="${cycle.id}">${cycle.text}</option>`);
-            });
-        }
+        // Invoicable Items is driven entirely by the selected property's SLA
+        // billable items (electricity/water/service charges — whichever it has
+        // enabled) — see loadBillableItemsForProperty() below, called from the
+        // #property_id change handler. Rent is shown as a note only, never a
+        // submittable row (it's already billed automatically elsewhere).
+        function renderBillableItems(items) {
+            $('#invoicableItemsContainer').empty();
+            $('#noBillableItemsNote').toggle(items.length === 0);
 
-        // Function to populate invoiceable items dropdown
-        function populateInvoiceableItems(selectId) {
-            $(selectId).empty();
-            $(selectId).append('<option value="">Please select</option>');
-
-            if (invoiceableItems.length > 0) {
-                invoiceableItems.forEach(function(item) {
-                    $(selectId).append(`<option value="${item.id}">${item.item_name}</option>`);
-                });
-            } else {
-                $(selectId).append('<option value="">No items available</option>');
-            }
-        }
-
-        // Update the Dynamic Invoicable Items section
-        let itemCounter = 1;
-        $('#addInvoicableItem').on('click', function() {
-            if (invoiceableItems.length === 0) {
-                alert('Loading invoiceable items, please wait...');
-                return;
-            }
-
-            // Generate invoiceable items options
-            let itemOptions = '<option value="">Please select</option>';
-            invoiceableItems.forEach(function(item) {
-                itemOptions += `<option value="${item.id}">${item.item_name}</option>`;
-            });
-
-            // Generate cycle options
             let cycleOptions = '<option value="">Please select</option>';
             invoiceableCycles.forEach(function(cycle) {
                 cycleOptions += `<option value="${cycle.id}">${cycle.text}</option>`;
             });
 
-            const itemEntry = `
-                <div class="invoicable-item-entry mb-3 p-3 border rounded">
-                    <div class="row align-items-end">
-                        <div class="col-md-4 mb-3">
-                            <label for="item_${itemCounter}" class="form-label">Item <span class="text-danger">*</span></label>
-                            <select class="form-select" id="item_${itemCounter}" name="invoicable_items[${itemCounter}][item]" required>
-                                ${itemOptions}
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="amount_${itemCounter}" class="form-label">Amount <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control" 
-                                id="amount_${itemCounter}" name="invoicable_items[${itemCounter}][amount]" 
-                                value="0.00" required>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="cycle_${itemCounter}" class="form-label">Cycle <span class="text-danger">*</span></label>
-                            <select class="form-select" id="cycle_${itemCounter}" name="invoicable_items[${itemCounter}][cycle]" required>
-                                ${cycleOptions}
-                            </select>
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label d-block">Prepay Client</label>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="checkbox" id="prepay_client_${itemCounter}" name="invoicable_items[${itemCounter}][prepay_client]" value="Yes">
-                                <label class="form-check-label" for="prepay_client_${itemCounter}">Yes</label>
+            items.forEach(function(item, index) {
+                const entry = `
+                    <div class="billable-item-entry mb-3 p-3 border rounded">
+                        <div class="row align-items-end">
+                            <div class="col-md-3 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input billable-item-checkbox" type="checkbox"
+                                        id="item_enabled_${index}" checked data-target="item-row-${index}">
+                                    <label class="form-check-label fw-semibold" for="item_enabled_${index}">${item.name}</label>
+                                </div>
+                                <input type="hidden" class="item-row-${index}" name="invoicable_items[${index}][item]" value="${item.item_id}">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="amount_${index}" class="form-label">Amount <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control item-row-${index}"
+                                    id="amount_${index}" name="invoicable_items[${index}][amount]"
+                                    value="${item.cost || '0.00'}" required>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="cycle_${index}" class="form-label">Cycle <span class="text-danger">*</span></label>
+                                <select class="form-select item-row-${index}" id="cycle_${index}" name="invoicable_items[${index}][cycle]" required>
+                                    ${cycleOptions}
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label d-block">Prepay Client</label>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input item-row-${index}" type="checkbox" id="prepay_client_${index}" name="invoicable_items[${index}][prepay_client]" value="Yes">
+                                    <label class="form-check-label" for="prepay_client_${index}">Yes</label>
+                                </div>
                             </div>
                         </div>
-                        <div class="d-flex gap-1">
-                            <button type="button" class="btn btn-light btn-sm remove-invoicable-item">
-                                <span class="material-symbols-outlined" style="font-size:16px;">remove</span>
-                            </button>
-                        </div>
                     </div>
-                </div>
-            `;
-            $('#invoicableItemsContainer').append(itemEntry);
-            itemCounter++;
-            updateRemoveButtons('.invoicable-item-entry', '.remove-invoicable-item');
+                `;
+                $('#invoicableItemsContainer').append(entry);
+            });
+        }
+
+        // Toggling a billable item's checkbox disables its row's other inputs —
+        // disabled fields are natively excluded from the submitted FormData, so
+        // that alone drops it from invoicable_items[] on submit.
+        $('#invoicableItemsContainer').on('change', '.billable-item-checkbox', function() {
+            var target = $(this).data('target');
+            $('.' + target).prop('disabled', !this.checked);
         });
 
-        $(document).on('click', '.remove-invoicable-item', function() {
-            $(this).closest('.invoicable-item-entry').remove();
-            updateRemoveButtons('.invoicable-item-entry', '.remove-invoicable-item');
-        });
+        // Fetch the selected property's SLA billable items — same endpoint the
+        // move-in-inspection banner elsewhere already uses, extended to also
+        // return billable_items (see SLAController::getSLAForProperty()).
+        function loadBillableItemsForProperty(propertyId) {
+            $('#invoicableItemsContainer').empty();
+            $('#rentInfoNote').hide();
+            $('#noBillableItemsNote').hide();
 
-        // Helper function to show/hide remove buttons
-        function updateRemoveButtons(containerClass, buttonClass) {
-            if ($(containerClass).length > 1) {
-                $(buttonClass).removeClass('d-none');
-            } else {
-                $(buttonClass).addClass('d-none');
-            }
+            $.ajax({
+                url: `/property/${propertyId}/sla`,
+                method: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    $('#rentInfoNote').show();
+                    renderBillableItems(response.billable_items || []);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading billable items:', xhr.responseText);
+                }
+            });
         }
 
         // Add Files Button functionality

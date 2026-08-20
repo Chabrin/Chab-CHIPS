@@ -50,11 +50,19 @@ trait TenantRecordHelperTrait
      * is already known once the property itself is selected. Most-recent-by-
      * start-date matches how the (now removed) manual SLA dropdown was
      * always ordered.
+     *
+     * NULLS LAST: plain `orderBy('date_start', 'desc')` puts NULL first on
+     * Postgres (its default DESC behavior), so a property with an
+     * undated SLA row would always win over a real, later-dated one —
+     * confirmed live via a direct query. Doesn't affect any property in the
+     * current dataset (none currently mix a null-dated and a real-dated SLA),
+     * but it's the kind of thing that silently breaks the moment a second
+     * SLA is added to a property that already has an undated one.
      */
     private function resolveSlaId(int $propertyId): ?int
     {
         return ServiceAgreement::where('property_id', $propertyId)
-            ->orderBy('date_start', 'desc')
+            ->orderByRaw('date_start DESC NULLS LAST')
             ->value('id');
     }
 
