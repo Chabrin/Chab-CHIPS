@@ -306,6 +306,11 @@ SELECT
     t.LEASELEN                                          AS years,
     0                                                   AS initial_water_meter_reading,
     ISNULL(t.LEASEREN, 0)                               AS escalation_rate,
+    sc.amt                                              AS service_charges_amount,
+    -- DERIVED: no direct service-charge amount on CHTENS — CHTNTRS has no
+    -- dedicated table for it either, so we take the most recent CHTNTRS
+    -- charge of type ''Service Charge'' for this tenant/lease (tenant_id
+    -- doubles as lease_id throughout this migration, see vw_..._009).
     RTRIM(LTRIM(t.LEASLETY))                            AS escalation_frequency,
     NULL                                                AS documents,
     NULL                                                AS linked_lease_id,
@@ -313,6 +318,13 @@ SELECT
 FROM CHABRINS_NEW.dbo.CHTENS t
 LEFT JOIN CHABRINS_NEW.dbo.CHBLOCKS blk
   ON RTRIM(LTRIM(blk.BLOCKID)) = RTRIM(LTRIM(t.BLOCKNO))
+OUTER APPLY (
+    SELECT TOP 1 n.TRANSAMT AS amt
+    FROM CHABRINS_NEW.dbo.CHTNTRS n
+    WHERE n.tenant_id = t.tenant_id
+      AND RTRIM(LTRIM(n.TRANSTYP)) = ''Service Charge''
+    ORDER BY n.TRADATE DESC
+) sc
 WHERE t.TENNAME IS NOT NULL AND RTRIM(LTRIM(t.TENNAME)) <> '''';
 ';
 

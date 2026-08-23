@@ -308,10 +308,22 @@ class InvoicingController extends Controller
             // Wrapped in a transaction so the invoice and its matching tenant-account
             // ledger entry can never partially land — either both are posted, or neither is.
             $invoice = DB::transaction(function () use (
-                $validated, $property, $lease, $unit, $item_name, $landlordId,
-                $totalAmount, $commAmount, $commissionPercentage, $isCommissionable,
-                $vatAmount, $commissionableAmount, $payableAmount, $vatOnCommission,
-                $referenceNumber, $batchNumber
+                $validated,
+                $property,
+                $lease,
+                $unit,
+                $item_name,
+                $landlordId,
+                $totalAmount,
+                $commAmount,
+                $commissionPercentage,
+                $isCommissionable,
+                $vatAmount,
+                $commissionableAmount,
+                $payableAmount,
+                $vatOnCommission,
+                $referenceNumber,
+                $batchNumber
             ) {
                 $invoice = DebtorInvoice::create([
                     'date_time' => now(),
@@ -1796,104 +1808,104 @@ class InvoicingController extends Controller
                     NOW() AS date_time,
                     ?::date AS date_due,
                     ?::date AS returns_period,
-                    l.zone_id,
-                    l.property_id,
-                    l.unit_id,
-                    l.id AS lease_id,
-                    l.tenant_id,
-                    l.client_id,
-                    l.sla_id,
+                    src.zone_id,
+                    src.property_id,
+                    src.unit_id,
+                    src.lease_id,
+                    src.tenant_id,
+                    src.client_id,
+                    src.sla_id,
                     ? AS created_by,
                     CONCAT(
                         'INV',
                         TO_CHAR(?::date, 'YYYY'),
                         TO_CHAR(?::date, 'FMMM'),
-                        u.unit_code,
+                        src.unit_code,
                         '-',
-                        i.item_name,
+                        src.item_name,
                         ' for ',
                         TO_CHAR(?::date, 'Month YYYY'),
                         '-',
-                        l.id
+                        src.lease_id
                     ) AS reference_number,
                     ? AS batch_number,
-                    CONCAT('Tenant Invoice - ', i.item_name) AS narration,
+                    CONCAT(src.item_name, ' FOR ', TO_CHAR(?::date, 'FMMonth YYYY')) AS narration,
                     2 AS debtor_type_id,
-                    u.rent_amount AS total_amount,
-                    CONCAT('18:', l.id, ':', EXTRACT(EPOCH FROM NOW())::bigint) AS trans_details,
+                    src.base_amount AS total_amount,
+                    CONCAT('18:', src.lease_id, ':', EXTRACT(EPOCH FROM NOW())::bigint) AS trans_details,
                     1 AS current_status_id,
                     'No' AS processed,
-                    CASE 
-                        WHEN i.commissionable = 'Yes' THEN
+                    CASE
+                        WHEN src.commissionable = 'Yes' THEN
                             CASE
-                                WHEN u.vat_able = 'Yes' THEN
+                                WHEN src.vat_able = 'Yes' THEN
                                     ROUND(
-                                        (u.rent_amount - ROUND(u.rent_amount * 0.16, 2)) 
-                                        * (sla.commission_percentage / 100), 
+                                        (src.base_amount - ROUND(src.base_amount * 0.16, 2))
+                                        * (src.commission_percentage / 100),
                                         2
                                     )
                                 ELSE
-                                    ROUND(u.rent_amount * (sla.commission_percentage / 100), 2)
+                                    ROUND(src.base_amount * (src.commission_percentage / 100), 2)
                             END
                         ELSE 0.00
                     END AS comm_ammount,
-                    CASE 
-                        WHEN i.commissionable = 'Yes' THEN sla.commission_percentage
+                    CASE
+                        WHEN src.commissionable = 'Yes' THEN src.commission_percentage
                         ELSE 0.00
                     END AS comm_per,
                     CASE
-                        WHEN u.vat_able = 'Yes' THEN
-                            ROUND(u.rent_amount * 0.16, 2)
+                        WHEN src.vat_able = 'Yes' THEN
+                            ROUND(src.base_amount * 0.16, 2)
                         ELSE 0.00
                     END AS vat_ammount,
                     16.00 AS vat_per,
                     CASE
-                        WHEN i.commissionable = 'Yes' THEN
+                        WHEN src.commissionable = 'Yes' THEN
                             CASE
-                                WHEN u.vat_able = 'Yes' THEN
-                                    u.rent_amount - ROUND(u.rent_amount * 0.16, 2)
+                                WHEN src.vat_able = 'Yes' THEN
+                                    src.base_amount - ROUND(src.base_amount * 0.16, 2)
                                 ELSE
-                                    u.rent_amount
+                                    src.base_amount
                             END
                         ELSE 0.00
                     END AS commisionable_amount,
-                    CASE 
-                        WHEN i.commissionable = 'Yes' THEN
+                    CASE
+                        WHEN src.commissionable = 'Yes' THEN
                             CASE
-                                WHEN u.vat_able = 'Yes' THEN
+                                WHEN src.vat_able = 'Yes' THEN
                                     ROUND(
-                                        u.rent_amount - 
+                                        src.base_amount -
                                         ROUND(
-                                            (u.rent_amount - ROUND(u.rent_amount * 0.16, 2)) 
-                                            * (sla.commission_percentage / 100), 
+                                            (src.base_amount - ROUND(src.base_amount * 0.16, 2))
+                                            * (src.commission_percentage / 100),
                                             2
-                                        ), 
+                                        ),
                                         2
                                     )
                                 ELSE
-                                    ROUND(u.rent_amount - ROUND(u.rent_amount * (sla.commission_percentage / 100), 2), 2)
+                                    ROUND(src.base_amount - ROUND(src.base_amount * (src.commission_percentage / 100), 2), 2)
                             END
-                        ELSE u.rent_amount
+                        ELSE src.base_amount
                     END AS payable_amount,
-                    i.id AS item_type_id,
+                    src.item_id AS item_type_id,
                     2 AS cycle_id,
-                    u.rent_amount AS current_balance,
-                    u.occupancy_status_id,
-                    p.field_officer_id,
-                    p.zone_supervisor_id,
-                    p.zone_manager_id,
-                    CASE 
-                        WHEN i.commissionable = 'Yes' THEN
+                    src.base_amount AS current_balance,
+                    src.occupancy_status_id,
+                    src.field_officer_id,
+                    src.zone_supervisor_id,
+                    src.zone_manager_id,
+                    CASE
+                        WHEN src.commissionable = 'Yes' THEN
                             ROUND(
                                 CASE
-                                    WHEN u.vat_able = 'Yes' THEN
+                                    WHEN src.vat_able = 'Yes' THEN
                                         ROUND(
-                                            (u.rent_amount - ROUND(u.rent_amount * 0.16, 2)) 
-                                            * (sla.commission_percentage / 100), 
+                                            (src.base_amount - ROUND(src.base_amount * 0.16, 2))
+                                            * (src.commission_percentage / 100),
                                             2
                                         ) * (? / 100)
                                     ELSE
-                                        ROUND(u.rent_amount * (sla.commission_percentage / 100), 2) 
+                                        ROUND(src.base_amount * (src.commission_percentage / 100), 2)
                                         * (? / 100)
                                 END,
                                 2
@@ -1902,19 +1914,47 @@ class InvoicingController extends Controller
                     END AS vat_on_commission,
                     1 AS override_period_check,
                     NOW() AS created_at
-                FROM sys_pm_lease_agreements l
-                INNER JOIN sys_pm_units u 
-                    ON u.id = l.unit_id
-                INNER JOIN sys_pm_properties p 
-                    ON p.id = l.property_id
-                LEFT JOIN sys_pm_service_agreements sla 
-                    ON sla.id = l.sla_id
-                CROSS JOIN sys_set_invoiceable_items i
-                WHERE
-                    i.item_name = 'Unit Rent'
-                    AND l.lease_status = 'Active'
-                    AND u.rent_amount > 0
-                ORDER BY l.id
+                FROM (
+                    -- RENT — one per active lease with a rent amount set
+                    SELECT
+                        l.zone_id, l.property_id, l.unit_id, l.id AS lease_id, l.tenant_id, l.client_id, l.sla_id,
+                        u.unit_code, i.item_name, i.id AS item_id, i.commissionable,
+                        u.rent_amount AS base_amount,
+                        u.vat_able,
+                        sla.commission_percentage,
+                        u.occupancy_status_id, p.field_officer_id, p.zone_supervisor_id, p.zone_manager_id
+                    FROM sys_pm_lease_agreements l
+                    INNER JOIN sys_pm_units u ON u.id = l.unit_id
+                    INNER JOIN sys_pm_properties p ON p.id = l.property_id
+                    LEFT JOIN sys_pm_service_agreements sla ON sla.id = l.sla_id
+                    CROSS JOIN sys_set_invoiceable_items i
+                    WHERE
+                        i.billing_code = '0024'
+                        AND l.lease_status = 'Active'
+                        AND u.rent_amount > 0
+
+                    UNION ALL
+
+                    -- Service Charge — only when the lease's current SLA has it enabled with a cost
+                    SELECT
+                        l.zone_id, l.property_id, l.unit_id, l.id AS lease_id, l.tenant_id, l.client_id, l.sla_id,
+                        u.unit_code, i.item_name, i.id AS item_id, i.commissionable,
+                        sla.service_charges_cost AS base_amount,
+                        u.vat_able,
+                        sla.commission_percentage,
+                        u.occupancy_status_id, p.field_officer_id, p.zone_supervisor_id, p.zone_manager_id
+                    FROM sys_pm_lease_agreements l
+                    INNER JOIN sys_pm_units u ON u.id = l.unit_id
+                    INNER JOIN sys_pm_properties p ON p.id = l.property_id
+                    INNER JOIN sys_pm_service_agreements sla ON sla.id = l.sla_id
+                    CROSS JOIN sys_set_invoiceable_items i
+                    WHERE
+                        i.billing_code = '2001'
+                        AND l.lease_status = 'Active'
+                        AND sla.service_charges_selected = 1
+                        AND sla.service_charges_cost > 0
+                ) src
+                ORDER BY src.lease_id
             ";
 
             DB::beginTransaction();
@@ -1958,6 +1998,7 @@ class InvoicingController extends Controller
                     $billingDateFormatted,              // for reference month number (M)
                     $billingDateFormatted,              // for reference month name (Month YYYY)
                     $batchNumber,                        // batch_number
+                    $billingDateFormatted,               // for narration month name (Month YYYY)
                     $vatOnCommRate,                      // vat_on_commission rate (first)
                     $vatOnCommRate,                      // vat_on_commission rate (second)
                 ]);
@@ -1990,7 +2031,7 @@ class InvoicingController extends Controller
                     SELECT
                         inv.date_time,
                         inv.narration,
-                        'Unit Rent'                     AS pay_for,
+                        i.item_name                     AS pay_for,
                         'DR'                            AS dr_cr,
                         inv.total_amount                AS debit_amount,
                         0.00                            AS credit_amount,
@@ -2010,6 +2051,7 @@ class InvoicingController extends Controller
                         inv.zone_manager_id,
                         1                               AS current_status_id
                     FROM sys_pm_debtors_invoices inv
+                    LEFT JOIN sys_set_invoiceable_items i ON i.id = inv.item_type_id
                     WHERE inv.batch_number = ?
                 ";
 
