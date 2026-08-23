@@ -255,6 +255,33 @@ class InvoicingController extends Controller
 
             $landlordId = $property ? $property->client_id : null;
 
+            // Only one invoice per tenant per month for these recurring item types
+            $singlePerMonthItems = [
+                'Water Bill',
+                'Service Charge',
+                'RENT',
+                'Electricity Bill',
+                'House Deposit',
+                'Electricity Deposit',
+                'Water Deposit',
+            ];
+
+            if ($invoiceableItem && in_array($invoiceableItem->item_name, $singlePerMonthItems, true)) {
+                $periodDate = new \DateTime($validated['returns_period']);
+
+                $duplicateExists = DebtorInvoice::where('tenant_id', $validated['tenant_id'])
+                    ->where('item_type_id', $validated['item_type_id'])
+                    ->whereYear('returns_period', $periodDate->format('Y'))
+                    ->whereMonth('returns_period', $periodDate->format('m'))
+                    ->exists();
+
+                if ($duplicateExists) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'item_type_id' => ["This tenant already has a {$invoiceableItem->item_name} invoice for {$periodDate->format('F Y')}."],
+                    ]);
+                }
+            }
+
             // Calculate commission and VAT based on invoiceable item settings
             $totalAmount = $validated['total_amount'];
             $isCommissionable = $invoiceableItem && $invoiceableItem->commissionable === 'Yes';
@@ -304,6 +331,7 @@ class InvoicingController extends Controller
                 'commisionable_amount' => $commissionableAmount,
                 'payable_amount' => $payableAmount,
                 'item_type_id' => $validated['item_type_id'],
+                'return_type_id' => $item_name,
                 'cycle_id' => 2,
                 'current_balance' => $totalAmount,
                 'occupancy_status_id' => $unit ? $unit->occupancy_status_id : null,

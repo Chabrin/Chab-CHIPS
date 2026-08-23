@@ -37,6 +37,7 @@ class DebtorInvoice extends Model
         'commisionable_amount',
         'payable_amount',
         'item_type_id',
+        'return_type_id',
         'cycle_id',
         'current_balance',
         'occupancy_status_id',
