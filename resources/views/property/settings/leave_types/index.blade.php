@@ -1,22 +1,20 @@
 @extends('layouts.main')
 
 @section('content')
+<style>
+    .btn-check:checked + .applies-to-radio {
+        color: #fff;
+        background-color: #3598db;
+        border-color: #3598db;
+    }
+</style>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <!-- Return Types Section -->
-                <div class="card mb-4">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Return Types</h5>
-                        @permission('create_property_settings_items')
-                        <div class="ms-auto d-flex gap-2">
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addReturnTypeBtn">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Return Type</span>
-                            </button>
-                        </div>
-                        @endpermission
+                <div class="card">
+                    <div class="card-header card-no-border">
+                        <h5 class="mb-0">Property Settings — Items</h5>
                     </div>
                     <div class="card-body">
                         @if(session('success'))
@@ -32,112 +30,131 @@
                         </div>
                         @endif
 
-                        <div class="table-responsive custom-scrollbar">
-                            <table id="returnTypesTable" class="display" style="width:100%;">
-                                <thead>
-                                    <tr>
-                                        <th>Type Name</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                        <ul class="nav nav-tabs mb-3" id="settingsItemsTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="return-types-tab" data-bs-toggle="tab" data-bs-target="#return-types" type="button" role="tab">
+                                    Return Types
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="unit-topology-tab" data-bs-toggle="tab" data-bs-target="#unit-topology" type="button" role="tab">
+                                    Unit Topology
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="unit-category-tab" data-bs-toggle="tab" data-bs-target="#unit-category" type="button" role="tab">
+                                    Unit Category
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="invoiceable-items-tab" data-bs-toggle="tab" data-bs-target="#invoiceable-items" type="button" role="tab">
+                                    Invoiceable Items
+                                </button>
+                            </li>
+                        </ul>
 
-                <!-- Unit Topology Section -->
-                <div class="card mb-4">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Unit Topology</h5>
-                        @permission('create_property_settings_items')
-                        <div class="ms-auto d-flex gap-2">
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitTopologyBtn">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Topology</span>
-                            </button>
-                        </div>
-                        @endpermission
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive custom-scrollbar">
-                            <table id="unitTopologiesTable" class="display" style="width:100%;">
-                                <thead>
-                                    <tr>
-                                        <th>Topology Name</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                        <div class="tab-content" id="settingsItemsTabsContent">
+                            <!-- Return Types Tab -->
+                            <div class="tab-pane fade show active" id="return-types" role="tabpanel" aria-labelledby="return-types-tab">
+                                <div class="d-flex align-items-center mb-3">
+                                    <h6 class="mb-0 me-auto">Return Types</h6>
+                                    @permission('create_property_settings_items')
+                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addReturnTypeBtn">
+                                        <span class="material-symbols-outlined">add_circle</span>
+                                        <span class="ms-1">Add Return Type</span>
+                                    </button>
+                                    @endpermission
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="returnTypesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Type Name</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                <!-- Unit Category Section -->
-                <div class="card mb-4">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Unit Category</h5>
-                        @permission('create_property_settings_items')
-                        <div class="ms-auto d-flex gap-2">
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitCategoryBtn">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Category</span>
-                            </button>
-                        </div>
-                        @endpermission
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive custom-scrollbar">
-                            <table id="unitCategoriesTable" class="display" style="width:100%;">
-                                <thead>
-                                    <tr>
-                                        <th>Category Name</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                            <!-- Unit Topology Tab -->
+                            <div class="tab-pane fade" id="unit-topology" role="tabpanel" aria-labelledby="unit-topology-tab">
+                                <div class="d-flex align-items-center mb-3">
+                                    <h6 class="mb-0 me-auto">Unit Topology</h6>
+                                    @permission('create_property_settings_items')
+                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitTopologyBtn">
+                                        <span class="material-symbols-outlined">add_circle</span>
+                                        <span class="ms-1">Add Topology</span>
+                                    </button>
+                                    @endpermission
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="unitTopologiesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Topology Name</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
 
-                <!-- Invoiceable Items Section -->
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Invoiceable Items</h5>
-                        @permission('create_property_settings_items')
-                        <div class="ms-auto d-flex gap-2">
-                            <button type="button" class="btn btn-danger btn-sm d-flex align-items-center" id="bulkDeleteInvoiceableItemsBtn" style="display:none;">
-                                <span class="material-symbols-outlined">delete</span>
-                                <span class="ms-1">Delete Selected</span>
-                            </button>
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addInvoiceableItemBtn">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Invoiceable Item</span>
-                            </button>
-                        </div>
-                        @endpermission
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive custom-scrollbar">
-                            <table id="invoiceableItemsTable" class="display" style="width:100%;">
-                                <thead>
-                                    <tr>
-                                        <th><input type="checkbox" id="selectAllInvoiceableItems"></th>
-                                        <th>Item Name</th>
-                                        <th>Billing Code</th>
-                                        <th>Default Cycle</th>
-                                        <th>Commissionable</th>
-                                        <th>Advance Payable</th>
-                                        <th>Is Bill</th>
-                                        <th>Fixed Amount</th>
-                                        <th>Amount</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
+                            <!-- Unit Category Tab -->
+                            <div class="tab-pane fade" id="unit-category" role="tabpanel" aria-labelledby="unit-category-tab">
+                                <div class="d-flex align-items-center mb-3">
+                                    <h6 class="mb-0 me-auto">Unit Category</h6>
+                                    @permission('create_property_settings_items')
+                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitCategoryBtn">
+                                        <span class="material-symbols-outlined">add_circle</span>
+                                        <span class="ms-1">Add Category</span>
+                                    </button>
+                                    @endpermission
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="unitCategoriesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Category Name</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Invoiceable Items Tab -->
+                            <div class="tab-pane fade" id="invoiceable-items" role="tabpanel" aria-labelledby="invoiceable-items-tab">
+                                <div class="d-flex align-items-center mb-3">
+                                    <h6 class="mb-0 me-auto">Invoiceable Items</h6>
+                                    @permission('create_property_settings_items')
+                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addInvoiceableItemBtn">
+                                        <span class="material-symbols-outlined">add_circle</span>
+                                        <span class="ms-1">Add Invoiceable Item</span>
+                                    </button>
+                                    @endpermission
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="invoiceableItemsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>Item Name</th>
+                                                <th>Applies To</th>
+                                                <th>Billing Code</th>
+                                                <th>Default Cycle</th>
+                                                <th>Commissionable</th>
+                                                <th>Fixed Amount</th>
+                                                <th>Amount</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -236,11 +253,36 @@
                 <div class="modal-body">
                     <input type="hidden" id="invoiceableItemId" name="id">
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <label for="itemName" class="form-label">Item Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="itemName" name="item_name" required>
                             <div class="invalid-feedback"></div>
                         </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label d-block">Applies To <span class="text-danger">*</span></label>
+                            <div class="btn-group" role="group" aria-label="Applies To">
+                                <input type="radio" class="btn-check" name="applies_to" id="appliesToTenant" value="TENANT" autocomplete="off">
+                                <label class="btn btn-outline-primary applies-to-radio btn-sm" for="appliesToTenant">
+                                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">person</span>
+                                    Tenant
+                                </label>
+
+                                <input type="radio" class="btn-check" name="applies_to" id="appliesToClient" value="CLIENT" autocomplete="off">
+                                <label class="btn btn-outline-primary applies-to-radio btn-sm" for="appliesToClient">
+                                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">apartment</span>
+                                    Client
+                                </label>
+
+                                <input type="radio" class="btn-check" name="applies_to" id="appliesToBoth" value="BOTH" checked autocomplete="off">
+                                <label class="btn btn-outline-primary applies-to-radio btn-sm" for="appliesToBoth">
+                                    <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">done_all</span>
+                                    Both
+                                </label>
+                            </div>
+                            <div class="invalid-feedback" id="appliesToFeedback"></div>
+                        </div>
+                    </div>
+                    <div class="row">
                         <div class="col-md-4 mb-3">
                             <label for="defaultCycle" class="form-label">Default Cycle</label>
                             <select class="form-select" id="defaultCycle" name="default_cycle_id">
@@ -255,32 +297,30 @@
                                 <option value="Yes">Yes</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label for="advancePayable" class="form-label">Advance Payable</label>
                             <select class="form-select" id="advancePayable" name="advance_payable">
                                 <option value="No">No</option>
                                 <option value="Yes">Yes</option>
                             </select>
                         </div>
-                        <div class="col-md-6 mb-3">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
                             <label for="isBill" class="form-label">Is Bill</label>
                             <select class="form-select" id="isBill" name="is_bill">
                                 <option value="No">No</option>
                                 <option value="Yes">Yes</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label for="fixedAmount" class="form-label">Fixed Amount</label>
                             <select class="form-select" id="fixedAmount" name="fixed_amount">
                                 <option value="No">No</option>
                                 <option value="Yes">Yes</option>
                             </select>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label for="amount" class="form-label">Amount</label>
                             <input type="number" step="0.01" class="form-control" id="amount" name="amount">
                             <div class="invalid-feedback"></div>
@@ -299,7 +339,11 @@
 
 <script>
 $(document).ready(function() {
-    let selectedInvoiceableItems = new Set();
+
+    // Keep DataTables column widths correct when a table is initialized inside a hidden tab
+    $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function() {
+        $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+    });
 
     // ============ RETURN TYPES TABLE ============
     const returnTypesTable = $('#returnTypesTable').DataTable({
@@ -431,21 +475,11 @@ $(document).ready(function() {
             }
         },
         columns: [
-            {
-                data: null,
-                orderable: false,
-                searchable: false,
-                render: function(data) {
-                    const isChecked = selectedInvoiceableItems.has(data.encrypted_id) ? 'checked' : '';
-                    return `<input type="checkbox" class="invoiceable-item-checkbox" value="${data.encrypted_id}" ${isChecked}>`;
-                }
-            },
             { data: 'item_name' },
+            { data: 'applies_to' },
             { data: 'billing_code' },
             { data: 'cycle_name' },
             { data: 'commissionable' },
-            { data: 'advance_payable' },
-            { data: 'is_bill' },
             { data: 'fixed_amount' },
             { data: 'amount' },
             {
@@ -455,15 +489,15 @@ $(document).ready(function() {
                 render: function(data) {
                     let actions = '';
                     if (data.can_update) {
-                        actions += `<a href="javascript:void(0)" class="text-success edit-invoiceable-item me-2" 
-                            data-id="${data.encrypted_id}" 
+                        actions += `<a href="javascript:void(0)" class="text-success edit-invoiceable-item me-2"
+                            data-id="${data.encrypted_id}"
                             data-item='${JSON.stringify(data)}' title="Edit">
                             <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
                         </a>`;
                     }
                     if (data.can_delete) {
-                        actions += `<a href="javascript:void(0)" class="text-danger delete-invoiceable-item" 
-                            data-id="${data.encrypted_id}" 
+                        actions += `<a href="javascript:void(0)" class="text-danger delete-invoiceable-item"
+                            data-id="${data.encrypted_id}"
                             data-name="${data.item_name}" title="Delete">
                             <span class="material-symbols-outlined" style="font-size:18px;">delete</span>
                         </a>`;
@@ -472,114 +506,9 @@ $(document).ready(function() {
                 }
             }
         ],
-        order: [[1, 'asc']],
+        order: [[0, 'asc']],
         pageLength: 10,
         responsive: true
-    });
-
-    // Handle select all checkbox for invoiceable items
-    $('#selectAllInvoiceableItems').on('change', function() {
-        const isChecked = $(this).prop('checked');
-        
-        if (isChecked) {
-            // Add all items to the set
-            invoiceableItemsTable.rows().data().each(function(row) {
-                selectedInvoiceableItems.add(row.encrypted_id);
-            });
-        } else {
-            // Remove all items from the set
-            selectedInvoiceableItems.clear();
-        }
-        
-        // Update checkboxes on current page
-        $('.invoiceable-item-checkbox').prop('checked', isChecked);
-        updateBulkDeleteButtonInvoiceableItems();
-    });
-
-    // Handle individual checkbox changes for invoiceable items
-    $('#invoiceableItemsTable').on('change', '.invoiceable-item-checkbox', function() {
-        const itemId = $(this).val();
-        
-        if ($(this).prop('checked')) {
-            selectedInvoiceableItems.add(itemId);
-        } else {
-            selectedInvoiceableItems.delete(itemId);
-            $('#selectAllInvoiceableItems').prop('checked', false);
-        }
-        
-        updateBulkDeleteButtonInvoiceableItems();
-    });
-
-    // Update checkboxes when page changes
-    invoiceableItemsTable.on('draw', function() {
-        $('.invoiceable-item-checkbox').each(function() {
-            const itemId = $(this).val();
-            $(this).prop('checked', selectedInvoiceableItems.has(itemId));
-        });
-        
-        // Update select all checkbox state
-        const allOnPageSelected = $('.invoiceable-item-checkbox').length > 0 && 
-            $('.invoiceable-item-checkbox').length === $('.invoiceable-item-checkbox:checked').length;
-        $('#selectAllInvoiceableItems').prop('checked', allOnPageSelected);
-    });
-
-    // Function to update bulk delete button visibility
-    function updateBulkDeleteButtonInvoiceableItems() {
-        if (selectedInvoiceableItems.size > 0) {
-            $('#bulkDeleteInvoiceableItemsBtn').show();
-        } else {
-            $('#bulkDeleteInvoiceableItemsBtn').hide();
-        }
-    }
-
-    // Bulk delete invoiceable items
-    $('#bulkDeleteInvoiceableItemsBtn').click(function() {
-        if (selectedInvoiceableItems.size === 0) {
-            toastr.warning('Please select at least one item to delete');
-            return;
-        }
-        
-        if (confirm(`Are you sure you want to delete ${selectedInvoiceableItems.size} selected item(s)?`)) {
-            const itemIds = Array.from(selectedInvoiceableItems);
-            let completed = 0;
-            let failed = 0;
-            
-            itemIds.forEach(function(encryptedId) {
-                $.ajax({
-                    url: '{{ route("property.settings.invoiceable-items.delete", ":id") }}'.replace(':id', encryptedId),
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                    },
-                    success: function() {
-                        completed++;
-                        selectedInvoiceableItems.delete(encryptedId);
-                        
-                        if (completed + failed === itemIds.length) {
-                            invoiceableItemsTable.ajax.reload();
-                            updateBulkDeleteButtonInvoiceableItems();
-                            $('#selectAllInvoiceableItems').prop('checked', false);
-                            toastr.success(`Successfully deleted ${completed} item(s)`);
-                            if (failed > 0) {
-                                toastr.error(`Failed to delete ${failed} item(s)`);
-                            }
-                        }
-                    },
-                    error: function() {
-                        failed++;
-                        
-                        if (completed + failed === itemIds.length) {
-                            invoiceableItemsTable.ajax.reload();
-                            updateBulkDeleteButtonInvoiceableItems();
-                            if (completed > 0) {
-                                toastr.success(`Successfully deleted ${completed} item(s)`);
-                            }
-                            toastr.error(`Failed to delete ${failed} item(s)`);
-                        }
-                    }
-                });
-            });
-        }
     });
 
     // ============ LOAD CYCLES ============
@@ -604,7 +533,7 @@ $(document).ready(function() {
     loadCycles();
 
     // ============ RETURN TYPE CRUD ============
-    
+
     // Add Return Type
     $('#addReturnTypeBtn').click(function() {
         $('#returnTypeForm')[0].reset();
@@ -619,7 +548,7 @@ $(document).ready(function() {
     $('#returnTypesTable').on('click', '.edit-return-type', function() {
         const id = $(this).data('id');
         const name = $(this).data('name');
-        
+
         $('#returnTypeId').val(id);
         $('#returnTypeName').val(name);
         $('#returnTypeModalLabel').text('Edit Return Type');
@@ -631,13 +560,13 @@ $(document).ready(function() {
     // Submit Return Type Form
     $('#returnTypeForm').submit(function(e) {
         e.preventDefault();
-        
+
         const id = $('#returnTypeId').val();
-        const url = id 
+        const url = id
             ? '{{ route("property.settings.return-types.update", ":id") }}'.replace(':id', id)
             : '{{ route("property.settings.return-types.store") }}';
         const method = 'POST';
-        
+
         $.ajax({
             url: url,
             method: method,
@@ -655,7 +584,7 @@ $(document).ready(function() {
                     const errors = xhr.responseJSON.errors;
                     $('.form-control').removeClass('is-invalid');
                     $('.invalid-feedback').text('').hide();
-                    
+
                     $.each(errors, function(field, messages) {
                         const input = $(`[name="${field}"]`);
                         input.addClass('is-invalid');
@@ -672,7 +601,7 @@ $(document).ready(function() {
     $('#returnTypesTable').on('click', '.delete-return-type', function() {
         const id = $(this).data('id');
         const name = $(this).data('name');
-        
+
         if (confirm(`Are you sure you want to delete "${name}"?`)) {
             $.ajax({
                 url: '{{ route("property.settings.return-types.delete", ":id") }}'.replace(':id', id),
@@ -866,11 +795,12 @@ $(document).ready(function() {
     });
 
     // ============ INVOICEABLE ITEM CRUD ============
-    
+
     // Add Invoiceable Item
     $('#addInvoiceableItemBtn').click(function() {
         $('#invoiceableItemForm')[0].reset();
         $('#invoiceableItemId').val('');
+        $('#appliesToBoth').prop('checked', true);
         $('#invoiceableItemModalLabel').text('Add Invoiceable Item');
         $('.invalid-feedback').text('').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
@@ -880,17 +810,17 @@ $(document).ready(function() {
     // Edit Invoiceable Item
     $('#invoiceableItemsTable').on('click', '.edit-invoiceable-item', function() {
         const data = $(this).data('item');
-        
+
         $('#invoiceableItemId').val(data.encrypted_id);
         $('#itemName').val(data.item_name);
-        $('#billingCode').val(data.billing_code !== '-' ? data.billing_code : '');
+        $('input[name="applies_to"][value="' + (data.applies_to || 'BOTH') + '"]').prop('checked', true);
         $('#defaultCycle').val(data.default_cycle_id || '');
         $('#commissionable').val(data.commissionable);
         $('#advancePayable').val(data.advance_payable);
         $('#isBill').val(data.is_bill);
         $('#fixedAmount').val(data.fixed_amount);
         $('#amount').val(data.amount !== '0.00' ? data.amount.replace(/,/g, '') : '');
-        
+
         $('#invoiceableItemModalLabel').text('Edit Invoiceable Item');
         $('.invalid-feedback').text('').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
@@ -900,13 +830,13 @@ $(document).ready(function() {
     // Submit Invoiceable Item Form
     $('#invoiceableItemForm').submit(function(e) {
         e.preventDefault();
-        
+
         const id = $('#invoiceableItemId').val();
-        const url = id 
+        const url = id
             ? '{{ route("property.settings.invoiceable-items.update", ":id") }}'.replace(':id', id)
             : '{{ route("property.settings.invoiceable-items.store") }}';
         const method = 'POST';
-        
+
         $.ajax({
             url: url,
             method: method,
@@ -924,11 +854,15 @@ $(document).ready(function() {
                     const errors = xhr.responseJSON.errors;
                     $('.form-control, .form-select').removeClass('is-invalid');
                     $('.invalid-feedback').text('').hide();
-                    
+
                     $.each(errors, function(field, messages) {
                         const input = $(`[name="${field}"]`);
                         input.addClass('is-invalid');
-                        input.siblings('.invalid-feedback').text(messages[0]).show();
+                        if (field === 'applies_to') {
+                            $('#appliesToFeedback').text(messages[0]).show();
+                        } else {
+                            input.siblings('.invalid-feedback').text(messages[0]).show();
+                        }
                     });
                 } else {
                     toastr.error(xhr.responseJSON?.message || 'An error occurred');
@@ -941,7 +875,7 @@ $(document).ready(function() {
     $('#invoiceableItemsTable').on('click', '.delete-invoiceable-item', function() {
         const id = $(this).data('id');
         const name = $(this).data('name');
-        
+
         if (confirm(`Are you sure you want to delete "${name}"?`)) {
             $.ajax({
                 url: '{{ route("property.settings.invoiceable-items.delete", ":id") }}'.replace(':id', id),

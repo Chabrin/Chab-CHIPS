@@ -357,7 +357,7 @@ class PropertySettingsController extends Controller
         try {
             $items = InvoiceableItem::with('cycle')
                 ->select([
-                    'id', 'item_name', 'billing_code',
+                    'id', 'item_name', 'applies_to', 'billing_code',
                     'commissionable', 'advance_payable', 'is_bill', 'fixed_amount', 'amount', 'default_cycle_id'
                 ])
                 ->orderBy('item_name', 'asc')
@@ -367,6 +367,7 @@ class PropertySettingsController extends Controller
                         'id' => $item->id,
                         'encrypted_id' => Crypt::encrypt($item->id),
                         'item_name' => $item->item_name ?? '-',
+                        'applies_to' => $item->applies_to ?? 'BOTH',
                         'billing_code' => $item->billing_code ?? '-',
                         'commissionable' => $item->commissionable ?? 'No',
                         'advance_payable' => $item->advance_payable ?? 'No',
@@ -395,6 +396,7 @@ class PropertySettingsController extends Controller
         try {
             $validated = $request->validate([
                 'item_name' => 'required|string|max:255',
+                'applies_to' => 'nullable|in:TENANT,CLIENT,BOTH',
                 'commissionable' => 'nullable|string|max:10',
                 'advance_payable' => 'nullable|string|max:10',
                 'is_bill' => 'nullable|string|max:10',
@@ -403,6 +405,7 @@ class PropertySettingsController extends Controller
                 'default_cycle_id' => 'nullable|integer|exists:sys_set_invoiceable_items_cycles,id',
             ]);
 
+            $validated['applies_to'] = $validated['applies_to'] ?? 'BOTH';
             $validated['date_time'] = now();
             $validated['current_status_id'] = 1;
             
@@ -439,6 +442,7 @@ class PropertySettingsController extends Controller
 
             $validated = $request->validate([
                 'item_name' => 'required|string|max:255',
+                'applies_to' => 'nullable|in:TENANT,CLIENT,BOTH',
                 'billing_code' => 'nullable|string|max:255',
                 'commissionable' => 'nullable|string|max:10',
                 'advance_payable' => 'nullable|string|max:10',

@@ -273,8 +273,8 @@ class SLAController extends Controller
                 'flat_rate_vat'                => 'nullable|numeric|min:0',
                 'auto_renewal'                 => 'required',
                 'payment_date'                 => 'required|integer|min:1|max:31',
-                'date_start'                   => 'required|date',
-                'duration_years'               => 'required|integer|min:1',
+                'date_start'                   => 'nullable|date',
+                'duration_years'               => 'nullable|integer|min:1',
                 'move_in_inspection_required'  => 'nullable|boolean',
                 'charge_registration_fee'      => 'nullable|boolean',
                 'returns_combination'          => 'nullable|in:rent_separate_rest_combined,each_separate,all_combined',
@@ -295,10 +295,13 @@ class SLAController extends Controller
                 ]);
             }
 
-            // Calculate end date
-            $startDate = new \DateTime($validated['date_start']);
-            $endDate = clone $startDate;
-            $endDate->modify('+' . $validated['duration_years'] . ' years');
+            // Calculate end date — only when both a start date and a duration were given
+            $endDate = null;
+            if (!empty($validated['date_start']) && !empty($validated['duration_years'])) {
+                $startDate = new \DateTime($validated['date_start']);
+                $endDate = clone $startDate;
+                $endDate->modify('+' . $validated['duration_years'] . ' years');
+            }
 
             // Handle file uploads
             $documentPaths = [];
@@ -336,9 +339,9 @@ class SLAController extends Controller
                 'vat'                         => $vatValue,
                 'vat_per'                     => $validated['vat_percentage'] ?? 0,
                 'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
-                'date_start'                  => $validated['date_start'],
-                'date_end'                    => $endDate->format('Y-m-d'),
-                'years'                       => $validated['duration_years'],
+                'date_start'                  => $validated['date_start'] ?? null,
+                'date_end'                    => $endDate ? $endDate->format('Y-m-d') : null,
+                'years'                       => $validated['duration_years'] ?? null,
                 'landlord_payment_date'       => $validated['payment_date'],
                 'auto_renewal'                => $validated['auto_renewal'],
                 'created_by_id'               => Auth::id(),
@@ -569,8 +572,8 @@ class SLAController extends Controller
                 'flat_rate_vat'               => 'nullable|numeric|min:0',
                 'auto_renewal'                => 'required|in:Yes,No',
                 'payment_date'                => 'required|integer|min:1|max:31',
-                'date_start'                  => 'required|date',
-                'duration_years'              => 'required|integer|min:1',
+                'date_start'                  => 'nullable|date',
+                'duration_years'              => 'nullable|integer|min:1',
                 'move_in_inspection_required' => 'nullable|boolean',
                 'charge_registration_fee'     => 'nullable|boolean',
                 'returns_combination'         => 'nullable|in:rent_separate_rest_combined,each_separate,all_combined',
@@ -591,10 +594,13 @@ class SLAController extends Controller
                 ]);
             }
 
-            // Calculate end date
-            $startDate = new \DateTime($validated['date_start']);
-            $endDate = clone $startDate;
-            $endDate->modify('+' . $validated['duration_years'] . ' years');
+            // Calculate end date — only when both a start date and a duration were given
+            $endDate = null;
+            if (!empty($validated['date_start']) && !empty($validated['duration_years'])) {
+                $startDate = new \DateTime($validated['date_start']);
+                $endDate = clone $startDate;
+                $endDate->modify('+' . $validated['duration_years'] . ' years');
+            }
 
             // Handle file uploads (new documents)
             if ($request->hasFile('sla_documents')) {
@@ -630,9 +636,9 @@ class SLAController extends Controller
                 'vat'                         => $vatValue,
                 'vat_per'                     => $validated['vat_percentage'] ?? 0,
                 'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
-                'date_start'                  => $validated['date_start'],
-                'date_end'                    => $endDate->format('Y-m-d'),
-                'years'                       => $validated['duration_years'],
+                'date_start'                  => $validated['date_start'] ?? null,
+                'date_end'                    => $endDate ? $endDate->format('Y-m-d') : null,
+                'years'                       => $validated['duration_years'] ?? null,
                 'landlord_payment_date'       => $validated['payment_date'],
                 'auto_renewal'                => $validated['auto_renewal'],
                 'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),

@@ -44,12 +44,12 @@
                                 <!-- Client selection (show dropdown if no client, otherwise hidden field) -->
                                 @if($client)
                                     <input type="hidden" name="client_id" value="{{ $client->id }}">
-                                    <div class="col-md-6 mb-3">
+                                    <div class="col-md-4 mb-3">
                                         <label for="client_name" class="form-label">Client Name</label>
                                         <input type="text" class="form-control" id="client_name" value="{{ $client->names }}" readonly>
                                     </div>
                                 @else
-                                    <div class="col-md-6 mb-3">
+                                    <div class="col-md-4 mb-3">
                                         <label for="client_id" class="form-label">Client <span class="text-danger">*</span></label>
                                         <select name="client_id" id="client_id" class="form-control" required style="width:100%;">
                                             <option value="">Type to search client...</option>
@@ -60,7 +60,7 @@
                                     </div>
                                 @endif
 
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label for="property_id" class="form-label">Property <span class="text-danger">*</span></label>
                                     <select class="form-select @error('property_id') is-invalid @enderror" id="property_id" name="property_id" required>
                                         <option value="">Loading properties...</option>
@@ -71,9 +71,9 @@
                                     <small class="text-danger d-none" id="currentSlaWarning"></small>
                                 </div>
 
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-4 mb-3">
                                     <label for="commission_percentage" class="form-label">Commission (%) <span class="text-danger">*</span></label>
-                                    <input type="number" step="0.01" class="form-control @error('commission_percentage') is-invalid @enderror" 
+                                    <input type="number" step="0.01" class="form-control @error('commission_percentage') is-invalid @enderror"
                                            id="commission_percentage" name="commission_percentage" required>
                                     @error('commission_percentage')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -144,19 +144,19 @@
                                 </div>
 
                                 <div class="col-md-4 mb-3">
-                                    <label for="date_start" class="form-label">Date Start <span class="text-danger">*</span></label>
-                                    <input type="date" class="form-control @error('date_start') is-invalid @enderror" 
-                                           id="date_start" name="date_start" 
-                                           value="{{ old('date_start', now()->format('Y-m-d')) }}" required>
+                                    <label for="date_start" class="form-label">Date Start</label>
+                                    <input type="date" class="form-control @error('date_start') is-invalid @enderror"
+                                           id="date_start" name="date_start"
+                                           value="{{ old('date_start', now()->format('Y-m-d')) }}">
                                     @error('date_start')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
 
                                 <div class="col-md-4 mb-3">
-                                    <label for="duration_years" class="form-label">Duration (Years) <span class="text-danger">*</span></label>
-                                    <input type="number" step="1" class="form-control @error('duration_years') is-invalid @enderror" 
-                                           id="duration_years" name="duration_years" required>
+                                    <label for="duration_years" class="form-label">Duration (Years)</label>
+                                    <input type="number" step="1" class="form-control @error('duration_years') is-invalid @enderror"
+                                           id="duration_years" name="duration_years">
                                     @error('duration_years')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror

@@ -73,7 +73,7 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-4 mb-3">
                                             <label for="vat_able" class="form-label">VATable <span class="text-danger">*</span></label>
                                             <select class="form-select @error('vat_able') is-invalid @enderror" id="vat_able" name="vat_able" required>
                                                 <option value="No" {{ $sla->vat == 'No' ? 'selected' : '' }}>No</option>
@@ -85,7 +85,7 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-4 mb-3">
                                             <label for="vat_percentage" class="form-label">VAT %</label>
                                             <input type="number" step="0.01" class="form-control @error('vat_percentage') is-invalid @enderror" id="vat_percentage" name="vat_percentage" value="{{ old('vat_percentage', $sla->vat_per) }}">
                                             @error('vat_percentage')
@@ -93,7 +93,7 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-4 mb-3">
                                             <label for="flat_rate_vat" class="form-label">Flat Rate VAT</label>
                                             <input type="number" step="0.01" class="form-control @error('flat_rate_vat') is-invalid @enderror" id="flat_rate_vat" name="flat_rate_vat" value="{{ old('flat_rate_vat', $sla->flat_rate_vat) }}">
                                             @error('flat_rate_vat')
@@ -101,7 +101,7 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-4 mb-3">
                                             <label for="auto_renewal" class="form-label">Auto Renewal <span class="text-danger">*</span></label>
                                             <select class="form-select @error('auto_renewal') is-invalid @enderror" id="auto_renewal" name="auto_renewal" required>
                                                 <option value="No" {{ $sla->auto_renewal == 'No' ? 'selected' : '' }}>No</option>
@@ -112,7 +112,7 @@
                                             @enderror
                                         </div>
 
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-4 mb-3">
                                             <label for="move_in_inspection_required" class="form-label">Move-in Inspection Required</label>
                                             <select class="form-select" id="move_in_inspection_required" name="move_in_inspection_required">
                                                 <option value="0" {{ !$sla->move_in_inspection_required ? 'selected' : '' }}>No — Optional</option>
@@ -130,16 +130,16 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="date_start" class="form-label">Start Date <span class="text-danger">*</span></label>
-                                            <input type="date" class="form-control @error('date_start') is-invalid @enderror" id="date_start" name="date_start" value="{{ old('date_start', $sla->date_start) }}" required>
+                                            <label for="date_start" class="form-label">Start Date</label>
+                                            <input type="date" class="form-control @error('date_start') is-invalid @enderror" id="date_start" name="date_start" value="{{ old('date_start', $sla->date_start) }}">
                                             @error('date_start')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="duration_years" class="form-label">Duration (Years) <span class="text-danger">*</span></label>
-                                            <input type="number" min="1" class="form-control @error('duration_years') is-invalid @enderror" id="duration_years" name="duration_years" value="{{ old('duration_years', $sla->years) }}" required>
+                                            <label for="duration_years" class="form-label">Duration (Years)</label>
+                                            <input type="number" min="1" class="form-control @error('duration_years') is-invalid @enderror" id="duration_years" name="duration_years" value="{{ old('duration_years', $sla->years) }}">
                                             @error('duration_years')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror

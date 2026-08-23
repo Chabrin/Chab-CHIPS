@@ -13,6 +13,7 @@ class InvoiceableItem extends Model
     protected $fillable = [
         'date_time',
         'item_name',
+        'applies_to',
         'billing_code',
         'feature',
         'payment_priority',
