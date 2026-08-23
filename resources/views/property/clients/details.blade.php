@@ -420,11 +420,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         <thead>
                                             <tr>
                                                 <th>#</th>
-                                                <th>Reference Number</th>
-                                                <th>Property Name</th>
-                                                <th>Description</th>
+                                                <th>Ref No</th>
+                                                <th>Status</th>
+                                                <th>Name</th>
                                                 <th>Zone</th>
-                                                <th>Zone Area</th>
                                                 <th>Field Officer</th>
                                                 <th>Bank Name</th>
                                                 <th>Account Number</th>
@@ -1081,19 +1080,28 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     data: 'reference_number'
                 },
                 {
+                    data: 'active',
+                    render: function(data, type) {
+                        if (type !== 'display') {
+                            return data ? 1 : 0;
+                        }
+                        if (data) {
+                            return '<span class="badge badge-light-success" style="font-size:13px; font-weight:700; padding:6px 10px;">ACTIVE</span>';
+                        }
+                        return '<span class="badge badge-light-danger" style="font-size:13px; font-weight:700; padding:6px 10px;">INACTIVE</span>';
+                    }
+                },
+                {
                     data: 'property_name',
                     render: function(data, type, row) {
+                        if (!row.active) {
+                            return data;
+                        }
                         return `<a href="/property/listings/${row.encrypted_id}">${data}</a>`;
                     }
                 },
                 {
-                    data: 'description'
-                },
-                {
                     data: 'zone'
-                },
-                {
-                    data: 'zone_area'
                 },
                 {
                     data: 'field_officer'
@@ -1109,6 +1117,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     orderable: false,
                     searchable: false,
                     render: function(id, type, row) {
+                        if (!row.active) {
+                            return '-';
+                        }
+
                         let buttons = '<div class="d-flex flex-row gap-1">';
                         buttons += `
                             <a href="/property/properties/${row.encrypted_id}/edit" title="Edit">
@@ -1127,6 +1139,9 @@ COPY PERMISSIONS (paste when re-enabling checks):
             ],
             pageLength: 10,
             responsive: true,
+            order: [
+                [2, 'desc']
+            ],
             language: {
                 emptyTable: "No properties found for this client"
             }

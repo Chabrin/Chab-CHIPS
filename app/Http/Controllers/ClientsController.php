@@ -565,7 +565,8 @@ class ClientsController extends Controller
                     'zone_area_id',
                     'zone_id',
                     'property_name',
-                    'field_officer_id'
+                    'field_officer_id',
+                    'active'
                 ])
                 ->where('client_id', $clientId)
                 ->get()
@@ -597,6 +598,7 @@ class ClientsController extends Controller
                         'account_number' => $accountNumber,
                         'property_bank_id' => $propertyBankId,
                         'client_id' => $property->client_id,
+                        'active' => (bool) $property->active,
                     ];
                 });
 

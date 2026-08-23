@@ -931,6 +931,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/listings/create', [App\Http\Controllers\PropertiesController::class, 'create'])->name('property.properties.create');
     Route::get('/property/properties/data', [PropertiesController::class, 'getProperties'])->name('property.properties.data');
 
+    // Inactive Properties (read-only listing, opens the same details page)
+    Route::get('/inactive/properties', [PropertiesController::class, 'inactiveIndex'])->name('property.properties.inactive.index');
+    Route::get('/inactive/properties/data', [PropertiesController::class, 'getInactiveProperties'])->name('property.properties.inactive.data');
+
     // Property edit routes
     Route::get('/property/properties/{encryptedId}/edit', [PropertiesController::class, 'edit'])->name('property.properties.edit');
     Route::put('/property/properties/{encryptedId}', [PropertiesController::class, 'update'])->name('property.properties.update');

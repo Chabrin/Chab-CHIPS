@@ -25,6 +25,14 @@ class PropertiesController extends Controller
     }
 
     /**
+     * Display a listing of inactive properties
+     */
+    public function inactiveIndex()
+    {
+        return view('property.properties.inactive-index');
+    }
+
+    /**
      * Get properties data for DataTables (AJAX)
      */
     public function getProperties(Request $request)
@@ -76,6 +84,57 @@ class PropertiesController extends Controller
         }
     }
 
+    /**
+     * Get inactive properties data for DataTables (AJAX)
+     */
+    public function getInactiveProperties(Request $request)
+    {
+        try {
+            $can_read = Auth::user()->isAbleTo('read_properties');
+            $can_read_client = Auth::user()->isAbleTo('read_clients');
+
+            $query = Property::withInactive()
+                ->with(['zone', 'client'])
+                ->where('active', 0)
+                ->select([
+                    'id',
+                    'reference_number',
+                    'description',
+                    'property_name',
+                    'zone_id',
+                    'client_id'
+                ]);
+
+            if ($request->filled('client_id')) {
+                $query->where('client_id', $request->client_id);
+            }
+
+            $properties = $query->orderBy('property_name', 'asc')
+                ->get()
+                ->map(function ($property) use ($can_read, $can_read_client) {
+                    return [
+                        'id' => $property->id,
+                        'encrypted_id' => Crypt::encrypt($property->id),
+                        'reference_number' => $property->reference_number ?? '-',
+                        'property_name' => $property->property_name ?? '-',
+                        'description' => $property->description ?? '-',
+                        'zone_name' => $property->zone->zone_name ?? '-',
+                        'client_name' => $property->client->names ?? '-',
+                        'client_id' => $property->client_id,
+                        'can_read_client' => $can_read_client,
+                        'can_read' => $can_read,
+                        'client_encrypted_id' => $property->client ? Crypt::encrypt($property->client_id) : null,
+                    ];
+                });
+
+            return response()->json(['data' => $properties]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading inactive properties: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load properties'], 500);
+        }
+    }
+
     public function getPropertiesByClient($ClientId)
     {
         try {
@@ -115,12 +174,13 @@ class PropertiesController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $property = Property::with([
-                'zone', 
-                'zoneArea', 
-                'client', 
-                'fieldOfficer', 
-                'zoneSupervisor', 
+            $property = Property::withInactive()
+            ->with([
+                'zone',
+                'zoneArea',
+                'client',
+                'fieldOfficer',
+                'zoneSupervisor',
                 'zoneManager',
                 'units',
                 'leaseAgreements'

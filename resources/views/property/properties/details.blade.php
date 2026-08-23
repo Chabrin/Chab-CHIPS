@@ -6,16 +6,30 @@
             <div class="col-sm-12">
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Property Details - {{ $property->property_name }}</h5>
+                        <h5 class="mb-0">
+                            Property Details - {{ $property->property_name }}
+                            @unless($property->active)
+                            <span class="badge badge-light-danger ms-2" style="font-size:12px; font-weight:700;">INACTIVE</span>
+                            @endunless
+                        </h5>
                         <div class="ms-auto d-flex gap-2">
+                            @if($property->active)
                             <a href="{{ route('property.clients.show', Crypt::encrypt($property->client->id)) }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to Client</span>
                             </a>
+                            @else
+                            <a href="{{ route('property.properties.inactive.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">arrow_back</span>
+                                <span class="ms-1">Back to Listing</span>
+                            </a>
+                            @endif
+                            @if($property->active)
                             <a href="/property/properties/{{ Crypt::encrypt($property->id) }}/edit" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">edit_document</span>
                                 <span class="ms-1">Edit Property</span>
                             </a>
+                            @endif
                         </div>
                     </div>
                     <div class="card-body">
@@ -46,6 +60,7 @@
                                 </p>
                             </div>
 
+                            @if($property->active)
                             <div class="d-flex flex-row">
                                 <a class="btn btn-sm btn-primary d-flex align-items-center me-2" href="{{ route('units.tenants.create', ['client' => Crypt::encrypt($property->client->id)]) }}" target="_blank" rel="noopener noreferrer">
                                     <span class="material-symbols-outlined me-2" style="font-size:18px;">person</span>
@@ -56,6 +71,7 @@
                                     Add Lease
                                 </a>
                             </div>
+                            @endif
                         </div>
 
 
@@ -342,6 +358,7 @@
                                         </div>
                                     </div>
                                     <div class="col-auto ms-auto d-flex gap-2">
+                                        @if($property->active)
                                         @permission('create_units')
                                         <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#bulkUploadUnitsModal">
                                             <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
@@ -352,6 +369,7 @@
                                             Add Unit
                                         </button>
                                         @endpermission
+                                        @endif
                                     </div>
                                 </div>
                                 <div class="table-responsive custom-scrollbar">
