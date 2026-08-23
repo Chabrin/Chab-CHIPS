@@ -21,21 +21,54 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
-    .condensed-card {
+    .condensed-accordion .accordion-item {
         border: 1px solid #e9ecef;
         border-radius: 4px;
         margin-bottom: 12px;
         background: white;
     }
 
-    .condensed-card .card-header {
-        padding: 6px 10px;
+    .condensed-accordion .accordion-header {
+        display: flex;
+        align-items: center;
         background-color: #f8f9fa;
         border-bottom: 1px solid #dee2e6;
         border-radius: 4px 4px 0 0;
     }
 
-    .condensed-card .card-body {
+    .condensed-accordion .accordion-button {
+        padding: 6px 10px;
+        background-color: transparent;
+        box-shadow: none;
+    }
+
+    .condensed-accordion .accordion-button:not(.collapsed) {
+        background-color: transparent;
+        color: #495057;
+        box-shadow: none;
+    }
+
+    .condensed-accordion .accordion-button:focus {
+        box-shadow: none;
+        border-color: transparent;
+    }
+
+    .condensed-accordion .accordion-button::after {
+        display: none;
+    }
+
+    .accordion-arrow {
+        margin-left: auto;
+        color: #6c757d;
+        font-size: 20px;
+        transition: transform 0.2s ease-in-out;
+    }
+
+    .accordion-button:not(.collapsed) .accordion-arrow {
+        transform: rotate(180deg);
+    }
+
+    .condensed-accordion .accordion-body {
         padding: 8px 10px;
     }
 
@@ -78,8 +111,10 @@
     .module-select-all-wrap {
         display: flex;
         align-items: center;
-        margin-left: auto;
-        padding-left: 8px;
+        justify-content: flex-end;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #eee;
     }
 
     .module-select-all-wrap .form-check-input {
@@ -88,6 +123,7 @@
 
     .module-select-all-wrap label {
         font-size: 0.75rem;
+        font-weight: 600;
         color: #6c757d;
         cursor: pointer;
         margin: 0;
@@ -116,8 +152,14 @@
                     <div class="condensed-header d-flex align-items-center">
                         <h6 class="mb-0 me-auto">Permissions for: <strong>{{ $role->name }}</strong></h6>
                         <div class="d-flex gap-2">
-                            <button id="select-all-permissions-btn" class="btn btn-outline-primary btn-sm" type="button">Select All</button>
-                            <button id="unselect-all-permissions-btn" class="btn btn-outline-secondary btn-sm" type="button">Unselect All</button>
+                            <button id="select-all-permissions-btn" class="btn btn-outline-primary btn-sm d-flex align-items-center" type="button">
+                                <span class="material-symbols-outlined" style="font-size:16px;">done_all</span>
+                                <span class="ms-1">Select All</span>
+                            </button>
+                            <button id="unselect-all-permissions-btn" class="btn btn-outline-primary btn-sm d-flex align-items-center" type="button">
+                                <span class="material-symbols-outlined" style="font-size:16px;">remove_done</span>
+                                <span class="ms-1">Unselect All</span>
+                            </button>
                             <button id="save-permissions-btn" class="btn btn-primary btn-sm d-flex align-items-center" type="button">
                                 <span class="spinner-border spinner-border-sm d-none me-1" id="save-perm-spinner" role="status"></span>
                                 <span class="material-symbols-outlined">
@@ -135,37 +177,48 @@
                     <div class="card-body main-card">
                         @include('components.error_reports')
                         <form id="permissions-access-form">
-                            @foreach($modules as $module)
-                            @php
-                            $modulePerms = $permissions->where('module_id', $module->id);
-                            @endphp
-                            @if($modulePerms->count())
-                            <div class="condensed-card">
-                                <div class="card-header d-flex align-items-center">
-                                    @if(!empty($module->icon))
-                                    <span class="material-symbols-outlined module-icon me-2">{!! $module->icon !!}</span>
-                                    @endif
-                                    <h6 class="module-title">{{ $module->module_name }}</h6>
-                                    <div class="module-select-all-wrap">
-                                        <input class="form-check-input module-select-all" type="checkbox" data-module-id="{{ $module->id }}" id="module_select_all_{{ $module->id }}">
-                                        <label for="module_select_all_{{ $module->id }}">Select All</label>
-                                    </div>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row g-1">
-                                        @foreach($modulePerms as $perm)
-                                        <div class="col-lg-3 col-md-4 col-sm-6">
-                                            <div class="condensed-form-check">
-                                                <input class="form-check-input perm-checkbox" type="checkbox" name="permissions[]" value="{{ $perm->id }}" id="perm_{{ $perm->id }}" data-module-id="{{ $module->id }}" {{ in_array($perm->id, $assigned) ? 'checked' : '' }}>
-                                                <label class="form-check-label" for="perm_{{ $perm->id }}">{{ $perm->name }}</label>
+                            <div class="accordion condensed-accordion" id="permissionsAccordion">
+                                @php $firstRendered = true; @endphp
+                                @foreach($modules as $module)
+                                @php
+                                $modulePerms = $permissions->where('module_id', $module->id);
+                                @endphp
+                                @if($modulePerms->count())
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button {{ $firstRendered ? '' : 'collapsed' }}" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#moduleCollapse{{ $module->id }}"
+                                                aria-expanded="{{ $firstRendered ? 'true' : 'false' }}" aria-controls="moduleCollapse{{ $module->id }}">
+                                            @if(!empty($module->icon))
+                                            <span class="material-symbols-outlined module-icon me-2">{!! $module->icon !!}</span>
+                                            @endif
+                                            <span class="module-title">{{ $module->module_name }}</span>
+                                            <span class="material-symbols-outlined accordion-arrow">expand_more</span>
+                                        </button>
+                                    </h2>
+                                    <div id="moduleCollapse{{ $module->id }}" class="accordion-collapse collapse {{ $firstRendered ? 'show' : '' }}" data-bs-parent="#permissionsAccordion">
+                                        <div class="accordion-body">
+                                            <div class="module-select-all-wrap">
+                                                <input class="form-check-input module-select-all" type="checkbox" data-module-id="{{ $module->id }}" id="module_select_all_{{ $module->id }}">
+                                                <label for="module_select_all_{{ $module->id }}">Select All</label>
+                                            </div>
+                                            <div class="row g-1">
+                                                @foreach($modulePerms as $perm)
+                                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                                    <div class="condensed-form-check">
+                                                        <input class="form-check-input perm-checkbox" type="checkbox" name="permissions[]" value="{{ $perm->id }}" id="perm_{{ $perm->id }}" data-module-id="{{ $module->id }}" {{ in_array($perm->id, $assigned) ? 'checked' : '' }}>
+                                                        <label class="form-check-label" for="perm_{{ $perm->id }}">{{ $perm->name }}</label>
+                                                    </div>
+                                                </div>
+                                                @endforeach
                                             </div>
                                         </div>
-                                        @endforeach
                                     </div>
                                 </div>
+                                @php $firstRendered = false; @endphp
+                                @endif
+                                @endforeach
                             </div>
-                            @endif
-                            @endforeach
                         </form>
                     </div>
                 </div>

@@ -111,6 +111,7 @@
     .module-select-all-wrap {
         display: flex;
         align-items: center;
+        justify-content: flex-end;
         margin-bottom: 8px;
         padding-bottom: 6px;
         border-bottom: 1px solid #eee;
