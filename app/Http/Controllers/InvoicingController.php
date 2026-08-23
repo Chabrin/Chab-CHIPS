@@ -243,7 +243,6 @@ class InvoicingController extends Controller
                 'date_due' => 'required|date',
                 'returns_period' => 'required|date',
                 'total_amount' => 'required|numeric|min:0',
-                'return_report_type' => 'required|string',
                 'is_arrear' => 'required|in:Yes,No'
             ]);
 
@@ -271,7 +270,7 @@ class InvoicingController extends Controller
 
             // Generate reference number matching invoice generation format
             $unit_code = $unit ? $unit->unit_code : 'UNKNOWN';
-            $item_name = $invoiceableItem ? $invoiceableItem->item_name : $validated['return_report_type'];
+            $item_name = $invoiceableItem ? $invoiceableItem->item_name : 'Unknown Item';
             $period = date('M Y', strtotime($validated['returns_period']));
             $referenceNumber = 'INV' . date('Y', strtotime($validated['returns_period'])) .
                 date('m', strtotime($validated['returns_period'])) .
@@ -385,7 +384,9 @@ class InvoicingController extends Controller
     public function getInvoiceableItems()
     {
         try {
-            $items = InvoiceableItem::orderBy('item_name', 'asc')->get();
+            $items = InvoiceableItem::whereIn('applies_to', ['TENANT', 'BOTH'])
+                ->orderBy('item_name', 'asc')
+                ->get();
             return response()->json([
                 'success' => true,
                 'items' => $items

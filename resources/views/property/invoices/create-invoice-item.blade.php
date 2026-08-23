@@ -94,17 +94,6 @@
                                     <input type="number" class="form-control form-control-sm" id="total_amount" name="total_amount" step="0.01" min="0" required>
                                 </div>
                                 <div class="col-md-4">
-                                    <label for="return_report_type" class="form-label">Return Report Type <span class="text-danger">*</span></label>
-                                    <select class="form-select form-select-sm" id="return_report_type" name="return_report_type" required>
-                                        <option value="">-- Select --</option>
-                                        <option value="Main Returns">Main Returns</option>
-                                        <option value="Bills Returns Options">Bills Returns Options</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="row mb-3">
-                                <div class="col-md-4">
                                     <label for="is_arrear" class="form-label">Is Arrear <span class="text-danger">*</span></label>
                                     <select class="form-select form-select-sm" id="is_arrear" name="is_arrear" required>
                                         <option value="">-- Select --</option>
@@ -262,7 +251,6 @@
                 date_due: $('#date_due').val(),
                 returns_period: $('#returns_period').val(),
                 total_amount: $('#total_amount').val(),
-                return_report_type: $('#return_report_type').val(),
                 is_arrear: $('#is_arrear').val(),
                 _token: '{{ csrf_token() }}'
             };
