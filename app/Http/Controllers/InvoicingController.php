@@ -1794,6 +1794,7 @@ class InvoicingController extends Controller
                     commisionable_amount,
                     payable_amount,
                     item_type_id,
+                    return_type_id,
                     cycle_id,
                     current_balance,
                     occupancy_status_id,
@@ -1888,6 +1889,7 @@ class InvoicingController extends Controller
                         ELSE src.base_amount
                     END AS payable_amount,
                     src.item_id AS item_type_id,
+                    src.item_name AS return_type_id,
                     2 AS cycle_id,
                     src.base_amount AS current_balance,
                     src.occupancy_status_id,
