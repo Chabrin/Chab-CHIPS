@@ -110,6 +110,8 @@
     </div>
 </div>
 @endsection
+
+@section('scripts')
 <script>
     $(document).ready(function() {
         var table = $('#invoice-items-table').DataTable({
@@ -256,3 +258,4 @@
         });
     });
 </script>
+@endsection
