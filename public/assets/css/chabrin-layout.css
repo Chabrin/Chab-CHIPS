@@ -782,7 +782,7 @@ textarea {
 
 .form-control:hover,
 .form-select:hover,
-input:hover,
+input:not([type="checkbox"]):not([type="radio"]):hover,
 select:hover,
 textarea:hover {
     border-color: #c9c7c5 !important;
@@ -791,13 +791,26 @@ textarea:hover {
 
 .form-control:focus,
 .form-select:focus,
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
     outline: none !important;
     border-color: var(--accent) !important;
     background-color: #fff !important;
     box-shadow: none !important;
+}
+
+.form-check-input:hover,
+.form-check-input:focus {
+    border-color: var(--bs-border-color) !important;
+    background-color: var(--bs-form-check-bg) !important;
+    box-shadow: none !important;
+}
+
+.form-check-input:checked:hover,
+.form-check-input:checked:focus {
+    border-color: #3598db !important;
+    background-color: #3598db !important;
 }
 
 .form-control::placeholder,
