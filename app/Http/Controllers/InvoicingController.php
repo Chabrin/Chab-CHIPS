@@ -693,7 +693,7 @@ class InvoicingController extends Controller
                 $statementEntries[] = [
                     'date' => $txn->date_time,
                     'reference' => $txn->invoice_number ?? '-',
-                    'narration' => $txn->narration ?? ($isDebit ? 'Invoice' : 'Payment'),
+                    'narration' => $isDebit ? ($txn->narration ?? 'Invoice') : ($txn->entry_ref ?? $txn->narration ?? 'Payment'),
                     'debit' => $debit,
                     'credit' => $credit,
                     'type' => $isDebit ? 'invoice' : 'payment',
@@ -891,7 +891,7 @@ class InvoicingController extends Controller
                 $statementEntries[] = [
                     'date' => $txn->date_time,
                     'reference' => $txn->invoice_number ?? '-',
-                    'narration' => $txn->narration ?? ($isDebit ? 'Invoice' : 'Payment'),
+                    'narration' => $isDebit ? ($txn->narration ?? 'Invoice') : ($txn->entry_ref ?? $txn->narration ?? 'Payment'),
                     'debit' => $debit,
                     'credit' => $credit,
                     'type' => $isDebit ? 'invoice' : 'payment',
