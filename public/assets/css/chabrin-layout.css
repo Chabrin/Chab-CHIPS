@@ -775,6 +775,21 @@ textarea {
         background-color 0.15s !important;
 }
 
+.form-control:not(:disabled):not([readonly]),
+.form-select:not(:disabled):not([readonly]),
+input[type="text"]:not(:disabled):not([readonly]),
+input[type="email"]:not(:disabled):not([readonly]),
+input[type="password"]:not(:disabled):not([readonly]),
+input[type="number"]:not(:disabled):not([readonly]),
+input[type="date"]:not(:disabled):not([readonly]),
+input[type="tel"]:not(:disabled):not([readonly]),
+input[type="url"]:not(:disabled):not([readonly]),
+input[type="search"]:not(:disabled):not([readonly]),
+select:not(:disabled):not([readonly]),
+textarea:not(:disabled):not([readonly]) {
+    background-color: #fff !important;
+}
+
 textarea {
     height: auto !important;
     padding: 6px 8px !important;
