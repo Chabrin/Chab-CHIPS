@@ -168,7 +168,7 @@ class TenantsController extends Controller
             $id = Crypt::decrypt($encryptedId);
 
             $query = LeaseAgreement::with(['property', 'unit'])
-                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'contract_sent_at', 'contract_signed_at', 'signed_pdf_path'])
+                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'contract_sent_at', 'contract_signed_at', 'signed_pdf_path', 'service_charges_amount'])
                 ->where('tenant_id', $id);
 
             // optional property filter
@@ -188,6 +188,7 @@ class TenantsController extends Controller
                     'date_end'       => $lease->date_end ? $lease->date_end->toDateString() : null,
                     'contract_status' => $lease->contract_signed_at ? 'signed' : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
                     'has_signed_pdf' => !empty($lease->signed_pdf_path),
+                    'service_charges_amount' => $lease->service_charges_amount,
                 ];
             });
 

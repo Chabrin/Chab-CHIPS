@@ -278,6 +278,17 @@
                                 </div>
 
                                 <div class="col-md-4 mb-3">
+                                    <label for="service_charges_amount" class="form-label">Service Charge Amount</label>
+                                    <input type="number" step="0.01" min="0" class="form-control @error('service_charges_amount') is-invalid @enderror"
+                                        id="service_charges_amount" name="service_charges_amount"
+                                        value="{{ old('service_charges_amount') }}">
+                                    <small class="form-text text-muted">Auto-filled from the property's SLA when service charges are enabled there — editable, optional.</small>
+                                    @error('service_charges_amount')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-4 mb-3">
                                     <label for="documents" class="form-label">Documents</label>
                                     <div class="input-group">
                                         <input type="file" class="form-control @error('documents') is-invalid @enderror"
@@ -860,6 +871,16 @@
                 success: function(response) {
                     $('#rentInfoNote').show();
                     renderBillableItems(response.billable_items || []);
+
+                    // Auto-fill Service Charge Amount from the property's current SLA —
+                    // only when it actually has service charges enabled with a real cost.
+                    // The field stays editable/optional either way.
+                    var currentSla = (response.sla && response.sla.length) ? response.sla[0] : null;
+                    if (currentSla && currentSla.service_charges_selected && parseFloat(currentSla.service_charges_cost) > 0) {
+                        $('#service_charges_amount').val(currentSla.service_charges_cost);
+                    } else {
+                        $('#service_charges_amount').val('');
+                    }
                 },
                 error: function(xhr, status, error) {
                     console.error('Error loading billable items:', xhr.responseText);

@@ -712,6 +712,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/leases/bulk-renew', [App\Http\Controllers\LeasesController::class, 'bulkRenew'])->name('property.leases.bulk-renew');
     Route::post('/property/leases/bulk-send-contracts', [App\Http\Controllers\LeasesController::class, 'bulkSendContracts'])->name('property.leases.bulk-send-contracts');
     Route::post('/property/leases/store', [App\Http\Controllers\LeasesController::class, 'store'])->name('property.leases.store');
+    Route::get('/property/leases/{encryptedId}/details', [App\Http\Controllers\LeasesController::class, 'showDetails'])->name('property.leases.details');
     Route::get('/property/leases/{encryptedId}/view-signed-contract', [App\Http\Controllers\LeasesController::class, 'viewSignedContract'])->name('property.leases.view-signed-contract');
     Route::post('/property/leases/{id}/send-contract', [App\Http\Controllers\LeasesController::class, 'sendContract'])->name('property.leases.send-contract');
     Route::get('/property/leases/{encryptedId}/edit', [App\Http\Controllers\LeasesController::class, 'edit'])->name('property.leases.edit');

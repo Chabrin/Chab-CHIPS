@@ -598,6 +598,8 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Unit</th>
                                                 <th>Start</th>
                                                 <th>End</th>
+                                                <th>Service Charges</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody></tbody>
@@ -1012,6 +1014,21 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="slaDetailsModalBody"></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="leaseDetailsModal" tabindex="-1" aria-labelledby="leaseDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="leaseDetailsModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">description</span>
+                    Lease Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="leaseDetailsModalBody"></div>
         </div>
     </div>
 </div>
@@ -2331,6 +2348,22 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     render: function(data) {
                         return formatDateShort(data);
                     }
+                },
+                {
+                    data: 'service_charges_amount',
+                    render: function(data) {
+                        return data !== null && data !== undefined ? Number(data).toFixed(2) : '-';
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function(data, type, row) {
+                        return `<a href="#" class="view-lease-details-btn" data-id="${row.encrypted_id}" title="View Lease Details">
+                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">info</span>
+                        </a>`;
+                    }
                 }
             ],
             pageLength: 10,
@@ -2406,6 +2439,92 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     toastr.error('Failed to load properties. Please try again.');
                 }
             });
+        }
+
+        // View lease details modal
+        $(document).on('click', '.view-lease-details-btn', function(e) {
+            e.preventDefault();
+            var encryptedId = $(this).data('id');
+            var $body = $('#leaseDetailsModalBody');
+
+            $body.html('<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span></div>');
+            $('#leaseDetailsModal').modal('show');
+
+            $.ajax({
+                url: '/property/leases/' + encryptedId + '/details',
+                method: 'GET',
+                dataType: 'json',
+                success: function(lease) {
+                    $body.html(renderLeaseDetails(lease));
+                },
+                error: function() {
+                    $body.html('<div class="text-danger">Failed to load lease details.</div>');
+                }
+            });
+        });
+
+        function renderLeaseDetails(lease) {
+            function field(label, value) {
+                return `
+                    <div class="col-6 col-md-3">
+                        <div class="text-muted" style="font-size:10px; line-height:1.2;">${label}</div>
+                        <div class="fw-semibold" style="font-size:12px; line-height:1.3;">${value !== null && value !== undefined && value !== '' ? value : '-'}</div>
+                    </div>
+                `;
+            }
+
+            var statusBadge = lease.lease_status === 'Active'
+                ? '<span class="badge badge-light-success">Active</span>'
+                : (lease.lease_status === 'Terminated'
+                    ? '<span class="badge badge-light-danger">Terminated</span>'
+                    : '<span class="badge badge-light-secondary">' + (lease.lease_status || '-') + '</span>');
+
+            var contractBadge = lease.contract_status === 'signed'
+                ? '<span class="badge badge-light-success">Signed</span>'
+                : (lease.contract_status === 'sent'
+                    ? '<span class="badge badge-light-warning">Sent</span>'
+                    : '<span class="badge badge-light-secondary">Not Sent</span>');
+
+            return `
+                <div class="card">
+                    <div class="card-body p-3">
+                        <div class="row g-2">
+                            ${field('Ref Number', lease.ref_number)}
+                            ${field('Status', statusBadge)}
+                            ${field('Start Date', lease.date_start)}
+                            ${field('End Date', lease.date_end)}
+                            ${field('Duration (Years)', lease.years)}
+                            ${field('Auto Renewal', lease.auto_renewal)}
+                            ${field('Contract', contractBadge)}
+                            ${field('Documents', lease.documents_count)}
+                        </div>
+
+                        <hr class="my-2">
+
+                        <div class="row g-2">
+                            ${field('Tenant', lease.tenant_name)}
+                            ${field('Tenant Mobile', lease.tenant_mobile)}
+                            ${field('Tenant Email', lease.tenant_email)}
+                            ${field('Landlord', lease.landlord_name)}
+                            ${field('Property', lease.property_name)}
+                            ${field('Property Ref', lease.property_reference)}
+                            ${field('Unit Code', lease.unit_code)}
+                            ${field('Unit Name', lease.unit_name)}
+                        </div>
+
+                        <hr class="my-2">
+
+                        <div class="row g-2">
+                            ${field('Rent Amount', lease.rent_amount !== null ? Number(lease.rent_amount).toFixed(2) : '-')}
+                            ${field('VAT-able', lease.vat_able)}
+                            ${field('Escalation Rate', lease.escalation_rate !== null ? lease.escalation_rate + '%' : '-')}
+                            ${field('Escalation Frequency', lease.escalation_frequency)}
+                            ${field('Service Charges Amount', lease.service_charges_amount !== null ? Number(lease.service_charges_amount).toFixed(2) : '-')}
+                            ${field('Water Meter Reading', lease.initial_water_meter_reading)}
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         // Initialize Recoveries DataTable (empty initially)

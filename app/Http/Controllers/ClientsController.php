@@ -1190,7 +1190,7 @@ class ClientsController extends Controller
             $propertyId = $request->property_id;
 
             $query = LeaseAgreement::with(['tenant', 'property', 'unit'])
-                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end'])
+                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'service_charges_amount'])
                 ->where('client_id', $clientId);
 
             if ($propertyId) {
@@ -1200,12 +1200,14 @@ class ClientsController extends Controller
             $leases = $query->orderBy('date_start', 'desc')->get()->map(function ($lease) {
                 return [
                     'id' => $lease->id,
+                    'encrypted_id' => Crypt::encrypt($lease->id),
                     'ref_number' => $lease->ref_number ?? '-',
                     'tenant' => $lease->tenant->names ?? '-',
                     'property' => $lease->property->property_name ?? '-',
                     'unit' => $lease->unit->unit_name ?? '-',
                     'date_start' => $lease->date_start ? $lease->date_start->format('d-m-Y') : '-',
                     'date_end' => $lease->date_end ? $lease->date_end->format('d-m-Y') : '-',
+                    'service_charges_amount' => $lease->service_charges_amount,
                 ];
             });
 

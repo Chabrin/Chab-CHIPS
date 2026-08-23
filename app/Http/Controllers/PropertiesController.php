@@ -208,18 +208,20 @@ class PropertiesController extends Controller
             $propertyId = Crypt::decrypt($encryptedId);
 
             $leases = LeaseAgreement::with(['tenant', 'unit'])
-                ->select(['id', 'ref_number', 'tenant_id', 'unit_id', 'date_start', 'date_end'])
+                ->select(['id', 'ref_number', 'tenant_id', 'unit_id', 'date_start', 'date_end', 'service_charges_amount'])
                 ->where('property_id', $propertyId)
                 ->orderBy('date_start', 'desc')
                 ->get()
                 ->map(function ($lease) {
                     return [
                         'id' => $lease->id,
+                        'encrypted_id' => Crypt::encrypt($lease->id),
                         'ref_number' => $lease->ref_number ?? '-',
                         'tenant' => $lease->tenant->names ?? '-',
                         'unit' => $lease->unit->unit_name ?? '-',
                         'date_start' => $lease->date_start ? $lease->date_start->toDateString() : null,
                         'date_end' => $lease->date_end ? $lease->date_end->toDateString() : null,
+                        'service_charges_amount' => $lease->service_charges_amount,
                     ];
                 });
 

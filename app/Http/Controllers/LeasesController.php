@@ -653,6 +653,7 @@ class LeasesController extends Controller
                 'auto_renewal' => 'required|in:Yes,No',
                 'escalation_rate' => 'required|numeric|min:0|max:100',
                 'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
+                'service_charges_amount' => 'nullable|numeric|min:0',
                 'documents.*' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
                 // No longer required|min:1 — Invoiceable Items is now driven by the
                 // property's SLA billable items (see lease/create.blade.php), and a
@@ -709,6 +710,7 @@ class LeasesController extends Controller
                 'auto_renewal' => $validated['auto_renewal'],
                 'escalation_rate' => $validated['escalation_rate'],
                 'escalation_frequency' => $validated['escalation_frequency'],
+                'service_charges_amount' => $validated['service_charges_amount'] ?? null,
                 'linked_lease_id' => $validated['linked_lease'] ?? null,
                 'initial_water_meter_reading' => $unit->initial_water_meter_reading ?? 0,
                 'created_by_id' => Auth::id(),
@@ -795,6 +797,53 @@ class LeasesController extends Controller
     /**
      * Show the form for editing an existing lease agreement's terms.
      */
+    /**
+     * Return the full set of details for a single lease (AJAX) — powers the
+     * "view details" modal on both the tenant's Leases tab and the
+     * property's Leases tab, so both stay in sync with one source of truth.
+     */
+    public function showDetails($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $lease = LeaseAgreement::with([
+                'tenant:id,names,mobile_number,email_address',
+                'property:id,property_name,reference_number',
+                'unit:id,unit_code,unit_name,rent_amount,vat_able',
+                'client:id,names',
+            ])->findOrFail($id);
+
+            return response()->json([
+                'ref_number' => $lease->ref_number ?? '-',
+                'lease_status' => $lease->lease_status ?? '-',
+                'date_start' => $lease->date_start ? $lease->date_start->format('Y-m-d') : '-',
+                'date_end' => $lease->date_end ? $lease->date_end->format('Y-m-d') : '-',
+                'years' => $lease->years ?? '-',
+                'auto_renewal' => $lease->auto_renewal ?? 'No',
+                'escalation_rate' => $lease->escalation_rate,
+                'escalation_frequency' => $lease->escalation_frequency ?? '-',
+                'service_charges_amount' => $lease->service_charges_amount,
+                'initial_water_meter_reading' => $lease->initial_water_meter_reading,
+                'tenant_name' => $lease->tenant->names ?? '-',
+                'tenant_mobile' => $lease->tenant->mobile_number ?? '-',
+                'tenant_email' => $lease->tenant->email_address ?? '-',
+                'landlord_name' => $lease->client->names ?? '-',
+                'property_name' => $lease->property->property_name ?? '-',
+                'property_reference' => $lease->property->reference_number ?? '-',
+                'unit_code' => $lease->unit->unit_code ?? '-',
+                'unit_name' => $lease->unit->unit_name ?? '-',
+                'rent_amount' => $lease->unit->rent_amount ?? null,
+                'vat_able' => $lease->unit->vat_able ?? 'No',
+                'contract_status' => $lease->contract_signed_at ? 'signed' : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
+                'documents_count' => $lease->documents()->count(),
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading lease details: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load lease details'], 500);
+        }
+    }
+
     public function edit($encryptedId)
     {
         try {

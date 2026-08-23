@@ -1935,24 +1935,43 @@ class InvoicingController extends Controller
 
                     UNION ALL
 
-                    -- Service Charge — only when the lease's current SLA has it enabled with a cost
+                    -- Service Charge — lease-level override takes priority; falls back to the
+                    -- property's current SLA (service_charges_selected = 1 with a non-zero cost)
+                    -- when the lease agreement doesn't specify its own amount. Resolved by
+                    -- property_id (most recent date_start), not l.sla_id — that column is not
+                    -- populated on leases, and this way every lease at a property shares the
+                    -- same SLA-derived charge, same as resolveSlaId() in LeasesController.
                     SELECT
                         l.zone_id, l.property_id, l.unit_id, l.id AS lease_id, l.tenant_id, l.client_id, l.sla_id,
                         u.unit_code, i.item_name, i.id AS item_id, i.commissionable,
-                        sla.service_charges_cost AS base_amount,
+                        COALESCE(l.service_charges_amount, sla.service_charges_cost) AS base_amount,
                         u.vat_able,
                         sla.commission_percentage,
                         u.occupancy_status_id, p.field_officer_id, p.zone_supervisor_id, p.zone_manager_id
                     FROM sys_pm_lease_agreements l
                     INNER JOIN sys_pm_units u ON u.id = l.unit_id
                     INNER JOIN sys_pm_properties p ON p.id = l.property_id
-                    INNER JOIN sys_pm_service_agreements sla ON sla.id = l.sla_id
+                    LEFT JOIN sys_pm_service_agreements sla
+                        ON sla.id = (
+                            SELECT sla2.id
+                            FROM sys_pm_service_agreements sla2
+                            WHERE sla2.property_id = l.property_id
+                            ORDER BY sla2.date_start DESC NULLS LAST
+                            LIMIT 1
+                        )
                     CROSS JOIN sys_set_invoiceable_items i
                     WHERE
                         i.billing_code = '2001'
                         AND l.lease_status = 'Active'
-                        AND sla.service_charges_selected = 1
-                        AND sla.service_charges_cost > 0
+                        AND (
+                            (l.service_charges_amount IS NOT NULL AND l.service_charges_amount > 0)
+                            OR (
+                                l.service_charges_amount IS NULL
+                                AND sla.service_charges_selected = 1
+                                AND sla.service_charges_cost IS NOT NULL
+                                AND sla.service_charges_cost > 0
+                            )
+                        )
                 ) src
                 ORDER BY src.lease_id
             ";
