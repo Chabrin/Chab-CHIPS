@@ -622,17 +622,6 @@ table.dataTable > tbody > tr:last-child > td {
     border-bottom: none !important;
 }
 
-/* Alternating row stripes */
-.table tbody tr:nth-child(odd),
-table.dataTable tbody tr:nth-child(odd) {
-    background-color: #b7d7f0 !important;
-}
-
-.table tbody tr:nth-child(even),
-table.dataTable tbody tr:nth-child(even) {
-    background-color: #d9ebf7 !important;
-}
-
 /* Row hover */
 .table tbody tr:hover,
 table.dataTable tbody tr:hover {
