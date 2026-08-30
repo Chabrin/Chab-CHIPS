@@ -3,7 +3,10 @@
 /* ============================================ */
 :root {
     --sidebar-width: 160px;
-    --header-height: 42px;
+    --header-height: 24px;
+    --header-bg: #eef1f5;
+    --sidebar-bg: #eef1f5;
+    --header-icon: #1f2f3e;
     --accent: #3598db;
     --accent-dark: #217dbb;
 
@@ -60,21 +63,26 @@
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
-    background: #fff !important;
-    border-bottom: 1px solid #e9ecef;
+    background: var(--header-bg) !important;
+    border-bottom: none !important;
     z-index: 999 !important;
 }
 
 .header-wrapper {
     height: var(--header-height) !important;
     align-items: center !important;
-    padding: 0 15px !important;
+    padding: 0 10px !important;
 }
 
 .header-logo-wrapper {
     height: var(--header-height) !important;
     display: flex;
     align-items: center;
+}
+
+.header-logo-wrapper .logo-wrapper img {
+    max-height: 15px !important;
+    width: auto !important;
 }
 
 .nav-right {
@@ -89,7 +97,7 @@
     display: flex;
     align-items: center;
     margin: 0 !important;
-    gap: 15px;
+    gap: 8px;
 }
 
 .nav-menus li {
@@ -98,67 +106,52 @@
     height: var(--header-height);
 }
 
-/* Flat D365-style icon-button treatment for the topbar's hamburger/search/bell —
+/* Flat D365-style icon-button treatment for the topbar's hamburger/search —
    pure hover/sizing rules, no markup changes needed. */
 .mobile-hamburger .toggle-sidebar,
-.serchinput .serchbox,
-.message {
+.serchinput .serchbox {
     border-radius: 4px !important;
     transition: background-color 0.12s ease !important;
+    padding: 3px !important;
+    position: static !important;
+    color: var(--header-icon) !important;
+}
+
+.serchinput .serchbox svg {
+    fill: var(--header-icon) !important;
 }
 .mobile-hamburger .toggle-sidebar:hover,
-.serchinput .serchbox:hover,
-.message:hover {
+.serchinput .serchbox:hover {
     background-color: var(--accent-tint) !important;
 }
 .serchinput .search-form input {
     border: none !important;
     background: transparent !important;
+    color: var(--header-icon) !important;
 }
 
 .nav-menus .material-symbols-outlined {
-    color: var(--accent) !important;
-    font-size: 20px !important;
+    color: var(--header-icon) !important;
+    font-size: 15px !important;
 }
 
-.nav-menus .message .material-symbols-outlined {
-    color: var(--accent) !important;
-}
-
-/* Profile */
+/* Profile/logout — single thick dropdown-trigger icon, no avatar/username text */
 .profile-nav .profile-media {
     height: var(--header-height) !important;
-    padding: 0 !important;
-    gap: 8px !important;
+    padding: 0 6px !important;
+    border-radius: 4px !important;
+    transition: background-color 0.12s ease !important;
+    cursor: pointer;
 }
 
-.profile-nav .profile-avatar {
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 28px !important;
-    color: var(--accent) !important;
-    border-radius: 50% !important;
+.profile-nav .profile-media:hover {
+    background-color: var(--accent-tint) !important;
 }
 
-.profile-nav .user {
-    display: flex !important;
-    align-items: center !important;
-    gap: 4px !important;
-    line-height: 1 !important;
-    margin: 0 !important;
-}
-
-.profile-nav .user span:first-child {
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    color: var(--accent) !important;
-    margin: 0 !important;
-    white-space: nowrap !important;
-}
-
-.profile-nav .user .material-symbols-outlined {
-    color: var(--accent) !important;
-    font-size: 16px !important;
+.profile-nav .profile-menu-icon {
+    font-size: 20px !important;
+    color: var(--header-icon) !important;
+    font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 20 !important;
 }
 
 .profile-dropdown {
@@ -193,20 +186,6 @@
     font-weight: 500 !important;
 }
 
-.message {
-    position: relative !important;
-    padding: 8px !important;
-}
-
-.message .badge-danger {
-    background-color: #dc3545 !important;
-    position: absolute !important;
-    top: 5px !important;
-    right: 5px !important;
-    width: 8px !important;
-    height: 8px !important;
-}
-
 /* ---- SIDEBAR ---- */
 .page-wrapper.compact-wrapper .sidebar-wrapper,
 .sidebar-wrapper {
@@ -216,7 +195,7 @@
     bottom: 0 !important;
     width: var(--sidebar-width) !important;
     height: auto !important;
-    background: #f5fafe !important;
+    background: var(--sidebar-bg) !important;
     border-right: 1px solid #e4eaf0 !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -378,6 +357,15 @@
 .page-wrapper {
     padding: 0 !important;
     margin: 0 !important;
+    /* .page-header is position:fixed (out of flow), so .page-body-wrapper's
+       margin-top: var(--header-height) below is this wrapper's effective
+       first in-flow child — without a new block-formatting context that
+       margin collapses straight through .page-wrapper AND <body>, landing
+       as blank space between <html> and <body> instead of where it's meant
+       to be (pushing content below the fixed header). Currently invisible
+       only because the header's own opaque background happens to paint over
+       that exact band — flow-root removes the reliance on that coincidence. */
+    display: flow-root !important;
 }
 
 .page-wrapper .page-body-wrapper .page-title {
@@ -1178,12 +1166,12 @@ label {
     }
 
     .mobile-hamburger .toggle-sidebar:hover {
-        background: rgba(53, 152, 219, 0.1) !important;
+        background: var(--accent-tint) !important;
     }
 
     .mobile-hamburger .toggle-sidebar .material-symbols-outlined {
         font-size: 30px !important;
-        color: var(--accent) !important;
+        color: var(--header-icon) !important;
     }
 
     .header-wrapper {
