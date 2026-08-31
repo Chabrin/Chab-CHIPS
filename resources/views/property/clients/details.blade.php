@@ -529,22 +529,77 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         </div>
                                     </div>
                                 </div>
-                                <div class="table-responsive custom-scrollbar">
-                                    <table id="tenantsTable" class="display" style="width:100%;">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Names</th>
-                                                <th>Mobile Number</th>
-                                                <th>Email Address</th>
-                                                <th>Unit Name</th>
-                                                <th>Reference Number</th>
-                                                <th>Registered Date</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
+
+                                <ul class="nav nav-tabs mb-3" id="tenantsSubTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="tenants-listing-subtab" data-bs-toggle="tab" data-bs-target="#tenants-listing-pane" type="button" role="tab">
+                                            Tenants Listing
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="tenants-uploads-subtab" data-bs-toggle="tab" data-bs-target="#tenants-uploads-pane" type="button" role="tab">
+                                            Tenants Uploads
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                <div class="tab-content" id="tenantsSubTabsContent">
+                                    <!-- Tenants Listing sub-tab -->
+                                    <div class="tab-pane fade show active" id="tenants-listing-pane" role="tabpanel">
+                                        <div class="table-responsive custom-scrollbar">
+                                            <table id="tenantsTable" class="display" style="width:100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Names</th>
+                                                        <th>Mobile Number</th>
+                                                        <th>Email Address</th>
+                                                        <th>Unit Name</th>
+                                                        <th>Reference Number</th>
+                                                        <th>Registered Date</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tenants Uploads sub-tab — staged rows from bulk upload, awaiting review/push -->
+                                    <div class="tab-pane fade" id="tenants-uploads-pane" role="tabpanel">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <p class="text-muted small mb-0">Staged tenants from bulk uploads. Review, edit, or delete a row, then complete the upload to push them into the main tenant records.</p>
+                                            <div class="d-flex flex-shrink-0 ms-2 gap-2">
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="openTenantBulkUploadBtn" data-bs-toggle="modal" data-bs-target="#tenantBulkUploadModal" disabled>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
+                                                    Bulk Upload Tenants
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="pushUploadsToMainBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="pushUploadsSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">publish</span>
+                                                    Complete Upload
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="table-responsive custom-scrollbar">
+                                            <table id="tenantUploadsTable" class="display" style="width:100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Unit Code</th>
+                                                        <th>Names</th>
+                                                        <th>Gender</th>
+                                                        <th>Mobile</th>
+                                                        <th>Nationality</th>
+                                                        <th>National ID</th>
+                                                        <th>Status</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -821,8 +876,188 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Tenant Bulk Upload Modal — scoped to whichever property is selected
+                             in the Tenants tab; the template's Unit Code column is pre-filled
+                             with that property's vacant units so a row can only ever target a
+                             real, currently vacant unit. -->
+                        <div class="modal fade" id="tenantBulkUploadModal" tabindex="-1" aria-labelledby="tenantBulkUploadModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="tenantBulkUploadModalLabel">
+                                            <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">upload_file</span>
+                                            Bulk Upload Tenants
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <form id="tenantBulkUploadForm">
+                                        <div class="modal-body">
+                                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                                <span class="small text-muted">Property: <strong id="tenantBulkUploadPropertyName"></strong></span>
+                                                <button type="button" class="btn btn-outline-primary btn-sm" id="downloadTenantTemplateBtn">
+                                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">download</span>
+                                                    Download Template
+                                                </button>
+                                            </div>
+
+                                            <div class="mb-2">
+                                                <label for="tenantBulkFile" class="form-label fw-bold">
+                                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">attach_file</span>
+                                                    Filled-in Template <span class="text-danger">*</span>
+                                                </label>
+                                                <input type="file" class="form-control" id="tenantBulkFile" name="bulk_file" accept=".xlsx,.xls" required>
+                                            </div>
+
+                                            <p class="text-muted small fst-italic mb-0">
+                                                Required: Unit Code, Names, Gender, Mobile Number, Nationality, National ID. Max per file: 100.
+                                            </p>
+
+                                            <div id="tenantBulkUploadResults" class="mt-3" style="display:none;"></div>
+                                        </div>
+
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary" id="tenantBulkUploadSubmitBtn">
+                                                <span class="spinner-border spinner-border-sm me-2 d-none" id="tenantBulkUploadSpinner"></span>
+                                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">upload</span>
+                                                Upload & Process
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Uploaded Tenant Modal — staged row (temp_uploaded_tenants), editable until pushed -->
+<div class="modal fade" id="editUploadModal" tabindex="-1" aria-labelledby="editUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUploadModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">edit</span>
+                    Edit Uploaded Tenant
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editUploadForm">
+                <input type="hidden" id="editUploadId">
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Unit Code <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editUnitCode">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Title</label>
+                            <input type="text" class="form-control form-control-sm" id="editTitle">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Names <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editNames">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Gender <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="editGender">
+                                <option value="">Select</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Mobile Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editMobileNumber">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Email Address</label>
+                            <input type="email" class="form-control form-control-sm" id="editEmailAddress">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">KRA PIN</label>
+                            <input type="text" class="form-control form-control-sm" id="editPinNumber">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Nationality <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editNationality">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">National ID <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editNationalId">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Passport Number</label>
+                            <input type="text" class="form-control form-control-sm" id="editPassportNumber">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Other Contact Name</label>
+                            <input type="text" class="form-control form-control-sm" id="editOtherContactName">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Other Contact Email</label>
+                            <input type="email" class="form-control form-control-sm" id="editOtherContactEmail">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Other Contact Phone</label>
+                            <input type="text" class="form-control form-control-sm" id="editOtherContactPhone">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Next of Kin Name</label>
+                            <input type="text" class="form-control form-control-sm" id="editNextOfKinName">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Next of Kin Mobile</label>
+                            <input type="text" class="form-control form-control-sm" id="editNextOfKinMobile">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Next of Kin Email</label>
+                            <input type="email" class="form-control form-control-sm" id="editNextOfKinEmail">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Next of Kin ID</label>
+                            <input type="text" class="form-control form-control-sm" id="editNextOfKinNationalId">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Next of Kin Relationship</label>
+                            <input type="text" class="form-control form-control-sm" id="editNextOfKinRelationship">
+                        </div>
+                    </div>
+                    <div id="editUploadError" class="alert alert-danger small mt-3 mb-0" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="editUploadSubmitBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="editUploadSpinner"></span>
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Issue Modal — shows a staged row's push_error in full -->
+<div class="modal fade" id="uploadErrorModal" tabindex="-1" aria-labelledby="uploadErrorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadErrorModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">info</span>
+                    Upload Issue
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0" id="uploadErrorModalText"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -1394,6 +1629,53 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
+        // Tenants Uploads — staged rows from bulk upload (temp_uploaded_tenants)
+        var tenantUploadsTable = $('#tenantUploadsTable').DataTable({
+            data: [],
+            columns: [{
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                { data: 'unit_code', defaultContent: '-' },
+                { data: 'names', defaultContent: '-' },
+                { data: 'gender', defaultContent: '-' },
+                { data: 'mobile_number', defaultContent: '-' },
+                { data: 'nationality', defaultContent: '-' },
+                { data: 'national_id', defaultContent: '-' },
+                {
+                    data: 'push_error',
+                    render: function(pushError) {
+                        if (!pushError) {
+                            return '<span class="badge bg-secondary">Pending push</span>';
+                        }
+                        return '<span class="badge bg-danger me-1">Needs attention</span>' +
+                            '<a href="#" class="text-primary view-upload-error-btn" data-error="' + $('<div>').text(pushError).html() + '" title="View issue">' +
+                            '<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span></a>';
+                    }
+                },
+                {
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id) {
+                        return '<div class="d-flex flex-row gap-2">' +
+                            '<a href="#" class="text-primary edit-upload-btn" data-id="' + id + '" title="Edit">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">edit</span></a>' +
+                            '<a href="#" class="text-primary delete-upload-btn" data-id="' + id + '" title="Delete">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>' +
+                            '</div>';
+                    }
+                }
+            ],
+            pageLength: 10,
+            responsive: true,
+            language: {
+                emptyTable: "No staged uploads for this property"
+            }
+        });
+
         // Tenant History — every tenant across every property this landlord owns,
         // loaded once on first click of the tab (same lazy-load pattern as every
         // other tab here)
@@ -1841,14 +2123,282 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
+        var tenantUploadsLoadedForProperty = null;
+
         // Load tenants when property is selected
         $('#tenantPropertySelect').on('change', function() {
             var propertyId = $(this).val();
+            var propertyName = $(this).find('option:selected').text();
             if (propertyId) {
                 loadTenants(propertyId);
+                tenantUploadsLoadedForProperty = null;
+                if ($('#tenants-uploads-subtab').hasClass('active')) {
+                    loadTenantUploads(propertyId);
+                }
+                $('#openTenantBulkUploadBtn').prop('disabled', false);
+                $('#pushUploadsToMainBtn').prop('disabled', false);
+                $('#tenantBulkUploadPropertyName').text(propertyName);
             } else {
                 tenantsTable.clear().draw();
+                tenantUploadsTable.clear().draw();
+                $('#openTenantBulkUploadBtn').prop('disabled', true);
+                $('#pushUploadsToMainBtn').prop('disabled', true);
+                $('#tenantBulkUploadPropertyName').text('');
             }
+        });
+
+        // Lazy-load the Uploads sub-tab the first time it's opened for the current property
+        $('#tenants-uploads-subtab').on('click', function() {
+            var propertyId = $('#tenantPropertySelect').val();
+            if (propertyId && tenantUploadsLoadedForProperty !== propertyId) {
+                loadTenantUploads(propertyId);
+            }
+        });
+
+        function loadTenantUploads(propertyId) {
+            tenantUploadsLoadedForProperty = propertyId;
+            $.ajax({
+                url: "{{ route('property.tenants.uploads.data') }}",
+                type: 'GET',
+                data: { property_id: propertyId },
+                dataType: 'json',
+                success: function(response) {
+                    tenantUploadsTable.clear();
+                    if (response.data && response.data.length) {
+                        tenantUploadsTable.rows.add(response.data);
+                    }
+                    tenantUploadsTable.draw();
+                },
+                error: function() {
+                    toastr.error('Failed to load uploaded tenants.');
+                }
+            });
+        }
+
+        // Bulk Upload Tenants — download template scoped to the selected property
+        $('#downloadTenantTemplateBtn').on('click', function() {
+            var propertyId = $('#tenantPropertySelect').val();
+            if (!propertyId) return;
+            window.location.href = "{{ route('property.tenants.bulk-upload.template') }}?property_id=" + propertyId;
+        });
+
+        // Bulk Upload Tenants — submit via AJAX, no page reload. Rows land in the
+        // staging table (temp_uploaded_tenants) — nothing becomes a real tenant
+        // until Complete Upload runs.
+        $('#tenantBulkUploadForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var propertyId = $('#tenantPropertySelect').val();
+            var fileInput = $('#tenantBulkFile')[0];
+            if (!propertyId || !fileInput.files.length) {
+                toastr.error('Please select a property and choose a file to upload.');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('property_id', propertyId);
+            formData.append('bulk_file', fileInput.files[0]);
+            formData.append('_token', '{{ csrf_token() }}');
+
+            var submitBtn = $('#tenantBulkUploadSubmitBtn');
+            var spinner = $('#tenantBulkUploadSpinner');
+            var resultsBox = $('#tenantBulkUploadResults');
+
+            submitBtn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            resultsBox.hide().empty();
+
+            $.ajax({
+                url: "{{ route('property.tenants.bulk-upload.import') }}",
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                dataType: 'json',
+                success: function(response) {
+                    toastr.success(response.message);
+                    loadTenantUploads(propertyId);
+                    $('#tenantsSubTabs button[data-bs-target="#tenants-uploads-pane"]').tab('show');
+                    $('#tenantBulkUploadForm')[0].reset();
+                    $('#tenantBulkUploadModal').modal('hide');
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to process upload.';
+                    resultsBox.html('<div class="alert alert-danger mb-0">' + $('<div>').text(message).html() + '</div>').show();
+                    toastr.error(message);
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Reset bulk upload modal on close
+        $('#tenantBulkUploadModal').on('hidden.bs.modal', function() {
+            $('#tenantBulkUploadForm')[0].reset();
+            $('#tenantBulkUploadResults').hide().empty();
+        });
+
+        // Complete Upload — turns every staged row for this property into a real tenant
+        $('#pushUploadsToMainBtn').on('click', function() {
+            var propertyId = $('#tenantPropertySelect').val();
+            if (!propertyId) return;
+
+            var btn = $(this);
+            var spinner = $('#pushUploadsSpinner');
+
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: "{{ route('property.tenants.uploads.push') }}",
+                type: 'POST',
+                data: { property_id: propertyId, _token: '{{ csrf_token() }}' },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.failed > 0) {
+                        toastr.warning(response.message);
+                    } else {
+                        toastr.success(response.message);
+                    }
+                    loadTenantUploads(propertyId);
+                    loadTenants(propertyId);
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to push uploads.';
+                    toastr.error(message);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Show a staged row's push_error in a modal
+        $('#tenantUploadsTable').on('click', '.view-upload-error-btn', function(e) {
+            e.preventDefault();
+            $('#uploadErrorModalText').text($(this).data('error'));
+            new bootstrap.Modal(document.getElementById('uploadErrorModal')).show();
+        });
+
+        // Edit a staged row
+        $('#tenantUploadsTable').on('click', '.edit-upload-btn', function(e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+            var row = tenantUploadsTable.row($(this).closest('tr')).data();
+            if (!row) return;
+
+            $('#editUploadId').val(id);
+            $('#editUnitCode').val(row.unit_code);
+            $('#editTitle').val(row.title);
+            $('#editNames').val(row.names);
+            $('#editGender').val(row.gender || '');
+            $('#editMobileNumber').val(row.mobile_number);
+            $('#editEmailAddress').val(row.email_address);
+            $('#editPinNumber').val(row.pin_number);
+            $('#editNationality').val(row.nationality);
+            $('#editNationalId').val(row.national_id);
+            $('#editPassportNumber').val(row.passport_number);
+            $('#editOtherContactName').val(row.other_contact_name);
+            $('#editOtherContactEmail').val(row.other_contact_email);
+            $('#editOtherContactPhone').val(row.other_contact_phone);
+            $('#editNextOfKinName').val(row.next_of_kin_name);
+            $('#editNextOfKinMobile').val(row.next_of_kin_mobile);
+            $('#editNextOfKinEmail').val(row.next_of_kin_email);
+            $('#editNextOfKinNationalId').val(row.next_of_kin_national_id);
+            $('#editNextOfKinRelationship').val(row.next_of_kin_relationship);
+            $('#editUploadError').hide().empty();
+
+            new bootstrap.Modal(document.getElementById('editUploadModal')).show();
+        });
+
+        $('#editUploadForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var id = $('#editUploadId').val();
+            var submitBtn = $('#editUploadSubmitBtn');
+            var spinner = $('#editUploadSpinner');
+            var errorBox = $('#editUploadError');
+
+            submitBtn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            errorBox.hide().empty();
+
+            $.ajax({
+                url: "{{ url('property/tenants/uploads') }}/" + id,
+                type: 'PUT',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    unit_code: $('#editUnitCode').val(),
+                    title: $('#editTitle').val(),
+                    names: $('#editNames').val(),
+                    gender: $('#editGender').val(),
+                    mobile_number: $('#editMobileNumber').val(),
+                    email_address: $('#editEmailAddress').val(),
+                    pin_number: $('#editPinNumber').val(),
+                    nationality: $('#editNationality').val(),
+                    national_id: $('#editNationalId').val(),
+                    passport_number: $('#editPassportNumber').val(),
+                    other_contact_name: $('#editOtherContactName').val(),
+                    other_contact_email: $('#editOtherContactEmail').val(),
+                    other_contact_phone: $('#editOtherContactPhone').val(),
+                    next_of_kin_name: $('#editNextOfKinName').val(),
+                    next_of_kin_mobile: $('#editNextOfKinMobile').val(),
+                    next_of_kin_email: $('#editNextOfKinEmail').val(),
+                    next_of_kin_national_id: $('#editNextOfKinNationalId').val(),
+                    next_of_kin_relationship: $('#editNextOfKinRelationship').val()
+                },
+                dataType: 'json',
+                success: function(response) {
+                    toastr.success(response.message);
+                    $('#editUploadModal').modal('hide');
+                    loadTenantUploads($('#tenantPropertySelect').val());
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to update row.';
+                    errorBox.text(message).show();
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Delete a staged row
+        $('#tenantUploadsTable').on('click', '.delete-upload-btn', function(e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+
+            Swal.fire({
+                title: 'Delete this staged tenant?',
+                text: 'This only removes the staged upload row — nothing else is affected.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3598db',
+                cancelButtonColor: '#8a94a3',
+                confirmButtonText: 'Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: "{{ url('property/tenants/uploads') }}/" + id,
+                    type: 'DELETE',
+                    data: { _token: '{{ csrf_token() }}' },
+                    dataType: 'json',
+                    success: function(response) {
+                        toastr.success(response.message);
+                        loadTenantUploads($('#tenantPropertySelect').val());
+                    },
+                    error: function(xhr) {
+                        var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete row.';
+                        toastr.error(message);
+                    }
+                });
+            });
         });
 
         function loadProperties() {

@@ -64,7 +64,7 @@
         <div class="page-header">
             <div class="header-wrapper row m-0">
                 <div class="header-logo-wrapper col-auto p-0">
-                    <div class="logo-wrapper"><a href="{{ url('/') }}"> <img class="img-fluid for-light" src="{{ asset('assets/images/logo/logo.png') }}" alt=""><img class="img-fluid for-dark" src="{{ asset('assets/images/logo/logo_dark.png') }}" alt=""></a></div>
+                    <div class="logo-wrapper"><a href="{{ url('/') }}"> <img class="img-fluid for-light" src="{{ asset('assets/images/logo/logo_light.png') }}" alt=""><img class="img-fluid for-dark" src="{{ asset('assets/images/logo/logo_dark.png') }}" alt=""></a></div>
                 </div>
                 <div class="nav-right col-xl-8 col-lg-12 col-auto pull-right right-header p-0">
                     <ul class="nav-menus">
@@ -87,34 +87,9 @@
                         </li>
 
 
-                        <li class="onhover-dropdown">
-                            <div class="message position-relative" id="notificationBell" style="cursor: pointer;">
-                                <span class="material-symbols-outlined">
-                                    notifications_active
-                                </span>
-                                <span class="rounded-pill badge-danger" id="notificationBadge" style="display: none;"></span>
-                            </div>
-                            <div class="onhover-show-div message-dropdown" id="notificationDropdown">
-                                <h6 class="f-18 mb-0 dropdown-title d-flex justify-content-between align-items-center">
-                                    Notifications
-                                    <button class="btn btn-link btn-sm p-0" id="markAllReadBtn" style="display: none;">Mark all read</button>
-                                </h6>
-                                <ul id="notificationList">
-                                    <li class="text-center p-3">
-                                        <span class="text-muted">Loading notifications...</span>
-                                    </li>
-                                </ul>
-                            </div>
-                        </li>
-
-
                         <li class="profile-nav onhover-dropdown pe-0 py-0">
                             <div class="d-flex align-items-center profile-media">
-                                <span class="material-symbols-outlined profile-avatar">account_circle</span>
-                                <div class="user">
-                                    <span>{{ optional(Auth::user())->username }}</span>
-                                    <span class="material-symbols-outlined">arrow_drop_down_circle</span>
-                                </div>
+                                <span class="material-symbols-outlined profile-menu-icon">arrow_drop_down</span>
                             </div>
                             <ul class="profile-dropdown onhover-show-div">
                                 <li><a href="{{ route('user.profile') }}"><span class="material-symbols-outlined">person</span><span>Profile</span></a></li>
@@ -144,7 +119,7 @@
         <!-- Page Body Start-->
         <div class="page-body-wrapper">
             <!-- Page Sidebar Start-->
-            <div style="background-color:#f5fafe !important;" class="sidebar-wrapper close_icon" data-layout="stroke-svg">
+            <div style="background-color:var(--sidebar-bg) !important;" class="sidebar-wrapper close_icon" data-layout="stroke-svg">
                 <div>
                     <!-- Mobile drawer close button (only visible on small screens) -->
                     <button class="drawer-close-btn" type="button">
@@ -633,156 +608,6 @@
             } else {
                 setupSuperModuleFlyout();
             }
-        })();
-    </script>
-
-    <!-- Notification System Script -->
-    <script>
-        (function() {
-            let unreadCount = 0;
-
-            // Load notifications on page load
-            function loadNotifications() {
-                fetch('{{ route("notifications.index") }}?unread_only=0', {
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            updateNotificationUI(data.notifications.data);
-                            updateUnreadCount(data.unread_count);
-                        }
-                    })
-                    .catch(error => console.error('Error loading notifications:', error));
-            }
-
-            // Update notification list in dropdown
-            function updateNotificationUI(notifications) {
-                const notificationList = document.getElementById('notificationList');
-
-                if (!notifications || notifications.length === 0) {
-                    notificationList.innerHTML = '<li class="text-center p-3"><span class="text-muted">No notifications</span></li>';
-                    return;
-                }
-
-                notificationList.innerHTML = notifications.slice(0, 10).map(notification => {
-                    const isUnread = !notification.read_at;
-                    const createdAt = new Date(notification.created_at).toLocaleString();
-
-                    return `
-                        <li class="notification-item ${isUnread ? 'unread' : ''}" data-id="${notification.id}" style="background: ${isUnread ? '#f8f9fa' : 'transparent'};">
-                            <div class="d-flex align-items-start p-2">
-                                <div class="flex-grow-1" style="cursor: pointer;" onclick="handleNotificationClick(${notification.id}, '${notification.action_url}')">
-                                    <h6 class="mb-1" style="font-size: 14px;">${notification.title}</h6>
-                                    <p class="mb-1 text-muted" style="font-size: 12px;">${notification.message || ''}</p>
-                                    <small class="text-muted" style="font-size: 11px;">${createdAt}</small>
-                                </div>
-                                <div class="notification-right">
-                                    <button class="btn btn-link btn-sm p-0" onclick="deleteNotification(${notification.id}, event)" title="Delete">
-                                        <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </li>
-                    `;
-                }).join('');
-            }
-
-            // Update unread count badge
-            function updateUnreadCount(count) {
-                unreadCount = count;
-                const badge = document.getElementById('notificationBadge');
-                const markAllBtn = document.getElementById('markAllReadBtn');
-
-                if (count > 0) {
-                    badge.textContent = count > 99 ? '99+' : count;
-                    badge.style.display = 'inline-block';
-                    markAllBtn.style.display = 'inline-block';
-                } else {
-                    badge.style.display = 'none';
-                    markAllBtn.style.display = 'none';
-                }
-            }
-
-            // Handle notification click
-            window.handleNotificationClick = function(notificationId, actionUrl) {
-                fetch(`/notifications/${notificationId}/read`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            updateUnreadCount(data.unread_count);
-                            loadNotifications();
-
-                            if (actionUrl && actionUrl !== 'null') {
-                                window.location.href = actionUrl;
-                            }
-                        }
-                    })
-                    .catch(error => console.error('Error marking notification as read:', error));
-            };
-
-            // Delete notification
-            window.deleteNotification = function(notificationId, event) {
-                event.stopPropagation();
-
-                if (!confirm('Delete this notification?')) return;
-
-                fetch(`/notifications/${notificationId}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            updateUnreadCount(data.unread_count);
-                            loadNotifications();
-                            toastr.success('Notification deleted');
-                        }
-                    })
-                    .catch(error => console.error('Error deleting notification:', error));
-            };
-
-            // Mark all as read
-            document.getElementById('markAllReadBtn').addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-
-                fetch('{{ route("notifications.mark-all-read") }}', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            updateUnreadCount(0);
-                            loadNotifications();
-                            toastr.success('All notifications marked as read');
-                        }
-                    })
-                    .catch(error => console.error('Error marking all as read:', error));
-            });
-
-            // Load notifications on page load
-            loadNotifications();
-
-            // Refresh notifications every 60 seconds
-            setInterval(loadNotifications, 60000);
         })();
     </script>
 
