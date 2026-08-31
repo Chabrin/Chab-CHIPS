@@ -22,6 +22,7 @@ class Deposit extends Model
         'invoice_id',
         'item_id',
         'amount',
+        'months',
         'held_by',
         'created_by_id',
         'current_status_id',
@@ -35,6 +36,7 @@ class Deposit extends Model
         'date_time' => 'datetime',
         'deposit_date' => 'datetime',
         'amount' => 'decimal:2',
+        'months' => 'decimal:1',
         'invoice_balance' => 'decimal:2',
     ];
 

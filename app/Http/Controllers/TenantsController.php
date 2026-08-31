@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Deposit;
 use App\Models\Property;
+use App\Models\TenantHistory;
 use App\Models\Unit;
 use App\Traits\TenantRecordHelperTrait;
+use App\Traits\LeaseCreationTrait;
 use Illuminate\Http\Request;
 use App\Models\SystemCountry;
 use App\Models\MoveInInspection;
@@ -28,6 +30,7 @@ use Illuminate\Support\Facades\Storage;
 class TenantsController extends Controller
 {
     use TenantRecordHelperTrait;
+    use LeaseCreationTrait;
 
     public function getTenantBalance(Request $request, $tenantId = null)
     {
@@ -487,6 +490,429 @@ class TenantsController extends Controller
     }
 
     /**
+     * Show the "Returning Tenant" page — search any tenant (not just an
+     * exited one — see searchTenantsForReassignment()), assign them a new
+     * unit, and create their lease, all as one combined action.
+     *
+     * Optional ?tenant={encrypted_id} pre-selects a tenant — used by the
+     * Tenant History page's "Reassign This Tenant" link. Resolved server-side
+     * (rather than making the page do an extra AJAX round-trip) since the
+     * display name/reference is needed to seed the select2 option before it
+     * can be selected.
+     */
+    public function returningTenantCreate(Request $request)
+    {
+        $preselectedTenant = null;
+
+        if ($request->filled('tenant')) {
+            try {
+                $tenantId = Crypt::decrypt($request->input('tenant'));
+                $tenant = Client::withAll()->tenants()->find($tenantId);
+                if ($tenant) {
+                    $preselectedTenant = [
+                        'encrypted_id' => $request->input('tenant'),
+                        'names' => $tenant->names,
+                        'reference_number' => $tenant->reference_number,
+                        'mobile_number' => $tenant->mobile_number,
+                    ];
+                }
+            } catch (\Exception $e) {
+                // Invalid/undecryptable id — ignore, page just loads with no pre-selection.
+            }
+        }
+
+        return view('property.tenants.returning.create', compact('preselectedTenant'));
+    }
+
+    /**
+     * Search among ANY tenant — the first step of the Returning Tenant flow.
+     * Mirrors InvoicingController::searchTenantsDirectly()'s
+     * name/reference/mobile/email/national_id matching.
+     *
+     * Deliberately NOT scoped to exited tenants: this app's tenant data can
+     * originate from another system, and may never have gone through this
+     * app's formal exit workflow — a tenant whose Client row still shows a
+     * unit/lease might, in reality, already be gone. Restricting this search
+     * to "exited" tenants would hide exactly the tenants most likely to have
+     * that stale-data problem. `is_exited` is still flagged (informational
+     * badge only, via a subquery rather than a join — a join risks duplicate
+     * rows if a tenant somehow has more than one completed exit record).
+     *
+     * withAll(): a tenant with a cleared/never-set property_id (either a
+     * properly exited tenant, or migrated data with a blank assignment)
+     * would otherwise be hidden from a non-global-role user by the model's
+     * user_clients_properties global scope — same reasoning as assignUnit()
+     * above.
+     */
+    public function searchTenantsForReassignment(Request $request)
+    {
+        try {
+            $search = $request->input('search', '');
+            if (strlen($search) < 2) {
+                return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
+            }
+
+            $tenants = Client::withAll()->tenants()
+                ->where(function ($q) use ($search) {
+                    $q->where('sys_pm_clients.names', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.reference_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.mobile_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.email_address', 'ILIKE', "%{$search}%")
+                        ->orWhere('sys_pm_clients.national_id', 'ILIKE', "%{$search}%");
+                })
+                ->select('sys_pm_clients.id', 'sys_pm_clients.names', 'sys_pm_clients.mobile_number', 'sys_pm_clients.email_address', 'sys_pm_clients.national_id', 'sys_pm_clients.reference_number')
+                ->selectRaw('EXISTS(SELECT 1 FROM cb_tenant_exits WHERE cb_tenant_exits.tenant_id = sys_pm_clients.id AND cb_tenant_exits.current_status_id = 2) as is_exited')
+                ->orderBy('sys_pm_clients.names')
+                ->limit(50)
+                ->get()
+                ->map(fn ($t) => [
+                    'id' => $t->id,
+                    'encrypted_id' => Crypt::encrypt($t->id),
+                    'names' => $t->names ?? 'N/A',
+                    'mobile_number' => $t->mobile_number,
+                    'email_address' => $t->email_address,
+                    'national_id' => $t->national_id,
+                    'reference_number' => $t->reference_number,
+                    'is_exited' => (bool) $t->is_exited,
+                ]);
+
+            return response()->json(['success' => true, 'tenants' => $tenants]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error searching tenants for reassignment: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to search tenants'], 500);
+        }
+    }
+
+    /**
+     * A tenant's previous tenancy record(s) — read-only context, most recent
+     * first. Backed by cb_tenant_history (TenantHistory), written at exit
+     * finalization (see TenantExitController::finaliseExit()) and at
+     * clearCurrentTenancy() below. Shared by the Returning Tenant flow and
+     * the standalone Tenant History page (historyPage()).
+     */
+    public function tenantHistory($encryptedId)
+    {
+        try {
+            $tenantId = Crypt::decrypt($encryptedId);
+
+            $history = TenantHistory::where('tenant_id', $tenantId)
+                ->with([
+                    'property:id,property_name',
+                    'unit:id,unit_code,unit_name',
+                    'landlord:id,names',
+                    'sla:id,reference_number',
+                ])
+                ->orderByDesc('exit_date')
+                ->get()
+                ->map(fn ($h) => [
+                    'id' => $h->id,
+                    'property_name' => $h->property->property_name ?? '-',
+                    'unit_code' => $h->unit->unit_code ?? $h->unit->unit_name ?? '-',
+                    'landlord_name' => $h->landlord->names ?? '-',
+                    'lease_start_date' => $h->lease_start_date ? $h->lease_start_date->format('Y-m-d') : '-',
+                    'exit_date' => $h->exit_date ? $h->exit_date->format('Y-m-d') : '-',
+                    'duration_label' => $h->duration_label,
+                    'rent_amount' => $h->rent_amount,
+                    'sla_reference' => $h->sla->reference_number ?? '-',
+                    'exit_reason' => $h->exit_reason ?? '-',
+                ]);
+
+            return response()->json(['success' => true, 'history' => $history]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenant history: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load tenant history'], 500);
+        }
+    }
+
+    /**
+     * A tenant's CURRENT on-record assignment, if any — distinct from
+     * tenantHistory() above (which is what they've EVER had). Read from the
+     * Client row directly plus any Active LeaseAgreement. Shared by the
+     * Returning Tenant flow (to decide whether a "clear current assignment"
+     * confirmation is required — see reassignReturningTenant()) and the
+     * standalone Tenant History page.
+     */
+    public function currentTenancy($encryptedId)
+    {
+        try {
+            $tenantId = Crypt::decrypt($encryptedId);
+
+            $tenant = Client::withAll()->tenants()
+                ->with(['property:id,property_name', 'unit:id,unit_code,unit_name'])
+                ->findOrFail($tenantId);
+
+            $slaReference = $tenant->sla_id
+                ? \App\Models\ServiceAgreement::where('id', $tenant->sla_id)->value('reference_number')
+                : null;
+
+            $activeLease = LeaseAgreement::where('tenant_id', $tenant->id)
+                ->where('lease_status', 'Active')
+                ->latest('date_start')
+                ->first();
+
+            return response()->json([
+                'success' => true,
+                'has_current' => (bool) $tenant->unit_id,
+                'property_name' => $tenant->property->property_name ?? null,
+                'unit_code' => $tenant->unit->unit_code ?? $tenant->unit->unit_name ?? null,
+                'sla_reference' => $slaReference,
+                'rent_amount' => $tenant->rent_amount,
+                'lease_start_date' => $tenant->lease_start_date ? $tenant->lease_start_date->format('Y-m-d') : null,
+                'lease_years' => $tenant->lease_years,
+                'frequency' => $tenant->frequency,
+                'active_lease' => $activeLease ? [
+                    'ref_number' => $activeLease->ref_number,
+                    'lease_status' => $activeLease->lease_status,
+                    'date_start' => $activeLease->date_start ? $activeLease->date_start->format('Y-m-d') : null,
+                    'date_end' => $activeLease->date_end ? $activeLease->date_end->format('Y-m-d') : null,
+                ] : null,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading current tenancy: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load current tenancy'], 500);
+        }
+    }
+
+    /**
+     * The standalone "Tenant History" page — reachable from tenant details.
+     * Read-only: current assignment (if any) + previous tenancies, no
+     * clear/reassign actions here (those are exclusive to the Returning
+     * Tenant flow, to avoid this general info page having side effects).
+     */
+    public function historyPage($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $tenant = Client::tenants()->findOrFail($id);
+
+            return view('property.tenants.history', compact('tenant'));
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenant history page: ' . $e->getMessage());
+            return redirect()->route('property.tenants.listing')->with('error', 'Tenant not found');
+        }
+    }
+
+    /**
+     * Reassign an exited tenant to a new unit and create their lease — one
+     * combined action, one transaction: the Client row is updated to the new
+     * tenancy, a LeaseAgreement is created for it (via LeaseCreationTrait,
+     * shared with LeasesController::store() so both build a lease
+     * identically), and — if months were entered — a Deposit is recorded
+     * (via saveDeposit(), shared with onboarding's own deposit capture).
+     */
+    public function reassignReturningTenant(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validated = $request->validate([
+                'tenant_id' => 'required|string',
+                'unit_id' => 'required|integer|exists:sys_pm_units,id',
+                'lease_start_date' => 'required|date',
+                'lease_years' => 'required|integer|min:1|max:10',
+                'auto_renewal' => 'required|in:Yes,No',
+                'escalation_rate' => 'required|numeric|min:0|max:100',
+                'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
+                'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually,Biennially',
+                'service_charges_amount' => 'nullable|numeric|min:0',
+                'deposit_months' => 'nullable|numeric|min:0.1',
+                'deposit_held_by' => 'required_with:deposit_months|nullable|in:Company,Landlord',
+                'deposit_reference' => 'nullable|string|max:100',
+                'clear_current_assignment' => 'nullable|in:1',
+                'clear_reason' => 'nullable|string|max:500',
+                'invoicable_items' => 'nullable|array',
+                'invoicable_items.*.item' => 'required|exists:sys_set_invoiceable_items,id',
+                'invoicable_items.*.amount' => 'required|numeric|min:0',
+                'invoicable_items.*.cycle' => 'required|exists:sys_set_invoiceable_items_cycles,id',
+                'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
+            ]);
+
+            try {
+                $tenantId = Crypt::decrypt($validated['tenant_id']);
+            } catch (\Exception $e) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'tenant_id' => ['Invalid tenant selected.'],
+                ]);
+            }
+
+            // withAll(): same reasoning as searchTenantsForReassignment() above —
+            // a tenant with no property_id yet would otherwise be hidden from a
+            // non-global-role user.
+            $tenant = Client::withAll()->tenants()->findOrFail($tenantId);
+            $unit = Unit::findOrFail($validated['unit_id']);
+
+            if (!$unit->isVacant()) {
+                return response()->json(['success' => false, 'message' => 'Selected unit is no longer vacant.'], 422);
+            }
+
+            // 0. If this tenant's Client row still shows a current unit — real
+            // data (an actual active tenancy) or stale/migrated data that was
+            // never properly cleared — it must be explicitly cleared first.
+            // Not automatic: this is a deliberate, staff-confirmed action (see
+            // clearCurrentTenancy() below), since the "current" data might
+            // genuinely still be correct.
+            if ($tenant->unit_id) {
+                if ($request->input('clear_current_assignment') !== '1') {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'clear_current_assignment' => ['This tenant currently has a unit/lease on record — confirm clearing it before reassigning.'],
+                    ]);
+                }
+
+                $this->clearCurrentTenancy($tenant, $validated['clear_reason'] ?? null);
+            }
+
+            $property = Property::findOrFail($unit->property_id);
+
+            // A lease always needs an SLA — same guarantee LeasesController::store() enforces.
+            $slaId = $this->resolveSlaId($unit->property_id);
+            if (!$slaId) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'unit_id' => ['This property has no service agreement (SLA) configured — a lease cannot be created until one exists.'],
+                ]);
+            }
+
+            // 1. Update the Client row to the new tenancy
+            $tenant->update([
+                'property_id' => $unit->property_id,
+                'unit_id' => $unit->id,
+                'sla_id' => $slaId,
+                'rent_amount' => $this->resolveRentAmount($unit->id),
+                'lease_start_date' => $validated['lease_start_date'],
+                'lease_years' => $validated['lease_years'],
+                'frequency' => $validated['frequency'],
+            ]);
+
+            // 2. Create the LeaseAgreement (+ ref number, invoiceable items, unit
+            // occupancy flip) — shared core with LeasesController::store().
+            $leaseAgreement = $this->createLeaseAgreementRecord([
+                'client_id' => $property->client_id,
+                'property_id' => $unit->property_id,
+                'unit_id' => $unit->id,
+                'tenant_id' => $tenant->id,
+                'sla_id' => $slaId,
+                'date_start' => $validated['lease_start_date'],
+                'years' => $validated['lease_years'],
+                'auto_renewal' => $validated['auto_renewal'],
+                'escalation_rate' => $validated['escalation_rate'],
+                'escalation_frequency' => $validated['escalation_frequency'],
+                'service_charges_amount' => $validated['service_charges_amount'] ?? null,
+            ], $validated['invoicable_items'] ?? []);
+
+            // 3. Deposit — same computation/creation as onboarding, linked to
+            // the lease just created.
+            $this->saveDeposit([
+                'property_id' => $unit->property_id,
+                'unit_id' => $unit->id,
+                'sla_ref' => $slaId,
+                'deposit_months' => $validated['deposit_months'] ?? null,
+                'deposit_held_by' => $validated['deposit_held_by'] ?? null,
+                'deposit_reference' => $validated['deposit_reference'] ?? null,
+            ], $tenant, $leaseAgreement->id);
+
+            DB::commit();
+
+            Log::info('Returning tenant reassigned', [
+                'tenant_id' => $tenant->id,
+                'unit_id' => $unit->id,
+                'lease_id' => $leaseAgreement->id,
+                'reassigned_by' => Auth::id(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Tenant reassigned and lease created successfully with reference: ' . $leaseAgreement->ref_number,
+                'redirect_url' => route('property.tenants.show', $tenant->encrypted_id),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error reassigning returning tenant: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to reassign tenant: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Clear a tenant's current on-record unit/lease before reassigning them
+     * elsewhere — for a tenant whose Client row still shows an assignment
+     * that turned out to be stale/incorrect (data from another system, never
+     * properly exited through this app). Mirrors
+     * TenantExitController::finaliseExit()'s clear/archive logic, but
+     * standalone: no TenantExit row backs this, and no deposit-refund step
+     * runs (existing deposits from the old tenancy are left untouched —
+     * out of scope here, unlike a formal exit).
+     *
+     * occupancy_status_id is set to 31 (not finaliseExit()'s 3) — this
+     * mirrors LeasesController's own standalone lease-cancel action instead,
+     * since that's the same situation this is: a standalone vacate outside
+     * the formal exit workflow. (The two values are a pre-existing
+     * inconsistency across this codebase; Unit::isVacant()/scopeVacant() —
+     * the actual vacancy check used everywhere — is lease-based and doesn't
+     * consult occupancy_status_id at all, so this choice only affects
+     * display, e.g. TenantMovementController's occupied/vacant unit lists.)
+     */
+    private function clearCurrentTenancy(Client $tenant, ?string $reason): void
+    {
+        LeaseAgreement::where('tenant_id', $tenant->id)
+            ->where('lease_status', 'Active')
+            ->update([
+                'lease_status' => 'Terminated',
+                'current_status_id' => 2,
+                'date_end' => now(),
+            ]);
+
+        if ($tenant->unit_id) {
+            Unit::where('id', $tenant->unit_id)->update(['occupancy_status_id' => 31]);
+        }
+
+        $oldUnitId = $tenant->unit_id;
+        // cb_tenant_history.property_id is NOT NULL — fall back to the unit's
+        // own property_id if the Client row's own property_id is inconsistent
+        // with its unit_id (exactly the kind of bad/migrated data this method
+        // exists to clean up).
+        $oldPropertyId = $tenant->property_id ?: Unit::where('id', $oldUnitId)->value('property_id');
+        $oldSlaId = $tenant->sla_id;
+        $oldRentAmount = $tenant->rent_amount;
+        $oldLeaseStart = $tenant->lease_start_date;
+
+        $tenant->update([
+            'unit_id' => null,
+            'property_id' => null,
+            'sla_id' => null,
+            'rent_amount' => null,
+            'lease_start_date' => null,
+            'lease_years' => null,
+            'frequency' => null,
+        ]);
+
+        $landlordId = $oldPropertyId ? Property::where('id', $oldPropertyId)->value('client_id') : null;
+        $exitDate = now();
+        $durationDays = $oldLeaseStart
+            ? (int) \Carbon\Carbon::parse($oldLeaseStart)->diffInDays($exitDate)
+            : null;
+
+        TenantHistory::create([
+            'tenant_id' => $tenant->id,
+            'landlord_id' => $landlordId,
+            'property_id' => $oldPropertyId,
+            'unit_id' => $oldUnitId,
+            'exit_id' => null,
+            'lease_start_date' => $oldLeaseStart,
+            'rent_amount' => $oldRentAmount,
+            'sla_id' => $oldSlaId,
+            'exit_date' => $exitDate,
+            'duration_days' => $durationDays,
+            'exit_reason' => $reason ?: 'Reassigned via Returning Tenant flow — cleared stale/incorrect prior assignment',
+            'recorded_by' => Auth::id(),
+        ]);
+    }
+
+    /**
      * Validate tenant request
      */
     private function validateTenantRequest(Request $request)
@@ -503,8 +929,8 @@ class TenantsController extends Controller
             'frequency' => 'required|in:Annually,Monthly,Quarterly,Semi-Annually,Biennially',
             'address_2' => 'nullable|string|max:255',
             'address_3' => 'nullable|string|max:255',
-            'deposit_amount' => 'nullable|numeric|min:0',
-            'deposit_held_by' => 'required_with:deposit_amount|nullable|in:Company,Landlord',
+            'deposit_months' => 'nullable|numeric|min:0.1',
+            'deposit_held_by' => 'required_with:deposit_months|nullable|in:Company,Landlord',
 
             // Tenant Information
             // Individual-only fields: not required here since a Company tenant doesn't fill
@@ -734,14 +1160,21 @@ class TenantsController extends Controller
      * Record the move-in deposit, if one was entered, in the dedicated deposits
      * register and mirror it as a credit entry on the tenant's ledger so it
      * shows up consistently on the tenant statement and exit workflow alike.
+     *
+     * $leaseId: optional — the returning-tenant flow always has a LeaseAgreement
+     * by the time it calls this (see reassignReturningTenant()) and links the
+     * deposit to it; onboarding doesn't create a lease at all (see class docblock
+     * / createTenant()) so its call leaves this null, same as before.
      */
-    private function saveDeposit(array $validated, Client $tenant): void
+    private function saveDeposit(array $validated, Client $tenant, ?int $leaseId = null): void
     {
-        $amount = (float) ($validated['deposit_amount'] ?? 0);
+        $months = (float) ($validated['deposit_months'] ?? 0);
 
-        if ($amount <= 0) {
+        if ($months <= 0) {
             return;
         }
+
+        $amount = $this->computeDepositAmount((int) $validated['unit_id'], $months);
 
         $property = Property::find($validated['property_id']);
         $narration = 'Move-in security deposit';
@@ -755,7 +1188,9 @@ class TenantsController extends Controller
             'property_id' => $validated['property_id'],
             'sla_id' => $validated['sla_ref'] ?? null,
             'unit_id' => $validated['unit_id'],
+            'lease_id' => $leaseId,
             'amount' => $amount,
+            'months' => $months,
             'held_by' => $validated['deposit_held_by'] ?? null,
             'created_by_id' => Auth::id(),
             'current_status_id' => 1,

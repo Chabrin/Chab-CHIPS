@@ -74,4 +74,15 @@ trait TenantRecordHelperTrait
     {
         return (float) (Unit::find($unitId)->rent_amount ?? 0);
     }
+
+    /**
+     * A deposit's amount is driven by how many months it covers, not typed
+     * freely — unit rent × months, computed here so every place that records
+     * a deposit (onboarding, the returning-tenant flow) can't disagree on
+     * the math.
+     */
+    private function computeDepositAmount(int $unitId, float $months): float
+    {
+        return round($this->resolveRentAmount($unitId) * $months, 2);
+    }
 }

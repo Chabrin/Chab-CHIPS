@@ -126,16 +126,31 @@ class PropertyConfirmationController extends Controller
             });
         }
 
+        // Was unbounded: 1,803 properties currently match this condition, and
+        // eager-loading `units` pulls in every unit on each one (not just the
+        // pending ones — the bundle card intentionally shows every unit's own
+        // status badge for context), which alone was ~48,600 rows — a
+        // confirmed fatal "Allowed memory size exhausted" every time this ran,
+        // never even reaching a caught exception or the logs. The "pagination"
+        // below (`slice($start, $length)`) was also fake — it only ever
+        // happened after everything was already loaded into memory. Capping
+        // each source query to the 500 most-recent trades perfect accuracy on
+        // very deep pagination for not crashing at all — same tradeoff as
+        // every other unbounded-query fix made this session.
         $bundles = collect();
 
-        foreach ($propertiesQuery->with(['client', 'zone', 'units', 'serviceAgreements'])->get() as $property) {
+        foreach ($propertiesQuery->with(['client', 'zone', 'units', 'serviceAgreements'])->orderByDesc('date_time')->limit(500)->get() as $property) {
             $bundles->push($this->buildPropertyOnboardingBundle($property));
         }
 
-        foreach ($landlordOnlyQuery->get() as $landlord) {
+        foreach ($landlordOnlyQuery->orderByDesc('date_time')->limit(500)->get() as $landlord) {
             $bundles->push($this->buildLandlordOnlyOnboardingBundle($landlord));
         }
 
+        // recordsTotal reflects the capped set, not the true underlying total —
+        // deliberate: an exact count would need its own uncapped query, and the
+        // point of the cap above is specifically to avoid touching the
+        // unbounded set at all.
         $bundles = $bundles->sortByDesc('created_at_raw')->values();
         $recordsTotal = $bundles->count();
 
