@@ -574,6 +574,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                     <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
                                                     Bulk Upload Tenants
                                                 </button>
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="deleteSelectedUploadsBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="deleteSelectedUploadsSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">delete</span>
+                                                    Delete Selected
+                                                </button>
                                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="pushUploadsToMainBtn" disabled>
                                                     <span class="spinner-border spinner-border-sm me-2 d-none" id="pushUploadsSpinner"></span>
                                                     <span class="material-symbols-outlined me-1" style="font-size:18px;">publish</span>
@@ -585,6 +590,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             <table id="tenantUploadsTable" class="display" style="width:100%;">
                                                 <thead>
                                                     <tr>
+                                                        <th><input type="checkbox" class="form-check-input" id="tenantUploadsSelectAll"></th>
                                                         <th>#</th>
                                                         <th>Unit Code</th>
                                                         <th>Names</th>
@@ -1633,6 +1639,14 @@ COPY PERMISSIONS (paste when re-enabling checks):
         var tenantUploadsTable = $('#tenantUploadsTable').DataTable({
             data: [],
             columns: [{
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id) {
+                        return '<input type="checkbox" class="form-check-input tenant-upload-row-check" value="' + id + '">';
+                    }
+                },
+                {
                     data: null,
                     render: function(data, type, row, meta) {
                         return meta.row + 1;
@@ -1650,9 +1664,8 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         if (!pushError) {
                             return '<span class="badge bg-secondary">Pending push</span>';
                         }
-                        return '<span class="badge bg-danger me-1">Needs attention</span>' +
-                            '<a href="#" class="text-primary view-upload-error-btn" data-error="' + $('<div>').text(pushError).html() + '" title="View issue">' +
-                            '<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span></a>';
+                        return '<a href="#" class="text-danger view-upload-error-btn" data-error="' + $('<div>').text(pushError).html() + '" title="View issue">' +
+                            '<span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">info</span></a>';
                     }
                 },
                 {
@@ -2168,12 +2181,72 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         tenantUploadsTable.rows.add(response.data);
                     }
                     tenantUploadsTable.draw();
+                    $('#tenantUploadsSelectAll').prop('checked', false);
+                    $('#deleteSelectedUploadsBtn').prop('disabled', true);
                 },
                 error: function() {
                     toastr.error('Failed to load uploaded tenants.');
                 }
             });
         }
+
+        // Select all / individual row checkboxes for the Tenants Uploads table
+        $('#tenantUploadsSelectAll').on('change', function() {
+            var checked = $(this).is(':checked');
+            $('#tenantUploadsTable .tenant-upload-row-check').prop('checked', checked);
+            $('#deleteSelectedUploadsBtn').prop('disabled', $('#tenantUploadsTable .tenant-upload-row-check:checked').length === 0);
+        });
+
+        $('#tenantUploadsTable').on('change', '.tenant-upload-row-check', function() {
+            var totalBoxes = $('#tenantUploadsTable .tenant-upload-row-check').length;
+            var checkedBoxes = $('#tenantUploadsTable .tenant-upload-row-check:checked').length;
+            $('#tenantUploadsSelectAll').prop('checked', totalBoxes > 0 && totalBoxes === checkedBoxes);
+            $('#deleteSelectedUploadsBtn').prop('disabled', checkedBoxes === 0);
+        });
+
+        // Bulk delete selected staged rows
+        $('#deleteSelectedUploadsBtn').on('click', function() {
+            var ids = $('#tenantUploadsTable .tenant-upload-row-check:checked').map(function() {
+                return $(this).val();
+            }).get();
+            if (!ids.length) return;
+
+            Swal.fire({
+                title: 'Delete ' + ids.length + ' selected row(s)?',
+                text: 'This only removes the staged upload rows — nothing else is affected.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3598db',
+                cancelButtonColor: '#8a94a3',
+                confirmButtonText: 'Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+
+                var btn = $('#deleteSelectedUploadsBtn');
+                var spinner = $('#deleteSelectedUploadsSpinner');
+                btn.prop('disabled', true);
+                spinner.removeClass('d-none');
+
+                $.ajax({
+                    url: "{{ route('property.tenants.uploads.bulk-delete') }}",
+                    type: 'POST',
+                    data: { _token: '{{ csrf_token() }}', ids: ids },
+                    dataType: 'json',
+                    success: function(response) {
+                        toastr.success(response.message);
+                        loadTenantUploads($('#tenantPropertySelect').val());
+                    },
+                    error: function(xhr) {
+                        var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete selected rows.';
+                        toastr.error(message);
+                    },
+                    complete: function() {
+                        spinner.addClass('d-none');
+                    }
+                });
+            });
+        });
 
         // Bulk Upload Tenants — download template scoped to the selected property
         $('#downloadTenantTemplateBtn').on('click', function() {

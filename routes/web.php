@@ -649,6 +649,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/tenants/uploads/data', [App\Http\Controllers\TenantBulkUploadController::class, 'uploadsData'])->name('property.tenants.uploads.data');
     Route::put('/property/tenants/uploads/{id}', [App\Http\Controllers\TenantBulkUploadController::class, 'updateUpload'])->name('property.tenants.uploads.update');
     Route::delete('/property/tenants/uploads/{id}', [App\Http\Controllers\TenantBulkUploadController::class, 'destroyUpload'])->name('property.tenants.uploads.delete');
+    Route::post('/property/tenants/uploads/bulk-delete', [App\Http\Controllers\TenantBulkUploadController::class, 'destroySelectedUploads'])->name('property.tenants.uploads.bulk-delete');
     Route::post('/property/tenants/uploads/push', [App\Http\Controllers\TenantBulkUploadController::class, 'pushToMain'])->name('property.tenants.uploads.push');
     Route::get('/ajax/banks-and-branches', [ClientsController::class, 'getBanksAndBranches'])->name('ajax.banks.branches');
 

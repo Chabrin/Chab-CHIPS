@@ -24,9 +24,12 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  * Bulk upload of tenant demographic records from the Tenants tab of a
  * landlord's client page (property.clients.show). Two-stage flow:
  *
- *   1. import() — an uploaded template is parsed and dumped, as-is, into the
- *      temp_uploaded_tenants staging table. No business validation here
- *      (unit vacancy, nationality lookup, duplicate national ID, ...) — the
+ *   1. import() — an uploaded template is parsed and dumped into the
+ *      temp_uploaded_tenants staging table. Only the required fields
+ *      (missingRequiredFields()) and Unit Code (unitCodeIssue()) are checked
+ *      at this point — a failing row is still staged, just flagged with
+ *      push_error so it's visible immediately. Everything else business-side
+ *      (nationality lookup, duplicate national ID) is deferred to push — the
  *      point of staging is to let the row be reviewed/edited before it
  *      becomes a real tenant.
  *   2. pushToMain() — every staged, not-yet-pushed row for a property is run
@@ -181,19 +184,39 @@ class TenantBulkUploadController extends Controller
 
                 foreach ($rows as $row) {
                     $unitCode = trim($row[0] ?? '');
-                    $unitIssue = $unitCode !== '' ? $this->unitCodeIssue($unitCode, $property, $usedUnitCodes) : null;
+                    $names = trim($row[2] ?? '');
+                    $gender = trim($row[3] ?? '');
+                    $mobile = trim($row[4] ?? '');
+                    $nationality = trim($row[7] ?? '');
+                    $nationalId = trim($row[8] ?? '');
+
+                    $issues = [];
+
+                    $missing = $this->missingRequiredFields($unitCode, $names, $gender, $mobile, $nationality, $nationalId);
+                    if (!empty($missing)) {
+                        $issues[] = implode(', ', $missing) . ' required';
+                    }
+
+                    if ($unitCode !== '') {
+                        $unitIssue = $this->unitCodeIssue($unitCode, $property, $usedUnitCodes);
+                        if ($unitIssue) {
+                            $issues[] = $unitIssue;
+                        }
+                    }
+
+                    $pushError = !empty($issues) ? implode('; ', $issues) : null;
 
                     TempUploadedTenant::create([
                         'property_id' => $property->id,
                         'unit_code' => $unitCode ?: null,
                         'title' => trim($row[1] ?? '') ?: null,
-                        'names' => trim($row[2] ?? '') ?: null,
-                        'gender' => trim($row[3] ?? '') ?: null,
-                        'mobile_number' => trim($row[4] ?? '') ?: null,
+                        'names' => $names ?: null,
+                        'gender' => $gender ?: null,
+                        'mobile_number' => $mobile ?: null,
                         'email_address' => trim($row[5] ?? '') ?: null,
                         'pin_number' => trim($row[6] ?? '') ?: null,
-                        'nationality' => trim($row[7] ?? '') ?: null,
-                        'national_id' => trim($row[8] ?? '') ?: null,
+                        'nationality' => $nationality ?: null,
+                        'national_id' => $nationalId ?: null,
                         'passport_number' => trim($row[9] ?? '') ?: null,
                         'other_contact_name' => trim($row[10] ?? '') ?: null,
                         'other_contact_email' => trim($row[11] ?? '') ?: null,
@@ -203,11 +226,11 @@ class TenantBulkUploadController extends Controller
                         'next_of_kin_email' => trim($row[15] ?? '') ?: null,
                         'next_of_kin_national_id' => trim($row[16] ?? '') ?: null,
                         'next_of_kin_relationship' => trim($row[17] ?? '') ?: null,
-                        'push_error' => $unitIssue,
+                        'push_error' => $pushError,
                         'created_by' => Auth::id(),
                     ]);
                     $count++;
-                    if ($unitIssue) {
+                    if ($pushError) {
                         $flagged++;
                     }
                 }
@@ -217,7 +240,7 @@ class TenantBulkUploadController extends Controller
 
             $message = "Staged {$result['count']} row(s) for review.";
             if ($result['flagged'] > 0) {
-                $message .= " {$result['flagged']} row(s) have a Unit Code issue — see \"Needs attention\" in the list.";
+                $message .= " {$result['flagged']} row(s) need attention — see the list.";
             }
 
             return response()->json([
@@ -328,6 +351,41 @@ class TenantBulkUploadController extends Controller
     }
 
     /**
+     * Bulk-discard several staged rows at once (the Tenants Uploads table's
+     * "Delete Selected"). Already-pushed rows in the selection are silently
+     * skipped rather than erroring the whole request — the same
+     * once-pushed-it's-final rule destroyUpload() enforces one row at a time.
+     */
+    public function destroySelectedUploads(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'integer',
+            ]);
+
+            $deleted = TempUploadedTenant::whereIn('id', $validated['ids'])
+                ->where('pushed_to_main', false)
+                ->delete();
+
+            $skipped = count($validated['ids']) - $deleted;
+
+            $message = "Deleted {$deleted} row(s).";
+            if ($skipped > 0) {
+                $message .= " {$skipped} row(s) were skipped (already pushed).";
+            }
+
+            return response()->json(['success' => true, 'message' => $message, 'deleted' => $deleted]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->flatten()->first()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error bulk-deleting staged tenant uploads: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to delete selected rows'], 500);
+        }
+    }
+
+    /**
      * Run every not-yet-pushed staged row for a property through the real
      * tenant-creation validation. Each row is independent — one failing row
      * neither blocks nor rolls back the others, mirroring the row-level
@@ -381,14 +439,33 @@ class TenantBulkUploadController extends Controller
     }
 
     /**
-     * Import-time Unit Code check — the one field validated before staging
-     * (everything else is deferred to pushOneRow(), see the class docblock).
-     * Returns null when the code is fine, or a human-readable reason why the
-     * row is flagged "Needs attention" as soon as it lands in the staging
-     * table: unit doesn't exist under the property, isn't vacant, already
-     * has a real tenant, or is claimed by an earlier row in this same file.
-     * Re-checked for real at push time too (pushOneRow()), since availability
-     * can change between upload and push.
+     * The six required fields (empty/null not allowed), shared by import()
+     * (flags the row immediately) and pushOneRow() (re-checked at push time,
+     * since a row can be edited in between). Returns the list of missing
+     * field labels — empty when the row is complete.
+     */
+    private function missingRequiredFields(string $unitCode, string $names, string $gender, string $mobile, string $nationality, string $nationalId): array
+    {
+        $missing = [];
+        if ($unitCode === '') $missing[] = 'Unit Code';
+        if ($names === '') $missing[] = 'Names';
+        if ($gender === '') $missing[] = 'Gender';
+        if ($mobile === '') $missing[] = 'Mobile Number';
+        if ($nationality === '') $missing[] = 'Nationality';
+        if ($nationalId === '') $missing[] = 'National ID';
+
+        return $missing;
+    }
+
+    /**
+     * Import-time Unit Code check. Everything else business-side (nationality
+     * lookup, duplicate national ID) is still deferred to pushOneRow(), see
+     * the class docblock — this one, like missingRequiredFields(), runs at
+     * import too so a bad Unit Code is visible the moment the row lands in
+     * the staging table: unit doesn't exist under the property, isn't
+     * vacant, already has a real tenant, or is claimed by an earlier row in
+     * this same file. Re-checked for real at push time too (pushOneRow()),
+     * since availability can change between upload and push.
      */
     private function unitCodeIssue(string $unitCode, Property $property, array &$usedInFile): ?string
     {
@@ -447,13 +524,7 @@ class TenantBulkUploadController extends Controller
         $kinId = trim((string) $row->next_of_kin_national_id);
         $kinRelationship = trim((string) $row->next_of_kin_relationship);
 
-        $missing = [];
-        if ($unitCode === '') $missing[] = 'Unit Code';
-        if ($names === '') $missing[] = 'Names';
-        if ($gender === '') $missing[] = 'Gender';
-        if ($mobile === '') $missing[] = 'Mobile Number';
-        if ($nationalityName === '') $missing[] = 'Nationality';
-        if ($nationalId === '') $missing[] = 'National ID';
+        $missing = $this->missingRequiredFields($unitCode, $names, $gender, $mobile, $nationalityName, $nationalId);
         if (!empty($missing)) {
             throw new \RuntimeException(implode(', ', $missing) . ' required');
         }
