@@ -9,6 +9,7 @@ use App\Models\Property;
 use App\Models\SystemCountry;
 use App\Models\TempUploadedTenant;
 use App\Models\Unit;
+use App\Traits\LeaseCreationTrait;
 use App\Traits\TenantRecordHelperTrait;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
@@ -35,31 +36,41 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  *   2. pushToMain() — every staged, not-yet-pushed row for a property is run
  *      through the real validation + Client-creation logic (the same rules
  *      TenantsController::store()/createTenant() and the old single-stage
- *      importer used). Rows that fail stay staged with push_error set, ready
- *      to be fixed via updateUpload() and pushed again; rows that succeed
- *      flip pushed_to_main and drop out of the staging listing.
+ *      importer used), then a LeaseAgreement is created for the new tenant
+ *      via LeaseCreationTrait (shared with LeasesController::store(), so a
+ *      lease built here can't drift from one built interactively) using the
+ *      row's Lease Start Date plus context already known from the push
+ *      (unit, property, tenant, SLA). Rows that fail stay staged with
+ *      push_error set, ready to be fixed via updateUpload() and pushed
+ *      again; rows that succeed flip pushed_to_main and drop out of the
+ *      staging listing.
  *
  * Deliberately narrower than BulkUploadController::processTenants(): no
- * Tenant Type/Company support, and no lease terms (lease_start_date/years/
- * frequency) — a row here only creates the tenant and links them to a
- * vacant unit, the same as TenantsController::assignUnit() does for a
- * pending-unit tenant. Lease creation stays a separate, deliberate step
- * (LeasesController).
+ * Tenant Type/Company support, and no per-row lease years/escalation/
+ * auto-renewal controls — every uploaded lease gets 1 year, 0% escalation,
+ * Annually, no auto-renewal (LeaseCreationTrait's own defaults bar years,
+ * which has none — 1 is this class's choice). Only Lease Start Date is
+ * uploaded; anyone needing different terms edits the lease afterward the
+ * same way any other lease is edited.
  */
 class TenantBulkUploadController extends Controller
 {
     use TenantRecordHelperTrait;
+    use LeaseCreationTrait;
 
     private const MAX_ROWS = 100;
 
     /** Column order shared by the template and the importer — keep in sync. */
     private const COLUMNS = [
-        'Unit Code', 'Title', 'Names', 'Gender', 'Mobile Number', 'Email Address',
+        'Unit Code', 'Lease Start Date', 'Title', 'Names', 'Gender', 'Mobile Number', 'Email Address',
         'KRA PIN', 'Nationality', 'National ID', 'Passport Number',
         'Other Contact Name', 'Other Contact Email', 'Other Contact Phone',
         'Next of Kin Name', 'Next of Kin Mobile', 'Next of Kin Email',
         'Next of Kin ID', 'Next of Kin Relationship',
     ];
+
+    /** Every uploaded lease gets these terms — only Lease Start Date is per-row. */
+    private const DEFAULT_LEASE_YEARS = 1;
 
     /**
      * Excel template for a single property, one row pre-filled per vacant
@@ -108,13 +119,15 @@ class TenantBulkUploadController extends Controller
             $sheet->setCellValue($refCol . $refRow, $property->reference_number . ' - ' . $property->property_name);
             $refRow += 2;
 
-            $sheet->setCellValue($refCol . $refRow, 'Required: Unit Code, Names, Gender, Mobile Number, Nationality, National ID');
+            $sheet->setCellValue($refCol . $refRow, 'Required: Unit Code, Lease Start Date, Names, Gender, Mobile Number, Nationality, National ID');
             $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
             $refRow++;
             $sheet->setCellValue($refCol . $refRow, 'Everything else is optional.');
             $refRow += 2;
 
             $sheet->setCellValue($refCol . $refRow, 'Unit Code must be one of this property\'s vacant units — pre-filled below, one per row.');
+            $refRow++;
+            $sheet->setCellValue($refCol . $refRow, 'Lease Start Date format: YYYY-MM-DD (e.g. 2026-09-01). A 1-year lease is created automatically on push.');
             $refRow++;
             $sheet->setCellValue($refCol . $refRow, 'Gender: Male, Female, or Other');
             $refRow++;
@@ -184,17 +197,22 @@ class TenantBulkUploadController extends Controller
 
                 foreach ($rows as $row) {
                     $unitCode = trim($row[0] ?? '');
-                    $names = trim($row[2] ?? '');
-                    $gender = trim($row[3] ?? '');
-                    $mobile = trim($row[4] ?? '');
-                    $nationality = trim($row[7] ?? '');
-                    $nationalId = trim($row[8] ?? '');
+                    $leaseStartDate = trim($row[1] ?? '');
+                    $names = trim($row[3] ?? '');
+                    $gender = trim($row[4] ?? '');
+                    $mobile = trim($row[5] ?? '');
+                    $nationality = trim($row[8] ?? '');
+                    $nationalId = trim($row[9] ?? '');
 
                     $issues = [];
 
-                    $missing = $this->missingRequiredFields($unitCode, $names, $gender, $mobile, $nationality, $nationalId);
+                    $missing = $this->missingRequiredFields($unitCode, $leaseStartDate, $names, $gender, $mobile, $nationality, $nationalId);
                     if (!empty($missing)) {
                         $issues[] = implode(', ', $missing) . ' required';
+                    }
+
+                    if ($leaseStartDate !== '' && !$this->isParsableDate($leaseStartDate)) {
+                        $issues[] = "Lease Start Date '{$leaseStartDate}' is not a valid date";
                     }
 
                     if ($unitCode !== '') {
@@ -209,23 +227,24 @@ class TenantBulkUploadController extends Controller
                     TempUploadedTenant::create([
                         'property_id' => $property->id,
                         'unit_code' => $unitCode ?: null,
-                        'title' => trim($row[1] ?? '') ?: null,
+                        'lease_start_date' => $leaseStartDate ?: null,
+                        'title' => trim($row[2] ?? '') ?: null,
                         'names' => $names ?: null,
                         'gender' => $gender ?: null,
                         'mobile_number' => $mobile ?: null,
-                        'email_address' => trim($row[5] ?? '') ?: null,
-                        'pin_number' => trim($row[6] ?? '') ?: null,
+                        'email_address' => trim($row[6] ?? '') ?: null,
+                        'pin_number' => trim($row[7] ?? '') ?: null,
                         'nationality' => $nationality ?: null,
                         'national_id' => $nationalId ?: null,
-                        'passport_number' => trim($row[9] ?? '') ?: null,
-                        'other_contact_name' => trim($row[10] ?? '') ?: null,
-                        'other_contact_email' => trim($row[11] ?? '') ?: null,
-                        'other_contact_phone' => trim($row[12] ?? '') ?: null,
-                        'next_of_kin_name' => trim($row[13] ?? '') ?: null,
-                        'next_of_kin_mobile' => trim($row[14] ?? '') ?: null,
-                        'next_of_kin_email' => trim($row[15] ?? '') ?: null,
-                        'next_of_kin_national_id' => trim($row[16] ?? '') ?: null,
-                        'next_of_kin_relationship' => trim($row[17] ?? '') ?: null,
+                        'passport_number' => trim($row[10] ?? '') ?: null,
+                        'other_contact_name' => trim($row[11] ?? '') ?: null,
+                        'other_contact_email' => trim($row[12] ?? '') ?: null,
+                        'other_contact_phone' => trim($row[13] ?? '') ?: null,
+                        'next_of_kin_name' => trim($row[14] ?? '') ?: null,
+                        'next_of_kin_mobile' => trim($row[15] ?? '') ?: null,
+                        'next_of_kin_email' => trim($row[16] ?? '') ?: null,
+                        'next_of_kin_national_id' => trim($row[17] ?? '') ?: null,
+                        'next_of_kin_relationship' => trim($row[18] ?? '') ?: null,
                         'push_error' => $pushError,
                         'created_by' => Auth::id(),
                     ]);
@@ -296,6 +315,7 @@ class TenantBulkUploadController extends Controller
 
             $validated = $request->validate([
                 'unit_code' => 'nullable|string|max:255',
+                'lease_start_date' => 'nullable|string|max:50',
                 'title' => 'nullable|string|max:50',
                 'names' => 'nullable|string|max:255',
                 'gender' => 'nullable|string|max:20',
@@ -439,15 +459,16 @@ class TenantBulkUploadController extends Controller
     }
 
     /**
-     * The six required fields (empty/null not allowed), shared by import()
+     * The seven required fields (empty/null not allowed), shared by import()
      * (flags the row immediately) and pushOneRow() (re-checked at push time,
      * since a row can be edited in between). Returns the list of missing
      * field labels — empty when the row is complete.
      */
-    private function missingRequiredFields(string $unitCode, string $names, string $gender, string $mobile, string $nationality, string $nationalId): array
+    private function missingRequiredFields(string $unitCode, string $leaseStartDate, string $names, string $gender, string $mobile, string $nationality, string $nationalId): array
     {
         $missing = [];
         if ($unitCode === '') $missing[] = 'Unit Code';
+        if ($leaseStartDate === '') $missing[] = 'Lease Start Date';
         if ($names === '') $missing[] = 'Names';
         if ($gender === '') $missing[] = 'Gender';
         if ($mobile === '') $missing[] = 'Mobile Number';
@@ -455,6 +476,21 @@ class TenantBulkUploadController extends Controller
         if ($nationalId === '') $missing[] = 'National ID';
 
         return $missing;
+    }
+
+    /**
+     * Whether a raw uploaded/edited cell parses as a real calendar date —
+     * used to flag Lease Start Date early (import) rather than only
+     * discovering it's garbage when pushOneRow() tries to build the lease.
+     */
+    private function isParsableDate(string $value): bool
+    {
+        try {
+            new \DateTime($value);
+            return true;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 
     /**
@@ -506,6 +542,7 @@ class TenantBulkUploadController extends Controller
     private function pushOneRow(TempUploadedTenant $row, Property $property, array &$usedUnitIds): void
     {
         $unitCode = trim((string) $row->unit_code);
+        $leaseStartDate = trim((string) $row->lease_start_date);
         $title = trim((string) $row->title);
         $names = trim((string) $row->names);
         $gender = trim((string) $row->gender);
@@ -524,10 +561,15 @@ class TenantBulkUploadController extends Controller
         $kinId = trim((string) $row->next_of_kin_national_id);
         $kinRelationship = trim((string) $row->next_of_kin_relationship);
 
-        $missing = $this->missingRequiredFields($unitCode, $names, $gender, $mobile, $nationalityName, $nationalId);
+        $missing = $this->missingRequiredFields($unitCode, $leaseStartDate, $names, $gender, $mobile, $nationalityName, $nationalId);
         if (!empty($missing)) {
             throw new \RuntimeException(implode(', ', $missing) . ' required');
         }
+
+        if (!$this->isParsableDate($leaseStartDate)) {
+            throw new \RuntimeException("Lease Start Date '{$leaseStartDate}' is not a valid date");
+        }
+        $leaseStartDateNormalized = (new \DateTime($leaseStartDate))->format('Y-m-d');
 
         $normalizedGender = ucfirst(strtolower($gender));
         if (!in_array($normalizedGender, ['Male', 'Female', 'Other'], true)) {
@@ -559,6 +601,8 @@ class TenantBulkUploadController extends Controller
             throw new \RuntimeException("National ID '{$nationalId}' already belongs to tenant {$duplicate->names} ({$duplicate->reference_number})");
         }
 
+        $slaId = $this->resolveSlaId($property->id);
+
         $tenant = Client::create([
             'reference_number' => $this->generateTenantReferenceNumber(),
             'names' => trim($title . ' ' . $names),
@@ -575,7 +619,7 @@ class TenantBulkUploadController extends Controller
             'client_type_id' => 1, // Individual
             'type_id' => 2, // Tenant — see Client::scopeTenants()
             'property_id' => $property->id,
-            'sla_id' => $this->resolveSlaId($property->id),
+            'sla_id' => $slaId,
             'unit_id' => $unit->id,
             'rent_amount' => $this->resolveRentAmount($unit->id),
             'overdraft_penalty' => 5, // company-standard default, not user-entered
@@ -603,6 +647,23 @@ class TenantBulkUploadController extends Controller
                 'national_id' => $kinId !== '' ? $kinId : null,
             ]);
         }
+
+        // LeaseCreationTrait::createLeaseAgreementRecord() also flips the unit's
+        // occupancy_status_id to Occupied and generates the lease ref number —
+        // same shared path LeasesController::store() uses, so a lease built here
+        // can't drift from one built interactively.
+        $this->createLeaseAgreementRecord([
+            'client_id' => $property->client_id,
+            'property_id' => $property->id,
+            'unit_id' => $unit->id,
+            'tenant_id' => $tenant->id,
+            'sla_id' => $slaId,
+            'date_start' => $leaseStartDateNormalized,
+            'years' => self::DEFAULT_LEASE_YEARS,
+            'auto_renewal' => 'No',
+            'escalation_rate' => 0,
+            'escalation_frequency' => 'Annually',
+        ]);
 
         $usedUnitIds[$unit->id] = true;
 

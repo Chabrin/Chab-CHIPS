@@ -11,6 +11,7 @@ class TempUploadedTenant extends Model
     protected $fillable = [
         'property_id',
         'unit_code',
+        'lease_start_date',
         'title',
         'names',
         'gender',

@@ -654,6 +654,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                         <th><input type="checkbox" class="form-check-input" id="tenantUploadsSelectAll"></th>
                                                         <th>#</th>
                                                         <th>Unit Code</th>
+                                                        <th>Lease Start</th>
                                                         <th>Names</th>
                                                         <th>Gender</th>
                                                         <th>Mobile</th>
@@ -977,7 +978,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </div>
 
                                             <p class="text-muted small fst-italic mb-0">
-                                                Required: Unit Code, Names, Gender, Mobile Number, Nationality, National ID. Max per file: 100.
+                                                Required: Unit Code, Lease Start Date, Names, Gender, Mobile Number, Nationality, National ID. Max per file: 100.
                                             </p>
 
                                             <div id="tenantBulkUploadResults" class="mt-3" style="display:none;"></div>
@@ -1020,6 +1021,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         <div class="col-md-4">
                             <label class="form-label small mb-1">Unit Code <span class="text-danger">*</span></label>
                             <input type="text" class="form-control form-control-sm" id="editUnitCode">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Lease Start Date <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editLeaseStartDate" placeholder="YYYY-MM-DD">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small mb-1">Title</label>
@@ -1898,6 +1903,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     }
                 },
                 { data: 'unit_code', defaultContent: '-' },
+                { data: 'lease_start_date', defaultContent: '-' },
                 { data: 'names', defaultContent: '-' },
                 { data: 'gender', defaultContent: '-' },
                 { data: 'mobile_number', defaultContent: '-' },
@@ -2629,6 +2635,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
             $('#editUploadId').val(id);
             $('#editUnitCode').val(row.unit_code);
+            $('#editLeaseStartDate').val(row.lease_start_date);
             $('#editTitle').val(row.title);
             $('#editNames').val(row.names);
             $('#editGender').val(row.gender || '');
@@ -2669,6 +2676,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 data: {
                     _token: '{{ csrf_token() }}',
                     unit_code: $('#editUnitCode').val(),
+                    lease_start_date: $('#editLeaseStartDate').val(),
                     title: $('#editTitle').val(),
                     names: $('#editNames').val(),
                     gender: $('#editGender').val(),
