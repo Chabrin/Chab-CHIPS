@@ -815,6 +815,18 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/units/tenants/search-landlords', [App\Http\Controllers\TenantsController::class, 'searchLandlordsForUnitPicker'])->name('units.tenants.search-landlords');
     Route::get('/units/tenants/search-properties', [App\Http\Controllers\TenantsController::class, 'searchPropertiesForUnitPicker'])->name('units.tenants.search-properties');
 
+    // Returning Tenant — reassign any tenant (not just a formally-exited one)
+    // to a new unit + create their lease, clearing a stale current
+    // unit/lease first if one is on record
+    Route::get('/units/tenants/returning/create', [App\Http\Controllers\TenantsController::class, 'returningTenantCreate'])->name('units.tenants.returning.create');
+    Route::get('/units/tenants/returning/search', [App\Http\Controllers\TenantsController::class, 'searchTenantsForReassignment'])->name('units.tenants.returning.search');
+    Route::get('/units/tenants/returning/{encryptedId}/history', [App\Http\Controllers\TenantsController::class, 'tenantHistory'])->name('units.tenants.returning.history');
+    Route::get('/units/tenants/returning/{encryptedId}/current', [App\Http\Controllers\TenantsController::class, 'currentTenancy'])->name('units.tenants.returning.current');
+    Route::post('/units/tenants/returning', [App\Http\Controllers\TenantsController::class, 'reassignReturningTenant'])->name('units.tenants.returning.store');
+
+    // Tenant History page — standalone, read-only, reachable from tenant details
+    Route::get('/property/tenants/{encryptedId}/history', [App\Http\Controllers\TenantsController::class, 'historyPage'])->name('property.tenants.history');
+
     // Tenant Payments Management
     Route::get('/tenant/payments', [App\Http\Controllers\TenantPaymentsController::class, 'index'])->name('tenant.payments.index');
     Route::get('/tenant/payments/{encryptedId}/details', [App\Http\Controllers\TenantPaymentsController::class, 'showPaymentDetails'])->name('tenant.payments.details');

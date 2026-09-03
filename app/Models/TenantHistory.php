@@ -16,6 +16,8 @@ class TenantHistory extends Model
         'unit_id',
         'exit_id',
         'lease_start_date',
+        'rent_amount',
+        'sla_id',
         'exit_date',
         'duration_days',
         'exit_reason',
@@ -25,6 +27,7 @@ class TenantHistory extends Model
     protected $casts = [
         'lease_start_date' => 'date',
         'exit_date'        => 'date',
+        'rent_amount'      => 'decimal:2',
     ];
 
     public function tenant(): BelongsTo
@@ -50,6 +53,11 @@ class TenantHistory extends Model
     public function exit(): BelongsTo
     {
         return $this->belongsTo(TenantExit::class, 'exit_id');
+    }
+
+    public function sla(): BelongsTo
+    {
+        return $this->belongsTo(ServiceAgreement::class, 'sla_id');
     }
 
     /** Human-readable duration, e.g. "2 yrs 3 mths". */

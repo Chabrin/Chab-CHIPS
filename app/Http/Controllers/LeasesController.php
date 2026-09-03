@@ -6,6 +6,7 @@ use App\Models\Unit;
 use App\Models\Client;
 use App\Models\Property;
 use App\Traits\TenantRecordHelperTrait;
+use App\Traits\LeaseCreationTrait;
 use Illuminate\Http\Request;
 use App\Models\LeaseAgreement;
 use App\Services\ErrorDispatcher;
@@ -20,6 +21,7 @@ use App\Services\LeaseContractService;
 class LeasesController extends Controller
 {
     use TenantRecordHelperTrait;
+    use LeaseCreationTrait;
 
     /**
      * Display a listing of lease agreements
@@ -666,13 +668,10 @@ class LeasesController extends Controller
                 'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
             ]);
 
-            // Calculate end date
-            $startDate = new \DateTime($validated['date_start']);
-            $endDate = clone $startDate;
-            $endDate->modify('+' . $validated['years'] . ' years');
-
-            // Get property to retrieve zone_id
-            $property = Property::findOrFail($validated['property_id']);
+            // Confirm the property exists up front (createLeaseAgreementRecord()
+            // re-fetches it internally for zone_id, but failing fast here keeps
+            // the same "property not found" behavior this method always had).
+            Property::findOrFail($validated['property_id']);
 
             // A lease always needs an SLA — same guarantee the old required "SLA Ref"
             // dropdown gave, just enforced here now that it's derived, not picked.
@@ -695,51 +694,28 @@ class LeasesController extends Controller
                 $hasDocuments = false;
             }
 
-            // Create the Lease Agreement
-            $leaseAgreement = LeaseAgreement::create([
-                'date_time' => now(),
+            // Create the Lease Agreement (+ ref number, invoiceable items, unit
+            // occupancy flip) — shared with the returning-tenant reassignment
+            // flow via LeaseCreationTrait, so both build a lease identically.
+            $leaseAgreement = $this->createLeaseAgreementRecord([
                 'client_id' => $validated['client_id'],
                 'property_id' => $validated['property_id'],
                 'unit_id' => $validated['unit_id'],
                 'tenant_id' => $validated['tenant_id'],
                 'sla_id' => $slaId,
-                'zone_id' => $property->zone_id ?? null,
                 'date_start' => $validated['date_start'],
-                'date_end' => $endDate->format('Y-m-d'),
                 'years' => $validated['years'],
                 'auto_renewal' => $validated['auto_renewal'],
                 'escalation_rate' => $validated['escalation_rate'],
                 'escalation_frequency' => $validated['escalation_frequency'],
                 'service_charges_amount' => $validated['service_charges_amount'] ?? null,
                 'linked_lease_id' => $validated['linked_lease'] ?? null,
-                'initial_water_meter_reading' => $unit->initial_water_meter_reading ?? 0,
-                'created_by_id' => Auth::id(),
-                'current_status_id' => 1, // Pending — awaiting maker-checker approval (bumped to 5/Approved by PropertyConfirmationController)
-                'lease_status' => 'Active',
-                'ref_number' => null, // Will be updated below
-            ]);
-
-            // Generate and update reference number after getting the ID
-            $tenant = Client::find($validated['tenant_id']);
-            $leaseAgreement->ref_number = $this->generateLeaseReferenceNumber(
-                $validated['unit_id'],
-                $tenant->names ?? ''
-            );
-            $leaseAgreement->save();
+            ], $request->has('invoicable_items') && is_array($request->invoicable_items) ? $request->invoicable_items : []);
 
             // Store documents in separate table
             if ($hasDocuments && $request->hasFile('documents')) {
                 $this->storeLeaseDocuments($leaseAgreement->id, $request->file('documents'));
             }
-
-            // Store Invoiceable Items (repeater data)
-            if ($request->has('invoicable_items') && is_array($request->invoicable_items)) {
-                $this->storeInvoiceableItems($leaseAgreement->id, $request->invoicable_items);
-            }
-
-            // Update unit occupancy status to "Occupied"
-            $unit->occupancy_status_id = 38; // Occupied status
-            $unit->save();
 
             DB::commit();
 
@@ -1353,55 +1329,9 @@ class LeasesController extends Controller
         }
     }
 
-    /**
-     * Store Invoiceable Items for the lease
-     *
-     * @param int $leaseAgreementId
-     * @param array $invoiceableItems
-     */
-    protected function storeInvoiceableItems($leaseAgreementId, $invoiceableItems)
-    {
-        foreach ($invoiceableItems as $item) {
-            if (isset($item['item']) && isset($item['amount']) && $item['item'] !== '') {
-                // Get the invoiceable item to retrieve commissionable and vatable info
-                $invoiceableItem = \App\Models\InvoiceableItem::find($item['item']);
-                
-                LeaseAgreementInvoiceableItem::create([
-                    'parent_id' => $leaseAgreementId,
-                    'item_id' => $item['item'],
-                    'amount' => $item['amount'],
-                    'cycle_id' => $item['cycle'],
-                    'commissionable' => $invoiceableItem->commissionable ?? 'No',
-                    'comm_per' => $invoiceableItem->commissionable === 'Yes' ? ($invoiceableItem->commission_percentage ?? 0) : 0,
-                    'vatable' => $invoiceableItem->vatable ?? 'No',
-                    'prepay_client' => isset($item['prepay_client']) && $item['prepay_client'] === 'Yes' ? 'Yes' : 'No',
-                ]);
-            }
-        }
-    
-        Log::info('Invoiceable items stored successfully', [
-            'lease_agreement_id' => $leaseAgreementId,
-            'items_count' => count($invoiceableItems)
-        ]);
-    }
-
-    /**
-     * Generate a reference number for the lease, matching the convention already
-     * used throughout the existing data: {UnitCode}-{TenantName}
-     * Example: 138G-16-ZYRON LAURA
-     *
-     * @param int $unitId
-     * @param string|null $tenantName
-     * @return string
-     */
-    protected function generateLeaseReferenceNumber($unitId, $tenantName)
-    {
-        $unit = Unit::find($unitId);
-        $unitCode = $unit->unit_code ?? '';
-        $tenantName = trim((string) $tenantName);
-
-        return trim($unitCode . '-' . $tenantName, '-');
-    }
+    // storeInvoiceableItems() and generateLeaseReferenceNumber() now live on
+    // LeaseCreationTrait (shared with the returning-tenant reassignment flow)
+    // — see that trait for both.
 
     /**
      * Store documents for the lease agreement

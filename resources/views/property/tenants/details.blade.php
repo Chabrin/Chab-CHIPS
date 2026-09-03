@@ -12,6 +12,10 @@
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to Search</span>
                             </a>
+                            <a href="{{ route('property.tenants.history', $tenant->encrypted_id) }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">history</span>
+                                <span class="ms-1">Tenant History</span>
+                            </a>
                             <a href="{{ url('/property/tenants/' . Crypt::encrypt($tenant->id) . '/edit') }}" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">edit_document</span>
                                 <span class="ms-1">Edit Tenant Details</span>

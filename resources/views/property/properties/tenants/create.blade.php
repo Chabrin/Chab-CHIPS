@@ -201,13 +201,20 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="deposit_amount" class="form-label">Deposit Amount</label>
-                                            <input type="number" step="0.01" class="form-control @error('deposit_amount') is-invalid @enderror"
-                                                   id="deposit_amount" name="deposit_amount"
-                                                   value="{{ old('deposit_amount') }}" placeholder="0.00">
-                                            @error('deposit_amount')
+                                            <label for="deposit_months" class="form-label">Deposit — Number of Months</label>
+                                            <input type="number" step="0.5" min="0" class="form-control @error('deposit_months') is-invalid @enderror"
+                                                   id="deposit_months" name="deposit_months"
+                                                   value="{{ old('deposit_months') }}" placeholder="e.g. 2">
+                                            @error('deposit_months')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                        </div>
+
+                                        <div class="col-md-4 mb-3">
+                                            <label for="deposit_amount_preview" class="form-label">Deposit Amount</label>
+                                            <input type="text" class="form-control" id="deposit_amount_preview" readonly
+                                                   placeholder="Select a unit and enter months">
+                                            <div class="form-text text-muted" style="font-size:0.75rem;">Unit rent × months — computed automatically, not editable. The amount actually recorded is always computed on the server the same way.</div>
                                         </div>
 
                                         <div class="col-md-4 mb-3">
@@ -218,7 +225,7 @@
                                                 <option value="Company" {{ old('deposit_held_by') == 'Company' ? 'selected' : '' }}>Chabrin (Company)</option>
                                                 <option value="Landlord" {{ old('deposit_held_by') == 'Landlord' ? 'selected' : '' }}>Landlord</option>
                                             </select>
-                                            <div class="form-text text-muted" style="font-size:0.75rem;">Who actually holds this deposit — required whenever a deposit amount is entered, to avoid disputes at move-out.</div>
+                                            <div class="form-text text-muted" style="font-size:0.75rem;">Who actually holds this deposit — required whenever a number of months is entered, to avoid disputes at move-out.</div>
                                             @error('deposit_held_by')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -1131,11 +1138,13 @@
                             response.units.forEach(function(unit) {
                                 let unitLabel = unit.unit_name || unit.unit_number;
                                 let status = unit.status == 'Occupied' ? ' (Occupied)' : '';
-                                unitSelect.append(`<option value="${unit.id}">${unitLabel}${status}</option>`);
+                                let rentRaw = String(unit.rent_amount || '0').replace(/,/g, '');
+                                unitSelect.append(`<option value="${unit.id}" data-rent="${rentRaw}">${unitLabel}${status}</option>`);
                             });
                         } else {
                             unitSelect.append('<option value="">No units available</option>');
                         }
+                        updateDepositPreview();
                     },
                     error: function(xhr, status, error) {
                         console.error('Error loading units:', xhr.responseText);
@@ -1145,6 +1154,21 @@
                 });
             }
         });
+
+        // Deposit Amount preview — unit rent × months. Display only; the real
+        // amount is always computed server-side the same way on submit.
+        function updateDepositPreview() {
+            var rent = parseFloat($('#unit_id option:selected').data('rent')) || 0;
+            var months = parseFloat($('#deposit_months').val()) || 0;
+            var preview = $('#deposit_amount_preview');
+            if (rent > 0 && months > 0) {
+                preview.val((rent * months).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+            } else {
+                preview.val('');
+            }
+        }
+        $(document).on('change', '#unit_id', updateDepositPreview);
+        $(document).on('input', '#deposit_months', updateDepositPreview);
 
         // Dynamic Other Contacts
         let contactCounter = 1;

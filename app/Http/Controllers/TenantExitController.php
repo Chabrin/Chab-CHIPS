@@ -710,10 +710,21 @@ class TenantExitController extends Controller
                 ]);
             }
 
-            // 4. Clear tenant's current unit & property links
+            // 4. Clear tenant's current unit & property links, and the lease terms
+            // that went with that tenancy. Captured into locals first so step 6 below
+            // can still archive them into cb_tenant_history even though they're being
+            // nulled off the Client row here.
+            $exitedRentAmount = $tenant->rent_amount;
+            $exitedSlaId      = $tenant->sla_id;
+
             $tenant->update([
-                'unit_id'     => null,
-                'property_id' => null,
+                'unit_id'          => null,
+                'property_id'      => null,
+                'sla_id'           => null,
+                'rent_amount'      => null,
+                'lease_start_date' => null,
+                'lease_years'      => null,
+                'frequency'        => null,
             ]);
 
             // 5. Record deposit refund if provided
@@ -748,6 +759,8 @@ class TenantExitController extends Controller
                     'property_id'      => $exitRecord?->property_id,
                     'unit_id'          => $exitRecord?->unit_id,
                     'lease_start_date' => $leaseStart,
+                    'rent_amount'      => $exitedRentAmount,
+                    'sla_id'           => $exitedSlaId,
                     'exit_date'        => $validated['actual_exit_date'],
                     'duration_days'    => $durationDays,
                     'exit_reason'      => $exitRecord?->exit_reason,

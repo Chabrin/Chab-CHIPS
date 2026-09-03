@@ -18,15 +18,32 @@
                                 <button type="button" class="btn btn-outline-secondary" data-status="pending_unit">Pending Unit</button>
                                 <button type="button" class="btn btn-outline-secondary" data-status="all">All</button>
                             </div>
-                            <a href="{{ route('move.in.inspections.index') }}" class="btn btn-sm btn-outline-secondary">
-                                <span class="material-symbols-outlined">search_check</span> Move-In Inspections
-                            </a>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#bulkUploadTenantsModal">
-                                <span class="material-symbols-outlined">upload_file</span> Bulk Upload Tenants
-                            </button>
-                            <a href="{{ route('units.tenants.create') }}" class="btn btn-sm btn-outline-secondary">
+                            <a href="{{ route('units.tenants.create') }}" class="btn btn-sm btn-primary d-flex align-items-center">
                                 <span class="material-symbols-outlined">add_circle</span> Onboard tenant
                             </a>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center" type="button" id="tenantActionsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">more_vert</span>
+                                    <span>Actions</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tenantActionsDropdown">
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center" href="{{ route('units.tenants.returning.create') }}">
+                                            <span class="material-symbols-outlined me-2" style="font-size:18px;">history</span> Returning Tenant
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center" href="{{ route('move.in.inspections.index') }}">
+                                            <span class="material-symbols-outlined me-2" style="font-size:18px;">search_check</span> Move-In Inspections
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <button type="button" class="dropdown-item d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#bulkUploadTenantsModal">
+                                            <span class="material-symbols-outlined me-2" style="font-size:18px;">upload_file</span> Bulk Upload Tenants
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
 
