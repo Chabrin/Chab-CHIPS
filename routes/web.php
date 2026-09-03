@@ -650,6 +650,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/property/tenants/uploads/{id}', [App\Http\Controllers\TenantBulkUploadController::class, 'updateUpload'])->name('property.tenants.uploads.update');
     Route::delete('/property/tenants/uploads/{id}', [App\Http\Controllers\TenantBulkUploadController::class, 'destroyUpload'])->name('property.tenants.uploads.delete');
     Route::post('/property/tenants/uploads/bulk-delete', [App\Http\Controllers\TenantBulkUploadController::class, 'destroySelectedUploads'])->name('property.tenants.uploads.bulk-delete');
+
+    Route::get('/property/units/bulk-upload/template', [App\Http\Controllers\UnitBulkUploadController::class, 'downloadTemplate'])->name('property.units.bulk-upload.template');
+    Route::post('/property/units/bulk-upload/import', [App\Http\Controllers\UnitBulkUploadController::class, 'import'])->name('property.units.bulk-upload.import');
+    Route::get('/property/units/uploads/data', [App\Http\Controllers\UnitBulkUploadController::class, 'uploadsData'])->name('property.units.uploads.data');
+    Route::put('/property/units/uploads/{id}', [App\Http\Controllers\UnitBulkUploadController::class, 'updateUpload'])->name('property.units.uploads.update');
+    Route::delete('/property/units/uploads/{id}', [App\Http\Controllers\UnitBulkUploadController::class, 'destroyUpload'])->name('property.units.uploads.delete');
+    Route::post('/property/units/uploads/bulk-delete', [App\Http\Controllers\UnitBulkUploadController::class, 'destroySelectedUploads'])->name('property.units.uploads.bulk-delete');
+    Route::post('/property/units/uploads/push', [App\Http\Controllers\UnitBulkUploadController::class, 'pushToMain'])->name('property.units.uploads.push');
     Route::post('/property/tenants/uploads/push', [App\Http\Controllers\TenantBulkUploadController::class, 'pushToMain'])->name('property.tenants.uploads.push');
     Route::get('/ajax/banks-and-branches', [ClientsController::class, 'getBanksAndBranches'])->name('ajax.banks.branches');
 

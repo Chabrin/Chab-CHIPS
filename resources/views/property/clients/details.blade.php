@@ -492,25 +492,86 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         </div>
                                     </div>
                                 </div>
-                                <div class="table-responsive custom-scrollbar">
-                                    <table id="unitsTable" class="display" style="width:100%;">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Property</th>
-                                                <th>Unit Code</th>
-                                                <th>Unit Name</th>
-                                                <th>Unit Number</th>
-                                                <th>Description</th>
-                                                <th>Rent Amount</th>
-                                                <th>Zone</th>
-                                                <th>Status</th>
-                                                <th>Tenants</th>
-                                                {{-- <th>Action</th> --}}
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
+
+                                <ul class="nav nav-tabs mb-3" id="unitsSubTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="units-listing-subtab" data-bs-toggle="tab" data-bs-target="#units-listing-pane" type="button" role="tab">
+                                            Units Listing
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="units-uploads-subtab" data-bs-toggle="tab" data-bs-target="#units-uploads-pane" type="button" role="tab">
+                                            Units Uploads
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                <div class="tab-content" id="unitsSubTabsContent">
+                                    <!-- Units Listing sub-tab -->
+                                    <div class="tab-pane fade show active" id="units-listing-pane" role="tabpanel">
+                                        <div class="table-responsive custom-scrollbar">
+                                            <table id="unitsTable" class="display" style="width:100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Property</th>
+                                                        <th>Unit Code</th>
+                                                        <th>Unit Name</th>
+                                                        <th>Unit Number</th>
+                                                        <th>Description</th>
+                                                        <th>Rent Amount</th>
+                                                        <th>Zone</th>
+                                                        <th>Status</th>
+                                                        <th>Tenants</th>
+                                                        {{-- <th>Action</th> --}}
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <!-- Units Uploads sub-tab — staged rows from bulk upload, awaiting review/push -->
+                                    <div class="tab-pane fade" id="units-uploads-pane" role="tabpanel">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <p class="text-muted small mb-0">Staged units from bulk uploads. Review, edit, or delete a row, then complete the upload to push them into the main unit records. Select a specific property above to use this.</p>
+                                            <div class="d-flex flex-shrink-0 ms-2 gap-2">
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="openUnitBulkUploadBtn" data-bs-toggle="modal" data-bs-target="#unitBulkUploadModal" disabled>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
+                                                    Bulk Upload Units
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="deleteSelectedUnitUploadsBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="deleteSelectedUnitUploadsSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">delete</span>
+                                                    Delete Selected
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="pushUnitUploadsToMainBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="pushUnitUploadsSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">publish</span>
+                                                    Complete Upload
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="table-responsive custom-scrollbar">
+                                            <table id="unitUploadsTable" class="display" style="width:100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th><input type="checkbox" class="form-check-input" id="unitUploadsSelectAll"></th>
+                                                        <th>#</th>
+                                                        <th>Unit Number</th>
+                                                        <th>Unit Name</th>
+                                                        <th>Usage Type</th>
+                                                        <th>Rent Amount</th>
+                                                        <th>Topology</th>
+                                                        <th>Category</th>
+                                                        <th>Status</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1069,6 +1130,136 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+<!-- Unit Bulk Upload Modal — scoped to whichever property is selected in the
+     Units tab. No pre-filled data (unlike the tenant template's vacant-unit
+     rows) since these are brand new units, not assignments. -->
+<div class="modal fade" id="unitBulkUploadModal" tabindex="-1" aria-labelledby="unitBulkUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unitBulkUploadModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">upload_file</span>
+                    Bulk Upload Units
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="unitBulkUploadForm">
+                <div class="modal-body">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <span class="small text-muted">Property: <strong id="unitBulkUploadPropertyName"></strong></span>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="downloadUnitTemplateBtn">
+                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">download</span>
+                            Download Template
+                        </button>
+                    </div>
+
+                    <div class="mb-2">
+                        <label for="unitBulkFile" class="form-label fw-bold">
+                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">attach_file</span>
+                            Filled-in Template <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" class="form-control" id="unitBulkFile" name="bulk_file" accept=".xlsx,.xls" required>
+                    </div>
+
+                    <p class="text-muted small fst-italic mb-0">
+                        Required: Unit Number, Usage Type. Max per file: 100.
+                    </p>
+
+                    <div id="unitBulkUploadResults" class="mt-3" style="display:none;"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="unitBulkUploadSubmitBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="unitBulkUploadSpinner"></span>
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">upload</span>
+                        Upload & Process
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Uploaded Unit Modal — staged row (temp_uploaded_units), editable until pushed -->
+<div class="modal fade" id="editUnitUploadModal" tabindex="-1" aria-labelledby="editUnitUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUnitUploadModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">edit</span>
+                    Edit Uploaded Unit
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editUnitUploadForm">
+                <input type="hidden" id="editUnitUploadId">
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Unit Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="editUnitNumber">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Unit Name</label>
+                            <input type="text" class="form-control form-control-sm" id="editUnitName">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Usage Type <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="editUsageType">
+                                <option value="">Select</option>
+                                <option value="Commercial">Commercial</option>
+                                <option value="Residential">Residential</option>
+                                <option value="Hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Unit Condition</label>
+                            <input type="text" class="form-control form-control-sm" id="editUnitCondition">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Topology</label>
+                            <input type="text" class="form-control form-control-sm" id="editTopology">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Category</label>
+                            <input type="text" class="form-control form-control-sm" id="editCategory">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Rent Amount</label>
+                            <input type="text" class="form-control form-control-sm" id="editRentAmount">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">VAT</label>
+                            <select class="form-select form-select-sm" id="editVatAble">
+                                <option value="">Select</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Initial Water Meter Reading</label>
+                            <input type="text" class="form-control form-control-sm" id="editWaterMeterReading">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label small mb-1">Description</label>
+                            <textarea class="form-control form-control-sm" id="editDescription" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div id="editUnitUploadError" class="alert alert-danger small mt-3 mb-0" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="editUnitUploadSubmitBtn">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" id="editUnitUploadSpinner"></span>
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Bank Detail Modal -->
 <div class="modal fade" id="bankDetailModal" tabindex="-1" aria-labelledby="bankDetailModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-md">
@@ -1530,6 +1721,60 @@ COPY PERMISSIONS (paste when re-enabling checks):
             responsive: true,
             language: {
                 emptyTable: "No units found"
+            }
+        });
+
+        // Units Uploads — staged rows from bulk upload (temp_uploaded_units)
+        var unitUploadsTable = $('#unitUploadsTable').DataTable({
+            data: [],
+            columns: [{
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id) {
+                        return '<input type="checkbox" class="form-check-input unit-upload-row-check" value="' + id + '">';
+                    }
+                },
+                {
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                { data: 'unit_number', defaultContent: '-' },
+                { data: 'unit_name', defaultContent: '-' },
+                { data: 'usage_type', defaultContent: '-' },
+                { data: 'rent_amount', defaultContent: '-' },
+                { data: 'topology', defaultContent: '-' },
+                { data: 'category', defaultContent: '-' },
+                {
+                    data: 'push_error',
+                    render: function(pushError) {
+                        if (!pushError) {
+                            return '<span class="badge bg-secondary">Pending push</span>';
+                        }
+                        return '<a href="#" class="text-danger view-upload-error-btn" data-error="' + $('<div>').text(pushError).html() + '" title="View issue">' +
+                            '<span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">info</span></a>';
+                    }
+                },
+                {
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id) {
+                        return '<div class="d-flex flex-row gap-2">' +
+                            '<a href="#" class="text-primary edit-unit-upload-btn" data-id="' + id + '" title="Edit">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">edit</span></a>' +
+                            '<a href="#" class="text-primary delete-unit-upload-btn" data-id="' + id + '" title="Delete">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>' +
+                            '</div>';
+                    }
+                }
+            ],
+            pageLength: 10,
+            responsive: true,
+            language: {
+                emptyTable: "No staged uploads for this property"
             }
         });
 
@@ -2118,8 +2363,27 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
         // Load units when property is selected — "All Properties" (empty value)
         // loads every unit across the landlord's properties, same as the initial load
+        var unitUploadsLoadedForProperty = null;
         $('#propertySelect').on('change', function() {
-            loadUnits($(this).val());
+            var propertyId = $(this).val();
+            var propertyName = $(this).find('option:selected').text();
+            loadUnits(propertyId);
+
+            // Bulk upload needs one specific property — "All Properties" can't be uploaded to
+            if (propertyId) {
+                unitUploadsLoadedForProperty = null;
+                if ($('#units-uploads-subtab').hasClass('active')) {
+                    loadUnitUploads(propertyId);
+                }
+                $('#openUnitBulkUploadBtn').prop('disabled', false);
+                $('#pushUnitUploadsToMainBtn').prop('disabled', false);
+                $('#unitBulkUploadPropertyName').text(propertyName);
+            } else {
+                unitUploadsTable.clear().draw();
+                $('#openUnitBulkUploadBtn').prop('disabled', true);
+                $('#pushUnitUploadsToMainBtn').prop('disabled', true);
+                $('#unitBulkUploadPropertyName').text('');
+            }
         });
 
         // Initialize Bootstrap dropdowns (if needed)
@@ -2465,6 +2729,304 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     success: function(response) {
                         toastr.success(response.message);
                         loadTenantUploads($('#tenantPropertySelect').val());
+                    },
+                    error: function(xhr) {
+                        var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete row.';
+                        toastr.error(message);
+                    }
+                });
+            });
+        });
+
+        // Lazy-load the Units Uploads sub-tab the first time it's opened for the current property
+        $('#units-uploads-subtab').on('click', function() {
+            var propertyId = $('#propertySelect').val();
+            if (propertyId && unitUploadsLoadedForProperty !== propertyId) {
+                loadUnitUploads(propertyId);
+            }
+        });
+
+        function loadUnitUploads(propertyId) {
+            unitUploadsLoadedForProperty = propertyId;
+            $.ajax({
+                url: "{{ route('property.units.uploads.data') }}",
+                type: 'GET',
+                data: { property_id: propertyId },
+                dataType: 'json',
+                success: function(response) {
+                    unitUploadsTable.clear();
+                    if (response.data && response.data.length) {
+                        unitUploadsTable.rows.add(response.data);
+                    }
+                    unitUploadsTable.draw();
+                    $('#unitUploadsSelectAll').prop('checked', false);
+                    $('#deleteSelectedUnitUploadsBtn').prop('disabled', true);
+                },
+                error: function() {
+                    toastr.error('Failed to load uploaded units.');
+                }
+            });
+        }
+
+        // Select all / individual row checkboxes for the Units Uploads table
+        $('#unitUploadsSelectAll').on('change', function() {
+            var checked = $(this).is(':checked');
+            $('#unitUploadsTable .unit-upload-row-check').prop('checked', checked);
+            $('#deleteSelectedUnitUploadsBtn').prop('disabled', $('#unitUploadsTable .unit-upload-row-check:checked').length === 0);
+        });
+
+        $('#unitUploadsTable').on('change', '.unit-upload-row-check', function() {
+            var totalBoxes = $('#unitUploadsTable .unit-upload-row-check').length;
+            var checkedBoxes = $('#unitUploadsTable .unit-upload-row-check:checked').length;
+            $('#unitUploadsSelectAll').prop('checked', totalBoxes > 0 && totalBoxes === checkedBoxes);
+            $('#deleteSelectedUnitUploadsBtn').prop('disabled', checkedBoxes === 0);
+        });
+
+        // Bulk delete selected staged rows
+        $('#deleteSelectedUnitUploadsBtn').on('click', function() {
+            var ids = $('#unitUploadsTable .unit-upload-row-check:checked').map(function() {
+                return $(this).val();
+            }).get();
+            if (!ids.length) return;
+
+            Swal.fire({
+                title: 'Delete ' + ids.length + ' selected row(s)?',
+                text: 'This only removes the staged upload rows — nothing else is affected.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3598db',
+                cancelButtonColor: '#8a94a3',
+                confirmButtonText: 'Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+
+                var btn = $('#deleteSelectedUnitUploadsBtn');
+                var spinner = $('#deleteSelectedUnitUploadsSpinner');
+                btn.prop('disabled', true);
+                spinner.removeClass('d-none');
+
+                $.ajax({
+                    url: "{{ route('property.units.uploads.bulk-delete') }}",
+                    type: 'POST',
+                    data: { _token: '{{ csrf_token() }}', ids: ids },
+                    dataType: 'json',
+                    success: function(response) {
+                        toastr.success(response.message);
+                        loadUnitUploads($('#propertySelect').val());
+                    },
+                    error: function(xhr) {
+                        var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete selected rows.';
+                        toastr.error(message);
+                    },
+                    complete: function() {
+                        spinner.addClass('d-none');
+                    }
+                });
+            });
+        });
+
+        // Bulk Upload Units — download template scoped to the selected property
+        $('#downloadUnitTemplateBtn').on('click', function() {
+            var propertyId = $('#propertySelect').val();
+            if (!propertyId) return;
+            window.location.href = "{{ route('property.units.bulk-upload.template') }}?property_id=" + propertyId;
+        });
+
+        // Bulk Upload Units — submit via AJAX, no page reload. Rows land in the
+        // staging table (temp_uploaded_units) — nothing becomes a real unit
+        // until Complete Upload runs.
+        $('#unitBulkUploadForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var propertyId = $('#propertySelect').val();
+            var fileInput = $('#unitBulkFile')[0];
+            if (!propertyId || !fileInput.files.length) {
+                toastr.error('Please select a property and choose a file to upload.');
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('property_id', propertyId);
+            formData.append('bulk_file', fileInput.files[0]);
+            formData.append('_token', '{{ csrf_token() }}');
+
+            var submitBtn = $('#unitBulkUploadSubmitBtn');
+            var spinner = $('#unitBulkUploadSpinner');
+            var resultsBox = $('#unitBulkUploadResults');
+
+            submitBtn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            resultsBox.hide().empty();
+
+            $.ajax({
+                url: "{{ route('property.units.bulk-upload.import') }}",
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                dataType: 'json',
+                success: function(response) {
+                    toastr.success(response.message);
+                    loadUnitUploads(propertyId);
+                    $('#unitsSubTabs button[data-bs-target="#units-uploads-pane"]').tab('show');
+                    $('#unitBulkUploadForm')[0].reset();
+                    $('#unitBulkUploadModal').modal('hide');
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to process upload.';
+                    resultsBox.html('<div class="alert alert-danger mb-0">' + $('<div>').text(message).html() + '</div>').show();
+                    toastr.error(message);
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Reset bulk upload modal on close
+        $('#unitBulkUploadModal').on('hidden.bs.modal', function() {
+            $('#unitBulkUploadForm')[0].reset();
+            $('#unitBulkUploadResults').hide().empty();
+        });
+
+        // Complete Upload — turns every staged row for this property into a real unit
+        $('#pushUnitUploadsToMainBtn').on('click', function() {
+            var propertyId = $('#propertySelect').val();
+            if (!propertyId) return;
+
+            var btn = $(this);
+            var spinner = $('#pushUnitUploadsSpinner');
+
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: "{{ route('property.units.uploads.push') }}",
+                type: 'POST',
+                data: { property_id: propertyId, _token: '{{ csrf_token() }}' },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.failed > 0) {
+                        toastr.warning(response.message);
+                    } else {
+                        toastr.success(response.message);
+                    }
+                    loadUnitUploads(propertyId);
+                    loadUnits(propertyId);
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to push uploads.';
+                    toastr.error(message);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Show a staged row's push_error in a modal (shared with the Tenants Uploads table)
+        $('#unitUploadsTable').on('click', '.view-upload-error-btn', function(e) {
+            e.preventDefault();
+            $('#uploadErrorModalText').text($(this).data('error'));
+            new bootstrap.Modal(document.getElementById('uploadErrorModal')).show();
+        });
+
+        // Edit a staged row
+        $('#unitUploadsTable').on('click', '.edit-unit-upload-btn', function(e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+            var row = unitUploadsTable.row($(this).closest('tr')).data();
+            if (!row) return;
+
+            $('#editUnitUploadId').val(id);
+            $('#editUnitNumber').val(row.unit_number);
+            $('#editUnitName').val(row.unit_name);
+            $('#editUsageType').val(row.usage_type || '');
+            $('#editUnitCondition').val(row.unit_condition);
+            $('#editTopology').val(row.topology);
+            $('#editCategory').val(row.category);
+            $('#editRentAmount').val(row.rent_amount);
+            $('#editVatAble').val(row.vat_able || '');
+            $('#editWaterMeterReading').val(row.initial_water_meter_reading);
+            $('#editDescription').val(row.description);
+            $('#editUnitUploadError').hide().empty();
+
+            new bootstrap.Modal(document.getElementById('editUnitUploadModal')).show();
+        });
+
+        $('#editUnitUploadForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var id = $('#editUnitUploadId').val();
+            var submitBtn = $('#editUnitUploadSubmitBtn');
+            var spinner = $('#editUnitUploadSpinner');
+            var errorBox = $('#editUnitUploadError');
+
+            submitBtn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            errorBox.hide().empty();
+
+            $.ajax({
+                url: "{{ url('property/units/uploads') }}/" + id,
+                type: 'PUT',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    unit_number: $('#editUnitNumber').val(),
+                    unit_name: $('#editUnitName').val(),
+                    usage_type: $('#editUsageType').val(),
+                    unit_condition: $('#editUnitCondition').val(),
+                    topology: $('#editTopology').val(),
+                    category: $('#editCategory').val(),
+                    rent_amount: $('#editRentAmount').val(),
+                    vat_able: $('#editVatAble').val(),
+                    initial_water_meter_reading: $('#editWaterMeterReading').val(),
+                    description: $('#editDescription').val()
+                },
+                dataType: 'json',
+                success: function(response) {
+                    toastr.success(response.message);
+                    $('#editUnitUploadModal').modal('hide');
+                    loadUnitUploads($('#propertySelect').val());
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to update row.';
+                    errorBox.text(message).show();
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // Delete a staged row
+        $('#unitUploadsTable').on('click', '.delete-unit-upload-btn', function(e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+
+            Swal.fire({
+                title: 'Delete this staged unit?',
+                text: 'This only removes the staged upload row — nothing else is affected.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3598db',
+                cancelButtonColor: '#8a94a3',
+                confirmButtonText: 'Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: "{{ url('property/units/uploads') }}/" + id,
+                    type: 'DELETE',
+                    data: { _token: '{{ csrf_token() }}' },
+                    dataType: 'json',
+                    success: function(response) {
+                        toastr.success(response.message);
+                        loadUnitUploads($('#propertySelect').val());
                     },
                     error: function(xhr) {
                         var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete row.';
