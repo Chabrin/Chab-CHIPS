@@ -29,6 +29,8 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class InvoicingController extends Controller
 {
+    use \App\Traits\InvoiceCreationTrait;
+
     /**
      * Display tenant invoices page
      */
@@ -246,151 +248,7 @@ class InvoicingController extends Controller
                 'is_arrear' => 'required|in:Yes,No'
             ]);
 
-            // Fetch all related data needed for invoice creation
-            $property = Property::find($validated['property_id']);
-            $lease = LeaseAgreement::find($validated['lease_id']);
-            $unit = Unit::find($validated['unit_id']);
-            $invoiceableItem = InvoiceableItem::find($validated['item_type_id']);
-            $serviceAgreement = $lease && $lease->sla_id ? ServiceAgreement::find($lease->sla_id) : null;
-
-            $landlordId = $property ? $property->client_id : null;
-
-            // Only one invoice per tenant per month for these recurring item types
-            $singlePerMonthItems = [
-                'Water Bill',
-                'Service Charge',
-                'RENT',
-                'Electricity Bill',
-                'House Deposit',
-                'Electricity Deposit',
-                'Water Deposit',
-            ];
-
-            if ($invoiceableItem && in_array($invoiceableItem->item_name, $singlePerMonthItems, true)) {
-                $periodDate = new \DateTime($validated['returns_period']);
-
-                $duplicateExists = DebtorInvoice::where('tenant_id', $validated['tenant_id'])
-                    ->where('item_type_id', $validated['item_type_id'])
-                    ->whereYear('returns_period', $periodDate->format('Y'))
-                    ->whereMonth('returns_period', $periodDate->format('m'))
-                    ->exists();
-
-                if ($duplicateExists) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'item_type_id' => ["This tenant already has a {$invoiceableItem->item_name} invoice for {$periodDate->format('F Y')}."],
-                    ]);
-                }
-            }
-
-            // Calculate commission and VAT based on invoiceable item settings
-            $totalAmount = $validated['total_amount'];
-            $isCommissionable = $invoiceableItem && $invoiceableItem->commissionable === 'Yes';
-            $isVatable = $unit && $unit->vat_able === 'Yes';
-            $commissionPercentage = $serviceAgreement ? $serviceAgreement->commission_percentage : 0;
-
-            $vatAmount = $isVatable ? round($totalAmount * 0.16, 2) : 0;
-            $commissionableBase = $isVatable ? ($totalAmount - $vatAmount) : $totalAmount;
-            $commAmount = $isCommissionable ? round($commissionableBase * ($commissionPercentage / 100), 2) : 0;
-            $commissionableAmount = $isCommissionable ? $commissionableBase : 0;
-            $payableAmount = $totalAmount - $commAmount;
-            $vatOnCommission = $isCommissionable ? round($commAmount * (16 / 100), 2) : 0;
-
-            // Generate reference number matching invoice generation format
-            $unit_code = $unit ? $unit->unit_code : 'UNKNOWN';
-            $item_name = $invoiceableItem ? $invoiceableItem->item_name : 'Unknown Item';
-            $period = date('M Y', strtotime($validated['returns_period']));
-            $referenceNumber = 'INV' . date('Y', strtotime($validated['returns_period'])) .
-                date('m', strtotime($validated['returns_period'])) .
-                $unit_code . '-' . $item_name . ' for ' . $period . '-' . $validated['lease_id'];
-
-            $batchNumber = date('YmdHi');
-
-            // Wrapped in a transaction so the invoice and its matching tenant-account
-            // ledger entry can never partially land — either both are posted, or neither is.
-            $invoice = DB::transaction(function () use (
-                $validated,
-                $property,
-                $lease,
-                $unit,
-                $item_name,
-                $landlordId,
-                $totalAmount,
-                $commAmount,
-                $commissionPercentage,
-                $isCommissionable,
-                $vatAmount,
-                $commissionableAmount,
-                $payableAmount,
-                $vatOnCommission,
-                $referenceNumber,
-                $batchNumber
-            ) {
-                $invoice = DebtorInvoice::create([
-                    'date_time' => now(),
-                    'date_due' => $validated['date_due'],
-                    'returns_period' => $validated['returns_period'],
-                    'zone_id' => $lease ? $lease->zone_id : null,
-                    'property_id' => $validated['property_id'],
-                    'unit_id' => $validated['unit_id'],
-                    'lease_id' => $validated['lease_id'],
-                    'tenant_id' => $validated['tenant_id'],
-                    'client_id' => $landlordId,
-                    'sla_id' => $lease ? $lease->sla_id : null,
-                    'created_by' => auth()->id(),
-                    'reference_number' => $referenceNumber,
-                    'narration' => $item_name . ' FOR ' . date('F Y', strtotime($validated['returns_period'])),
-                    'debtor_type_id' => 2, // Tenant
-                    'total_amount' => $totalAmount,
-                    'trans_details' => '18:' . ($lease ? $lease->id : 0) . ':' . intval(microtime(true) * 1000),
-                    'current_status_id' => 1, // Pending
-                    'processed' => 'No',
-                    'comm_ammount' => $commAmount,
-                    'comm_per' => $isCommissionable ? $commissionPercentage : 0,
-                    'vat_ammount' => $vatAmount,
-                    'vat_per' => 16.00,
-                    'commisionable_amount' => $commissionableAmount,
-                    'payable_amount' => $payableAmount,
-                    'item_type_id' => $validated['item_type_id'],
-                    'return_type_id' => $item_name,
-                    'cycle_id' => 2,
-                    'current_balance' => $totalAmount,
-                    'occupancy_status_id' => $unit ? $unit->occupancy_status_id : null,
-                    'field_officer_id' => $property ? $property->field_officer_id : null,
-                    'zone_supervisor_id' => $property ? $property->zone_supervisor_id : null,
-                    'zone_manager_id' => $property ? $property->zone_manager_id : null,
-                    'vat_on_commission' => $vatOnCommission,
-                    'override_period_check' => 1,
-                    'batch_number' => $batchNumber
-                ]);
-
-                // Post the matching Debit entry to the tenant's account ledger — mirrors the
-                // field mapping used for other DR postings against sys_pm_tenants_accounts_trans
-                // (see PropertyConfirmationController::applyTenantExitSettlementApproval()).
-                TenantAccountTransaction::create([
-                    'date_time' => now(),
-                    'narration' => $item_name . ' FOR ' . date('F Y', strtotime($validated['returns_period'])),
-                    'pay_for' => $item_name,
-                    'dr_cr' => 'DR',
-                    'debit_amount' => $totalAmount,
-                    'credit_amount' => 0,
-                    'invoice_number' => $referenceNumber,
-                    'invoice_id' => $invoice->id,
-                    'zone_id' => $lease ? $lease->zone_id : null,
-                    'property_id' => $validated['property_id'],
-                    'unit_id' => $validated['unit_id'],
-                    'lease_id' => $validated['lease_id'],
-                    'client_id' => $landlordId,
-                    'tenant_id' => $validated['tenant_id'],
-                    'sla_id' => $lease ? $lease->sla_id : null,
-                    'field_officer_id' => $property ? $property->field_officer_id : null,
-                    'zone_supervisor_id' => $property ? $property->zone_supervisor_id : null,
-                    'zone_manager_id' => $property ? $property->zone_manager_id : null,
-                    'current_status_id' => 1,
-                    'entry_by' => auth()->id(),
-                ]);
-
-                return $invoice;
-            });
+            $invoice = $this->createSingleDebtorInvoice($validated);
 
             return response()->json([
                 'success' => true,
@@ -402,6 +260,12 @@ class InvoicingController extends Controller
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
+            ], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors' => ['item_type_id' => [$e->getMessage()]],
             ], 422);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);

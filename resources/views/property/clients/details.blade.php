@@ -129,6 +129,16 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="invoicing-tab" data-bs-toggle="tab" data-bs-target="#invoicing" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">receipt_long</span> Invoicing
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="generated-invoices-tab" data-bs-toggle="tab" data-bs-target="#generated-invoices" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">request_quote</span> Generated Invoices
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="tenant-history-tab" data-bs-toggle="tab" data-bs-target="#tenant-history" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">history</span> Tenant History
                                 </button>
@@ -668,6 +678,260 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </table>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Invoicing Tab -->
+                            <div class="tab-pane fade" id="invoicing" role="tabpanel" aria-labelledby="invoicing-tab">
+                                <ul class="nav nav-tabs mb-3" id="invoicingSubTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="rent-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#rent-invoicing-pane" type="button" role="tab">
+                                            Rent Invoicing
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="utility-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#utility-invoicing-pane" type="button" role="tab">
+                                            Utilities Invoicing
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                <div class="tab-content" id="invoicingSubTabsContent">
+                                    <!-- Rent Invoicing sub-tab -->
+                                    <div class="tab-pane fade show active" id="rent-invoicing-pane" role="tabpanel">
+                                        <div class="card mb-3">
+                                            <div class="card-body">
+                                                <div class="row g-3 align-items-end">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Select Property</label>
+                                                        <select id="rentInvPropertySelect" class="form-select">
+                                                            <option value="">-- Select Property --</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Billing Month</label>
+                                                        <input type="month" id="rentInvBillingMonth" class="form-control">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Due Date</label>
+                                                        <input type="date" id="rentInvDueDate" class="form-control">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <div id="rentInvSpinnerInline" class="spinner-border spinner-border-sm text-primary d-none" role="status"></div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="row g-3 mt-1">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label d-block">Tenants</label>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="rentInvScope" id="rentInvScopeAll" value="all" checked>
+                                                            <label class="form-check-label" for="rentInvScopeAll">All Tenants</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="rentInvScope" id="rentInvScopeSelected" value="selected">
+                                                            <label class="form-check-label" for="rentInvScopeSelected">Selected Tenants</label>
+                                                        </div>
+                                                        <div id="rentInvTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label d-block">Proration Basis</label>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="rentInvDateMode" id="rentInvModeLeaseStart" value="lease_start" checked>
+                                                            <label class="form-check-label" for="rentInvModeLeaseStart">Use Lease Start Date</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="rentInvDateMode" id="rentInvModeSelectedDate" value="selected_date">
+                                                            <label class="form-check-label" for="rentInvModeSelectedDate">Selected Date</label>
+                                                        </div>
+                                                        <input type="date" id="rentInvSelectedDate" class="form-control mt-2" style="display:none; max-width:220px;">
+                                                        <p class="text-muted small fst-italic mb-0 mt-2">Rent is prorated from the effective date to the end of the billing month, based on each unit's rent amount.</p>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-3">
+                                                    <button type="button" class="btn btn-primary d-flex align-items-center" id="rentInvGenerateBtn" disabled>
+                                                        <span class="spinner-border spinner-border-sm me-2 d-none" id="rentInvGenerateSpinner"></span>
+                                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">calculate</span>
+                                                        Generate to Staging
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <p class="text-muted small mb-0">Staged rent invoices. Review or delete a row, then complete the upload to push them into real invoices.</p>
+                                            <div class="d-flex flex-shrink-0 ms-2 gap-2">
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="deleteSelectedRentInvBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="deleteSelectedRentInvSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">delete</span>
+                                                    Delete Selected
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="pushRentInvBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="pushRentInvSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">publish</span>
+                                                    Complete Upload
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="table-responsive custom-scrollbar">
+                                            <table id="rentInvStagedTable" class="display" style="width:100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th><input type="checkbox" class="form-check-input" id="rentInvSelectAll"></th>
+                                                        <th>#</th>
+                                                        <th>Tenant</th>
+                                                        <th>Unit</th>
+                                                        <th>Base Rent</th>
+                                                        <th>Prorated Amount</th>
+                                                        <th>Days</th>
+                                                        <th>Due Date</th>
+                                                        <th>Status</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <!-- Utilities Invoicing sub-tab -->
+                                    <div class="tab-pane fade" id="utility-invoicing-pane" role="tabpanel">
+                                        <div class="card mb-3">
+                                            <div class="card-body">
+                                                <div class="row g-3 align-items-end">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Select Property</label>
+                                                        <select id="utilInvPropertySelect" class="form-select">
+                                                            <option value="">-- Select Property --</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Billing Month</label>
+                                                        <input type="month" id="utilInvBillingMonth" class="form-control">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Due Date</label>
+                                                        <input type="date" id="utilInvDueDate" class="form-control">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <div id="utilInvSpinnerInline" class="spinner-border spinner-border-sm text-primary d-none" role="status"></div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="row g-3 mt-1">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label d-block">Utility</label>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="utilInvType" id="utilInvTypeWater" value="water" checked>
+                                                            <label class="form-check-label" for="utilInvTypeWater">Water Bill</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="utilInvType" id="utilInvTypeElectricity" value="electricity">
+                                                            <label class="form-check-label" for="utilInvTypeElectricity">Electricity Bill</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <label class="form-label d-block">Mode</label>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="utilInvMode" id="utilInvModeFixed" value="fixed" checked>
+                                                            <label class="form-check-label" for="utilInvModeFixed">Fixed Rate (from SLA)</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="utilInvMode" id="utilInvModeOneOff" value="one_off">
+                                                            <label class="form-check-label" for="utilInvModeOneOff">One-by-One (not fixed, e.g. metered water)</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Fixed-rate batch controls -->
+                                                <div id="utilInvFixedControls">
+                                                    <div class="row g-3 mt-1">
+                                                        <div class="col-md-12">
+                                                            <label class="form-label d-block">Tenants</label>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input" type="radio" name="utilInvScope" id="utilInvScopeAll" value="all" checked>
+                                                                <label class="form-check-label" for="utilInvScopeAll">All Tenants</label>
+                                                            </div>
+                                                            <div class="form-check form-check-inline">
+                                                                <input class="form-check-input" type="radio" name="utilInvScope" id="utilInvScopeSelected" value="selected">
+                                                                <label class="form-check-label" for="utilInvScopeSelected">Selected Tenants</label>
+                                                            </div>
+                                                            <div id="utilInvTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mt-3">
+                                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="utilInvGenerateFixedBtn" disabled>
+                                                            <span class="spinner-border spinner-border-sm me-2 d-none" id="utilInvGenerateFixedSpinner"></span>
+                                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">bolt</span>
+                                                            Generate Invoices
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- One-by-one controls -->
+                                                <div id="utilInvOneOffControls" style="display:none;">
+                                                    <div class="row g-3 mt-1">
+                                                        <div class="col-md-6">
+                                                            <label class="form-label">Tenant</label>
+                                                            <select id="utilInvOneOffTenant" class="form-select">
+                                                                <option value="">-- Select Tenant --</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <label class="form-label">Amount</label>
+                                                            <input type="number" step="0.01" min="0" id="utilInvOneOffAmount" class="form-control">
+                                                        </div>
+                                                    </div>
+                                                    <div class="mt-3">
+                                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="utilInvOneOffBtn" disabled>
+                                                            <span class="spinner-border spinner-border-sm me-2 d-none" id="utilInvOneOffSpinner"></span>
+                                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">receipt</span>
+                                                            Create Invoice
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div id="utilInvResults" class="mt-3" style="display:none;"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Generated Invoices Tab -->
+                            <div class="tab-pane fade" id="generated-invoices" role="tabpanel" aria-labelledby="generated-invoices-tab">
+                                <div class="row mb-3 align-items-end">
+                                    <div class="col-5">
+                                        <label for="invListPropertySelect" class="form-label">Select Property</label>
+                                        <select id="invListPropertySelect" class="form-select">
+                                            <option value="">-- Select Property --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <div id="invListSpinner" class="spinner-border text-primary" role="status" style="display:none;">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="generatedInvoicesTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Tenant</th>
+                                                <th>Unit</th>
+                                                <th>Item</th>
+                                                <th>Period</th>
+                                                <th>Due Date</th>
+                                                <th>Amount</th>
+                                                <th>Balance</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
                                 </div>
                             </div>
 
@@ -1261,6 +1525,33 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Invoice Details Modal — Generated Invoices tab -->
+<div class="modal fade" id="invoiceDetailsModal" tabindex="-1" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="invoiceDetailsModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">receipt_long</span>
+                    Invoice Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="invoiceDetailsBody">
+                <div class="text-center text-muted py-4">
+                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Close</button>
+                <a href="#" class="btn btn-primary d-flex align-items-center" id="invoiceDetailsDownloadBtn" target="_blank">
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">download</span>
+                    Download PDF
+                </a>
+            </div>
         </div>
     </div>
 </div>
@@ -3043,6 +3334,647 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 });
             });
         });
+
+        // ===================== Invoicing Tab =====================
+
+        // Generic property-dropdown loader, reused by Rent/Utility Invoicing and Generated Invoices
+        function loadPropertiesIntoSelect(selectId) {
+            $.ajax({
+                url: "{{ route('property.clients.properties.dropdown', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    var $select = $('#' + selectId);
+                    $select.empty().append('<option value="">-- Select Property --</option>');
+                    $.each(response, function(index, property) {
+                        $select.append('<option value="' + property.id + '">' + property.text + '</option>');
+                    });
+                },
+                error: function() {
+                    toastr.error('Failed to load properties. Please try again.');
+                }
+            });
+        }
+
+        // Renders a checkbox list of a property's tenants into a container
+        function loadTenantCheckboxList(propertyId, containerId) {
+            var $container = $('#' + containerId);
+            $container.html('<div class="text-muted small">Loading tenants...</div>');
+            $.ajax({
+                url: "{{ route('ajax.property.tenants.get') }}",
+                type: 'GET',
+                data: { property_id: propertyId },
+                dataType: 'json',
+                success: function(response) {
+                    var rows = response.data || [];
+                    if (!rows.length) {
+                        $container.html('<div class="text-muted small">No tenants found for this property.</div>');
+                        return;
+                    }
+                    var html = '';
+                    rows.forEach(function(t) {
+                        html += '<div class="form-check">' +
+                            '<input class="form-check-input tenant-checkbox" type="checkbox" value="' + t.id + '" id="' + containerId + '-t' + t.id + '">' +
+                            '<label class="form-check-label small" for="' + containerId + '-t' + t.id + '">' + t.names + '</label></div>';
+                    });
+                    $container.html(html);
+                },
+                error: function() {
+                    $container.html('<div class="text-danger small">Failed to load tenants.</div>');
+                }
+            });
+        }
+
+        // Fills a <select> with a property's tenants (used by the utility one-off tenant picker)
+        function loadTenantSelectOptions(propertyId, selectId) {
+            var $select = $('#' + selectId);
+            $select.empty().append('<option value="">-- Select Tenant --</option>');
+            $.ajax({
+                url: "{{ route('ajax.property.tenants.get') }}",
+                type: 'GET',
+                data: { property_id: propertyId },
+                dataType: 'json',
+                success: function(response) {
+                    (response.data || []).forEach(function(t) {
+                        $select.append('<option value="' + t.id + '">' + t.names + '</option>');
+                    });
+                }
+            });
+        }
+
+        var invoicingPropertiesLoaded = false;
+        $('#invoicing-tab').on('click', function() {
+            if (!invoicingPropertiesLoaded) {
+                loadPropertiesIntoSelect('rentInvPropertySelect');
+                loadPropertiesIntoSelect('utilInvPropertySelect');
+                invoicingPropertiesLoaded = true;
+            }
+        });
+
+        // ---------- Rent Invoicing ----------
+
+        var rentInvStagedTable = $('#rentInvStagedTable').DataTable({
+            data: [],
+            columns: [{
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id) {
+                        return '<input type="checkbox" class="form-check-input rent-inv-row-check" value="' + id + '">';
+                    }
+                },
+                {
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                { data: 'tenant_name', defaultContent: '-' },
+                { data: 'unit_code', defaultContent: '-' },
+                {
+                    data: 'base_rent',
+                    render: function(v) {
+                        return v !== null ? Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '-';
+                    }
+                },
+                {
+                    data: 'prorated_amount',
+                    render: function(v) {
+                        return v !== null ? Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '-';
+                    }
+                },
+                {
+                    data: 'proration_days',
+                    render: function(v, type, row) {
+                        return v !== null ? (v + ' / ' + row.month_days) : 'Full month';
+                    }
+                },
+                {
+                    data: 'date_due',
+                    render: function(v) {
+                        return v ? v.substring(0, 10) : '-';
+                    }
+                },
+                {
+                    data: 'push_error',
+                    render: function(pushError) {
+                        if (!pushError) {
+                            return '<span class="badge bg-secondary">Pending push</span>';
+                        }
+                        return '<a href="#" class="text-danger view-upload-error-btn" data-error="' + $('<div>').text(pushError).html() + '" title="View issue">' +
+                            '<span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">info</span></a>';
+                    }
+                },
+                {
+                    data: 'id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(id) {
+                        return '<a href="#" class="text-primary delete-rent-inv-btn" data-id="' + id + '" title="Delete">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>';
+                    }
+                }
+            ],
+            pageLength: 10,
+            responsive: true,
+            language: { emptyTable: "No staged rent invoices for this selection" }
+        });
+
+        function loadRentInvStaged(propertyId, billingMonth) {
+            $.ajax({
+                url: "{{ route('property.rent-invoicing.staged') }}",
+                type: 'GET',
+                data: { property_id: propertyId, billing_month: billingMonth },
+                dataType: 'json',
+                success: function(response) {
+                    rentInvStagedTable.clear();
+                    if (response.data && response.data.length) {
+                        rentInvStagedTable.rows.add(response.data);
+                    }
+                    rentInvStagedTable.draw();
+                    $('#rentInvSelectAll').prop('checked', false);
+                    $('#deleteSelectedRentInvBtn').prop('disabled', true);
+                },
+                error: function() {
+                    toastr.error('Failed to load staged rent invoices.');
+                }
+            });
+        }
+
+        function rentInvReady() {
+            var propertyId = $('#rentInvPropertySelect').val();
+            var month = $('#rentInvBillingMonth').val();
+            var ready = !!propertyId && !!month && !!$('#rentInvDueDate').val();
+            $('#rentInvGenerateBtn').prop('disabled', !ready);
+        }
+
+        $('#rentInvPropertySelect, #rentInvBillingMonth, #rentInvDueDate').on('change', function() {
+            rentInvReady();
+            var propertyId = $('#rentInvPropertySelect').val();
+            var month = $('#rentInvBillingMonth').val();
+            if (propertyId) {
+                loadRentInvStaged(propertyId, month);
+                if ($('#rentInvScopeSelected').is(':checked')) {
+                    loadTenantCheckboxList(propertyId, 'rentInvTenantList');
+                }
+            } else {
+                rentInvStagedTable.clear().draw();
+            }
+        });
+
+        $('input[name="rentInvScope"]').on('change', function() {
+            var isSelected = $('#rentInvScopeSelected').is(':checked');
+            $('#rentInvTenantList').toggle(isSelected);
+            if (isSelected && $('#rentInvPropertySelect').val()) {
+                loadTenantCheckboxList($('#rentInvPropertySelect').val(), 'rentInvTenantList');
+            }
+        });
+
+        $('input[name="rentInvDateMode"]').on('change', function() {
+            $('#rentInvSelectedDate').toggle($('#rentInvModeSelectedDate').is(':checked'));
+        });
+
+        $('#rentInvGenerateBtn').on('click', function() {
+            var propertyId = $('#rentInvPropertySelect').val();
+            var scope = $('input[name="rentInvScope"]:checked').val();
+            var dateMode = $('input[name="rentInvDateMode"]:checked').val();
+
+            var payload = {
+                _token: '{{ csrf_token() }}',
+                property_id: propertyId,
+                billing_month: $('#rentInvBillingMonth').val(),
+                due_date: $('#rentInvDueDate').val(),
+                scope: scope,
+                date_mode: dateMode,
+            };
+
+            if (scope === 'selected') {
+                var ids = $('#rentInvTenantList .tenant-checkbox:checked').map(function() { return $(this).val(); }).get();
+                if (!ids.length) {
+                    toastr.error('Select at least one tenant.');
+                    return;
+                }
+                payload.tenant_ids = ids;
+            }
+
+            if (dateMode === 'selected_date') {
+                if (!$('#rentInvSelectedDate').val()) {
+                    toastr.error('Choose a date.');
+                    return;
+                }
+                payload.selected_date = $('#rentInvSelectedDate').val();
+            }
+
+            var btn = $('#rentInvGenerateBtn');
+            var spinner = $('#rentInvGenerateSpinner');
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: "{{ route('property.rent-invoicing.generate') }}",
+                type: 'POST',
+                data: payload,
+                dataType: 'json',
+                success: function(response) {
+                    toastr.success(response.message);
+                    loadRentInvStaged(propertyId, $('#rentInvBillingMonth').val());
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to generate invoices.';
+                    toastr.error(message);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        $('#pushRentInvBtn').on('click', function() {
+            var propertyId = $('#rentInvPropertySelect').val();
+            if (!propertyId) return;
+
+            var btn = $(this);
+            var spinner = $('#pushRentInvSpinner');
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: "{{ route('property.rent-invoicing.push') }}",
+                type: 'POST',
+                data: { property_id: propertyId, billing_month: $('#rentInvBillingMonth').val(), _token: '{{ csrf_token() }}' },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.failed > 0) {
+                        toastr.warning(response.message);
+                    } else {
+                        toastr.success(response.message);
+                    }
+                    loadRentInvStaged(propertyId, $('#rentInvBillingMonth').val());
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to push invoices.';
+                    toastr.error(message);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        $('#rentInvSelectAll').on('change', function() {
+            var checked = $(this).is(':checked');
+            $('#rentInvStagedTable .rent-inv-row-check').prop('checked', checked);
+            $('#deleteSelectedRentInvBtn').prop('disabled', $('#rentInvStagedTable .rent-inv-row-check:checked').length === 0);
+        });
+
+        $('#rentInvStagedTable').on('change', '.rent-inv-row-check', function() {
+            var total = $('#rentInvStagedTable .rent-inv-row-check').length;
+            var checked = $('#rentInvStagedTable .rent-inv-row-check:checked').length;
+            $('#rentInvSelectAll').prop('checked', total > 0 && total === checked);
+            $('#deleteSelectedRentInvBtn').prop('disabled', checked === 0);
+        });
+
+        $('#rentInvStagedTable').on('click', '.view-upload-error-btn', function(e) {
+            e.preventDefault();
+            $('#uploadErrorModalText').text($(this).data('error'));
+            new bootstrap.Modal(document.getElementById('uploadErrorModal')).show();
+        });
+
+        $('#rentInvStagedTable').on('click', '.delete-rent-inv-btn', function(e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+
+            Swal.fire({
+                title: 'Delete this staged invoice?',
+                text: 'This only removes the staged row — nothing else is affected.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3598db',
+                cancelButtonColor: '#8a94a3',
+                confirmButtonText: 'Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: "{{ url('property/rent-invoicing/staged') }}/" + id,
+                    type: 'DELETE',
+                    data: { _token: '{{ csrf_token() }}' },
+                    dataType: 'json',
+                    success: function(response) {
+                        toastr.success(response.message);
+                        loadRentInvStaged($('#rentInvPropertySelect').val(), $('#rentInvBillingMonth').val());
+                    },
+                    error: function(xhr) {
+                        var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete row.';
+                        toastr.error(message);
+                    }
+                });
+            });
+        });
+
+        $('#deleteSelectedRentInvBtn').on('click', function() {
+            var ids = $('#rentInvStagedTable .rent-inv-row-check:checked').map(function() { return $(this).val(); }).get();
+            if (!ids.length) return;
+
+            Swal.fire({
+                title: 'Delete ' + ids.length + ' selected row(s)?',
+                text: 'This only removes the staged rows — nothing else is affected.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3598db',
+                cancelButtonColor: '#8a94a3',
+                confirmButtonText: 'Yes, Delete',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+
+                var btn = $('#deleteSelectedRentInvBtn');
+                var spinner = $('#deleteSelectedRentInvSpinner');
+                btn.prop('disabled', true);
+                spinner.removeClass('d-none');
+
+                $.ajax({
+                    url: "{{ route('property.rent-invoicing.staged.bulk-delete') }}",
+                    type: 'POST',
+                    data: { _token: '{{ csrf_token() }}', ids: ids },
+                    dataType: 'json',
+                    success: function(response) {
+                        toastr.success(response.message);
+                        loadRentInvStaged($('#rentInvPropertySelect').val(), $('#rentInvBillingMonth').val());
+                    },
+                    error: function(xhr) {
+                        var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete selected rows.';
+                        toastr.error(message);
+                    },
+                    complete: function() {
+                        spinner.addClass('d-none');
+                    }
+                });
+            });
+        });
+
+        // ---------- Utilities Invoicing ----------
+
+        $('#utilInvPropertySelect').on('change', function() {
+            var propertyId = $(this).val();
+            $('#utilInvGenerateFixedBtn').prop('disabled', !propertyId);
+            $('#utilInvOneOffBtn').prop('disabled', !propertyId);
+            if (propertyId) {
+                if ($('#utilInvScopeSelected').is(':checked')) {
+                    loadTenantCheckboxList(propertyId, 'utilInvTenantList');
+                }
+                loadTenantSelectOptions(propertyId, 'utilInvOneOffTenant');
+            }
+        });
+
+        $('input[name="utilInvScope"]').on('change', function() {
+            var isSelected = $('#utilInvScopeSelected').is(':checked');
+            $('#utilInvTenantList').toggle(isSelected);
+            if (isSelected && $('#utilInvPropertySelect').val()) {
+                loadTenantCheckboxList($('#utilInvPropertySelect').val(), 'utilInvTenantList');
+            }
+        });
+
+        $('input[name="utilInvMode"]').on('change', function() {
+            var isFixed = $('#utilInvModeFixed').is(':checked');
+            $('#utilInvFixedControls').toggle(isFixed);
+            $('#utilInvOneOffControls').toggle(!isFixed);
+            $('#utilInvResults').hide().empty();
+        });
+
+        $('#utilInvGenerateFixedBtn').on('click', function() {
+            var propertyId = $('#utilInvPropertySelect').val();
+            var scope = $('input[name="utilInvScope"]:checked').val();
+
+            if (!$('#utilInvBillingMonth').val() || !$('#utilInvDueDate').val()) {
+                toastr.error('Choose a billing month and due date.');
+                return;
+            }
+
+            var payload = {
+                _token: '{{ csrf_token() }}',
+                property_id: propertyId,
+                utility_type: $('input[name="utilInvType"]:checked').val(),
+                billing_month: $('#utilInvBillingMonth').val(),
+                due_date: $('#utilInvDueDate').val(),
+                scope: scope,
+            };
+
+            if (scope === 'selected') {
+                var ids = $('#utilInvTenantList .tenant-checkbox:checked').map(function() { return $(this).val(); }).get();
+                if (!ids.length) {
+                    toastr.error('Select at least one tenant.');
+                    return;
+                }
+                payload.tenant_ids = ids;
+            }
+
+            var btn = $('#utilInvGenerateFixedBtn');
+            var spinner = $('#utilInvGenerateFixedSpinner');
+            var resultsBox = $('#utilInvResults');
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            resultsBox.hide().empty();
+
+            $.ajax({
+                url: "{{ route('property.utility-invoicing.generate-fixed') }}",
+                type: 'POST',
+                data: payload,
+                dataType: 'json',
+                success: function(response) {
+                    var html = '<div class="alert ' + (response.failed > 0 ? 'alert-warning' : 'alert-success') + ' mb-2">' + response.message + '</div>';
+                    if (response.errors && response.errors.length) {
+                        html += '<ul class="mb-0 small text-danger">';
+                        response.errors.forEach(function(err) {
+                            html += '<li>' + $('<div>').text(err).html() + '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    resultsBox.html(html).show();
+                    if (response.created > 0) {
+                        toastr.success(response.created + ' invoice(s) created.');
+                    }
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to generate invoices.';
+                    resultsBox.html('<div class="alert alert-danger mb-0">' + $('<div>').text(message).html() + '</div>').show();
+                    toastr.error(message);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        $('#utilInvOneOffBtn').on('click', function() {
+            var tenantId = $('#utilInvOneOffTenant').val();
+            var amount = $('#utilInvOneOffAmount').val();
+
+            if (!tenantId || !amount) {
+                toastr.error('Select a tenant and enter an amount.');
+                return;
+            }
+            if (!$('#utilInvBillingMonth').val() || !$('#utilInvDueDate').val()) {
+                toastr.error('Choose a billing month and due date.');
+                return;
+            }
+
+            var btn = $('#utilInvOneOffBtn');
+            var spinner = $('#utilInvOneOffSpinner');
+            var resultsBox = $('#utilInvResults');
+            btn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            resultsBox.hide().empty();
+
+            $.ajax({
+                url: "{{ route('property.utility-invoicing.one-off') }}",
+                type: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    tenant_id: tenantId,
+                    utility_type: $('input[name="utilInvType"]:checked').val(),
+                    amount: amount,
+                    billing_month: $('#utilInvBillingMonth').val(),
+                    due_date: $('#utilInvDueDate').val(),
+                },
+                dataType: 'json',
+                success: function(response) {
+                    resultsBox.html('<div class="alert alert-success mb-0">' + response.message + '</div>').show();
+                    toastr.success(response.message);
+                    $('#utilInvOneOffAmount').val('');
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to create invoice.';
+                    resultsBox.html('<div class="alert alert-danger mb-0">' + $('<div>').text(message).html() + '</div>').show();
+                    toastr.error(message);
+                },
+                complete: function() {
+                    btn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        // ---------- Generated Invoices ----------
+
+        var generatedInvoicesTable = $('#generatedInvoicesTable').DataTable({
+            data: [],
+            columns: [{
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                { data: 'tenant_name', defaultContent: '-' },
+                { data: 'unit_code', defaultContent: '-' },
+                { data: 'return_type_id', defaultContent: '-' },
+                { data: 'returns_period', defaultContent: '-' },
+                { data: 'date_due', defaultContent: '-' },
+                { data: 'total_amount', defaultContent: '-' },
+                { data: 'current_balance', defaultContent: '-' },
+                {
+                    data: 'status_name',
+                    render: function(status) {
+                        return '<span class="badge bg-secondary">' + (status || 'Pending') + '</span>';
+                    }
+                },
+                {
+                    data: 'encrypted_id',
+                    orderable: false,
+                    searchable: false,
+                    render: function(encId) {
+                        return '<div class="d-flex flex-row gap-2">' +
+                            '<a href="#" class="text-primary view-invoice-btn" data-id="' + encId + '" title="View Details">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">visibility</span></a>' +
+                            '<a href="{{ url('property/client-invoices') }}/' + encId + '/pdf" class="text-primary" title="Download PDF">' +
+                            '<span class="material-symbols-outlined" style="font-size:18px;">download</span></a>' +
+                            '</div>';
+                    }
+                }
+            ],
+            pageLength: 10,
+            responsive: true,
+            language: { emptyTable: "Please select a property to view invoices" }
+        });
+
+        var invListLoaded = false;
+        $('#generated-invoices-tab').on('click', function() {
+            if (!invListLoaded) {
+                loadPropertiesIntoSelect('invListPropertySelect');
+                invListLoaded = true;
+            }
+        });
+
+        $('#invListPropertySelect').on('change', function() {
+            var propertyId = $(this).val();
+            if (!propertyId) {
+                generatedInvoicesTable.clear().draw();
+                return;
+            }
+            $('#invListSpinner').show();
+            $.ajax({
+                url: "{{ route('property.client-invoices.data') }}",
+                type: 'GET',
+                data: { property_id: propertyId },
+                dataType: 'json',
+                success: function(response) {
+                    generatedInvoicesTable.clear();
+                    if (response.data && response.data.length) {
+                        generatedInvoicesTable.rows.add(response.data);
+                    }
+                    generatedInvoicesTable.draw();
+                },
+                error: function() {
+                    toastr.error('Failed to load invoices.');
+                },
+                complete: function() {
+                    $('#invListSpinner').hide();
+                }
+            });
+        });
+
+        $('#generatedInvoicesTable').on('click', '.view-invoice-btn', function(e) {
+            e.preventDefault();
+            var encId = $(this).data('id');
+            var $body = $('#invoiceDetailsBody');
+            $body.html('<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>');
+            $('#invoiceDetailsDownloadBtn').attr('href', "{{ url('property/client-invoices') }}/" + encId + "/pdf");
+            new bootstrap.Modal(document.getElementById('invoiceDetailsModal')).show();
+
+            $.ajax({
+                url: "{{ url('property/client-invoices') }}/" + encId + "/details",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    var inv = response.invoice;
+                    var html = '<table class="table table-sm table-borderless mb-0">' +
+                        '<tr><td class="text-muted small">Reference</td><td class="fw-semibold">' + inv.reference_number + '</td></tr>' +
+                        '<tr><td class="text-muted small">Tenant</td><td>' + inv.tenant_name + '</td></tr>' +
+                        '<tr><td class="text-muted small">Property</td><td>' + inv.property_name + '</td></tr>' +
+                        '<tr><td class="text-muted small">Unit</td><td>' + inv.unit_code + '</td></tr>' +
+                        '<tr><td class="text-muted small">Item</td><td>' + inv.return_type_id + '</td></tr>' +
+                        '<tr><td class="text-muted small">Period</td><td>' + inv.returns_period + '</td></tr>' +
+                        '<tr><td class="text-muted small">Due Date</td><td>' + inv.date_due + '</td></tr>' +
+                        '<tr><td class="text-muted small">Amount</td><td>' + inv.total_amount + '</td></tr>' +
+                        '<tr><td class="text-muted small">VAT</td><td>' + inv.vat_ammount + '</td></tr>' +
+                        '<tr><td class="text-muted small">Commission</td><td>' + inv.comm_ammount + '</td></tr>' +
+                        '<tr><td class="text-muted small">Payable</td><td>' + inv.payable_amount + '</td></tr>' +
+                        '<tr><td class="text-muted small">Balance</td><td class="fw-semibold">' + inv.current_balance + '</td></tr>' +
+                        '<tr><td class="text-muted small">Status</td><td><span class="badge bg-secondary">' + inv.status_name + '</span></td></tr>' +
+                        '</table>';
+                    $body.html(html);
+                },
+                error: function() {
+                    $body.html('<div class="alert alert-danger mb-0">Failed to load invoice details.</div>');
+                }
+            });
+        });
+
+        // ===================== End Invoicing Tab =====================
 
         function loadProperties() {
             $.ajax({
