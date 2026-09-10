@@ -1399,13 +1399,20 @@ class ClientsController extends Controller
                 if (!$staffId) {
                     $query->whereRaw('1 = 0');
                 } else {
+                    // Mirrors Client::boot()'s scope: staff-based property/zone match, not sys_pm_zones_assignments (dead).
                     $query->whereExists(function ($sub) use ($staffId) {
                         $sub->selectRaw('1')
                             ->from('sys_pm_lease_agreements')
-                            ->join('sys_pm_zones_assignments', 'sys_pm_zones_assignments.property_id', '=', 'sys_pm_lease_agreements.property_id')
+                            ->join('sys_pm_properties as spp', 'spp.id', '=', 'sys_pm_lease_agreements.property_id')
+                            ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
                             ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id')
-                            ->where('sys_pm_zones_assignments.staff_id', $staffId)
-                            ->where('sys_pm_zones_assignments.current_status_id', 1);
+                            ->where(function ($q) use ($staffId) {
+                                $q->where('spp.field_officer_id', $staffId)
+                                    ->orWhere('spp.zone_manager_id', $staffId)
+                                    ->orWhere('spp.zone_supervisor_id', $staffId)
+                                    ->orWhere('spz.zone_manager_id', $staffId)
+                                    ->orWhere('spz.zone_supervisor_id', $staffId);
+                            });
                     });
                 }
             }
@@ -1497,13 +1504,20 @@ class ClientsController extends Controller
                 if (!$staffId) {
                     $query->whereRaw('1 = 0');
                 } else {
+                    // Mirrors Client::boot()'s scope: staff-based property/zone match, not sys_pm_zones_assignments (dead).
                     $query->whereExists(function ($sub) use ($staffId) {
                         $sub->selectRaw('1')
                             ->from('sys_pm_lease_agreements')
-                            ->join('sys_pm_zones_assignments', 'sys_pm_zones_assignments.property_id', '=', 'sys_pm_lease_agreements.property_id')
+                            ->join('sys_pm_properties as spp', 'spp.id', '=', 'sys_pm_lease_agreements.property_id')
+                            ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
                             ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id')
-                            ->where('sys_pm_zones_assignments.staff_id', $staffId)
-                            ->where('sys_pm_zones_assignments.current_status_id', 1);
+                            ->where(function ($q) use ($staffId) {
+                                $q->where('spp.field_officer_id', $staffId)
+                                    ->orWhere('spp.zone_manager_id', $staffId)
+                                    ->orWhere('spp.zone_supervisor_id', $staffId)
+                                    ->orWhere('spz.zone_manager_id', $staffId)
+                                    ->orWhere('spz.zone_supervisor_id', $staffId);
+                            });
                     });
                 }
             }

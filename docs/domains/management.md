@@ -89,11 +89,13 @@ UI-only-gate shape.
 maker-checker surface for the whole onboarding chain — one `approve`/`reject` pair per entity type
 plus bulk variants, all writing `current_status_id` 5/41.
 
-**Zone assignments.** `ZoneAssignment` (`sys_pm_zones_assignments`) is the one real cross-domain
-join to HR: `staff_id` + `property_id` + `zone_id` + `assigned_as`. Property's own approval routing
-(field-officer/zone-manager lookups used across confirmations and exit communications) resolves
-through this table to `Staff`/`User` — noted here but out of scope to deep-dive (see the HR
-agent's write-up for the `Staff` side).
+**Zone assignments.** `ZoneAssignment` (`sys_pm_zones_assignments`) is a legacy table — confirmed
+via git history (commit `a5363dab7`, 2026-08-12) as explicitly **unused**: the developer who owns
+this area migrated zone/field-officer assignment onto `sys_pm_properties.field_officer_id`/
+`zone_manager_id`/`zone_supervisor_id` and `sys_set_zones.zone_manager_id`/`zone_supervisor_id`
+(both staff-based). Nothing in `app/` writes to `sys_pm_zones_assignments` anymore. Property's own
+approval routing and tenant visibility now resolve through those live columns to `Staff` directly
+— not through this table (see the HR agent's write-up for the `Staff` side).
 
 ## The Bulk Upload Feature
 

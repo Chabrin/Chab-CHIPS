@@ -112,21 +112,22 @@ class Client extends Model
                 return;
             }
 
-            // Visible if the client's property is directly assigned to this staff member
-            // (sys_pm_properties, staff-based) or the property's zone is assigned to this
-            // user as manager/supervisor (sys_set_zones, josya_users-based) — assignment
-            // no longer flows through sys_pm_zones_assignments.
-            $query->whereExists(function ($sub) use ($staffId, $userId) {
+            // Matches the tenant's own property or a landlord's owned property;
+            // sys_set_zones IDs are staff-based (not user-based), unlike sys_pm_zones_assignments (dead).
+            $query->whereExists(function ($sub) use ($staffId) {
                 $sub->selectRaw('1')
                     ->from('sys_pm_properties as spp')
                     ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
-                    ->whereColumn('spp.client_id', 'sys_pm_clients.id')
-                    ->where(function ($q) use ($staffId, $userId) {
+                    ->where(function ($clientMatch) {
+                        $clientMatch->whereColumn('spp.client_id', 'sys_pm_clients.id')
+                            ->orWhereColumn('spp.id', 'sys_pm_clients.property_id');
+                    })
+                    ->where(function ($q) use ($staffId) {
                         $q->where('spp.field_officer_id', $staffId)
                             ->orWhere('spp.zone_manager_id', $staffId)
                             ->orWhere('spp.zone_supervisor_id', $staffId)
-                            ->orWhere('spz.zone_manager_id', $userId)
-                            ->orWhere('spz.zone_supervisor_id', $userId);
+                            ->orWhere('spz.zone_manager_id', $staffId)
+                            ->orWhere('spz.zone_supervisor_id', $staffId);
                     });
             });
         });
