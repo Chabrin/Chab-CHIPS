@@ -1839,6 +1839,13 @@ class InvoicingController extends Controller
                             )
                         )
                 ) src
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM sys_pm_debtors_invoices existing
+                    WHERE existing.lease_id = src.lease_id
+                      AND existing.item_type_id = src.item_id
+                      AND existing.returns_period = ?::date
+                )
                 ORDER BY src.lease_id
             ";
 
@@ -1886,6 +1893,7 @@ class InvoicingController extends Controller
                     $billingDateFormatted,               // for narration month name (Month YYYY)
                     $vatOnCommRate,                      // vat_on_commission rate (first)
                     $vatOnCommRate,                      // vat_on_commission rate (second)
+                    $billingDateFormatted,               // NOT EXISTS guard: skip leases already invoiced for this period
                 ]);
 
                 // Insert DR entries into the tenant accounts ledger for each generated invoice
