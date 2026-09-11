@@ -636,12 +636,31 @@ class WorkflowApprovalController extends Controller
         });
     }
 
+    /**
+     * Check that a record is still in a status eligible for approval/rejection, so an
+     * already-actioned or out-of-sequence record can't be re-approved/rejected.
+     *
+     * @param int|null $currentStatus
+     * @param array $allowedStatuses
+     */
+    private function assertActionableStatus(?int $currentStatus, array $allowedStatuses = [1]): ?\Illuminate\Http\JsonResponse
+    {
+        if (!in_array($currentStatus, $allowedStatuses, true)) {
+            return response()->json(['success' => false, 'error' => 'This record is no longer pending and cannot be actioned.'], 422);
+        }
+
+        return null;
+    }
+
     public function approve(Request $request, $id)
     {
         $section = $request->input('section');
         switch ($section) {
             case 'Staff Contracts':
                 $item = \App\Models\Contract::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5; // Approved
                 $item->save();
 
@@ -650,6 +669,9 @@ class WorkflowApprovalController extends Controller
                 break;
             case 'Staff Discipline Tracker':
                 $item = \App\Models\DisciplineCase::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5;
                 $item->save();
 
@@ -658,6 +680,9 @@ class WorkflowApprovalController extends Controller
                 break;
             case 'Zone Assignments':
                 $item = \App\Models\ZoneAssignment::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5;
                 $item->save();
                 break;
@@ -807,15 +832,23 @@ class WorkflowApprovalController extends Controller
 
                     // Send notification
                     SendApprovalNotification::dispatch($section, $id, Auth::id());
+                } else {
+                    return response()->json(['success' => false, 'error' => 'This record is no longer pending and cannot be actioned.'], 422);
                 }
                 break;
             case 'Leave Calendar':
                 $item = \App\Models\LeaveCalendarPlan::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5;
                 $item->save();
                 break;
             case 'Employee Termination':
                 $item = \App\Models\EmployeeTermination::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5;
                 $item->save();
 
@@ -826,17 +859,23 @@ class WorkflowApprovalController extends Controller
                 break;
             case 'Employee Attendance':
                 $item = \App\Models\EmployeeAttendance::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5; // Approved
                 $item->save();
                 break;
             case 'Communication Templates':
                 $item = \App\Models\CommunicationTemplate::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5; // Approved
                 $item->save();
                 break;
             case 'Leave Adjustments':
                 $adjustment = \App\Models\LeaveAdjustment::findOrFail($id);
-                
+
                 if ($adjustment->current_status_id == 1) {
                     // Stage 1: First approval
                     $adjustment->current_status_id = 24; // Partially Approved
@@ -893,6 +932,8 @@ class WorkflowApprovalController extends Controller
 
                     // Send notification
                     SendApprovalNotification::dispatch($section, $id, Auth::id());
+                } else {
+                    return response()->json(['success' => false, 'error' => 'This record is no longer pending and cannot be actioned.'], 422);
                 }
                 break;
         }
@@ -908,51 +949,81 @@ class WorkflowApprovalController extends Controller
         switch ($section) {
             case 'Staff Contracts':
                 $item = \App\Models\Contract::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41; // Rejected
                 $item->save();
                 break;
             case 'Staff Discipline Tracker':
                 $item = \App\Models\DisciplineCase::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41;
                 $item->save();
                 break;
             case 'Zone Assignments':
                 $item = \App\Models\ZoneAssignment::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41;
                 $item->save();
                 break;
             case 'Leave Application':
                 $item = \App\Models\LeaveRequest::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id, [1, 24])) {
+                    return $error;
+                }
                 $item->current_status_id = 41;
                 $item->save();
                 break;
             case 'Leave Calendar':
                 $item = \App\Models\LeaveCalendarPlan::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41;
                 $item->save();
                 break;
             case 'Employee Termination':
                 $item = \App\Models\EmployeeTermination::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41;
                 $item->save();
                 break;
             case 'Employee Attendance':
                 $item = \App\Models\EmployeeAttendance::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41; // Rejected
                 $item->save();
                 break;
             case 'Communication':
                 $item = \App\Models\Communication::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->status)) {
+                    return $error;
+                }
                 $item->status = 41; // Rejected
                 $item->save();
                 break;
             case 'Communication Templates':
                 $item = \App\Models\CommunicationTemplate::findOrFail($id);
+                if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 41; // Rejected
                 $item->save();
                 break;
             case 'Leave Adjustments':
                 $adjustment = \App\Models\LeaveAdjustment::findOrFail($id);
+                if ($error = $this->assertActionableStatus($adjustment->current_status_id, [1, 24])) {
+                    return $error;
+                }
                 $adjustment->current_status_id = 41; // Rejected
                 $adjustment->rejection_reason = $request->input('reason', 'Rejected by approver');
                 $adjustment->save();
@@ -971,23 +1042,25 @@ class WorkflowApprovalController extends Controller
         $section = $request->input('section');
         switch ($section) {
             case 'Staff Contracts':
-                \App\Models\Contract::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                $eligibleIds = \App\Models\Contract::whereIn('id', $ids)->where('current_status_id', 1)->pluck('id')->toArray();
+                \App\Models\Contract::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
                 // Send notifications for each approved contract
-                foreach ($ids as $id) {
+                foreach ($eligibleIds as $id) {
                     SendApprovalNotification::dispatch($section, $id, Auth::id());
                 }
                 break;
             case 'Staff Discipline Tracker':
-                \App\Models\DisciplineCase::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                $eligibleIds = \App\Models\DisciplineCase::whereIn('id', $ids)->where('current_status_id', 1)->pluck('id')->toArray();
+                \App\Models\DisciplineCase::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
                 // Send notifications
-                foreach ($ids as $id) {
+                foreach ($eligibleIds as $id) {
                     SendApprovalNotification::dispatch($section, $id, Auth::id());
                 }
                 break;
             case 'Zone Assignments':
-                \App\Models\ZoneAssignment::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                \App\Models\ZoneAssignment::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
                 break;
             case 'Leave Application':
                 $items = \App\Models\LeaveRequest::whereIn('id', $ids)->get();
@@ -1061,27 +1134,28 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Leave Calendar':
-                \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
                 break;
             case 'Employee Termination':
-                \App\Models\EmployeeTermination::whereIn('id', $ids)->update(['current_status_id' => 5]);
-                
-                $items = \App\Models\EmployeeTermination::whereIn('id', $ids)->get();
+                $eligibleIds = \App\Models\EmployeeTermination::whereIn('id', $ids)->where('current_status_id', 1)->pluck('id')->toArray();
+                \App\Models\EmployeeTermination::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
+
+                $items = \App\Models\EmployeeTermination::whereIn('id', $eligibleIds)->get();
                 foreach ($items as $item) {
                     \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 28]); // Terminated
                 }
 
                 // Send notifications
-                foreach ($ids as $id) {
+                foreach ($eligibleIds as $id) {
                     SendApprovalNotification::dispatch($section, $id, Auth::id());
                 }
                 break;
             case 'Employee Attendance':
-                \App\Models\EmployeeAttendance::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                \App\Models\EmployeeAttendance::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
                 break;
             case 'Communication Templates':
-                \App\Models\CommunicationTemplate::whereIn('id', $ids)->update(['current_status_id' => 5]);
-                break;  
+                \App\Models\CommunicationTemplate::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
+                break;
         }
 
         $this->logConfirmation($section, 'bulk approve', $ids);
@@ -1095,31 +1169,31 @@ class WorkflowApprovalController extends Controller
         $section = $request->input('section');
         switch ($section) {
             case 'Staff Contracts':
-                \App\Models\Contract::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\Contract::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Staff Discipline Tracker':
-                \App\Models\DisciplineCase::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\DisciplineCase::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Zone Assignments':
-                \App\Models\ZoneAssignment::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\ZoneAssignment::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Leave Application':
-                \App\Models\LeaveRequest::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\LeaveRequest::whereIn('id', $ids)->whereIn('current_status_id', [1, 24])->update(['current_status_id' => 41]);
                 break;
             case 'Leave Calendar':
-                \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Employee Termination':
-                \App\Models\EmployeeTermination::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\EmployeeTermination::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Employee Attendance':
-                \App\Models\EmployeeAttendance::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\EmployeeAttendance::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Communication':
-                \App\Models\Communication::whereIn('id', $ids)->update(['status' => 41]); // Rejected
+                \App\Models\Communication::whereIn('id', $ids)->where('status', 1)->update(['status' => 41]); // Rejected
                 break;
             case 'Communication Templates':
-                \App\Models\CommunicationTemplate::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                \App\Models\CommunicationTemplate::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
         }
 
