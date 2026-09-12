@@ -652,6 +652,61 @@ class WorkflowApprovalController extends Controller
         return null;
     }
 
+    /**
+     * Check that a staff member referenced by an approval still exists and isn't in a
+     * terminal employment state (suspended/terminated/absconded).
+     *
+     * @param int|null $staffId
+     */
+    private function assertStaffValid(?int $staffId): ?\Illuminate\Http\JsonResponse
+    {
+        $staff = $staffId ? \App\Models\Staff::find($staffId) : null;
+
+        if (!$staff) {
+            return response()->json(['success' => false, 'error' => 'The referenced staff member no longer exists.'], 422);
+        }
+
+        if (in_array($staff->current_status_id, [4, 28, 36], true)) {
+            return response()->json(['success' => false, 'error' => 'The referenced staff member is suspended, terminated, or absconded.'], 422);
+        }
+
+        return null;
+    }
+
+    /**
+     * Check that a staff member referenced by a termination still exists and isn't already terminated.
+     *
+     * @param int|null $staffId
+     */
+    private function assertStaffTerminable(?int $staffId): ?\Illuminate\Http\JsonResponse
+    {
+        $staff = $staffId ? \App\Models\Staff::find($staffId) : null;
+
+        if (!$staff) {
+            return response()->json(['success' => false, 'error' => 'The referenced staff member no longer exists.'], 422);
+        }
+
+        if ($staff->current_status_id == 28) {
+            return response()->json(['success' => false, 'error' => 'The referenced staff member is already terminated.'], 422);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the ids of staff members not in the given excluded employment statuses, for
+     * scoping bulk approval updates to valid staff references only.
+     *
+     * @param array $excludedStatuses
+     */
+    private function validStaffIds(array $excludedStatuses): array
+    {
+        return \App\Models\Staff::where(function ($query) use ($excludedStatuses) {
+            $query->whereNotIn('current_status_id', $excludedStatuses)
+                ->orWhereNull('current_status_id');
+        })->pluck('id')->toArray();
+    }
+
     public function approve(Request $request, $id)
     {
         $section = $request->input('section');
@@ -659,6 +714,9 @@ class WorkflowApprovalController extends Controller
             case 'Staff Contracts':
                 $item = \App\Models\Contract::findOrFail($id);
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
+                if ($error = $this->assertStaffValid($item->staff_id)) {
                     return $error;
                 }
                 $item->current_status_id = 5; // Approved
@@ -672,6 +730,9 @@ class WorkflowApprovalController extends Controller
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
                     return $error;
                 }
+                if ($error = $this->assertStaffValid($item->staff_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5;
                 $item->save();
 
@@ -683,12 +744,22 @@ class WorkflowApprovalController extends Controller
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
                     return $error;
                 }
+                if ($error = $this->assertStaffValid($item->staff_id)) {
+                    return $error;
+                }
+                if (!\App\Models\Zone::find($item->zone_id) || !\App\Models\Property::withoutGlobalScopes()->find($item->property_id)) {
+                    return response()->json(['success' => false, 'error' => 'The referenced zone or property no longer exists.'], 422);
+                }
                 $item->current_status_id = 5;
                 $item->save();
                 break;
             case 'Leave Application':
                 $item = \App\Models\LeaveRequest::findOrFail($id);
-                
+
+                if ($error = $this->assertStaffValid($item->staff_id)) {
+                    return $error;
+                }
+
                 if ($item->current_status_id == 1) {
                     // Stage 1: First approver sets up the actual days taken
                     $days_taken = $request->input('days_taken', []);
@@ -841,12 +912,18 @@ class WorkflowApprovalController extends Controller
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
                     return $error;
                 }
+                if ($error = $this->assertStaffValid($item->employee_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5;
                 $item->save();
                 break;
             case 'Employee Termination':
                 $item = \App\Models\EmployeeTermination::findOrFail($id);
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
+                    return $error;
+                }
+                if ($error = $this->assertStaffTerminable($item->staff_id)) {
                     return $error;
                 }
                 $item->current_status_id = 5;
@@ -862,6 +939,9 @@ class WorkflowApprovalController extends Controller
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
                     return $error;
                 }
+                if ($error = $this->assertStaffValid($item->employee_id)) {
+                    return $error;
+                }
                 $item->current_status_id = 5; // Approved
                 $item->save();
                 break;
@@ -875,6 +955,14 @@ class WorkflowApprovalController extends Controller
                 break;
             case 'Leave Adjustments':
                 $adjustment = \App\Models\LeaveAdjustment::findOrFail($id);
+
+                $leaveRequest = $adjustment->leaveRequest;
+                if (!$leaveRequest) {
+                    return response()->json(['success' => false, 'error' => 'The referenced leave application no longer exists.'], 422);
+                }
+                if ($error = $this->assertStaffValid($leaveRequest->staff_id)) {
+                    return $error;
+                }
 
                 if ($adjustment->current_status_id == 1) {
                     // Stage 1: First approval
@@ -1042,7 +1130,8 @@ class WorkflowApprovalController extends Controller
         $section = $request->input('section');
         switch ($section) {
             case 'Staff Contracts':
-                $eligibleIds = \App\Models\Contract::whereIn('id', $ids)->where('current_status_id', 1)->pluck('id')->toArray();
+                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $eligibleIds = \App\Models\Contract::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('staff_id', $validStaffIds)->pluck('id')->toArray();
                 \App\Models\Contract::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
                 // Send notifications for each approved contract
@@ -1051,7 +1140,8 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Staff Discipline Tracker':
-                $eligibleIds = \App\Models\DisciplineCase::whereIn('id', $ids)->where('current_status_id', 1)->pluck('id')->toArray();
+                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $eligibleIds = \App\Models\DisciplineCase::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('staff_id', $validStaffIds)->pluck('id')->toArray();
                 \App\Models\DisciplineCase::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
                 // Send notifications
@@ -1060,15 +1150,28 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Zone Assignments':
-                \App\Models\ZoneAssignment::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
+                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $validZoneIds = \App\Models\Zone::pluck('id')->toArray();
+                $validPropertyIds = \App\Models\Property::withoutGlobalScopes()->pluck('id')->toArray();
+                \App\Models\ZoneAssignment::whereIn('id', $ids)
+                    ->where('current_status_id', 1)
+                    ->whereIn('staff_id', $validStaffIds)
+                    ->whereIn('zone_id', $validZoneIds)
+                    ->whereIn('property_id', $validPropertyIds)
+                    ->update(['current_status_id' => 5]);
                 break;
             case 'Leave Application':
                 $items = \App\Models\LeaveRequest::whereIn('id', $ids)->get();
                 $errors = [];
                 $approvedIds = [];
-                
+
                 foreach ($items as $item) {
                     if ($item->current_status_id == 24) {
+                        if ($this->assertStaffValid($item->staff_id)) {
+                            $errors[] = "Cannot approve leave ID {$item->id} - referenced staff member is invalid";
+                            continue;
+                        }
+
                         // Get first approver
                         $firstApproval = ConfirmationLog::where('section', 'Leave Application')
                             ->where('ids', 'like', '%"' . $item->id . '"%')
@@ -1134,10 +1237,12 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Leave Calendar':
-                \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
+                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('employee_id', $validStaffIds)->update(['current_status_id' => 5]);
                 break;
             case 'Employee Termination':
-                $eligibleIds = \App\Models\EmployeeTermination::whereIn('id', $ids)->where('current_status_id', 1)->pluck('id')->toArray();
+                $validStaffIds = $this->validStaffIds([28]);
+                $eligibleIds = \App\Models\EmployeeTermination::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('staff_id', $validStaffIds)->pluck('id')->toArray();
                 \App\Models\EmployeeTermination::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
                 $items = \App\Models\EmployeeTermination::whereIn('id', $eligibleIds)->get();
@@ -1151,7 +1256,8 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Employee Attendance':
-                \App\Models\EmployeeAttendance::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
+                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                \App\Models\EmployeeAttendance::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('employee_id', $validStaffIds)->update(['current_status_id' => 5]);
                 break;
             case 'Communication Templates':
                 \App\Models\CommunicationTemplate::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 5]);
