@@ -28,9 +28,14 @@ trait TenantExitSettlementCalculatorTrait
 
         $depositOnRecord = (float) Deposit::where('tenant_id', $exit->tenant_id)->sum('amount');
 
-        // Arrears: closing balance from transactions (positive = DR balance = tenant owes us)
+        // Arrears: closing balance from transactions (positive = DR balance = tenant owes us).
+        // Excludes the Security Deposit ledger entry itself — it's already counted via
+        // $depositOnRecord above, so including it here would double-count it in the
+        // settlement formula below (once netted into arrears, once added back directly).
         $transactions = TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
-            ->where('current_status_id', 1)->get();
+            ->where('current_status_id', 1)
+            ->where(fn($q) => $q->whereNull('pay_for')->orWhere('pay_for', '!=', 'Security Deposit'))
+            ->get();
         $balance = 0;
         foreach ($transactions as $txn) {
             $balance += abs($txn->credit_amount ?? 0) - abs($txn->debit_amount ?? 0);
