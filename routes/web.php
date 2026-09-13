@@ -1156,7 +1156,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         Route::post('/inspection/save',     [TenantExitController::class, 'saveInspection'])->name('inspection.save');
         Route::post('/communication/send',  [TenantExitController::class, 'sendCommunication'])->name('communication.send');
         Route::get('/communications/{exitId}',     [TenantExitController::class, 'getCommunications']);
-        Route::post('/finalise',            [TenantExitController::class, 'finaliseExit'])->name('finalise');
         Route::get('/templates',            [TenantExitController::class, 'getTemplates'])->name('templates');
 
         // PDF downloads (from exited tenants detail panel)
