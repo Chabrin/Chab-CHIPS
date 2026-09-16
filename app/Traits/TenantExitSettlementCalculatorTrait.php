@@ -28,6 +28,18 @@ trait TenantExitSettlementCalculatorTrait
 
         $depositOnRecord = (float) Deposit::where('tenant_id', $exit->tenant_id)->sum('amount');
 
+        // Most tenants never went through the dedicated deposit-capture flow added in
+        // July 2026 — their deposit was invoiced and paid off like any other charge
+        // instead, so sys_pm_deposits has no row for them at all. Fall back to what they
+        // actually paid against a deposit-type charge, or a real paid deposit reads as
+        // zero on record here and the tenant is refunded nothing for it.
+        if ($depositOnRecord <= 0) {
+            $depositOnRecord = (float) TenantAccountTransaction::where('tenant_id', $exit->tenant_id)
+                ->where('current_status_id', 1)
+                ->whereIn('pay_for', ['House Deposit', 'Electricity Deposit', 'Water Deposit'])
+                ->sum('credit_amount');
+        }
+
         // Arrears: closing balance from transactions (positive = DR balance = tenant owes us).
         // Excludes the Security Deposit ledger entry itself — it's already counted via
         // $depositOnRecord above, so including it here would double-count it in the
