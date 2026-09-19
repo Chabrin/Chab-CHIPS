@@ -1344,6 +1344,11 @@ class HrSettingsController extends Controller
                 $query->where('zone_id', $request->input('zone_id'));
             }
 
+            if ($request->filled('position_slug')) {
+                $positionIds = Position::where('slug_name', $request->input('position_slug'))->pluck('id');
+                $query->whereIn('position_id', $positionIds);
+            }
+
             $staff = $query->get()
                 ->map(function ($employee) {
                     return [

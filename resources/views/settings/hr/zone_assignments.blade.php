@@ -9,16 +9,6 @@
                         <h5 class="mb-0">Zone Assignments</h5>
                     </div>
                     <div class="card-body">
-                        <div class="alert alert-info py-2 px-3" style="font-size:0.85rem;">
-                            <strong>What you can do here:</strong> the <em>Unallocated</em> tab lists properties with no
-                            Field Officer yet — click <em>Allocate</em> to assign one. The <em>Field Officers</em>,
-                            <em>Zone Managers</em>, <em>Zone Supervisors</em> and <em>Property Managers</em> tabs show who
-                            is currently assigned what; click a name or <em>Details</em> to see their properties. On the
-                            Field Officers list, that Details view also lets you
-                            <span class="material-symbols-outlined align-middle" style="font-size:15px;">swap_horiz</span>
-                            reassign a property to a different officer one at a time, or select several with the
-                            checkboxes and use <em>Reassign Selected</em> to move them all at once.
-                        </div>
                         <!-- Nav tabs -->
                         <ul class="nav nav-tabs mb-3" id="zoneAssignmentsTab" role="tablist">
                             <li class="nav-item" role="presentation">
@@ -522,8 +512,11 @@
 
         // Select all — across every page, not just the one currently visible. This
         // DataTable loads its full dataset client-side, so .rows() already has every
-        // row's data regardless of pagination; draw(false) re-renders checkboxes
-        // (keeping the current page) so the visible ones reflect the new state.
+        // row's data regardless of pagination. DataTables caches each row's rendered
+        // <td> nodes after the first draw and won't re-invoke the column's render()
+        // on a plain draw() — invalidate('data') clears that cache so the checkbox
+        // column re-renders (picking up the updated selectedProperties Map) both for
+        // the currently visible page and for any page the user pages to afterwards.
         $(document).on('change', '#selectAllStaffProperties', function() {
             const checked = $(this).is(':checked');
             if (staffPropertiesTable) {
@@ -535,7 +528,7 @@
                         selectedProperties.delete(id);
                     }
                 });
-                staffPropertiesTable.draw(false);
+                staffPropertiesTable.rows().invalidate('data').draw(false);
             }
             updateStaffPropertiesBulkBar();
         });
@@ -641,7 +634,10 @@
             return $.ajax({
                 url: "{{ url('/ajax/hr/staff/list') }}",
                 type: 'GET',
-                dataType: 'json'
+                dataType: 'json',
+                data: {
+                    position_slug: 'field_officer'
+                }
             }).then(function(response) {
                 staffOptionsCache = response.staff || [];
                 return staffOptionsCache;
