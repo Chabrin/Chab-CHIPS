@@ -98,6 +98,8 @@ use Illuminate\Support\Facades\Crypt;
                                                 <th>#</th>
                                                 <th>Staff ID</th>
                                                 <th>Full Name</th>
+                                                <th>Gender</th>
+                                                <th>National ID</th>
                                                 <th>Phone</th>
                                             </tr>
                                         </thead>
@@ -107,11 +109,13 @@ use Illuminate\Support\Facades\Crypt;
                                                 <td>{{ $index + 1 }}</td>
                                                 <td>{{ $staff->staff_number }}</td>
                                                 <td>{{ $staff->full_names }}</td>
+                                                <td>{{ $staff->gender ?? '-' }}</td>
+                                                <td>{{ $staff->national_id ?? '-' }}</td>
                                                 <td>{{ $staff->mobile_number ?? '-' }}</td>
                                             </tr>
                                             @empty
                                             <tr>
-                                                <td colspan="4" class="text-center text-muted">No staff assigned to this position</td>
+                                                <td colspan="6" class="text-center text-muted">No staff assigned to this position</td>
                                             </tr>
                                             @endforelse
                                         </tbody>
@@ -197,6 +201,7 @@ use Illuminate\Support\Facades\Crypt;
 </style>
 @endsection
 
+@section('scripts')
 <script>
     $(document).ready(function() {
         // Initialize DataTable for staff
@@ -264,3 +269,4 @@ use Illuminate\Support\Facades\Crypt;
         });
     });
 </script>
+@endsection

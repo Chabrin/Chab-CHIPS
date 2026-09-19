@@ -107,6 +107,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/positions/get', [HrSettingsController::class, 'positionsGet'])->name('ajax.hr.positions.get');
     Route::post('/ajax/hr/positions', [HrSettingsController::class, 'positionsStoreAjax'])->name('ajax.hr.positions.store');
     Route::post('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsUpdateAjax'])->name('ajax.hr.positions.update');
+    Route::delete('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsDestroyAjax'])->name('ajax.hr.positions.destroy');
 
     // Payroll Settings - Tax Bands
     Route::get('/payroll/tax-bands', [PayrollController::class, 'taxBandsIndex'])->name('payroll.tax_bands');

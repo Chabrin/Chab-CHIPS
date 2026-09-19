@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\CommunicationTemplate;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class HrSettingsController extends Controller
@@ -261,19 +262,26 @@ class HrSettingsController extends Controller
     public function positionsList()
     {
         try {
-            $positions = Position::with(['reportsTo', 'salaryAccount', 'staff'])
+            $canUpdate = Auth::user()->isAbleTo('update_staff_positions');
+            $canRead = Auth::user()->isAbleTo('read_staff_positions');
+            $canDelete = Auth::user()->isAbleTo('delete_staff_positions');
+
+            $positions = Position::with(['reportsTo', 'salaryAccount'])
+                ->withCount('staff')
                 ->orderBy('position_name')
                 ->get()
-                ->map(function ($position) {
+                ->map(function ($position) use ($canUpdate, $canRead, $canDelete) {
                     return [
                         'id' => $position->id,
                         'encrypted_id' => Crypt::encrypt($position->id),
                         'position_name' => $position->position_name,
+                        'slug_name' => $position->slug_name,
                         'basic_salary' => $position->basic_salary,
                         'reports_to_name' => $position->reportsTo->position_name ?? null,
-                        'staff_count' => $position->staff->count(),
-                        'can_update' => Auth::user()->isAbleTo('update_staff_positions'),
-                        'can_read' => Auth::user()->isAbleTo('read_staff_positions'),
+                        'staff_count' => $position->staff_count,
+                        'can_update' => $canUpdate,
+                        'can_read' => $canRead,
+                        'can_delete' => $canDelete,
                     ];
                 });
 
@@ -352,6 +360,7 @@ class HrSettingsController extends Controller
 
             $position = new Position();
             $position->position_name = $validated['position_name'];
+            $position->slug_name = Str::slug($validated['position_name'], '_');
             $position->basic_salary = $validated['basic_salary'] ?? null;
             $position->salary_account_id = $validated['salary_account_id'] ?? null;
             $position->reports_to_id = $validated['reports_to_id'] ?? null;
@@ -418,6 +427,43 @@ class HrSettingsController extends Controller
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update position'], 500);
+        }
+    }
+
+    public function positionsDestroyAjax($id)
+    {
+        try {
+            $position = Position::findOrFail($id);
+
+            $staffCount = Staff::where('position_id', $id)->count();
+            if ($staffCount > 0) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'This position cannot be deleted because it is assigned to ' . $staffCount . ' staff member(s).'
+                ], 422);
+            }
+
+            $reportsToCount = Position::where('reports_to_id', $id)->count();
+            if ($reportsToCount > 0) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'This position cannot be deleted because other positions report to it.'
+                ], 422);
+            }
+
+            $position->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Position deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to delete position'], 500);
         }
     }
 

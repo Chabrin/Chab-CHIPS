@@ -20,6 +20,7 @@ class Position extends Model
     protected $fillable = [
         'date_time',
         'position_name',
+        'slug_name',
         'basic_salary',
         'salary_account_id',
         'current_status_id',

@@ -23,6 +23,7 @@
                                     <tr>
                                         <th>#</th>
                                         <th>Position Name</th>
+                                        <th>Slug</th>
                                         <th>Basic Salary</th>
                                         <th>Reports To</th>
                                         <th>Staff Count</th>
@@ -53,6 +54,10 @@
                         <label for="add_position_name" class="form-label">Position Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="add_position_name" name="position_name" required>
                         <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_slug_name" class="form-label">Slug <span class="text-muted small">(auto-generated)</span></label>
+                        <input type="text" class="form-control" id="add_slug_name" readonly tabindex="-1">
                     </div>
                     <div class="mb-3">
                         <label for="add_basic_salary" class="form-label">Basic Salary</label>
@@ -93,6 +98,10 @@
                         <div class="invalid-feedback"></div>
                     </div>
                     <div class="mb-3">
+                        <label for="edit_slug_name" class="form-label">Slug <span class="text-muted small">(auto-generated)</span></label>
+                        <input type="text" class="form-control" id="edit_slug_name" readonly tabindex="-1">
+                    </div>
+                    <div class="mb-3">
                         <label for="edit_basic_salary" class="form-label">Basic Salary</label>
                         <input type="number" step="0.01" class="form-control" id="edit_basic_salary" name="basic_salary">
                         <div class="invalid-feedback"></div>
@@ -115,6 +124,7 @@
 </div>
 @endsection
 
+@section('scripts')
 <script>
     var positionsTable;
 
@@ -147,7 +157,29 @@
             e.preventDefault();
             saveEditPosition();
         });
+
+        // Live slug preview (add only — edit keeps the original slug fixed)
+        $('#add_position_name').on('input', function() {
+            $('#add_slug_name').val(slugify($(this).val()));
+        });
+
+        // Delete position
+        $(document).on('click', '.delete-position', function(e) {
+            e.preventDefault();
+            var positionId = $(this).data('id');
+            var positionName = $(this).data('name');
+            deletePosition(positionId, positionName);
+        });
     });
+
+    function slugify(text) {
+        return (text || '')
+            .toString()
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+    }
 
     function loadPositionsTable() {
         positionsTable = $('#positions-table').DataTable({
@@ -169,6 +201,10 @@
                         }
                         return data;
                     }
+                },
+                {
+                    data: 'slug_name',
+                    defaultContent: '-'
                 },
                 {
                     data: 'basic_salary',
@@ -196,6 +232,9 @@
                         if (row.can_update) {
                             actions += '<a href="#" class="edit-position" data-id="' + row.id + '" title="Edit"><span class="material-symbols-outlined" style="font-size:18px;">edit_document</span></a>';
                         }
+                        if (row.can_delete) {
+                            actions += '<a href="#" class="delete-position text-primary" data-id="' + row.id + '" data-name="' + row.position_name + '" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>';
+                        }
                         actions += '</div>';
                         return actions;
                     }
@@ -217,8 +256,69 @@
             function(data) {
                 $('#edit_position_id').val(data.position.id);
                 $('#edit_position_name').val(data.position.position_name);
+                $('#edit_slug_name').val(data.position.slug_name);
                 $('#edit_basic_salary').val(data.position.basic_salary);
             });
+    }
+
+    function deletePosition(positionId, positionName) {
+        Swal.fire({
+            title: 'Delete Position?',
+            text: 'Are you sure you want to delete "' + positionName + '"? This cannot be undone.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3598db',
+            cancelButtonColor: '#8a94a3',
+            confirmButtonText: 'Yes, delete it',
+            cancelButtonText: 'Cancel'
+        }).then(function(result) {
+            if (!result.isConfirmed) {
+                return;
+            }
+
+            Swal.fire({
+                title: 'Deleting...',
+                allowOutsideClick: false,
+                didOpen: function() {
+                    Swal.showLoading();
+                }
+            });
+
+            $.ajax({
+                url: '/ajax/hr/positions/' + positionId,
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire({
+                            title: 'Deleted!',
+                            text: response.message || 'Position deleted successfully',
+                            icon: 'success',
+                            confirmButtonColor: '#3598db'
+                        });
+                        positionsTable.ajax.reload();
+                    } else {
+                        Swal.fire({
+                            title: 'Cannot Delete',
+                            text: response.error || 'Failed to delete position',
+                            icon: 'error',
+                            confirmButtonColor: '#3598db'
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'An error occurred while deleting';
+                    Swal.fire({
+                        title: 'Cannot Delete',
+                        text: message,
+                        icon: 'error',
+                        confirmButtonColor: '#3598db'
+                    });
+                }
+            });
+        });
     }
 
     function saveAddPosition() {
@@ -334,3 +434,4 @@
         $('#addPositionForm .invalid-feedback').text('');
     }
 </script>
+@endsection
