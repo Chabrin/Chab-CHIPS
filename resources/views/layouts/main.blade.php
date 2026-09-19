@@ -76,13 +76,13 @@
                             </div>
                         </li>
                         <li class="serchinput">
-                            <div class="serchbox">
+                            <div class="serchbox" id="global_search_submit" style="cursor:pointer;">
                                 <svg>
                                     <use href="../assets/svg/icon-sprite.svg#search"></use>
                                 </svg>
                             </div>
                             <div class="form-group search-form">
-                                <input type="text" placeholder="Search here...">
+                                <input type="text" id="global_search_input" placeholder="Search here...">
                             </div>
                         </li>
 
@@ -343,6 +343,32 @@
     @if(session('error'))
     <script>document.addEventListener('DOMContentLoaded', function() { toastr.error(@json(session('error'))); });</script>
     @endif
+
+    <script>
+        // Global search box: Enter key navigates to the search results page
+        (function() {
+            var searchInput = document.getElementById('global_search_input');
+            var searchButton = document.getElementById('global_search_submit');
+            if (!searchInput) return;
+
+            function submitSearch() {
+                var term = searchInput.value.trim();
+                if (term.length < 2) return;
+
+                window.location.href = '{{ route('search') }}?q=' + encodeURIComponent(term);
+            }
+
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                submitSearch();
+            });
+
+            if (searchButton) {
+                searchButton.addEventListener('click', submitSearch);
+            }
+        })();
+    </script>
 
     <script>
         // Handle hamburger menu collapse with responsive behavior

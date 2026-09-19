@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TenantExitSettlement extends Model
 {
@@ -55,5 +56,13 @@ class TenantExitSettlement extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /**
+     * Landlord consent requests raised against this settlement's refund.
+     */
+    public function consents(): HasMany
+    {
+        return $this->hasMany(TenantExitLandlordConsent::class, 'settlement_id');
     }
 }

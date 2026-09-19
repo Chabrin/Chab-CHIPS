@@ -1167,7 +1167,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         Route::post('/inspection/save',     [TenantExitController::class, 'saveInspection'])->name('inspection.save');
         Route::post('/communication/send',  [TenantExitController::class, 'sendCommunication'])->name('communication.send');
         Route::get('/communications/{exitId}',     [TenantExitController::class, 'getCommunications']);
-        Route::post('/finalise',            [TenantExitController::class, 'finaliseExit'])->name('finalise');
         Route::get('/templates',            [TenantExitController::class, 'getTemplates'])->name('templates');
 
         // PDF downloads (from exited tenants detail panel)
@@ -1210,6 +1209,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/confirmations/{id}/reject', [PropertyConfirmationController::class, 'reject'])->name('property.confirmations.reject');
     Route::post('/property/confirmations/bulk-approve', [PropertyConfirmationController::class, 'bulkApprove'])->name('property.confirmations.bulk-approve');
     Route::post('/property/confirmations/bulk-reject', [PropertyConfirmationController::class, 'bulkReject'])->name('property.confirmations.bulk-reject');
+    Route::post('/property/confirmations/tenant-exit-settlements/{id}/resend-consent', [PropertyConfirmationController::class, 'resendLandlordConsent'])->name('property.confirmations.tenant-exit-settlements.resend-consent');
     Route::get('/ajax/property/confirmations/landlord-onboarding/list', [PropertyConfirmationController::class, 'landlordOnboardingList'])->name('property.confirmations.landlord-onboarding.list');
     Route::post('/property/confirmations/landlord-onboarding/approve', [PropertyConfirmationController::class, 'landlordOnboardingApprove'])->name('property.confirmations.landlord-onboarding.approve');
     Route::post('/property/confirmations/landlord-onboarding/reject', [PropertyConfirmationController::class, 'landlordOnboardingReject'])->name('property.confirmations.landlord-onboarding.reject');
@@ -1311,6 +1311,15 @@ Route::middleware(['throttle:5,1', 'signed'])->group(function () {
     Route::post('/advances/approve/{encryptedId}', [App\Http\Controllers\ClientAdvanceController::class, 'confirmApproveAdvance'])->name('property.advances.approve.confirm');
 });
 
+// Public tenant-exit landlord consent routes — landlord clicks link from consent-request
+// email (no auth, rate-limited, signature+expiry enforced) to approve/reject having a
+// tenant's refund deducted from their payout. GET renders the review page; POST (from
+// that page's form) records the decision.
+Route::middleware(['throttle:5,1', 'signed'])->group(function () {
+    Route::get('/exit-settlements/consent/{encryptedId}', [App\Http\Controllers\TenantExitLandlordConsentController::class, 'show'])->name('property.exit-consents.show');
+    Route::post('/exit-settlements/consent/{encryptedId}', [App\Http\Controllers\TenantExitLandlordConsentController::class, 'decide'])->name('property.exit-consents.decide');
+});
+
 
 
 Route::redirect('/', '/dashboard');
@@ -1391,6 +1400,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
 
     Route::get('/dashboard', [HomeController::class, 'Dashboard'])->name('dashboard');
+
+    Route::get('/search', [SearchController::class, 'index'])->name('search');
 
     // Dashboard AJAX endpoints
     Route::get('/dashboard/field-officer/stats', [HomeController::class, 'getFieldOfficerStats'])->name('dashboard.field-officer.stats');

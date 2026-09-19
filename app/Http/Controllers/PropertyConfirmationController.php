@@ -690,11 +690,12 @@ class PropertyConfirmationController extends Controller
                     });
                 }
                 $recordsTotal = (clone $base)->count();
-                $records = $base->with(['exit.tenant', 'exit.property', 'settledBy'])
+                $records = $base->with(['exit.tenant', 'exit.property', 'settledBy', 'consents'])
                     ->orderBy('settled_at', 'desc')
                     ->skip($start)->take($length)
                     ->get()
                     ->map(function ($settlement) {
+                        $latestConsent = $settlement->consents->sortByDesc('id')->first();
                         return [
                             'id' => $settlement->id,
                             'encrypted_id' => Crypt::encrypt($settlement->id),
@@ -704,6 +705,7 @@ class PropertyConfirmationController extends Controller
                             'settlement_balance' => number_format($settlement->settlement_balance ?? 0, 2),
                             'submitted_by' => $settlement->settledBy->name ?? '-',
                             'submitted_at' => $settlement->settled_at ? $settlement->settled_at->format('d-m-Y H:i') : '-',
+                            'consent_pending' => (bool) ($latestConsent && $latestConsent->isPending()),
                         ];
                     });
                 break;
@@ -819,8 +821,11 @@ class PropertyConfirmationController extends Controller
                         return response()->json(['success' => false, 'error' => 'A different user must approve this settlement — you cannot approve your own submission.'], 422);
                     }
                     $previousStatus = $record->current_status_id;
+                    $blockReason = $this->applyTenantExitSettlementApproval($record);
+                    if ($blockReason !== null) {
+                        return response()->json(['success' => false, 'error' => $blockReason], 422);
+                    }
                     $newStatus = 5;
-                    $this->applyTenantExitSettlementApproval($record);
                     break;
 
                 default:
@@ -938,22 +943,35 @@ class PropertyConfirmationController extends Controller
      * approve()/bulkApprove() before this is ever called). Wrapped in a transaction so
      * a failure partway through can't leave a half-applied settlement. Shared by both
      * single and bulk approval so the two can never drift apart.
+     *
+     * Returns null once the settlement has been applied, or a human-readable reason it
+     * was blocked instead (currently only: a "Refund to Tenant" balance that docks the
+     * landlord's payout still needs the landlord's consent) — the caller surfaces that
+     * reason to staff rather than finalising anything.
      */
-    private function applyTenantExitSettlementApproval(\App\Models\TenantExitSettlement $settlement): void
+    private function applyTenantExitSettlementApproval(\App\Models\TenantExitSettlement $settlement): ?string
     {
-        DB::transaction(function () use ($settlement) {
-            $exit = \App\Models\TenantExit::findOrFail($settlement->exit_id);
-            $refNum = 'EXIT-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
+        $exit = \App\Models\TenantExit::findOrFail($settlement->exit_id);
 
-            // Recompute fresh from the tenant's current ledger/deposit/inspection data rather
-            // than trusting the figures stored at submission time — the tenant's balance could
-            // have changed in the time between submission and this approval (a payment posted,
-            // an invoice raised, etc.), and this is the point where money actually moves, so
-            // it must reflect reality now, not a possibly-stale snapshot. other_deductions is
-            // the one manual figure carried through unchanged, since it's not derivable from
-            // any table.
-            $fresh = $this->computeTenantExitSettlement($exit, (float) $settlement->other_deductions);
-            $settlement->fill($fresh);
+        // Recompute fresh from the tenant's current ledger/deposit/inspection data rather
+        // than trusting the figures stored at submission time — the tenant's balance could
+        // have changed in the time between submission and this approval (a payment posted,
+        // an invoice raised, etc.), and this is the point where money actually moves, so
+        // it must reflect reality now, not a possibly-stale snapshot. other_deductions is
+        // the one manual figure carried through unchanged, since it's not derivable from
+        // any table.
+        $fresh = $this->computeTenantExitSettlement($exit, (float) $settlement->other_deductions);
+        $settlement->fill($fresh);
+
+        if ($settlement->settlement_type === 'Refund to Tenant' && $settlement->settlement_balance > 0.005) {
+            $blockReason = $this->guardLandlordConsentForRefund($exit, $settlement);
+            if ($blockReason !== null) {
+                return $blockReason;
+            }
+        }
+
+        DB::transaction(function () use ($settlement, $exit) {
+            $refNum = 'EXIT-' . date('Ymd') . '-' . str_pad($settlement->id, 5, '0', STR_PAD_LEFT);
 
             if ($settlement->settlement_type === 'Refund to Tenant' && $settlement->settlement_balance > 0.005) {
                 \App\Models\TenantAccountTransaction::create([
@@ -1102,6 +1120,120 @@ class PropertyConfirmationController extends Controller
             $settlement->approved_at = now();
             $settlement->save();
         });
+
+        return null;
+    }
+
+    /**
+     * Gate the "landlord's payout gets docked to cover this tenant refund" step: refuse
+     * to proceed until the landlord has actually consented via the signed-email-link
+     * flow (mirrors ClientAdvanceController's advance-approval pattern), rather than the
+     * staff self-attested checkbox this used to rely on. Returns null once a matching,
+     * approved consent is on file (safe to proceed), or a block reason otherwise —
+     * (re)sending the consent request as a side effect when none is currently
+     * outstanding for this exact amount.
+     */
+    private function guardLandlordConsentForRefund(\App\Models\TenantExit $exit, \App\Models\TenantExitSettlement $settlement): ?string
+    {
+        $consent = \App\Models\TenantExitLandlordConsent::where('exit_id', $exit->id)->latest('id')->first();
+        $amountMatches = $consent && abs((float) $consent->refund_amount - (float) $settlement->settlement_balance) < 0.01;
+
+        if ($consent && $amountMatches && $consent->isApproved()) {
+            return null;
+        }
+
+        if ($consent && $amountMatches && $consent->isPending()) {
+            return 'Awaiting the landlord\'s response to the refund consent request sent on '
+                . $consent->requested_at->format('d M Y') . ' — this settlement cannot be approved until they respond.';
+        }
+
+        $this->requestLandlordConsentForExit($exit, $settlement);
+
+        return 'This refund would be funded from the landlord\'s payout. A consent request has been emailed to the landlord — this settlement cannot be approved until they respond.';
+    }
+
+    /**
+     * Create a fresh landlord consent request for this exit's refund and email the
+     * landlord a signed, no-login link to approve or reject it.
+     *
+     * @param \App\Models\TenantExit $exit
+     * @param \App\Models\TenantExitSettlement $settlement
+     */
+    private function requestLandlordConsentForExit(\App\Models\TenantExit $exit, \App\Models\TenantExitSettlement $settlement): void
+    {
+        $landlordId = \App\Models\Unit::find($exit->unit_id)?->client_id
+            ?? \App\Models\Property::find($exit->property_id)?->client_id;
+
+        if (!$landlordId) {
+            Log::error('Cannot request landlord consent for exit refund — no landlord resolvable', ['exit_id' => $exit->id]);
+            return;
+        }
+
+        $consent = \App\Models\TenantExitLandlordConsent::create([
+            'exit_id' => $exit->id,
+            'settlement_id' => $settlement->id,
+            'landlord_id' => $landlordId,
+            'tenant_id' => $settlement->tenant_id,
+            'refund_amount' => $settlement->settlement_balance,
+            'current_status_id' => 1,
+            'requested_by' => Auth::id(),
+            'requested_at' => now(),
+        ]);
+
+        $this->sendLandlordConsentNotification($consent);
+    }
+
+    /**
+     * Email the given consent request's landlord the signed review link, logging
+     * a warning rather than throwing if there's no email on file or delivery fails.
+     * Shared by the initial request and the staff-triggered resend.
+     *
+     * @param \App\Models\TenantExitLandlordConsent $consent
+     */
+    private function sendLandlordConsentNotification(\App\Models\TenantExitLandlordConsent $consent): void
+    {
+        $landlord = \App\Models\Client::find($consent->landlord_id);
+        if ($landlord && $landlord->email_address) {
+            try {
+                $landlord->notify(new \App\Notifications\TenantExitLandlordConsentNotification($consent, Crypt::encrypt($consent->id)));
+            } catch (\Exception $e) {
+                Log::warning('Failed to send tenant exit landlord consent notification', ['consent_id' => $consent->id, 'error' => $e->getMessage()]);
+            }
+        } else {
+            Log::warning('Landlord has no email on file — cannot send exit refund consent request', ['consent_id' => $consent->id, 'landlord_id' => $consent->landlord_id]);
+        }
+    }
+
+    /**
+     * Resend the landlord consent-request email for a Tenant Exit Settlement that's
+     * still awaiting a response — e.g. the first email never arrived, or the
+     * landlord lost it. Reuses the existing pending consent record (same amount,
+     * same landlord) rather than creating a new one, just refreshing its
+     * requested_at/requested_by and re-sending with a freshly-signed link.
+     *
+     * @param int $id
+     */
+    public function resendLandlordConsent($id)
+    {
+        try {
+            $settlement = \App\Models\TenantExitSettlement::findOrFail($id);
+            $consent = \App\Models\TenantExitLandlordConsent::where('exit_id', $settlement->exit_id)->latest('id')->first();
+
+            if (!$consent || !$consent->isPending()) {
+                return response()->json(['success' => false, 'error' => 'No pending consent request found for this settlement.'], 422);
+            }
+
+            $consent->requested_by = Auth::id();
+            $consent->requested_at = now();
+            $consent->save();
+
+            $this->sendLandlordConsentNotification($consent);
+
+            return response()->json(['success' => true, 'message' => 'Consent request resent to the landlord.']);
+        } catch (\Exception $e) {
+            Log::error('Error resending tenant exit landlord consent: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to resend consent request'], 500);
+        }
     }
 
     public function reject(Request $request, $id)
@@ -1291,7 +1423,10 @@ class PropertyConfirmationController extends Controller
                             $skipped[] = $settlement->id . ' (same user submitted and approved)';
                             continue;
                         }
-                        $this->applyTenantExitSettlementApproval($settlement);
+                        $blockReason = $this->applyTenantExitSettlementApproval($settlement);
+                        if ($blockReason !== null) {
+                            $skipped[] = $settlement->id . ' (' . $blockReason . ')';
+                        }
                     }
                     break;
 
@@ -1308,7 +1443,7 @@ class PropertyConfirmationController extends Controller
 
             $message = 'Records approved successfully';
             if (!empty($skipped)) {
-                $message .= '. Skipped (self-approval not allowed): ' . implode(', ', $skipped);
+                $message .= '. Skipped: ' . implode(', ', $skipped);
             }
 
             return response()->json(['success' => true, 'message' => $message]);

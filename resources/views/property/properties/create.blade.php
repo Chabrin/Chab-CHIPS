@@ -467,6 +467,7 @@
                 type: 'GET',
                 data: { zone_id: zoneId },
                 success: function(response) {
+                    if ($('#zone_id').val() != zoneId) return; // stale response, zone changed since this request fired
                     fieldOfficerSelect.empty().append('<option value="">Please select</option>');
                     (response.staff || []).forEach(function(staff) {
                         fieldOfficerSelect.append(`<option value="${staff.id}">${staff.full_names}</option>`);
@@ -474,6 +475,7 @@
                     fieldOfficerSelect.prop('disabled', false).trigger('change');
                 },
                 error: function(xhr) {
+                    if ($('#zone_id').val() != zoneId) return; // stale response, zone changed since this request fired
                     console.error('Failed to load field officers:', xhr);
                     toastr.error('Failed to load field officers for this zone.');
                     fieldOfficerSelect.empty().append('<option value="">Please select</option>').prop('disabled', false).trigger('change');

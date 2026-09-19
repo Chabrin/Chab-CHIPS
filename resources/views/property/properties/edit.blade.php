@@ -235,6 +235,26 @@
     </div>
 </div>
 
+<!-- Zone Change Warning Modal -->
+<div class="modal fade" id="zoneChangeWarningModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Zone Change</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>This property's reference number (<strong id="zoneWarningRef"></strong>) will <strong>not</strong> change even though you're moving it to <strong id="zoneWarningZone"></strong>.</p>
+                <p class="mb-0 text-muted">The reference number is only assigned once, at creation, and always keeps reflecting the property's original zone. Continue anyway?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmZoneChangeBtn">Continue and Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
@@ -249,8 +269,13 @@
             zone_area_id: {{ $property->zone_area_id ?? 'null' }},
             field_officer_id: {{ $property->field_officer_id ?? 'null' }},
             latitude: {{ $latitude ?? 'null' }},
-            longitude: {{ $longitude ?? 'null' }}
+            longitude: {{ $longitude ?? 'null' }},
+            reference_number: @json($property->reference_number)
         };
+
+        // Set once the user has clicked "Continue and Save" on the zone-change
+        // warning modal, so the re-triggered submit doesn't loop back into it.
+        let zoneChangeConfirmed = false;
 
         // Initialize Leaflet map (centered on Nairobi, Kenya or existing location)
         let initialLat = existingPropertyData.latitude || -1.2921;
@@ -304,14 +329,49 @@
             marker.bindPopup('<b>Property Location</b><br>Lat: ' + lat + '<br>Lng: ' + lng).openPopup();
         });
 
-        // Handle form submission
-        $('#propertyEditForm').on('submit', function() {
+        // Handle form submission — if the zone was changed, warn that the
+        // reference number won't follow it before actually saving.
+        $('#propertyEditForm').on('submit', function(e) {
+            var zoneId = $('#zone_id').val();
+            var zoneChanged = existingPropertyData.zone_id && zoneId != existingPropertyData.zone_id;
+
+            if (zoneChanged && !zoneChangeConfirmed) {
+                e.preventDefault();
+
+                var selectedZone = zonesData.find(function(zone) {
+                    return zone.id == zoneId;
+                });
+
+                $('#zoneWarningRef').text(existingPropertyData.reference_number || '-');
+                $('#zoneWarningZone').text(selectedZone ? selectedZone.zone_name : 'the new zone');
+
+                var warningModal = new bootstrap.Modal(document.getElementById('zoneChangeWarningModal'));
+                warningModal.show();
+                return;
+            }
+
             var submitButton = $('#saveButton');
             var spinner = $('#submitSpinner');
 
             spinner.removeClass('d-none');
             submitButton.prop('disabled', true);
             submitButton.css('opacity', '0.6');
+        });
+
+        $('#confirmZoneChangeBtn').on('click', function() {
+            zoneChangeConfirmed = true;
+            bootstrap.Modal.getInstance(document.getElementById('zoneChangeWarningModal')).hide();
+            $('#propertyEditForm').trigger('submit');
+        });
+
+        // If the modal closes WITHOUT being confirmed (Cancel, backdrop click,
+        // Escape), the dropdown was left showing the rejected zone — snap it
+        // back to the property's original zone so the UI doesn't lie about
+        // what's actually selected.
+        document.getElementById('zoneChangeWarningModal').addEventListener('hidden.bs.modal', function() {
+            if (!zoneChangeConfirmed) {
+                $('#zone_id').val(existingPropertyData.zone_id).trigger('change');
+            }
         });
 
         // Load zones with details
@@ -358,6 +418,7 @@
                 type: 'GET',
                 data: { zone_id: zoneId },
                 success: function(response) {
+                    if ($('#zone_id').val() != zoneId) return; // stale response, zone changed since this request fired
                     fieldOfficerSelect.empty().append('<option value="">Please select</option>');
                     (response.staff || []).forEach(function(staff) {
                         var selected = preselectId && preselectId == staff.id ? 'selected' : '';
@@ -366,6 +427,7 @@
                     fieldOfficerSelect.prop('disabled', false);
                 },
                 error: function(xhr) {
+                    if ($('#zone_id').val() != zoneId) return; // stale response, zone changed since this request fired
                     console.error('Failed to load field officers:', xhr);
                     toastr.error('Failed to load field officers for this zone.');
                     fieldOfficerSelect.empty().append('<option value="">Please select</option>').prop('disabled', false);

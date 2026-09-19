@@ -166,20 +166,22 @@ class Property extends Model
 
     /**
      * Generate the next reference number for a zone, e.g. "146A". Locks the
-     * matching rows for the duration of the caller's transaction so two
-     * concurrent creations in the same zone can't collide, with a defensive
-     * backstop that keeps bumping the number if it's somehow already taken
-     * (e.g. irregular legacy data). Shared by PropertiesController::store()
-     * and BulkUploadController::processProperties() so the two creation
-     * paths can't drift apart again.
+     * zone's own row for the duration of the caller's transaction so two
+     * concurrent creations in the same zone can't collide — including the
+     * very first property in a zone, where there's no existing property row
+     * to lock onto — with a defensive backstop that keeps bumping the number
+     * if it's somehow already taken (e.g. irregular legacy data). Shared by
+     * PropertiesController::store() and BulkUploadController::processProperties()
+     * so the two creation paths can't drift apart again.
      */
     public static function generateReferenceNumber(Zone $zone): string
     {
+        Zone::whereKey($zone->id)->lockForUpdate()->first();
+
         $zoneName = strtoupper($zone->zone_name);
 
         $lastProperty = static::where('reference_number', 'LIKE', "%{$zoneName}")
             ->orderByRaw("CAST(SUBSTRING(reference_number FROM '^[0-9]+') AS INTEGER) DESC")
-            ->lockForUpdate()
             ->first();
 
         if ($lastProperty) {

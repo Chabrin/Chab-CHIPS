@@ -247,6 +247,11 @@ $(document).ready(function() {
                 orderable: false,
                 searchable: false,
                 render: function(id, type, row) {
+                    let resendBtn = row.consent_pending ? `
+                        <button class="btn btn-warning btn-sm resend-consent-btn d-flex align-items-center mt-1" data-id="${id}" title="Resend landlord consent email">
+                            <span class="material-symbols-outlined me-1" style="font-size:16px;">forward_to_inbox</span>
+                        </button>
+                    ` : '';
                     return `
                         <button class="btn btn-success btn-sm approve-btn d-flex align-items-center" data-id="${id}">
                             <span class="material-symbols-outlined me-1" style="font-size:16px;">check</span>
@@ -254,6 +259,7 @@ $(document).ready(function() {
                         <button class="btn btn-danger btn-sm reject-btn d-flex align-items-center mt-1" data-id="${id}">
                             <span class="material-symbols-outlined me-1" style="font-size:16px;">close</span>
                         </button>
+                        ${resendBtn}
                     `;
                 }
             }
@@ -571,6 +577,8 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to approve');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to approve');
         }).always(function() {
             setButtonLoading($btn, false);
         });
@@ -597,6 +605,32 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to reject');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to reject');
+        }).always(function() {
+            setButtonLoading($btn, false);
+        });
+    });
+
+    // Resend landlord consent request (Tenant Exit Settlements only — button only
+    // renders when the row's latest consent request is still Pending)
+    $(document).on('click', '.resend-consent-btn', async function(e) {
+        e.stopPropagation();
+        let $btn = $(this);
+        let id = $btn.data('id');
+        let ok = await confirmAction('Resend Consent Request', 'Resend the landlord consent email for this settlement?', 'btn-warning');
+        if (!ok) return;
+        setButtonLoading($btn, true);
+        $.post(`/property/confirmations/tenant-exit-settlements/${id}/resend-consent`, {
+            _token: $('meta[name="csrf-token"]').attr('content')
+        }, function(res) {
+            if (res.success) {
+                toastr.success(res.message || 'Resent successfully');
+            } else {
+                toastr.error(res.error || 'Failed to resend');
+            }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to resend');
         }).always(function() {
             setButtonLoading($btn, false);
         });
@@ -623,6 +657,8 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to bulk approve');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to bulk approve');
         }).always(function() {
             setButtonLoading($btn, false);
         });
@@ -650,6 +686,8 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to bulk reject');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to bulk reject');
         }).always(function() {
             setButtonLoading($btn, false);
         });

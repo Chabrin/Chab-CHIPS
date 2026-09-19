@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\GenericReportExport;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use App\Services\ErrorDispatcher;
 use App\Models\TenantPayment;
 use App\Models\TenantAccountTransaction;
@@ -945,29 +946,23 @@ class AccountsReportsController extends Controller
                     'pvh.id',
                     'pvh.voucher_number',
                     'pvh.voucher_date',
-                    'pvh.payee',
-                    'pvh.status',
-                    'pvh.printed',
+                    'pvh.vendor_name',
+                    'pvh.voucher_status',
+                    'pvh.is_printed',
                     'pvh.prepared_by',
                     'pvh.checked_by',
                     'pvh.authorized_by',
-                    DB::raw('COALESCE(SUM(pvl.amount), 0) as total_amount'),
-                    DB::raw('u1.name as prepared_name'),
-                    DB::raw('u2.name as checked_name'),
-                    DB::raw('u3.name as authorized_name')
+                    DB::raw('COALESCE(SUM(pvl.amount), 0) as total_amount')
                 )
-                ->leftJoin('cb_payment_vouchers_lines_new as pvl', 'pvl.voucher_id', '=', 'pvh.id')
-                ->leftJoin('josya_users as u1', 'u1.id', '=', 'pvh.prepared_by')
-                ->leftJoin('josya_users as u2', 'u2.id', '=', 'pvh.checked_by')
-                ->leftJoin('josya_users as u3', 'u3.id', '=', 'pvh.authorized_by')
+                ->leftJoin('cb_payment_vouchers_lines_new as pvl', 'pvl.voucher_number', '=', 'pvh.voucher_number')
                 ->groupBy(
-                    'pvh.id', 'pvh.voucher_number', 'pvh.voucher_date', 'pvh.payee',
-                    'pvh.status', 'pvh.printed', 'pvh.prepared_by', 'pvh.checked_by',
-                    'pvh.authorized_by', 'u1.name', 'u2.name', 'u3.name'
+                    'pvh.id', 'pvh.voucher_number', 'pvh.voucher_date', 'pvh.vendor_name',
+                    'pvh.voucher_status', 'pvh.is_printed', 'pvh.prepared_by', 'pvh.checked_by',
+                    'pvh.authorized_by'
                 )
                 ->when($dateFrom, fn($q) => $q->whereDate('pvh.voucher_date', '>=', $dateFrom))
                 ->when($dateTo,   fn($q) => $q->whereDate('pvh.voucher_date', '<=', $dateTo))
-                ->when($status,   fn($q) => $q->where('pvh.status', $status))
+                ->when($status,   fn($q) => $q->whereRaw('LOWER(pvh.voucher_status) = ?', [strtolower($status)]))
                 ->orderBy('pvh.voucher_date', 'desc');
 
             $rows = $query->get();
@@ -977,18 +972,18 @@ class AccountsReportsController extends Controller
                     'no'              => $i + 1,
                     'voucher_no'      => $r->voucher_number ?? 'N/A',
                     'date'            => $r->voucher_date ? \Carbon\Carbon::parse($r->voucher_date)->format('d/m/Y') : 'N/A',
-                    'payee'           => $r->payee ?? '-',
+                    'payee'           => $r->vendor_name ?? '-',
                     'total_amount'    => number_format((float) $r->total_amount, 2),
-                    'prepared_by'     => $r->prepared_name ?? ($r->prepared_by ?? '-'),
-                    'checked_by'      => $r->checked_name ?? ($r->checked_by ?? '-'),
-                    'authorized_by'   => $r->authorized_name ?? ($r->authorized_by ?? '-'),
-                    'status'          => $r->status ?? '-',
-                    'printed'         => $r->printed ? 'Yes' : 'No',
+                    'prepared_by'     => $r->prepared_by ?? '-',
+                    'checked_by'      => $r->checked_by ?? '-',
+                    'authorized_by'   => $r->authorized_by ?? '-',
+                    'status'          => $r->voucher_status ?? '-',
+                    'printed'         => $r->is_printed ? 'Yes' : 'No',
                 ];
             });
 
             // Chart: count by status grouped by month
-            $byStatus  = $rows->groupBy('status');
+            $byStatus  = $rows->groupBy('voucher_status');
             $allMonths = $rows->map(fn($r) => $r->voucher_date
                 ? \Carbon\Carbon::parse($r->voucher_date)->format('M Y') : null)
                 ->filter()->unique()->values();
@@ -1015,66 +1010,60 @@ class AccountsReportsController extends Controller
         }
     }
 
-    public function exportVoucherRegister(Request $request)
+    public function exportVoucherRegister(Request $request): StreamedResponse
     {
-        try {
-            $dateFrom = $request->input('date_from');
-            $dateTo   = $request->input('date_to');
-            $status   = $request->input('status');
+        $dateFrom = $request->input('date_from');
+        $dateTo   = $request->input('date_to');
+        $status   = $request->input('status');
 
-            $rows = DB::table('cb_payment_vouchers_headers_new as pvh')
-                ->select(
-                    'pvh.voucher_number', 'pvh.voucher_date', 'pvh.payee',
-                    'pvh.status', 'pvh.printed',
-                    DB::raw('COALESCE(SUM(pvl.amount), 0) as total_amount'),
-                    DB::raw('u1.name as prepared_name'),
-                    DB::raw('u2.name as checked_name'),
-                    DB::raw('u3.name as authorized_name')
-                )
-                ->leftJoin('cb_payment_vouchers_lines_new as pvl', 'pvl.voucher_id', '=', 'pvh.id')
-                ->leftJoin('josya_users as u1', 'u1.id', '=', 'pvh.prepared_by')
-                ->leftJoin('josya_users as u2', 'u2.id', '=', 'pvh.checked_by')
-                ->leftJoin('josya_users as u3', 'u3.id', '=', 'pvh.authorized_by')
-                ->groupBy(
-                    'pvh.voucher_number', 'pvh.voucher_date', 'pvh.payee',
-                    'pvh.status', 'pvh.printed', 'u1.name', 'u2.name', 'u3.name'
-                )
-                ->when($dateFrom, fn($q) => $q->whereDate('pvh.voucher_date', '>=', $dateFrom))
-                ->when($dateTo,   fn($q) => $q->whereDate('pvh.voucher_date', '<=', $dateTo))
-                ->when($status,   fn($q) => $q->where('pvh.status', $status))
-                ->orderBy('pvh.voucher_date', 'desc')
-                ->get();
+        $query = DB::table('cb_payment_vouchers_headers_new as pvh')
+            ->select(
+                'pvh.voucher_number', 'pvh.voucher_date', 'pvh.vendor_name',
+                'pvh.voucher_status', 'pvh.is_printed',
+                'pvh.prepared_by', 'pvh.checked_by', 'pvh.authorized_by',
+                DB::raw('COALESCE(SUM(pvl.amount), 0) as total_amount')
+            )
+            ->leftJoin('cb_payment_vouchers_lines_new as pvl', 'pvl.voucher_number', '=', 'pvh.voucher_number')
+            ->groupBy(
+                'pvh.id', 'pvh.voucher_number', 'pvh.voucher_date', 'pvh.vendor_name',
+                'pvh.voucher_status', 'pvh.is_printed', 'pvh.prepared_by', 'pvh.checked_by', 'pvh.authorized_by'
+            )
+            ->when($dateFrom, fn($q) => $q->whereDate('pvh.voucher_date', '>=', $dateFrom))
+            ->when($dateTo,   fn($q) => $q->whereDate('pvh.voucher_date', '<=', $dateTo))
+            ->when($status,   fn($q) => $q->whereRaw('LOWER(pvh.voucher_status) = ?', [strtolower($status)]))
+            ->orderBy('pvh.voucher_date', 'desc')
+            ->orderBy('pvh.id', 'desc');
 
-            $headings = ['#', 'Voucher No', 'Date', 'Payee', 'Total Amount (KES)', 'Prepared By', 'Checked By', 'Authorized By', 'Status', 'Printed'];
-            $exportRows = $rows->map(function ($r, $i) {
-                return [
-                    $i + 1,
-                    $r->voucher_number ?? 'N/A',
-                    $r->voucher_date ? \Carbon\Carbon::parse($r->voucher_date)->format('d/m/Y') : 'N/A',
-                    $r->payee ?? '-',
-                    number_format((float) $r->total_amount, 2),
-                    $r->prepared_name ?? '-',
-                    $r->checked_name ?? '-',
-                    $r->authorized_name ?? '-',
-                    $r->status ?? '-',
-                    $r->printed ? 'Yes' : 'No',
-                ];
-            })->toArray();
+        $headings = ['Voucher No', 'Date', 'Payee', 'Total Amount (KES)', 'Prepared By', 'Checked By', 'Authorized By', 'Status', 'Printed'];
 
-            return Excel::download(
-                GenericReportExport::build(
-                    'Voucher Register',
-                    $headings,
-                    $exportRows,
-                    ['Period: ' . ($dateFrom ?? 'All') . ' to ' . ($dateTo ?? 'All'), 'Generated: ' . now()->format('d/m/Y H:i:s')]
-                ),
-                'voucher-register-' . now()->format('Ymd') . '.xlsx'
-            );
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('AccountsReportsController::exportVoucherRegister — ' . $e->getMessage());
-            return back()->with('error', 'Export failed: ' . $e->getMessage());
-        }
+        $response = new StreamedResponse(function () use ($query, $headings) {
+            set_time_limit(0);
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, $headings, ',', '"', '\\');
+
+            $query->chunk(1000, function ($rows) use ($handle) {
+                foreach ($rows as $r) {
+                    fputcsv($handle, [
+                        $r->voucher_number ?? 'N/A',
+                        $r->voucher_date ? \Carbon\Carbon::parse($r->voucher_date)->format('d/m/Y') : 'N/A',
+                        $r->vendor_name ?? '-',
+                        number_format((float) $r->total_amount, 2),
+                        $r->prepared_by ?? '-',
+                        $r->checked_by ?? '-',
+                        $r->authorized_by ?? '-',
+                        $r->voucher_status ?? '-',
+                        $r->is_printed ? 'Yes' : 'No',
+                    ], ',', '"', '\\');
+                }
+            });
+
+            fclose($handle);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv');
+        $response->headers->set('Content-Disposition', 'attachment; filename="voucher-register-' . now()->format('Ymd') . '.csv"');
+
+        return $response;
     }
 
     // ═══════════════════════════════════════════════════════════
