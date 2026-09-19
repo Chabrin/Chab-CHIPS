@@ -1065,12 +1065,12 @@ class ClientsController extends Controller
 
             $units = $query->get();
 
-            // Tenant history per unit — every lease except Withdrawn (29): a real
+            // Tenant history per unit — every lease, Withdrawn (29) included: a real
             // tenant was, or is, associated with the unit for Pending/Approved/
-            // Renewed-out/Terminated. Bulk-fetched, not per-unit, to avoid N+1.
+            // Renewed-out/Terminated/Withdrawn. Bulk-fetched, not per-unit, to avoid N+1.
             $unitIds = $units->pluck('id');
             $leasesByUnit = LeaseAgreement::whereIn('unit_id', $unitIds)
-                ->whereIn('current_status_id', [1, 5, 2, 28])
+                ->whereIn('current_status_id', [1, 5, 2, 28, 29])
                 ->orderBy('date_start', 'desc')
                 ->get(['id', 'unit_id', 'tenant_id', 'ref_number', 'date_start', 'date_end', 'current_status_id'])
                 ->groupBy('unit_id');
@@ -1082,16 +1082,19 @@ class ClientsController extends Controller
             $tenantIds = $leasesByUnit->flatten()->pluck('tenant_id')->filter()->unique();
             $tenantNames = Client::withAll()->whereIn('id', $tenantIds)->pluck('names', 'id');
 
-            $leaseStatusLabels = [1 => 'Pending Approval', 5 => 'Active', 2 => 'Renewed', 28 => 'Terminated'];
+            $leaseStatusLabels = [1 => 'Pending Approval', 5 => 'Active', 2 => 'Renewed', 28 => 'Terminated', 29 => 'Withdrawn'];
 
             $units = $units->map(function ($unit) use ($canEdit, $leasesByUnit, $tenantNames, $leaseStatusLabels) {
                 $tenants = ($leasesByUnit->get($unit->id) ?? collect())->map(function ($lease) use ($tenantNames, $leaseStatusLabels) {
                     return [
+                        'encrypted_id' => Crypt::encrypt($lease->id),
                         'ref_number' => $lease->ref_number ?? '-',
                         'tenant_name' => $tenantNames->get($lease->tenant_id, 'N/A'),
                         'date_start' => $lease->date_start ? $lease->date_start->format('d M Y') : '-',
                         'date_end' => $lease->date_end ? $lease->date_end->format('d M Y') : 'Ongoing',
                         'status' => $leaseStatusLabels[$lease->current_status_id] ?? 'Unknown',
+                        // Pending/Active occupy the unit now; Renewed-out/Terminated/Withdrawn are history.
+                        'is_current' => in_array($lease->current_status_id, [1, 5]),
                     ];
                 })->values();
 
@@ -1190,14 +1193,16 @@ class ClientsController extends Controller
             $propertyId = $request->property_id;
 
             $query = LeaseAgreement::with(['tenant', 'property', 'unit'])
-                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'service_charges_amount'])
+                ->select(['id', 'ref_number', 'tenant_id', 'property_id', 'unit_id', 'date_start', 'date_end', 'service_charges_amount', 'current_status_id'])
                 ->where('client_id', $clientId);
 
             if ($propertyId) {
                 $query->where('property_id', $propertyId);
             }
 
-            $leases = $query->orderBy('date_start', 'desc')->get()->map(function ($lease) {
+            $leaseStatusLabels = [1 => 'Pending Approval', 5 => 'Active', 2 => 'Renewed', 28 => 'Terminated', 29 => 'Withdrawn'];
+
+            $leases = $query->orderBy('date_start', 'desc')->get()->map(function ($lease) use ($leaseStatusLabels) {
                 return [
                     'id' => $lease->id,
                     'encrypted_id' => Crypt::encrypt($lease->id),
@@ -1208,6 +1213,8 @@ class ClientsController extends Controller
                     'date_start' => $lease->date_start ? $lease->date_start->format('d-m-Y') : '-',
                     'date_end' => $lease->date_end ? $lease->date_end->format('d-m-Y') : '-',
                     'service_charges_amount' => $lease->service_charges_amount,
+                    'current_status_id' => $lease->current_status_id,
+                    'status' => $leaseStatusLabels[$lease->current_status_id] ?? 'Unknown',
                 ];
             });
 

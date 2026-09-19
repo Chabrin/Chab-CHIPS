@@ -986,6 +986,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Start</th>
                                                 <th>End</th>
                                                 <th>Service Charges</th>
+                                                <th>Status</th>
                                                 <th>Actions</th>
                                             </tr>
                                         </thead>
@@ -1761,6 +1762,35 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+<!-- Unit Lease History Modal -->
+<div class="modal fade" id="unitLeaseModal" tabindex="-1" aria-labelledby="unitLeaseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unitLeaseModalLabel">
+                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">home</span>
+                    <span id="unitLeaseModalUnitLabel"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" id="unitLeaseTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="unit-current-lease-tab" data-bs-toggle="tab" data-bs-target="#unit-current-lease" type="button" role="tab">Current Lease</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="unit-previous-leases-tab" data-bs-toggle="tab" data-bs-target="#unit-previous-leases" type="button" role="tab">Previous Leases</button>
+                    </li>
+                </ul>
+                <div class="tab-content pt-3" id="unitLeaseTabsContent">
+                    <div class="tab-pane fade show active" id="unit-current-lease" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="unit-previous-leases" role="tabpanel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;
@@ -1992,7 +2022,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     render: function(d, type, row) {
                         var count = (row.tenants || []).length;
                         return '<span class="d-flex align-items-center gap-1">' +
-                            '<span class="material-symbols-outlined text-primary toggle-chevron" style="font-size:18px;">chevron_right</span>' +
+                            '<span class="material-symbols-outlined text-primary" style="font-size:18px;">visibility</span>' +
                             '<span class="small text-muted">' + count + ' tenant' + (count === 1 ? '' : 's') + '</span>' +
                             '</span>';
                     }
@@ -2074,23 +2104,59 @@ COPY PERMISSIONS (paste when re-enabling checks):
             }
         });
 
-        // Expand/collapse a unit row to show who has ever leased it — data is
-        // already embedded per row (getUnits()'s `tenants` array), no extra AJAX.
-        function buildUnitTenantsTable(tenants) {
-            if (!tenants || tenants.length === 0) {
-                return '<div class="ps-4 py-2 border-start border-2 text-muted small">No tenants recorded for this unit.</div>';
+        // Show a unit's lease history in a modal — data is already embedded per
+        // row (getUnits()'s `tenants` array); rich per-lease detail is fetched
+        // on demand from the same endpoint/renderer the Leases tab's info
+        // button uses (renderLeaseDetails(), defined below).
+        function renderCurrentLeaseTab(unitRow) {
+            var current = (unitRow.tenants || []).find(function(t) {
+                return t.is_current;
+            });
+            var $pane = $('#unit-current-lease');
+
+            if (!current) {
+                $pane.html('<div class="text-muted small py-4 text-center">This unit is vacant — no current lease.</div>');
+                return;
             }
+
+            $pane.html('<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span></div>');
+            $.ajax({
+                url: '/property/leases/' + current.encrypted_id + '/details',
+                method: 'GET',
+                dataType: 'json',
+                success: function(lease) {
+                    $pane.html(renderLeaseDetails(lease));
+                },
+                error: function() {
+                    $pane.html('<div class="text-danger small">Failed to load lease details.</div>');
+                }
+            });
+        }
+
+        function renderPreviousLeasesTab(unitRow) {
+            var previous = (unitRow.tenants || []).filter(function(t) {
+                return !t.is_current;
+            });
+            var $pane = $('#unit-previous-leases');
+
+            if (previous.length === 0) {
+                $pane.html('<div class="text-muted small py-4 text-center">No previous leases recorded for this unit.</div>');
+                return;
+            }
+
             var rows = '';
-            tenants.forEach(function(t) {
-                rows += '<tr>' +
+            previous.forEach(function(t, idx) {
+                rows += '<tr class="previous-lease-row" data-encrypted-id="' + t.encrypted_id + '" data-detail-row="prev-lease-detail-' + idx + '" style="cursor:pointer;">' +
                     '<td class="small fw-semibold">' + t.tenant_name + '</td>' +
                     '<td class="small">' + t.ref_number + '</td>' +
                     '<td class="small">' + t.date_start + '</td>' +
                     '<td class="small">' + t.date_end + '</td>' +
                     '<td class="small"><span class="badge bg-secondary">' + t.status + '</span></td>' +
-                    '</tr>';
+                    '</tr>' +
+                    '<tr class="prev-lease-detail-row" id="prev-lease-detail-' + idx + '" style="display:none;"><td colspan="5" class="p-0"></td></tr>';
             });
-            return '<div class="ps-4 py-2 border-start border-2">' +
+
+            $pane.html(
                 '<table class="table table-sm table-bordered table-hover mb-0">' +
                 '<thead><tr>' +
                 '<th class="bg-light text-secondary small">Tenant</th>' +
@@ -2098,25 +2164,48 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 '<th class="bg-light text-secondary small">Start</th>' +
                 '<th class="bg-light text-secondary small">End</th>' +
                 '<th class="bg-light text-secondary small">Status</th>' +
-                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+                '</tr></thead><tbody>' + rows + '</tbody></table>'
+            );
         }
 
+        $(document).on('click', '#unit-previous-leases tr.previous-lease-row', function() {
+            var $row = $(this);
+            var $detailRow = $('#' + $row.data('detail-row'));
+            var $td = $detailRow.find('td');
+
+            if ($detailRow.is(':visible')) {
+                $detailRow.hide();
+                return;
+            }
+
+            if (!$td.data('loaded')) {
+                $td.html('<div class="text-center py-2"><span class="spinner-border spinner-border-sm text-primary"></span></div>');
+                $.ajax({
+                    url: '/property/leases/' + $row.data('encrypted-id') + '/details',
+                    method: 'GET',
+                    dataType: 'json',
+                    success: function(lease) {
+                        $td.html(renderLeaseDetails(lease)).data('loaded', true);
+                    },
+                    error: function() {
+                        $td.html('<div class="text-danger small p-2">Failed to load lease details.</div>');
+                    }
+                });
+            }
+            $detailRow.show();
+        });
+
         $('#unitsTable').on('click', 'tr.group-parent-row', function() {
-            var tr = $(this);
             var dtRow = unitsTable.row(this);
             var data = dtRow.data();
             if (!data) return;
 
-            var icon = tr.find('.toggle-chevron');
-            if (dtRow.child.isShown()) {
-                dtRow.child.hide();
-                icon.text('chevron_right');
-                tr.removeClass('table-primary').addClass('table-light');
-            } else {
-                dtRow.child(buildUnitTenantsTable(data.tenants)).show();
-                icon.text('expand_more');
-                tr.removeClass('table-light').addClass('table-primary');
-            }
+            var unitLabel = (data.unit_name && data.unit_name !== '-') ? data.unit_name : data.unit_code;
+            $('#unitLeaseModalUnitLabel').text(unitLabel + ' — Lease History');
+            renderCurrentLeaseTab(data);
+            renderPreviousLeasesTab(data);
+            $('#unit-current-lease-tab').tab('show');
+            $('#unitLeaseModal').modal('show');
         });
 
         // Initialize Tenants DataTable immediately but with empty data
@@ -4478,6 +4567,19 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     data: 'service_charges_amount',
                     render: function(data) {
                         return data !== null && data !== undefined ? Number(data).toFixed(2) : '-';
+                    }
+                },
+                {
+                    data: 'status',yes
+                    render: function(status, type, row) {
+                        var badgeClass = {
+                            1: 'bg-warning',
+                            5: 'bg-success',
+                            2: 'bg-info',
+                            28: 'bg-danger',
+                            29: 'bg-secondary'
+                        } [row.current_status_id] || 'bg-secondary';
+                        return '<span class="badge ' + badgeClass + '">' + (status || 'Unknown') + '</span>';
                     }
                 },
                 {
