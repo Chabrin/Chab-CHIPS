@@ -4570,7 +4570,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     }
                 },
                 {
-                    data: 'status',yes
+                    data: 'status',
                     render: function(status, type, row) {
                         var badgeClass = {
                             1: 'bg-warning',
