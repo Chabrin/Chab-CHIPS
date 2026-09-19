@@ -1375,7 +1375,7 @@
                     data: 'email'
                 },
                 {
-                    data: 'created_at',
+                    data: 'registered_date',
                     render: function(data) {
                         return data ? moment(data).format('MMM D, YYYY') : 'N/A';
                     }

@@ -690,6 +690,17 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Tenants
     Route::get('/tenants/listing', [App\Http\Controllers\ClientsController::class, 'tenantsListing'])->name('property.tenants.listing');
     Route::get('/ajax/tenants/listing/data', [App\Http\Controllers\ClientsController::class, 'getTenantsListingData'])->name('ajax.tenants.listing.data');
+    Route::get('/tenant/arrears', [App\Http\Controllers\TenantsController::class, 'arrears'])->name('tenant.arrears');
+    Route::get('/ajax/tenant/arrears/data', [App\Http\Controllers\TenantsController::class, 'arrearsData'])->name('ajax.tenant.arrears.data');
+
+    // Vendors
+    Route::get('/system/vendors', [App\Http\Controllers\VendorController::class, 'index'])->name('vendors.index');
+    Route::get('/ajax/vendors/data', [App\Http\Controllers\VendorController::class, 'data'])->name('ajax.vendors.data');
+    Route::post('/system/vendors', [App\Http\Controllers\VendorController::class, 'store'])->name('vendors.store');
+    Route::get('/system/vendors/{encryptedId}', [App\Http\Controllers\VendorController::class, 'show'])->name('vendors.show');
+    Route::put('/system/vendors/{encryptedId}', [App\Http\Controllers\VendorController::class, 'update'])->name('vendors.update');
+    Route::put('/system/vendors/{encryptedId}/bank-details', [App\Http\Controllers\VendorController::class, 'updateBankDetails'])->name('vendors.bank-details.update');
+    Route::delete('/system/vendors/{encryptedId}', [App\Http\Controllers\VendorController::class, 'destroy'])->name('vendors.destroy');
     Route::get('/tenants/search', [App\Http\Controllers\UtilityController::class, 'searchTenants'])->name('utility.tenants.search');
     Route::get('/tenants/{id}/details', [App\Http\Controllers\UtilityController::class, 'getTenantDetails'])->name('utility.tenants.details');
 

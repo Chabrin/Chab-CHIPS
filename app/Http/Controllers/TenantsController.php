@@ -1691,4 +1691,158 @@ class TenantsController extends Controller
             return response()->json(['success' => false, 'message' => 'Failed to delete document'], 500);
         }
     }
+
+    /**
+     * Tenant Arrears page — every invoice still carrying a balance
+     * (sys_pm_debtors_invoices.current_balance > 0), with tenant/property/unit
+     * names joined in. Data itself loads via arrearsData() (AJAX); this just
+     * renders the shell.
+     */
+    public function arrears()
+    {
+        try {
+            return view('property.tenants.arrears');
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenant arrears page: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to load tenant arrears page');
+        }
+    }
+
+    /**
+     * AJAX data for the Arrears table. Same shape/conventions as
+     * ClientsController::getTenantsListingData(): per-column ILIKE filters
+     * (3+ chars), capped at 1000 rows. Extra here: an optional date_due
+     * range, capped at 60 days — this table has 1M+ rows, so an unbounded
+     * range on a page with no default filter would be a real cost.
+     */
+    public function arrearsData(Request $request)
+    {
+        try {
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+
+            if (($startDate && !$endDate) || ($endDate && !$startDate)) {
+                return response()->json(['success' => false, 'message' => 'Provide both a start and end date, or neither.'], 422);
+            }
+
+            if ($startDate && $endDate) {
+                $start = \Carbon\Carbon::parse($startDate)->startOfDay();
+                $end = \Carbon\Carbon::parse($endDate)->endOfDay();
+
+                if ($end->lt($start)) {
+                    return response()->json(['success' => false, 'message' => 'End date must be on or after the start date.'], 422);
+                }
+                if ($start->diffInDays($end) > 60) {
+                    return response()->json(['success' => false, 'message' => 'Date range is limited to 60 days — please narrow it.'], 422);
+                }
+            }
+
+            $query = DB::table('sys_pm_debtors_invoices as inv')
+                ->join('sys_pm_clients as t', 't.id', '=', 'inv.tenant_id')
+                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 'inv.property_id')
+                ->leftJoin('sys_pm_units as u', 'u.id', '=', 'inv.unit_id')
+                ->where('inv.current_balance', '>', 0);
+
+            // Scope to the logged-in user's assigned properties/zones, unless their role
+            // is global — mirrors Client::boot()'s "user_clients_properties" global scope
+            // (field_officer/zone_manager/zone_supervisor by staff, or zone assignment by
+            // user) so this portfolio-wide report can't leak arrears outside a staff
+            // member's own patch. The invoice row already carries its own copies of
+            // field_officer_id/zone_manager_id/zone_supervisor_id/zone_id, so this scopes
+            // directly off inv.* without an extra join through leases.
+            $userId = Auth::id();
+            $isGlobal = DB::table('cb_role_user as ru')
+                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                ->where('ru.user_id', $userId)
+                ->where('r.is_global', true)
+                ->exists();
+
+            if (!$isGlobal) {
+                $staffId = DB::table('sys_user_staff_links')->where('user_id', $userId)->value('staff_id');
+
+                if (!$staffId) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->leftJoin('sys_set_zones as z', 'z.id', '=', 'inv.zone_id')
+                        ->where(function ($q) use ($staffId, $userId) {
+                            $q->where('inv.field_officer_id', $staffId)
+                                ->orWhere('inv.zone_manager_id', $staffId)
+                                ->orWhere('inv.zone_supervisor_id', $staffId)
+                                ->orWhere('z.zone_manager_id', $userId)
+                                ->orWhere('z.zone_supervisor_id', $userId);
+                        });
+                }
+            }
+
+            if ($startDate && $endDate) {
+                $query->whereBetween('inv.date_due', [$start, $end]);
+            }
+
+            // Column filters (only apply when 3+ characters) — search by name, not raw id.
+            if ($request->filled('filter_tenant') && strlen($request->filter_tenant) >= 3) {
+                $query->where('t.names', 'ILIKE', '%' . $request->filter_tenant . '%');
+            }
+            if ($request->filled('filter_property') && strlen($request->filter_property) >= 3) {
+                $query->where('p.property_name', 'ILIKE', '%' . $request->filter_property . '%');
+            }
+            if ($request->filled('filter_unit') && strlen($request->filter_unit) >= 3) {
+                $query->where('u.unit_code', 'ILIKE', '%' . $request->filter_unit . '%');
+            }
+            if ($request->filled('filter_reference') && strlen($request->filter_reference) >= 3) {
+                $query->where('inv.reference_number', 'ILIKE', '%' . $request->filter_reference . '%');
+            }
+
+            // True total across the whole filtered set, not just the 1000 rows returned —
+            // computed before the limit so it reflects everything matching the filters.
+            $totalBalance = (clone $query)->sum('inv.current_balance');
+
+            $rows = $query->select(
+                    'inv.id',
+                    'inv.tenant_id',
+                    'inv.property_id',
+                    'inv.unit_id',
+                    'inv.total_amount',
+                    'inv.current_balance',
+                    'inv.reference_number',
+                    'inv.return_type_id',
+                    'inv.date_due',
+                    't.names as tenant_name',
+                    't.mobile_number',
+                    'p.property_name',
+                    'u.unit_code'
+                )
+                ->orderByDesc('inv.current_balance')
+                ->limit(1000)
+                ->get()
+                ->map(function ($row) {
+                    return [
+                        'id' => $row->id,
+                        'tenant_id' => $row->tenant_id,
+                        'property_id' => $row->property_id,
+                        'unit_id' => $row->unit_id,
+                        'tenant_name' => $row->tenant_name ?? '-',
+                        'mobile_number' => $row->mobile_number ?? '-',
+                        'property_name' => $row->property_name ?? '-',
+                        'unit_code' => $row->unit_code ?? '-',
+                        'reference_number' => $row->reference_number ?? '-',
+                        'return_type_id' => $row->return_type_id ?? '-',
+                        'date_due' => $row->date_due ? \Carbon\Carbon::parse($row->date_due)->format('d M Y') : '-',
+                        'total_amount' => number_format($row->total_amount ?? 0, 2),
+                        'current_balance' => number_format($row->current_balance ?? 0, 2),
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'count' => $rows->count(),
+                'total_balance' => number_format($totalBalance ?? 0, 2),
+                'data' => $rows,
+            ]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error fetching tenant arrears data: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch arrears'], 500);
+        }
+    }
 }

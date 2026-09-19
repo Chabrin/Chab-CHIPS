@@ -304,7 +304,7 @@ class LeasesController extends Controller
                         ->from('sys_pm_lease_agreements')
                         ->whereNotNull('tenant_id');
                 })
-                ->select(['id', 'names', 'reference_number', 'mobile_number', 'email_address'])
+                ->select(['id', 'names', 'reference_number', 'mobile_number', 'email_address', 'registered_date'])
                 ->orderBy('names', 'asc')
                 ->limit(500)
                 ->get()
@@ -315,7 +315,8 @@ class LeasesController extends Controller
                         'names' => $tenant->names,
                         'reference_number' => $tenant->reference_number,
                         'mobile_number' => $tenant->mobile_number ?? 'N/A',
-                        'email_address' => $tenant->email_address ?? 'N/A',
+                        'email' => $tenant->email_address ?? 'N/A',
+                        'registered_date' => $tenant->registered_date,
                     ];
                 });
 
