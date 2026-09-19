@@ -510,7 +510,7 @@ class PropertySettingsController extends Controller
                 });
             }
 
-            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names', 'fieldOfficers:id,full_names,zone_id'])
+            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names'])
                 ->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
@@ -523,7 +523,6 @@ class PropertySettingsController extends Controller
                         'zone_manager_name' => $zone->zoneManager->full_names ?? '-',
                         'zone_supervisor_id' => $zone->zone_supervisor_id,
                         'zone_supervisor_name' => $zone->zoneSupervisor->full_names ?? '-',
-                        'field_officers' => $zone->fieldOfficers->map(fn($s) => ['id' => $s->id, 'full_names' => $s->full_names])->values(),
                         'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
                         'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
                     ];
@@ -548,9 +547,13 @@ class PropertySettingsController extends Controller
                     Rule::unique('sys_set_zones', 'zone_name'),
                 ],
                 'estates_id' => 'nullable|integer',
+                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
+
+            $this->assertNoOverlappingZoneRoles($validated);
 
             $validated['date_time'] = now();
             $validated['current_status_id'] = 1;
@@ -582,9 +585,13 @@ class PropertySettingsController extends Controller
                     Rule::unique('sys_set_zones', 'zone_name')->ignore($id),
                 ],
                 'estates_id' => 'nullable|integer',
+                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
+
+            $this->assertNoOverlappingZoneRoles($validated);
 
             $zone->update($validated);
 
@@ -613,79 +620,6 @@ class PropertySettingsController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error deleting zone: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to delete zone'], 500);
-        }
-    }
-
-    /**
-     * Mass-assign field officers to a zone. Staff.zone_id is the source of
-     * truth (same field the property form's Field Officer filter reads) —
-     * this replaces, per zone, the full set of staff stationed there: staff
-     * previously stationed here but not in the submitted list are cleared,
-     * and staff in the submitted list are moved here even if they were
-     * previously stationed in a different zone.
-     */
-    public function assignFieldOfficers(Request $request, $encryptedId)
-    {
-        try {
-            $id = Crypt::decrypt($encryptedId);
-            $zone = Zone::findOrFail($id);
-
-            $validated = $request->validate([
-                'staff_ids' => 'nullable|array',
-                'staff_ids.*' => 'integer|exists:sys_staff,id',
-            ]);
-
-            $staffIds = $validated['staff_ids'] ?? [];
-
-            Staff::where('zone_id', $zone->id)->whereNotIn('id', $staffIds)->update(['zone_id' => null]);
-            if (!empty($staffIds)) {
-                Staff::whereIn('id', $staffIds)->update(['zone_id' => $zone->id]);
-            }
-
-            return response()->json(['success' => true, 'message' => 'Field officers updated successfully']);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error assigning field officers: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to assign field officers'], 500);
-        }
-    }
-
-    /**
-     * Set this zone's Manager/Supervisor directly from the Zones page — a
-     * second entry point alongside Staff editing (StaffController::
-     * syncZoneRoles()), which stays the source of truth for the same
-     * Zone.zone_manager_id/zone_supervisor_id columns. Unlike Field
-     * Officers (Staff.zone_id, single-valued per staff), manager/supervisor
-     * is zone-owned, so setting it here doesn't need to touch any other
-     * zone this staff member already manages/supervises elsewhere.
-     */
-    public function assignZoneRoles(Request $request, $encryptedId)
-    {
-        try {
-            $id = Crypt::decrypt($encryptedId);
-            $zone = Zone::findOrFail($id);
-
-            $validated = $request->validate([
-                'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
-                'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
-            ]);
-
-            $this->assertNoOverlappingZoneRoles($validated);
-
-            $zone->update([
-                'zone_manager_id' => $validated['zone_manager_id'] ?? null,
-                'zone_supervisor_id' => $validated['zone_supervisor_id'] ?? null,
-            ]);
-
-            return response()->json(['success' => true, 'message' => 'Zone roles updated successfully']);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error assigning zone roles: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to assign zone roles'], 500);
         }
     }
 
