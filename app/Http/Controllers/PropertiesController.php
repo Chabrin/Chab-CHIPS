@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Models\LeaseAgreement;
+use Illuminate\Validation\Rule;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -429,7 +430,13 @@ class PropertiesController extends Controller
         try {
             $validated = $request->validate([
                 'client_id' => 'required|integer|exists:sys_pm_clients,id',
-                'property_name' => 'required|string|max:255',
+                'property_name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('sys_pm_properties', 'property_name')
+                        ->where(fn ($query) => $query->where('client_id', $request->input('client_id'))->where('active', 1)),
+                ],
                 'zone_id' => 'required|integer',
                 'zone_area_id' => 'required|integer',
                 'lr_number' => 'nullable|string|max:100',
