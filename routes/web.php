@@ -1390,6 +1390,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     Route::get('/dashboard', [HomeController::class, 'Dashboard'])->name('dashboard');
 
+    Route::get('/search', [SearchController::class, 'index'])->name('search');
+
     // Dashboard AJAX endpoints
     Route::get('/dashboard/field-officer/stats', [HomeController::class, 'getFieldOfficerStats'])->name('dashboard.field-officer.stats');
     Route::get('/dashboard/field-officer/collection', [HomeController::class, 'getFieldOfficerCollection'])->name('dashboard.field-officer.collection');

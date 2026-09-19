@@ -117,6 +117,24 @@
     color: var(--header-icon) !important;
 }
 
+/* style.css hides this via the same selector chain + !important; must match its
+   specificity to win. Also forces .search-form visible (it's normally off-screen
+   pending a JS ".open" toggle the app never adds). */
+.page-wrapper .page-header .header-wrapper .serchinput {
+    display: flex !important;
+}
+.serchinput .search-form {
+    opacity: 1 !important;
+    position: static !important;
+    transform: none !important;
+    visibility: visible !important;
+    width: auto !important;
+    height: var(--header-height) !important;
+    margin: 0 0 0 4px !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
 .serchinput .serchbox svg {
     fill: var(--header-icon) !important;
 }
@@ -124,10 +142,17 @@
 .serchinput .serchbox:hover {
     background-color: var(--accent-tint) !important;
 }
+/* Shrink to fit the 24px header bar — default Bootstrap input height overflows it. */
 .serchinput .search-form input {
     border: none !important;
     background: transparent !important;
     color: var(--header-icon) !important;
+    height: var(--header-height) !important;
+    line-height: var(--header-height) !important;
+    padding: 0 6px !important;
+    margin: 0 !important;
+    font-size: 12px !important;
+    width: 140px !important;
 }
 
 .nav-menus .material-symbols-outlined {
@@ -156,6 +181,10 @@
 
 .profile-dropdown {
     min-width: 150px !important;
+    /* style.css anchors via left+width off a trigger flush with the header's right
+       edge, so it overflows the viewport — anchor from the right instead. */
+    left: auto !important;
+    right: -8px !important;
 }
 
 .profile-dropdown li {
