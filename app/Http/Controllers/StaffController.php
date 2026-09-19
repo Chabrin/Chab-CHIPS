@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bank;
+use App\Models\Role;
 use App\Models\Zone;
 use App\Models\Staff;
 use App\Models\User;
@@ -37,27 +38,16 @@ class StaffController extends Controller
      */
     public function index()
     {
-        $activeStaff = Staff::with(['position', 'zone:id,zone_name', 'zonesManaged:id,zone_name,zone_manager_id', 'zonesSupervised:id,zone_name,zone_supervisor_id'])
-            ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id', 'zone_id')
-            ->orderBy('full_names', 'asc')
-            ->where('current_status_id', 5)
-            ->get()
-            ->map(function ($member) {
-                $member->encrypted_id = Crypt::encrypt($member->id);
-                return $member;
-            });
-
-        $otherStaff = Staff::with(['position', 'zone:id,zone_name', 'zonesManaged:id,zone_name,zone_manager_id', 'zonesSupervised:id,zone_name,zone_supervisor_id'])
+        $staff = Staff::with(['position', 'zone:id,zone_name', 'zonesManaged:id,zone_name,zone_manager_id', 'zonesSupervised:id,zone_name,zone_supervisor_id'])
             ->select('id', 'gender', 'staff_number', 'full_names', 'mobile_number', 'email_address', 'national_id', 'position_id', 'zone_id', 'current_status_id')
             ->orderBy('full_names', 'asc')
-            ->where('current_status_id', '!=', 5)
             ->get()
             ->map(function ($member) {
                 $member->encrypted_id = Crypt::encrypt($member->id);
                 return $member;
             });
 
-        return view('staff.index', compact('activeStaff', 'otherStaff'));
+        return view('staff.index', compact('staff'));
     }
 
     /**
@@ -69,9 +59,8 @@ class StaffController extends Controller
             abort(403);
         }
 
-        $validStatuses = [4, 5, 28, 36];
         $validated = $request->validate([
-            'status_id' => 'required|integer|in:4,5,28,36',
+            'status_id' => 'required|integer|in:' . implode(',', array_keys(Staff::STATUSES)),
         ]);
 
         try {
@@ -80,12 +69,10 @@ class StaffController extends Controller
             $staff->current_status_id = $validated['status_id'];
             $staff->save();
 
-            $statusLabels = [4 => 'Suspended', 5 => 'Approved', 28 => 'Terminated', 36 => 'Absconded'];
-
             return response()->json([
                 'success' => true,
                 'status_id' => $validated['status_id'],
-                'status_label' => $statusLabels[$validated['status_id']],
+                'status_label' => Staff::STATUSES[$validated['status_id']],
             ]);
         } catch (\Exception $e) {
             Log::error('Error updating staff status: ' . $e->getMessage());
@@ -237,12 +224,14 @@ class StaffController extends Controller
         $positions = Position::orderBy('position_name')->get();
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
+        $roles = Role::orderBy('display_name')->get();
 
-        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas'));
+        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles'));
     }
 
     /**
-     * Store a newly created staff member
+     * Store a newly created staff member, optionally creating a linked system-user login
+     * when the requester has the create_users permission and fills in the password field.
      */
     public function store(Request $request)
     {
@@ -296,19 +285,78 @@ class StaffController extends Controller
                 $validated['spouse_name'] = strtoupper($validated['spouse_name']);
             }
 
-            $staff = DB::transaction(function () use ($validated, $managedZoneIds, $supervisedZoneIds) {
+            // Optional system-login creation: triggered by selecting a role, gated by permission regardless.
+            // Password is optional — a random one is generated (and shown once) when left blank.
+            $createUser = $request->filled('role_id') && auth()->user()->hasPermission('create_users');
+            $userValidated = null;
+            $generatedPassword = null;
+            if ($createUser) {
+                $userValidated = $request->validate([
+                    'password' => 'nullable|string|min:8|max:255',
+                    'role_id' => 'required|integer|exists:cb_roles,id',
+                ]);
+
+                if (empty($userValidated['password'])) {
+                    $generatedPassword = Str::password(12);
+                    $userValidated['password'] = $generatedPassword;
+                }
+
+                if (User::where('email', $validated['email_address'])->exists()) {
+                    throw ValidationException::withMessages([
+                        'email_address' => ['This email is already registered as a system user login.'],
+                    ]);
+                }
+            }
+
+            $staff = DB::transaction(function () use ($validated, $managedZoneIds, $supervisedZoneIds, $createUser, $userValidated, $generatedPassword) {
                 $staff = new Staff();
                 $staff->fill($validated);
                 $staff->date_time = now();
                 $staff->uid = uniqid('staff_', true);
+                $staff->current_status_id = 1;
                 $staff->save();
 
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
+                if ($createUser) {
+                    $username = $this->buildUniqueUsername($staff->email_address, $staff);
+
+                    $user = User::create([
+                        'name' => $staff->full_names,
+                        'username' => $username,
+                        'email' => $staff->email_address,
+                        'password' => $userValidated['password'],
+                        'block' => 0,
+                        'sendEmail' => 0,
+                        'registerDate' => now(),
+                        'activation' => '',
+                        'params' => '',
+                        'resetCount' => 0,
+                        'otpKey' => '',
+                        'otep' => '',
+                        'requireReset' => $generatedPassword ? 1 : 0,
+                        'staff_id' => $staff->id,
+                    ]);
+
+                    DB::table('cb_role_user')->insert([
+                        'user_id' => $user->id,
+                        'role_id' => $userValidated['role_id'],
+                    ]);
+
+                    UserStaffLink::create([
+                        'user_id' => $user->id,
+                        'staff_id' => $staff->id,
+                    ]);
+                }
+
                 return $staff;
             });
 
-            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member created successfully');
+            $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member created successfully');
+            if ($generatedPassword) {
+                $redirect->with('generated_password', $generatedPassword);
+            }
+            return $redirect;
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
@@ -517,7 +565,7 @@ class StaffController extends Controller
         try {
             $contracts = Contract::with('employee', 'position', 'createdBy', 'elements.payrollElement')
                 ->whereHas('employee', function ($query) {
-                    $query->where('current_status_id', 5);
+                    $query->where('current_status_id', 1);
                 })
                 ->orderBy('date_time', 'desc')
                 ->get()

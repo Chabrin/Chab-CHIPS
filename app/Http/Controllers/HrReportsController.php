@@ -226,7 +226,7 @@ class HrReportsController extends Controller
                 'mobile'       => $r->mobile_number  ?? '-',
                 'email'        => $r->email_address  ?? '-',
                 'hire_date'    => $r->hire_date ? Carbon::parse($r->hire_date)->format('d-m-Y') : '-',
-                'status'       => $r->current_status_id == 1 ? 'Active' : 'Inactive',
+                'status'       => Staff::STATUSES[$r->current_status_id] ?? 'Unknown',
             ]);
             return response()->json(['success' => true, 'data' => $data, 'count' => $records->count()]);
         } catch (\Exception $e) {
@@ -269,7 +269,7 @@ class HrReportsController extends Controller
                 $r->mobile_number  ?? '-',
                 $r->email_address  ?? '-',
                 $r->hire_date ? Carbon::parse($r->hire_date)->format('d-m-Y') : '-',
-                $r->current_status_id == 1 ? 'Active' : 'Inactive',
+                Staff::STATUSES[$r->current_status_id] ?? 'Unknown',
             ])->values()->all();
 
             return Excel::download(
@@ -305,6 +305,7 @@ class HrReportsController extends Controller
         try {
             $query = DB::table('sys_staff')
                 ->leftJoin('sys_set_departments', 'sys_staff.department_id', '=', 'sys_set_departments.id')
+                ->where('sys_staff.current_status_id', '!=', 3)
                 ->select(
                     'sys_set_departments.department_name',
                     DB::raw("SUM(CASE WHEN sys_staff.current_status_id = 1 THEN 1 ELSE 0 END) as active"),

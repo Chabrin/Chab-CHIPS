@@ -9,7 +9,7 @@
             <span class="material-symbols-outlined align-middle me-1" style="font-size:22px;">groups</span>
             Headcount by Department
         </h4>
-        <small class="text-muted">Active and inactive staff count per department</small>
+        <small class="text-muted">Active and suspended staff count per department</small>
     </div>
     <a href="{{ route('reports.index') }}" class="btn btn-sm btn-outline-secondary">
         <span class="material-symbols-outlined align-middle" style="font-size:14px;">arrow_back</span> All Reports
@@ -58,7 +58,7 @@
                             <th>#</th>
                             <th>Department</th>
                             <th class="text-end">Active</th>
-                            <th class="text-end">Inactive</th>
+                            <th class="text-end">Suspended</th>
                             <th class="text-end">Total</th>
                         </tr>
                     </thead>
@@ -120,7 +120,7 @@ $(function () {
                         labels: res.data.map(function(r){ return r.department; }),
                         datasets: [
                             { label: 'Active', data: res.data.map(function(r){ return r.active; }), backgroundColor: '#27ae60', borderRadius: 3 },
-                            { label: 'Inactive', data: res.data.map(function(r){ return r.inactive; }), backgroundColor: '#95a5a6', borderRadius: 3 }
+                            { label: 'Suspended', data: res.data.map(function(r){ return r.inactive; }), backgroundColor: '#95a5a6', borderRadius: 3 }
                         ]
                     },
                     options: { responsive: true, indexAxis: 'y', plugins: { legend: { position: 'bottom' } }, scales: { x: { beginAtZero: true, stacked: true }, y: { stacked: true } } }

@@ -125,7 +125,7 @@ class DispatchCommunication implements ShouldQueue
         if ($recipientType === 'staff' && isset($config['staff_ids'])) {
             // Get specific staff members
             $staff = Staff::whereIn('id', $config['staff_ids'])
-                ->where('current_status_id', 5) // Active only
+                ->where('current_status_id', 1) // Active only
                 ->with('position', 'department')
                 ->get();
                 
@@ -143,7 +143,7 @@ class DispatchCommunication implements ShouldQueue
         } elseif ($recipientType === 'position' && isset($config['position_ids'])) {
             // Get staff by positions/departments
             $staff = Staff::whereIn('position_id', $config['position_ids'])
-                ->where('current_status_id', 5) // Active only
+                ->where('current_status_id', 1) // Active only
                 ->with('position', 'department')
                 ->get();
                 
@@ -160,7 +160,7 @@ class DispatchCommunication implements ShouldQueue
             
         } elseif ($recipientType === 'everyone') {
             // Get all active staff
-            $staff = Staff::where('current_status_id', 5)
+            $staff = Staff::where('current_status_id', 1)
                 ->with('position', 'department')
                 ->get();
                 

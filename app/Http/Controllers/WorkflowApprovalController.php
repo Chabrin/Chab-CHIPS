@@ -653,8 +653,7 @@ class WorkflowApprovalController extends Controller
     }
 
     /**
-     * Check that a staff member referenced by an approval still exists and isn't in a
-     * terminal employment state (suspended/terminated/absconded).
+     * Check that a staff member referenced by an approval still exists and isn't inactive or terminated.
      *
      * @param int|null $staffId
      */
@@ -666,8 +665,8 @@ class WorkflowApprovalController extends Controller
             return response()->json(['success' => false, 'error' => 'The referenced staff member no longer exists.'], 422);
         }
 
-        if (in_array($staff->current_status_id, [4, 28, 36], true)) {
-            return response()->json(['success' => false, 'error' => 'The referenced staff member is suspended, terminated, or absconded.'], 422);
+        if (in_array($staff->current_status_id, [2, 3], true)) {
+            return response()->json(['success' => false, 'error' => 'The referenced staff member is inactive or terminated.'], 422);
         }
 
         return null;
@@ -686,7 +685,7 @@ class WorkflowApprovalController extends Controller
             return response()->json(['success' => false, 'error' => 'The referenced staff member no longer exists.'], 422);
         }
 
-        if ($staff->current_status_id == 28) {
+        if ($staff->current_status_id == 3) {
             return response()->json(['success' => false, 'error' => 'The referenced staff member is already terminated.'], 422);
         }
 
@@ -929,7 +928,7 @@ class WorkflowApprovalController extends Controller
                 $item->current_status_id = 5;
                 $item->save();
 
-                \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 28]); // Terminated
+                \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 3]); // Terminated
 
                 // Send notification
                 SendApprovalNotification::dispatch($section, $id, Auth::id());
@@ -1130,7 +1129,7 @@ class WorkflowApprovalController extends Controller
         $section = $request->input('section');
         switch ($section) {
             case 'Staff Contracts':
-                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $validStaffIds = $this->validStaffIds([2, 3]);
                 $eligibleIds = \App\Models\Contract::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('staff_id', $validStaffIds)->pluck('id')->toArray();
                 \App\Models\Contract::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
@@ -1140,7 +1139,7 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Staff Discipline Tracker':
-                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $validStaffIds = $this->validStaffIds([2, 3]);
                 $eligibleIds = \App\Models\DisciplineCase::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('staff_id', $validStaffIds)->pluck('id')->toArray();
                 \App\Models\DisciplineCase::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
@@ -1150,7 +1149,7 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Zone Assignments':
-                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $validStaffIds = $this->validStaffIds([2, 3]);
                 $validZoneIds = \App\Models\Zone::pluck('id')->toArray();
                 $validPropertyIds = \App\Models\Property::withoutGlobalScopes()->pluck('id')->toArray();
                 \App\Models\ZoneAssignment::whereIn('id', $ids)
@@ -1204,7 +1203,7 @@ class WorkflowApprovalController extends Controller
                             ->where('current_status_id', 5)
                             ->first();
 
-                        \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 50]); // On Leave
+                        \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 4]); // On Leave
                         
                         if ($plan) {
                             $plan->balance = $plan->balance - $used_days;
@@ -1237,17 +1236,17 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Leave Calendar':
-                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $validStaffIds = $this->validStaffIds([2, 3]);
                 \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('employee_id', $validStaffIds)->update(['current_status_id' => 5]);
                 break;
             case 'Employee Termination':
-                $validStaffIds = $this->validStaffIds([28]);
+                $validStaffIds = $this->validStaffIds([3]);
                 $eligibleIds = \App\Models\EmployeeTermination::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('staff_id', $validStaffIds)->pluck('id')->toArray();
                 \App\Models\EmployeeTermination::whereIn('id', $eligibleIds)->update(['current_status_id' => 5]);
 
                 $items = \App\Models\EmployeeTermination::whereIn('id', $eligibleIds)->get();
                 foreach ($items as $item) {
-                    \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 28]); // Terminated
+                    \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 3]); // Terminated
                 }
 
                 // Send notifications
@@ -1256,7 +1255,7 @@ class WorkflowApprovalController extends Controller
                 }
                 break;
             case 'Employee Attendance':
-                $validStaffIds = $this->validStaffIds([4, 28, 36]);
+                $validStaffIds = $this->validStaffIds([2, 3]);
                 \App\Models\EmployeeAttendance::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('employee_id', $validStaffIds)->update(['current_status_id' => 5]);
                 break;
             case 'Communication Templates':

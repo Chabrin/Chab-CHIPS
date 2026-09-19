@@ -41,7 +41,7 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
         Log::info("Starting annual leave calendar generation for year {$this->year}");
         
         // Get all active staff
-        $activeStaff = Staff::where('current_status_id', 5)->get();
+        $activeStaff = Staff::where('current_status_id', 1)->get();
         
         // Get leave types based on selection
         if ($this->leaveTypeIds && count($this->leaveTypeIds) > 0) {

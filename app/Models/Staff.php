@@ -64,6 +64,12 @@ class Staff extends Model
         'date_time' => 'datetime',
     ];
 
+    /** Canonical employment status labels for current_status_id. */
+    public const STATUSES = [1 => 'Active', 2 => 'Suspended', 3 => 'Terminated', 4 => 'On Leave'];
+
+    /** Bootstrap badge classes matching STATUSES, keyed the same way. */
+    public const STATUS_BADGE_CLASSES = [1 => 'badge-light-success', 2 => 'badge-light-warning', 3 => 'badge-light-danger', 4 => 'badge-light-info'];
+
     // Relationships
     public function department()
     {

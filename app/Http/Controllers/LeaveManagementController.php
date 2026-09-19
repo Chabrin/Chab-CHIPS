@@ -476,7 +476,7 @@ class LeaveManagementController extends Controller
             $leaveTypeIds = $validated['leave_type_ids'] ?? null;
             
             // Quick validation checks
-            $activeStaffCount = Staff::where('current_status_id', 5)->count();
+            $activeStaffCount = Staff::where('current_status_id', 1)->count();
             
             if ($activeStaffCount === 0) {
                 return response()->json(['success' => false, 'error' => 'No active staff found'], 400);

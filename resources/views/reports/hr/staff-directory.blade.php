@@ -43,8 +43,9 @@
                     <label class="form-label form-label-sm mb-1">Status</label>
                     <select name="status" class="form-select form-select-sm">
                         <option value="">All</option>
-                        <option value="1">Active</option>
-                        <option value="2">Inactive</option>
+                        @foreach(\App\Models\Staff::STATUSES as $id => $label)
+                        <option value="{{ $id }}">{{ $label }}</option>
+                        @endforeach
                     </select>
                 </div>
                 <div class="col-12 col-md-2">
@@ -118,9 +119,13 @@ $(function () {
             { data: 'email' },
             { data: 'hire_date' },
             { data: 'status', render: function(d){
-                return d === 'Active'
-                    ? '<span class="badge bg-success-subtle text-success">Active</span>'
-                    : '<span class="badge bg-secondary-subtle text-secondary">Inactive</span>';
+                var classes = {
+                    'Active': 'bg-success-subtle text-success',
+                    'Suspended': 'bg-secondary-subtle text-secondary',
+                    'Terminated': 'bg-danger-subtle text-danger',
+                    'On Leave': 'bg-info-subtle text-info'
+                };
+                return '<span class="badge ' + (classes[d] || 'bg-secondary-subtle text-secondary') + '">' + d + '</span>';
             }}
         ],
         order: [],

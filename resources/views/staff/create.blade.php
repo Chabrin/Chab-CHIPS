@@ -1,5 +1,69 @@
 @extends('layouts.main')
 @section('content')
+@php
+$canCreateUsers = auth()->user()->hasPermission('create_users');
+@endphp
+<style>
+    /* Match select2 to Bootstrap's .form-select styling — the stock select2 theme
+       otherwise ships with the wrong height, border-radius, and focus ring. */
+    .select2-container--default .select2-selection--multiple,
+    .select2-container--default .select2-selection--single {
+        min-height: 38px;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+    }
+    .select2-container--default .select2-selection--multiple {
+        padding: 0.25rem;
+    }
+    .select2-container--default .select2-selection--single {
+        padding: 0.25rem 0.5rem;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 28px;
+        padding-left: 0;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 36px;
+    }
+    .select2-container--default.select2-container--focus .select2-selection--multiple,
+    .select2-container--default.select2-container--open .select2-selection--single {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice {
+        background-color: #e7f1ff;
+        border: 1px solid #b6d4fe;
+        border-radius: 0.375rem;
+        color: #084298;
+        padding: 2px 8px;
+        margin: 3px 4px 0 0;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+        color: #084298;
+        margin-right: 6px;
+        border: none;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+        color: #052c65;
+        background: transparent;
+    }
+    /* The inline search box in multi-select mode is a <textarea> (for paste support), which
+       wraps its placeholder onto multiple lines instead of showing it on one line like a
+       normal input — force single-line rendering so the empty field doesn't look broken. */
+    .select2-container--default .select2-search--inline .select2-search__field {
+        min-height: 28px;
+        line-height: 28px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 3px;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+</style>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
@@ -61,6 +125,14 @@
                                         Banking & Statutory
                                     </button>
                                 </li>
+                                @if($canCreateUsers)
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="user-tab" data-bs-toggle="tab" data-bs-target="#user" type="button" role="tab" aria-controls="user" aria-selected="false">
+                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">person_add</span>
+                                        System User (Optional)
+                                    </button>
+                                </li>
+                                @endif
                             </ul>
 
                             <!-- Tab Content -->
@@ -205,7 +277,7 @@
                                             @enderror
                                         </div>
                                         <div class="row col-md-12 mb-3">
-                                            <div class="col-md-4 mb-3">
+                                            <div class="col-md-4 mb-3 zone-role-field" id="zone_field_group" style="display:none;">
                                                 <label for="zone_id" class="form-label">Zone</label>
                                                 <select class="form-select @error('zone_id') is-invalid @enderror" id="zone_id" name="zone_id">
                                                     <option value="">Select Zone</option>
@@ -220,42 +292,39 @@
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                                 @enderror
                                             </div>
-                                            <div class="col-md-2 mb-3 d-flex flex-wrap justify-content-center align-items-center"><p>or</p></div>
-                                            <div class="row col-md-6 mb-3">
-                                                <div class="col-md-12 mb-3">
-                                                    <label for="managed_zone_ids" class="form-label">Zones Managed</label>
-                                                    <select class="form-select @error('managed_zone_ids') is-invalid @enderror @error('managed_zone_ids.*') is-invalid @enderror" id="managed_zone_ids" name="managed_zone_ids[]" multiple>
-                                                        @foreach($zones as $zone)
-                                                        <option value="{{ $zone->id }}" {{ collect(old('managed_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
-                                                            {{ $zone->zone_name }}
-                                                        </option>
-                                                        @endforeach
-                                                    </select>
-                                                    <small class="text-muted">Zones this staff member manages</small>
-                                                    @error('managed_zone_ids')
-                                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                                    @enderror
-                                                    @error('managed_zone_ids.*')
-                                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                                <div class="col-md-12 mb-3">
-                                                    <label for="supervised_zone_ids" class="form-label">Zones Supervised</label>
-                                                    <select class="form-select @error('supervised_zone_ids') is-invalid @enderror @error('supervised_zone_ids.*') is-invalid @enderror" id="supervised_zone_ids" name="supervised_zone_ids[]" multiple>
-                                                        @foreach($zones as $zone)
-                                                        <option value="{{ $zone->id }}" {{ collect(old('supervised_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
-                                                            {{ $zone->zone_name }}
-                                                        </option>
-                                                        @endforeach
-                                                    </select>
-                                                    <small class="text-muted">Zones this staff member supervises</small>
-                                                    @error('supervised_zone_ids')
-                                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                                    @enderror
-                                                    @error('supervised_zone_ids.*')
-                                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
+                                            <div class="col-md-4 mb-3 zone-role-field" id="zone_managed_group" style="display:none;">
+                                                <label for="managed_zone_ids" class="form-label">Zones Managed</label>
+                                                <select class="form-select @error('managed_zone_ids') is-invalid @enderror @error('managed_zone_ids.*') is-invalid @enderror" id="managed_zone_ids" name="managed_zone_ids[]" multiple>
+                                                    @foreach($zones as $zone)
+                                                    <option value="{{ $zone->id }}" {{ collect(old('managed_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
+                                                        {{ $zone->zone_name }}
+                                                    </option>
+                                                    @endforeach
+                                                </select>
+                                                <small class="text-muted">Zones this staff member manages</small>
+                                                @error('managed_zone_ids')
+                                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                @enderror
+                                                @error('managed_zone_ids.*')
+                                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <div class="col-md-4 mb-3 zone-role-field" id="zone_supervised_group" style="display:none;">
+                                                <label for="supervised_zone_ids" class="form-label">Zones Supervised</label>
+                                                <select class="form-select @error('supervised_zone_ids') is-invalid @enderror @error('supervised_zone_ids.*') is-invalid @enderror" id="supervised_zone_ids" name="supervised_zone_ids[]" multiple>
+                                                    @foreach($zones as $zone)
+                                                    <option value="{{ $zone->id }}" {{ collect(old('supervised_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
+                                                        {{ $zone->zone_name }}
+                                                    </option>
+                                                    @endforeach
+                                                </select>
+                                                <small class="text-muted">Zones this staff member supervises</small>
+                                                @error('supervised_zone_ids')
+                                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                @enderror
+                                                @error('supervised_zone_ids.*')
+                                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                @enderror
                                             </div>
                                         </div>
                                     </div>
@@ -377,6 +446,38 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                @if($canCreateUsers)
+                                <!-- System User Tab -->
+                                <div class="tab-pane fade" id="user" role="tabpanel" aria-labelledby="user-tab">
+                                    <p class="text-muted small">Optional — select a role to also create a system login for this staff member.</p>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Login Email</label>
+                                            <input type="email" class="form-control" id="login_email_preview" value="{{ old('email_address') }}" disabled>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="role_id" class="form-label">Role</label>
+                                            <select class="form-select @error('role_id') is-invalid @enderror" id="role_id" name="role_id">
+                                                <option value="">Select Role</option>
+                                                @foreach($roles as $role)
+                                                <option value="{{ $role->id }}" {{ old('role_id') == $role->id ? 'selected' : '' }}>{{ $role->display_name }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('role_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="password" class="form-label">Password <span class="text-muted small">(optional — leave blank to auto-generate)</span></label>
+                                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" minlength="8" autocomplete="new-password">
+                                            @error('password')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                    </div>
+                                </div>
+                                @endif
                             </div>
                         </form>
                     </div>
@@ -387,8 +488,38 @@
 </div>
 <script>
     $(document).ready(function() {
-        $('#managed_zone_ids').select2({ placeholder: 'Select zones managed', width: '100%' });
-        $('#supervised_zone_ids').select2({ placeholder: 'Select zones supervised', width: '100%' });
+        // Show only the zone field relevant to the selected position. Select2 is initialized
+        // lazily, the first time each group becomes visible — initializing it while the group
+        // is still display:none gives it a broken (zero) width.
+        var positionSlugs = @json($positions->pluck('slug_name', 'id'));
+        var select2Initialized = {};
+        function ensureSelect2(selectId, groupId, options) {
+            if (select2Initialized[selectId]) return;
+            select2Initialized[selectId] = true;
+            $(selectId).select2(options);
+        }
+        function toggleZoneFields() {
+            var slug = positionSlugs[$('#position_id').val()] || null;
+
+            var showZone = slug === 'field_officer';
+            $('#zone_field_group').toggle(showZone);
+            if (showZone) ensureSelect2('#zone_id', '#zone_field_group', { placeholder: 'Select Zone', width: '100%', allowClear: true });
+
+            var showManaged = slug === 'zone_manager';
+            $('#zone_managed_group').toggle(showManaged);
+            if (showManaged) ensureSelect2('#managed_zone_ids', '#zone_managed_group', { placeholder: 'Select zones managed', width: '100%' });
+
+            var showSupervised = slug === 'zone_supervisor';
+            $('#zone_supervised_group').toggle(showSupervised);
+            if (showSupervised) ensureSelect2('#supervised_zone_ids', '#zone_supervised_group', { placeholder: 'Select zones supervised', width: '100%' });
+        }
+        $('#position_id').on('change', toggleZoneFields);
+        toggleZoneFields();
+
+        // Mirror the Personal Information email into the read-only login email preview
+        $('#email_address').on('input', function() {
+            $('#login_email_preview').val($(this).val());
+        });
 
         // Handle form submission
         $('#staffCreateForm').on('submit', function() {

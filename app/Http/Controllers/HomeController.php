@@ -169,7 +169,7 @@ class HomeController extends Controller
     {
         try {
             // People
-            $totalEmployees = DB::table('sys_staff')->where('current_status_id', 5)->count();
+            $totalEmployees = DB::table('sys_staff')->where('current_status_id', 1)->count();
 
             $totalFieldOfficers = DB::table('josya_users as u')
                 ->join('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
@@ -386,7 +386,7 @@ class HomeController extends Controller
     public function getHrManagerStats()
     {
         try {
-            $totalEmployees = DB::table('sys_staff')->where('current_status_id', 5)->count();
+            $totalEmployees = DB::table('sys_staff')->where('current_status_id', 1)->count();
 
             $totalFieldOfficers = DB::table('josya_users as u')
                 ->join('cb_role_user as ru', 'u.id', '=', 'ru.user_id')

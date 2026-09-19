@@ -5,8 +5,6 @@
 $canReadStaff = auth()->user()->hasPermission('read_staff');
 $canUpdateStaff = auth()->user()->hasPermission('update_staff');
 $canCreateUsers = auth()->user()->hasPermission('create_users');
-$staffStatuses = [5 => 'Approved', 4 => 'Suspended', 28 => 'Terminated', 36 => 'Absconded'];
-$statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 28 => 'badge-light-danger', 36 => 'badge-light-dark'];
 @endphp
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -38,195 +36,88 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                         </div>
                         @endif
 
-                        <!-- Tabs -->
-                        <ul class="nav nav-tabs" id="staffTabs" role="tablist" style="border-bottom: 2px solid #dee2e6;">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active fw-semibold" id="active-tab" data-bs-toggle="tab" data-bs-target="#active-pane" type="button" role="tab"
-                                    style="border-radius: 6px 6px 0 0; padding: 10px 20px;">
-                                    <span class="material-symbols-outlined align-middle me-1" style="font-size:16px;">groups</span>
-                                    Active Employees
-                                    <span class="badge bg-success ms-1">{{ $activeStaff->count() }}</span>
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link fw-semibold" id="other-tab" data-bs-toggle="tab" data-bs-target="#other-pane" type="button" role="tab"
-                                    style="border-radius: 6px 6px 0 0; padding: 10px 20px;">
-                                    <span class="material-symbols-outlined align-middle me-1" style="font-size:16px;">person_off</span>
-                                    Suspended
-                                    <span class="badge bg-warning text-dark ms-1">{{ $otherStaff->count() }}</span>
-                                </button>
-                            </li>
-                        </ul>
-
-                        <div class="tab-content mt-3" id="staffTabsContent">
-
-                            <!-- Tab 1: Active Employees -->
-                            <div class="tab-pane fade show active" id="active-pane" role="tabpanel">
-                                <div id="staff-preloader" class="text-center my-5">
-                                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p class="mt-3 text-muted">Loading employees...</p>
-                                </div>
-                                <div class="table-responsive custom-scrollbar">
-                                    <table class="display" id="staff-table" style="visibility: hidden;">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Staff No</th>
-                                                <th>Full Names</th>
-                                                <th>Position</th>
-                                                <th>Gender</th>
-                                                <th>Mobile Number</th>
-                                                <th>National ID</th>
-                                                <th>Zone Roles</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach($activeStaff as $index => $member)
-                                            <tr>
-                                                <td>{{ $index + 1 }}</td>
-                                                <td>{{ $member->staff_number ?? '-' }}</td>
-                                                <td>
-                                                    @if($canReadStaff)
-                                                    <a class="staff-link" href="{{ route('staff.show', $member->encrypted_id) }}">
-                                                        {{ $member->full_names }}
-                                                    </a>
-                                                    @else
-                                                    {{ $member->full_names }}
-                                                    @endif
-                                                </td>
-                                                <td>{{ $member->position->position_name ?? '-' }}</td>
-                                                <td>{{ $member->gender ?? '-' }}</td>
-                                                <td>{{ $member->mobile_number ?? '-' }}</td>
-                                                <td>{{ $member->national_id ?? '-' }}</td>
-                                                <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
-                                                <td>
-                                                    <div class="d-flex flex-row gap-1">
-                                                        @if($canReadStaff)
-                                                        <a class="staff-link" href="{{ route('staff.show', $member->encrypted_id) }}" title="View">
-                                                            <span class="material-symbols-outlined view-icon" style="font-size:18px;">visibility</span>
-                                                        </a>
-                                                        <div class="spinner-border spinner-border-sm text-primary row-spinner" role="status" style="display: none;">
-                                                            <span class="visually-hidden">Loading...</span>
-                                                        </div>
-                                                        @endif
-                                                        @if($canUpdateStaff)
-                                                        <a href="{{ route('staff.edit', $member->encrypted_id) }}" title="Edit">
-                                                            <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
-                                                        </a>
-                                                        @endif
-                                                        @if($canCreateUsers)
-                                                        <button type="button" class="btn btn-link p-0 btn-convert-user" title="Convert to User"
-                                                            data-id="{{ $member->encrypted_id }}"
-                                                            data-name="{{ $member->full_names }}"
-                                                            data-email="{{ $member->email_address }}"
-                                                            style="line-height:1; color: inherit;">
-                                                            <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
-                                                        </button>
-                                                        @endif
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
+                        <div id="staff-preloader" class="text-center my-5">
+                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                                <span class="visually-hidden">Loading...</span>
                             </div>
-
-                            <!-- Tab 2: Other Statuses -->
-                            <div class="tab-pane fade" id="other-pane" role="tabpanel">
-                                <div id="other-staff-preloader" class="text-center my-5" style="display:none;">
-                                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p class="mt-3 text-muted">Loading employees...</p>
-                                </div>
-                                <div class="table-responsive custom-scrollbar">
-                                    <table class="display" id="other-staff-table" style="visibility: hidden;">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Staff No</th>
-                                                <th>Full Names</th>
-                                                <th>Position</th>
-                                                <th>Gender</th>
-                                                <th>Mobile Number</th>
-                                                <th>National ID</th>
-                                                <th>Zone Roles</th>
-                                                <th>Status</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach($otherStaff as $index => $member)
-                                            @php
-                                            $statusId = $member->current_status_id;
-                                            $statusLabel = $staffStatuses[$statusId] ?? 'Unknown';
-                                            $badgeClass = $statusBadgeClasses[$statusId] ?? 'badge-light-secondary';
-                                            @endphp
-                                            <tr>
-                                                <td>{{ $index + 1 }}</td>
-                                                <td>{{ $member->staff_number ?? '-' }}</td>
-                                                <td>
-                                                    @if($canReadStaff)
-                                                    <a class="other-staff-link" href="{{ route('staff.show', $member->encrypted_id) }}">
-                                                        {{ $member->full_names }}
-                                                    </a>
-                                                    @else
-                                                    {{ $member->full_names }}
-                                                    @endif
-                                                </td>
-                                                <td>{{ $member->position->position_name ?? '-' }}</td>
-                                                <td>{{ $member->gender ?? '-' }}</td>
-                                                <td>{{ $member->mobile_number ?? '-' }}</td>
-                                                <td>{{ $member->national_id ?? '-' }}</td>
-                                                <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
-                                                <td>
-                                                    <span class="badge {{ $badgeClass }} status-badge" data-status-id="{{ $statusId }}">{{ $statusLabel }}</span>
-                                                </td>
-                                                <td>
-                                                    <div class="d-flex flex-row gap-1">
-                                                        @if($canReadStaff)
-                                                        <a class="other-staff-link" href="{{ route('staff.show', $member->encrypted_id) }}" title="View">
-                                                            <span class="material-symbols-outlined other-view-icon" style="font-size:18px;">visibility</span>
-                                                        </a>
-                                                        <div class="spinner-border spinner-border-sm text-primary other-row-spinner" role="status" style="display: none;">
-                                                            <span class="visually-hidden">Loading...</span>
-                                                        </div>
-                                                        @endif
-                                                        @if($canUpdateStaff)
-                                                        <a href="{{ route('staff.edit', $member->encrypted_id) }}" title="Edit">
-                                                            <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
-                                                        </a>
-                                                        <button type="button" class="btn btn-link p-0 btn-update-status" title="Update Status"
-                                                            data-id="{{ $member->encrypted_id }}"
-                                                            data-name="{{ $member->full_names }}"
-                                                            data-status-id="{{ $statusId }}"
-                                                            style="line-height:1; color: inherit;">
-                                                            <span class="material-symbols-outlined" style="font-size:18px;">swap_horiz</span>
-                                                        </button>
-                                                        @endif
-                                                        @if($canCreateUsers)
-                                                        <button type="button" class="btn btn-link p-0 btn-convert-user" title="Convert to User"
-                                                            data-id="{{ $member->encrypted_id }}"
-                                                            data-name="{{ $member->full_names }}"
-                                                            data-email="{{ $member->email_address }}"
-                                                            style="line-height:1; color: inherit;">
-                                                            <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
-                                                        </button>
-                                                        @endif
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-
-                        </div>{{-- end tab-content --}}
+                            <p class="mt-3 text-muted">Loading employees...</p>
+                        </div>
+                        <div class="table-responsive custom-scrollbar">
+                            <table class="display" id="staff-table" style="visibility: hidden;">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Staff No</th>
+                                        <th>Full Names</th>
+                                        <th>Position</th>
+                                        <th>Gender</th>
+                                        <th>Mobile Number</th>
+                                        <th>National ID</th>
+                                        <th>Zone Roles</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($staff as $index => $member)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $member->staff_number ?? '-' }}</td>
+                                        <td>
+                                            @if($canReadStaff)
+                                            <a class="staff-link" href="{{ route('staff.show', $member->encrypted_id) }}">
+                                                {{ $member->full_names }}
+                                            </a>
+                                            @else
+                                            {{ $member->full_names }}
+                                            @endif
+                                        </td>
+                                        <td>{{ $member->position->position_name ?? '-' }}</td>
+                                        <td>{{ $member->gender ?? '-' }}</td>
+                                        <td>{{ $member->mobile_number ?? '-' }}</td>
+                                        <td>{{ $member->national_id ?? '-' }}</td>
+                                        <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
+                                        <td>
+                                            <span class="badge {{ \App\Models\Staff::STATUS_BADGE_CLASSES[$member->current_status_id] ?? 'badge-light-secondary' }} status-badge" data-status-id="{{ $member->current_status_id }}">{{ \App\Models\Staff::STATUSES[$member->current_status_id] ?? 'Unknown' }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex flex-row gap-1">
+                                                @if($canReadStaff)
+                                                <a class="staff-link" href="{{ route('staff.show', $member->encrypted_id) }}" title="View">
+                                                    <span class="material-symbols-outlined view-icon" style="font-size:18px;">visibility</span>
+                                                </a>
+                                                <div class="spinner-border spinner-border-sm text-primary row-spinner" role="status" style="display: none;">
+                                                    <span class="visually-hidden">Loading...</span>
+                                                </div>
+                                                @endif
+                                                @if($canUpdateStaff)
+                                                <a href="{{ route('staff.edit', $member->encrypted_id) }}" title="Edit">
+                                                    <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                                                </a>
+                                                <button type="button" class="btn btn-link p-0 btn-update-status" title="Update Status"
+                                                    data-id="{{ $member->encrypted_id }}"
+                                                    data-name="{{ $member->full_names }}"
+                                                    data-status-id="{{ $member->current_status_id }}"
+                                                    style="line-height:1; color: inherit;">
+                                                    <span class="material-symbols-outlined" style="font-size:18px;">swap_horiz</span>
+                                                </button>
+                                                @endif
+                                                @if($canCreateUsers)
+                                                <button type="button" class="btn btn-link p-0 btn-convert-user" title="Convert to User"
+                                                    data-id="{{ $member->encrypted_id }}"
+                                                    data-name="{{ $member->full_names }}"
+                                                    data-email="{{ $member->email_address }}"
+                                                    style="line-height:1; color: inherit;">
+                                                    <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
+                                                </button>
+                                                @endif
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -248,10 +139,9 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
                 <div class="mb-3">
                     <label for="modal-status-select" class="form-label">New Status</label>
                     <select class="form-select" id="modal-status-select">
-                        <option value="5">Approved</option>
-                        <option value="4">Suspended</option>
-                        <option value="28">Terminated</option>
-                        <option value="36">Absconded</option>
+                        @foreach(\App\Models\Staff::STATUSES as $id => $label)
+                        <option value="{{ $id }}">{{ $label }}</option>
+                        @endforeach
                     </select>
                 </div>
             </div>
@@ -314,21 +204,11 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
     var canCreateUsers = '{{ $canCreateUsers ? "1" : "0" }}' === '1';
     var canUpdateStaff = '{{ $canUpdateStaff ? "1" : "0" }}' === '1';
     var csrfToken = '{{ csrf_token() }}';
-    var statusBadgeClasses = {
-        5: 'badge-light-success',
-        4: 'badge-light-warning',
-        28: 'badge-light-danger',
-        36: 'badge-light-dark'
-    };
-    var statusLabels = {
-        5: 'Approved',
-        4: 'Suspended',
-        28: 'Terminated',
-        36: 'Absconded'
-    };
+    var statusBadgeClasses = @json(\App\Models\Staff::STATUS_BADGE_CLASSES);
+    var statusLabels = @json(\App\Models\Staff::STATUSES);
 
     $(document).ready(function() {
-        // Init active staff table
+        // Init staff table
         $('#staff-table').DataTable({
             paging: true,
             info: true,
@@ -344,47 +224,13 @@ $statusBadgeClasses = [5 => 'badge-light-success', 4 => 'badge-light-warning', 2
             }
         });
 
-        // Init other staff table (lazy — only when tab is first shown)
-        var otherTableInitialized = false;
-        $('#other-tab').on('shown.bs.tab', function() {
-            if (!otherTableInitialized) {
-                otherTableInitialized = true;
-                $('#other-staff-preloader').show();
-                $('#other-staff-table').css('visibility', 'visible');
-                $('#other-staff-table').DataTable({
-                    paging: true,
-                    info: true,
-                    lengthChange: true,
-                    searching: true,
-                    ordering: true,
-                    order: [
-                        [2, 'asc']
-                    ],
-                    initComplete: function() {
-                        $('#other-staff-preloader').hide();
-                    }
-                });
-            }
-        });
-
-        // Row spinner on staff link (active tab)
+        // Row spinner on staff link
         $(document).on('click', '.staff-link', function(e) {
             e.preventDefault();
             var row = $(this).closest('tr');
             var url = $(this).attr('href');
             row.find('.view-icon').hide();
             row.find('.row-spinner').show();
-            row.find('a').css('pointer-events', 'none').css('opacity', '0.6');
-            window.location.href = url;
-        });
-
-        // Row spinner on staff link (other tab)
-        $(document).on('click', '.other-staff-link', function(e) {
-            e.preventDefault();
-            var row = $(this).closest('tr');
-            var url = $(this).attr('href');
-            row.find('.other-view-icon').hide();
-            row.find('.other-row-spinner').show();
             row.find('a').css('pointer-events', 'none').css('opacity', '0.6');
             window.location.href = url;
         });

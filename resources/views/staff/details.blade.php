@@ -38,6 +38,14 @@ use Illuminate\Support\Facades\Crypt;
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
+                        @if(session('generated_password'))
+                        <div class="alert alert-light-warning alert-dismissible fade show" role="alert">
+                            <strong>System login created.</strong> Temporary password:
+                            <code style="font-size:1.05em;">{{ session('generated_password') }}</code>
+                            — this will not be shown again, copy it now. The staff member will be required to change it on first login.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        @endif
 
                         <!-- Summary Header -->
                         <div class="mb-3">
@@ -244,8 +252,31 @@ use Illuminate\Support\Facades\Crypt;
                                                     <div class="col-5"><small class="text-muted">Branch ID:</small></div>
                                                     <div class="col-7"><small>{{ $staff->branch_id ?? '-' }}</small></div>
 
+                                                    @php
+                                                    $positionSlug = $staff->position->slug_name ?? null;
+                                                    @endphp
+                                                    @if($positionSlug === 'field_officer')
                                                     <div class="col-5"><small class="text-muted">Zone:</small></div>
                                                     <div class="col-7"><small>{{ $staff->zone->zone_name ?? '-' }}</small></div>
+                                                    @elseif($positionSlug === 'zone_manager')
+                                                    <div class="col-5"><small class="text-muted">Zones Managed:</small></div>
+                                                    <div class="col-7">
+                                                        @forelse($staff->zonesManaged as $zone)
+                                                        <span class="badge badge-light-success me-1 mb-1">{{ $zone->zone_name }}</span>
+                                                        @empty
+                                                        <small>-</small>
+                                                        @endforelse
+                                                    </div>
+                                                    @elseif($positionSlug === 'zone_supervisor')
+                                                    <div class="col-5"><small class="text-muted">Zones Supervised:</small></div>
+                                                    <div class="col-7">
+                                                        @forelse($staff->zonesSupervised as $zone)
+                                                        <span class="badge badge-light-warning me-1 mb-1">{{ $zone->zone_name }}</span>
+                                                        @empty
+                                                        <small>-</small>
+                                                        @endforelse
+                                                    </div>
+                                                    @endif
 
                                                     <div class="col-5"><small class="text-muted">Zone Area:</small></div>
                                                     <div class="col-7"><small>{{ $staff->zoneArea->area_name ?? '-' }}</small></div>
