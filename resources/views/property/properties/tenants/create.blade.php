@@ -5,6 +5,58 @@
     /* Individual is the default selection, so hide Company-only fields until
        toggleTenantTypeFields() runs (or immediately, if old('tenant_type') was 3). */
     .company-only { display: none; }
+
+    /* Move-in Inspection accordion — same condensed look as the Permissions
+       accordion (resources/views/roles/permissionsaccess.blade.php). */
+    .condensed-accordion .accordion-item {
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        background: white;
+    }
+
+    .condensed-accordion .accordion-header {
+        display: flex;
+        align-items: center;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        border-radius: 4px 4px 0 0;
+    }
+
+    .condensed-accordion .accordion-button {
+        padding: 6px 10px;
+        background-color: transparent;
+        box-shadow: none;
+    }
+
+    .condensed-accordion .accordion-button:not(.collapsed) {
+        background-color: transparent;
+        color: #495057;
+        box-shadow: none;
+    }
+
+    .condensed-accordion .accordion-button:focus {
+        box-shadow: none;
+        border-color: transparent;
+    }
+
+    .condensed-accordion .accordion-button::after {
+        display: none;
+    }
+
+    .condensed-accordion .accordion-arrow {
+        margin-left: auto;
+        color: #6c757d;
+        font-size: 20px;
+        transition: transform 0.2s ease-in-out;
+    }
+
+    .condensed-accordion .accordion-button:not(.collapsed) .accordion-arrow {
+        transform: rotate(180deg);
+    }
+
+    .condensed-accordion .accordion-body {
+        padding: 10px 12px;
+    }
 </style>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -231,81 +283,97 @@
                                             @enderror
                                         </div>
 
-                                        {{-- Move-in Inspection Section (inline in Unit Details tab) --}}
-                                        <div class="col-12 mt-2 mb-3" id="inspectionSection">
-                                            <h6 class="text-muted border-bottom pb-2">
-                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">search_check</span>
-                                                Move-in Inspection
-                                            </h6>
-                                            <div id="inspectionRequiredAlert" class="alert alert-warning d-none" role="alert" style="font-size:0.83rem;">
-                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">warning</span>
-                                                A move-in inspection is <strong>mandatory</strong> for this property. Please complete the form below.
+                                        {{-- Move-in Inspection Section (inline in Unit Details tab), collapsed by
+                                             default like the Permissions accordion (roles/permissionsaccess.blade.php) --}}
+                                        <div class="col-12 mt-2 mb-3">
+                                            <div class="accordion condensed-accordion" id="moveInInspectionAccordion">
+                                                <div class="accordion-item">
+                                                    <h2 class="accordion-header">
+                                                        <button class="accordion-button collapsed" type="button"
+                                                                data-bs-toggle="collapse" data-bs-target="#moveInInspectionCollapse"
+                                                                aria-expanded="false" aria-controls="moveInInspectionCollapse">
+                                                            <span class="material-symbols-outlined me-2">search_check</span>
+                                                            Move-in Inspection
+                                                            <span class="material-symbols-outlined accordion-arrow">expand_more</span>
+                                                        </button>
+                                                    </h2>
+                                                    <div id="moveInInspectionCollapse" class="accordion-collapse collapse" data-bs-parent="#moveInInspectionAccordion">
+                                                        <div class="accordion-body" id="inspectionSection">
+                                                            <div id="inspectionRequiredAlert" class="alert alert-warning d-none" role="alert" style="font-size:0.83rem;">
+                                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">warning</span>
+                                                                A move-in inspection is <strong>mandatory</strong> for this property. Please complete the form below.
+                                                            </div>
+                                                            <div id="inspectionOptionalAlert" class="alert alert-info d-none" role="alert" style="font-size:0.83rem;">
+                                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">info</span>
+                                                                A move-in inspection is <strong>optional</strong> for this property. You may complete it now or skip.
+                                                            </div>
+
+                                                            <div class="row">
+                                                                <div class="col-md-4 mb-3">
+                                                                    <label for="inspection_date" class="form-label">Inspection Date <span id="inspectionDateRequired" class="text-danger" style="display:none;">*</span></label>
+                                                                    <input type="date" class="form-control" id="inspection_date" name="inspection_date">
+                                                                </div>
+                                                                <div class="col-md-4 mb-3">
+                                                                    <label for="inspector_name" class="form-label">Inspector Name</label>
+                                                                    <input type="text" class="form-control" id="inspector_name" name="inspector_name" placeholder="Name of inspector">
+                                                                </div>
+                                                                <div class="col-md-4 mb-3">
+                                                                    <label for="overall_condition" class="form-label">Overall Condition</label>
+                                                                    <select class="form-select" id="overall_condition" name="overall_condition">
+                                                                        <option value="">— Select —</option>
+                                                                        <option value="Excellent">Excellent</option>
+                                                                        <option value="Good">Good</option>
+                                                                        <option value="Fair">Fair</option>
+                                                                        <option value="Poor">Poor</option>
+                                                                    </select>
+                                                                </div>
+
+                                                                @foreach([['walls','Walls'],['floors','Floors'],['ceiling','Ceiling'],['doors','Doors'],['windows','Windows'],['plumbing','Plumbing'],['electrical','Electrical']] as [$key, $label])
+                                                                <div class="col-md-3 mb-3">
+                                                                    <label class="form-label">{{ $label }}</label>
+                                                                    <select class="form-select" name="{{ $key }}_condition">
+                                                                        <option value="">— Select —</option>
+                                                                        <option value="Excellent">Excellent</option>
+                                                                        <option value="Good">Good</option>
+                                                                        <option value="Fair">Fair</option>
+                                                                        <option value="Poor">Poor</option>
+                                                                    </select>
+                                                                </div>
+                                                                @endforeach
+
+                                                                <div class="col-12 mb-3">
+                                                                    <label for="inspection_notes" class="form-label">Notes</label>
+                                                                    <textarea class="form-control" id="inspection_notes" name="inspection_notes" rows="3" placeholder="Any observations or notes about the unit condition..."></textarea>
+                                                                </div>
+
+                                                                <div class="col-12 mb-1">
+                                                                    <hr class="mt-0 mb-2">
+                                                                    <p class="text-muted mb-2" style="font-size:0.8rem;">
+                                                                        <span class="material-symbols-outlined align-middle" style="font-size:15px;">photo_camera</span>
+                                                                        Upload photos and/or videos documenting the unit condition at move-in.
+                                                                    </p>
+                                                                </div>
+                                                                <div class="col-md-6 mb-3">
+                                                                    <label class="form-label">Photos</label>
+                                                                    <input type="file" name="inspection_photos[]" class="form-control"
+                                                                           accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                                                           multiple id="moveInPhotos">
+                                                                    <div class="form-text" style="font-size:0.72rem;">JPG, PNG, WEBP, HEIC — multiple allowed</div>
+                                                                    <div id="moveInPhotoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                                                                </div>
+                                                                <div class="col-md-6 mb-3">
+                                                                    <label class="form-label">Videos</label>
+                                                                    <input type="file" name="inspection_videos[]" class="form-control"
+                                                                           accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska"
+                                                                           multiple id="moveInVideos">
+                                                                    <div class="form-text" style="font-size:0.72rem;">MP4, MOV, AVI, MKV — multiple allowed</div>
+                                                                    <div id="moveInVideoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div id="inspectionOptionalAlert" class="alert alert-info d-none" role="alert" style="font-size:0.83rem;">
-                                                <span class="material-symbols-outlined me-1" style="font-size:16px;vertical-align:middle;">info</span>
-                                                A move-in inspection is <strong>optional</strong> for this property. You may complete it now or skip.
-                                            </div>
-                                        </div>
-
-                                        <div class="col-md-4 mb-3">
-                                            <label for="inspection_date" class="form-label">Inspection Date <span id="inspectionDateRequired" class="text-danger" style="display:none;">*</span></label>
-                                            <input type="date" class="form-control" id="inspection_date" name="inspection_date">
-                                        </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="inspector_name" class="form-label">Inspector Name</label>
-                                            <input type="text" class="form-control" id="inspector_name" name="inspector_name" placeholder="Name of inspector">
-                                        </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="overall_condition" class="form-label">Overall Condition</label>
-                                            <select class="form-select" id="overall_condition" name="overall_condition">
-                                                <option value="">— Select —</option>
-                                                <option value="Excellent">Excellent</option>
-                                                <option value="Good">Good</option>
-                                                <option value="Fair">Fair</option>
-                                                <option value="Poor">Poor</option>
-                                            </select>
-                                        </div>
-
-                                        @foreach([['walls','Walls'],['floors','Floors'],['ceiling','Ceiling'],['doors','Doors'],['windows','Windows'],['plumbing','Plumbing'],['electrical','Electrical']] as [$key, $label])
-                                        <div class="col-md-3 mb-3">
-                                            <label class="form-label">{{ $label }}</label>
-                                            <select class="form-select" name="{{ $key }}_condition">
-                                                <option value="">— Select —</option>
-                                                <option value="Excellent">Excellent</option>
-                                                <option value="Good">Good</option>
-                                                <option value="Fair">Fair</option>
-                                                <option value="Poor">Poor</option>
-                                            </select>
-                                        </div>
-                                        @endforeach
-
-                                        <div class="col-12 mb-3">
-                                            <label for="inspection_notes" class="form-label">Notes</label>
-                                            <textarea class="form-control" id="inspection_notes" name="inspection_notes" rows="3" placeholder="Any observations or notes about the unit condition..."></textarea>
-                                        </div>
-
-                                        <div class="col-12 mb-1">
-                                            <hr class="mt-0 mb-2">
-                                            <p class="text-muted mb-2" style="font-size:0.8rem;">
-                                                <span class="material-symbols-outlined align-middle" style="font-size:15px;">photo_camera</span>
-                                                Upload photos and/or videos documenting the unit condition at move-in.
-                                            </p>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Photos</label>
-                                            <input type="file" name="inspection_photos[]" class="form-control"
-                                                   accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                                                   multiple id="moveInPhotos">
-                                            <div class="form-text" style="font-size:0.72rem;">JPG, PNG, WEBP, HEIC — multiple allowed</div>
-                                            <div id="moveInPhotoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label class="form-label">Videos</label>
-                                            <input type="file" name="inspection_videos[]" class="form-control"
-                                                   accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska"
-                                                   multiple id="moveInVideos">
-                                            <div class="form-text" style="font-size:0.72rem;">MP4, MOV, AVI, MKV — multiple allowed</div>
-                                            <div id="moveInVideoPreview" class="d-flex flex-wrap gap-1 mt-2"></div>
                                         </div>
 
                                     </div>
@@ -887,6 +955,12 @@
                 $('#inspectionOptionalAlert').addClass('d-none');
                 $date.prop('required', true);
                 $reqMark.show();
+                // Mandatory — auto-expand the collapsed accordion so the warning
+                // and required fields aren't hidden from the tenant.
+                var collapseEl = document.getElementById('moveInInspectionCollapse');
+                if (collapseEl && !collapseEl.classList.contains('show')) {
+                    bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+                }
             } else {
                 $badge.removeClass('bg-danger').addClass('bg-secondary').text('Optional');
                 $('#inspectionRequiredAlert').addClass('d-none');
@@ -903,6 +977,10 @@
             if (inspRequired && !inspDate) {
                 e.preventDefault();
                 $('#inspectionRequiredAlert').removeClass('d-none');
+                var collapseEl = document.getElementById('moveInInspectionCollapse');
+                if (collapseEl && !collapseEl.classList.contains('show')) {
+                    bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+                }
                 $('html, body').animate({ scrollTop: $('#inspectionSection').offset().top - 100 }, 300);
                 return false;
             }
@@ -1126,7 +1204,7 @@
                 unitSelect.html('<option value="">Loading units...</option>');
                 
                 $.ajax({
-                    url: `/property/${propertyId}/units`,
+                    url: `/property/${propertyId}/units?vacant_only=1`,
                     method: 'GET',
                     dataType: 'json',
                     success: function(response) {

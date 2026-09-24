@@ -283,6 +283,26 @@ class TenantsController extends Controller
             $validated['rent_amount'] = $this->resolveRentAmount($validated['unit_id']);
             Log::info('Validated tenant data: ' . json_encode($validated));
 
+            // A lease always needs an SLA — same guarantee reassignReturningTenant()
+            // and LeasesController::store() enforce, now that this creates a
+            // LeaseAgreement too (see below).
+            if (!$validated['sla_ref']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'property_id' => ['This property has no service agreement (SLA) configured — a lease cannot be created until one exists.'],
+                ]);
+            }
+
+            // The create form only offers vacant units (see InspectionsController::
+            // getUnitsByProperty's ?vacant_only=1), but that's client-side — re-check
+            // here so a unit that picked up an active lease between page load and
+            // submit (or a direct POST) can't be double-assigned.
+            $unit = Unit::findOrFail($validated['unit_id']);
+            if (!$unit->isVacant()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'unit_id' => ['Selected unit is no longer vacant — it already has an active lease.'],
+                ]);
+            }
+
             $referenceNumber = $this->generateTenantReferenceNumber();
             Log::info('Generated reference number: ' . $referenceNumber);
 
@@ -291,7 +311,24 @@ class TenantsController extends Controller
             $tenant = $this->createTenant($validated, $referenceNumber, $photoPath);
             Log::info('Tenant created with ID: ' . $tenant->id . ' by User ID: ' . Auth::id());
 
-            $this->saveDeposit($validated, $tenant);
+            // A tenant is only ever created here against a selected unit, so a
+            // LeaseAgreement is created in the same step — shared core with
+            // LeasesController::store() and reassignReturningTenant() (via
+            // LeaseCreationTrait), so all three build a lease identically.
+            $property = Property::findOrFail($validated['property_id']);
+            $leaseAgreement = $this->createLeaseAgreementRecord([
+                'client_id' => $property->client_id,
+                'property_id' => $validated['property_id'],
+                'unit_id' => $validated['unit_id'],
+                'tenant_id' => $tenant->id,
+                'sla_id' => $validated['sla_ref'],
+                'date_start' => $validated['lease_start_date'],
+                'years' => $validated['lease_years'],
+                'escalation_rate' => $validated['escalation_rate'] ?? 0,
+            ]);
+            Log::info('Lease agreement created with ID: ' . $leaseAgreement->id . ' for tenant ID: ' . $tenant->id);
+
+            $this->saveDeposit($validated, $tenant, $leaseAgreement->id);
             Log::info('Deposit processed for tenant ID: ' . $tenant->id);
 
             $this->saveBankAccounts($request, $tenant->id);
@@ -1161,10 +1198,10 @@ class TenantsController extends Controller
      * register and mirror it as a credit entry on the tenant's ledger so it
      * shows up consistently on the tenant statement and exit workflow alike.
      *
-     * $leaseId: optional — the returning-tenant flow always has a LeaseAgreement
-     * by the time it calls this (see reassignReturningTenant()) and links the
-     * deposit to it; onboarding doesn't create a lease at all (see class docblock
-     * / createTenant()) so its call leaves this null, same as before.
+     * $leaseId: optional — both the onboarding flow (store(), once
+     * createLeaseAgreementRecord() has run) and the returning-tenant flow (see
+     * reassignReturningTenant()) always have a LeaseAgreement by the time they
+     * call this, and link the deposit to it.
      */
     private function saveDeposit(array $validated, Client $tenant, ?int $leaseId = null): void
     {

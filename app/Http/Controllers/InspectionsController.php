@@ -104,8 +104,14 @@ class InspectionsController extends Controller
      * Unit::activeLeaseAgreement()'s docblock for the full finding, including
      * why current_status_id 1 *and* 5 both count and why there's no date
      * window).
+     *
+     * Pass ?vacant_only=1 (used by the tenant-create unit picker, which must
+     * only ever offer units with no active lease) to apply Unit::scopeVacant()
+     * server-side rather than just labeling occupied units client-side — the
+     * other callers of this endpoint (lease creation, property details, etc.)
+     * still need to see occupied units, so this stays opt-in.
      */
-    public function getUnitsByProperty($propertyId)
+    public function getUnitsByProperty(Request $request, $propertyId)
     {
         try {
 
@@ -122,6 +128,7 @@ class InspectionsController extends Controller
                     'occupancy_status_id'
                 ])
                 ->where('property_id', $propertyId)
+                ->when($request->boolean('vacant_only'), fn ($query) => $query->vacant())
                 ->get()
                 ->map(function ($unit) {
                     return [
