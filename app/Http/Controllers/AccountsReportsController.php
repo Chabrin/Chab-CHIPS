@@ -63,11 +63,11 @@ class AccountsReportsController extends Controller
                 $query->where('t.property_id', $propertyId);
             }
 
-            $results = $query->get();
-
             if (!$showAll) {
-                $results = $results->filter(fn($r) => $r->closing_balance < 0);
+                $query->havingRaw('SUM(t.credit_amount) - SUM(t.debit_amount) < 0');
             }
+
+            $results = $query->get();
 
             $data = $results->values()->map(function ($item, $index) {
                 $balance = (float) $item->closing_balance;
@@ -96,66 +96,68 @@ class AccountsReportsController extends Controller
         }
     }
 
-    public function exportArrears(Request $request)
+    public function exportArrears(Request $request): StreamedResponse
     {
-        try {
-            $propertyId = $request->input('property_id');
-            $asAtDate   = $request->input('as_at_date', now()->toDateString());
-            $showAll    = $request->boolean('show_all', false);
+        $propertyId = $request->input('property_id');
+        $asAtDate   = $request->input('as_at_date', now()->toDateString());
+        $showAll    = $request->boolean('show_all', false);
 
-            $query = DB::table('sys_pm_tenants_accounts_trans as t')
-                ->select(
-                    't.tenant_id',
-                    DB::raw('SUM(t.credit_amount) - SUM(t.debit_amount) as closing_balance'),
-                    'c.names as tenant_name',
-                    'c.reference_number as tenant_ref',
-                    'p.property_name',
-                    'u.unit_code'
-                )
-                ->join('sys_pm_clients as c', 'c.id', '=', 't.tenant_id')
-                ->leftJoin('sys_pm_properties as p', 'p.id', '=', 't.property_id')
-                ->leftJoin('sys_pm_units as u', 'u.id', '=', 't.unit_id')
-                ->where('t.current_status_id', 1)
-                ->whereDate('t.date_time', '<=', $asAtDate)
-                ->groupBy('t.tenant_id', 'c.names', 'c.reference_number', 'p.property_name', 'u.unit_code');
+        $query = DB::table('sys_pm_tenants_accounts_trans as t')
+            ->select(
+                't.tenant_id',
+                DB::raw('SUM(t.credit_amount) - SUM(t.debit_amount) as closing_balance'),
+                'c.names as tenant_name',
+                'c.reference_number as tenant_ref',
+                'p.property_name',
+                'u.unit_code'
+            )
+            ->join('sys_pm_clients as c', 'c.id', '=', 't.tenant_id')
+            ->leftJoin('sys_pm_properties as p', 'p.id', '=', 't.property_id')
+            ->leftJoin('sys_pm_units as u', 'u.id', '=', 't.unit_id')
+            ->where('t.current_status_id', 1)
+            ->whereDate('t.date_time', '<=', $asAtDate)
+            ->groupBy('t.tenant_id', 'c.names', 'c.reference_number', 'p.property_name', 'u.unit_code')
+            ->orderBy('t.tenant_id');
 
-            if ($propertyId) {
-                $query->where('t.property_id', $propertyId);
-            }
+        if ($propertyId) {
+            $query->where('t.property_id', $propertyId);
+        }
 
-            $results = $query->get();
-            if (!$showAll) {
-                $results = $results->filter(fn($r) => $r->closing_balance < 0);
-            }
+        if (!$showAll) {
+            $query->havingRaw('SUM(t.credit_amount) - SUM(t.debit_amount) < 0');
+        }
 
-            $headings = ['#', 'Tenant Ref', 'Tenant Name', 'Property', 'Unit', 'Closing Balance (KES)', 'Status'];
-            $rows = $results->values()->map(function ($item, $index) {
-                $balance = (float) $item->closing_balance;
-                return [
-                    $index + 1,
-                    $item->tenant_ref ?? 'N/A',
-                    $item->tenant_name ?? 'N/A',
-                    $item->property_name ?? 'N/A',
-                    $item->unit_code ?? 'N/A',
+        $headings = ['#', 'Tenant Ref', 'Tenant Name', 'Property', 'Unit', 'Closing Balance (KES)', 'Status'];
+
+        $response = new StreamedResponse(function () use ($query, $headings) {
+            // cursor(), not chunk(): chunk()'s OFFSET pagination would re-run this
+            // GROUP BY over the full 2.3M-row ledger on every page.
+            set_time_limit(0);
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, $headings, ',', '"', '\\');
+
+            $rowNumber = 0;
+            foreach ($query->cursor() as $r) {
+                $balance = (float) $r->closing_balance;
+                $rowNumber++;
+                fputcsv($handle, [
+                    $rowNumber,
+                    $r->tenant_ref ?? 'N/A',
+                    $r->tenant_name ?? 'N/A',
+                    $r->property_name ?? 'N/A',
+                    $r->unit_code ?? 'N/A',
                     number_format(abs($balance), 2),
                     $balance >= 0 ? 'CR' : 'DR',
-                ];
-            })->values()->toArray();
+                ], ',', '"', '\\');
+            }
 
-            return Excel::download(
-                GenericReportExport::build(
-                    'Arrears / Aging Report',
-                    $headings,
-                    $rows,
-                    ['As At: ' . $asAtDate, 'Generated: ' . now()->format('d/m/Y H:i:s')]
-                ),
-                'arrears-' . now()->format('Ymd') . '.xlsx'
-            );
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('AccountsReportsController::exportArrears — ' . $e->getMessage());
-            return back()->with('error', 'Export failed: ' . $e->getMessage());
-        }
+            fclose($handle);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv');
+        $response->headers->set('Content-Disposition', 'attachment; filename="arrears-' . now()->format('Ymd') . '.csv"');
+
+        return $response;
     }
 
     // ═══════════════════════════════════════════════════════════

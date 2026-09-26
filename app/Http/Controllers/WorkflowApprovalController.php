@@ -976,12 +976,12 @@ class WorkflowApprovalController extends Controller
                     // Stage 2: Final confirmation
                     
                     // Check same person restriction
-                    // if ($adjustment->approved_by == Auth::id()) {
-                    //     return response()->json([
-                    //         'success' => false,
-                    //         'error' => 'You cannot approve the same adjustment twice. A different approver is required.'
-                    //     ], 422);
-                    // }
+                    if ($adjustment->approved_by == Auth::id()) {
+                        return response()->json([
+                            'success' => false,
+                            'error' => 'You cannot approve the same adjustment twice. A different approver is required.'
+                        ], 422);
+                    }
                     
                     // Mark days as refunded
                     \App\Models\LeaveRequestDaysTaken::whereIn('id', $adjustment->day_ids)

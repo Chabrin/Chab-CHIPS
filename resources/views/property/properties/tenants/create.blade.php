@@ -1169,6 +1169,45 @@
         });
 
 
+        // Loads units for a property; preserveSelected keeps the current
+        // unit chosen on a background refresh instead of resetting it.
+        function loadUnitsForProperty(propertyId, preserveSelected) {
+            var unitSelect = $('#unit_id');
+            var previouslySelected = preserveSelected ? unitSelect.val() : null;
+            unitSelect.html('<option value="">Loading units...</option>');
+
+            $.ajax({
+                url: `/property/${propertyId}/units?vacant_only=1`,
+                method: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    console.log('Units loaded:', response);
+                    unitSelect.empty().prop('disabled', false);
+                    unitSelect.append('<option value="">Please select</option>');
+
+                    if (response.units && response.units.length > 0) {
+                        response.units.forEach(function(unit) {
+                            let unitLabel = unit.unit_name || unit.unit_number;
+                            let status = unit.status == 'Occupied' ? ' (Occupied)' : '';
+                            let rentRaw = String(unit.rent_amount || '0').replace(/,/g, '');
+                            unitSelect.append(`<option value="${unit.id}" data-rent="${rentRaw}">${unitLabel}${status}</option>`);
+                        });
+                    } else {
+                        unitSelect.append('<option value="">No units available</option>');
+                    }
+                    if (previouslySelected && unitSelect.find(`option[value="${previouslySelected}"]`).length) {
+                        unitSelect.val(previouslySelected);
+                    }
+                    updateDepositPreview();
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading units:', xhr.responseText);
+                    unitSelect.empty().prop('disabled', false);
+                    unitSelect.append('<option value="">Error loading units</option>');
+                }
+            });
+        }
+
         // Load units when property is selected
         $('#property_id').on('change', function() {
             var propertyId = $(this).val();
@@ -1200,36 +1239,16 @@
                     }
                 });
 
-                // Load units
-                unitSelect.html('<option value="">Loading units...</option>');
-                
-                $.ajax({
-                    url: `/property/${propertyId}/units?vacant_only=1`,
-                    method: 'GET',
-                    dataType: 'json',
-                    success: function(response) {
-                        console.log('Units loaded:', response);
-                        unitSelect.empty().prop('disabled', false);
-                        unitSelect.append('<option value="">Please select</option>');
-                        
-                        if (response.units && response.units.length > 0) {
-                            response.units.forEach(function(unit) {
-                                let unitLabel = unit.unit_name || unit.unit_number;
-                                let status = unit.status == 'Occupied' ? ' (Occupied)' : '';
-                                let rentRaw = String(unit.rent_amount || '0').replace(/,/g, '');
-                                unitSelect.append(`<option value="${unit.id}" data-rent="${rentRaw}">${unitLabel}${status}</option>`);
-                            });
-                        } else {
-                            unitSelect.append('<option value="">No units available</option>');
-                        }
-                        updateDepositPreview();
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error loading units:', xhr.responseText);
-                        unitSelect.empty().prop('disabled', false);
-                        unitSelect.append('<option value="">Error loading units</option>');
-                    }
-                });
+                loadUnitsForProperty(propertyId);
+            }
+        });
+
+        // Refresh units on refocus, so one created in another tab shows up
+        // without requiring a manual page reload.
+        $(window).on('focus', function() {
+            var propertyId = $('#property_id').val();
+            if (propertyId) {
+                loadUnitsForProperty(propertyId, true);
             }
         });
 
