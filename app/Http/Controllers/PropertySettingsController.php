@@ -8,6 +8,7 @@ use App\Models\InvoiceableItem;
 use App\Models\UnitTopology;
 use App\Models\UnitCategory;
 use App\Models\Zone;
+use App\Models\ZoneArea;
 use App\Models\Staff;
 use App\Traits\GeneralTraits\Reusables;
 use Illuminate\Support\Facades\DB;
@@ -633,6 +634,121 @@ class PropertySettingsController extends Controller
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'zone_supervisor_id' => ['A zone cannot have the same staff member as both manager and supervisor.'],
             ]);
+        }
+    }
+
+    // ============ ZONE AREAS METHODS ============
+
+    /**
+     * Get all zone areas (AJAX)
+     */
+    public function getZoneAreasList(Request $request)
+    {
+        try {
+            $query = ZoneArea::select(['id', 'zone_id', 'area_name'])
+                ->with('zone:id,zone_name');
+
+            if ($request->filled('zone_id')) {
+                $query->where('zone_id', $request->input('zone_id'));
+            }
+
+            $areas = $query->orderBy('area_name', 'asc')
+                ->get()
+                ->map(function ($area) {
+                    return [
+                        'id' => $area->id,
+                        'encrypted_id' => Crypt::encrypt($area->id),
+                        'area_name' => $area->area_name ?? '-',
+                        'zone_id' => $area->zone_id,
+                        'zone_name' => $area->zone->zone_name ?? '-',
+                        'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
+                        'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
+                    ];
+                });
+            return response()->json(['data' => $areas]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading zone areas: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load zone areas'], 500);
+        }
+    }
+
+    /**
+     * Store a new zone area
+     */
+    public function storeZoneArea(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'zone_id' => 'required|integer|exists:sys_set_zones,id',
+                'area_name' => [
+                    'required', 'string', 'max:255',
+                    Rule::unique('sys_set_zone_areas', 'area_name')->where(fn ($query) => $query->where('zone_id', $request->input('zone_id'))),
+                ],
+            ], [
+                'area_name.unique' => 'An area with this name already exists in the selected zone.',
+            ]);
+
+            $validated['date_time'] = now();
+
+            ZoneArea::create($validated);
+
+            return response()->json(['success' => true, 'message' => 'Zone area created successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating zone area: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to create zone area'], 500);
+        }
+    }
+
+    /**
+     * Update a zone area
+     */
+    public function updateZoneArea(Request $request, $encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $area = ZoneArea::findOrFail($id);
+
+            $validated = $request->validate([
+                'zone_id' => 'required|integer|exists:sys_set_zones,id',
+                'area_name' => [
+                    'required', 'string', 'max:255',
+                    Rule::unique('sys_set_zone_areas', 'area_name')->where(fn ($query) => $query->where('zone_id', $request->input('zone_id')))->ignore($id),
+                ],
+            ], [
+                'area_name.unique' => 'An area with this name already exists in the selected zone.',
+            ]);
+
+            $area->update($validated);
+
+            return response()->json(['success' => true, 'message' => 'Zone area updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating zone area: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update zone area'], 500);
+        }
+    }
+
+    /**
+     * Delete a zone area
+     */
+    public function deleteZoneArea($encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $area = ZoneArea::findOrFail($id);
+            $area->delete();
+
+            return response()->json(['success' => true, 'message' => 'Zone area deleted successfully']);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error deleting zone area: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to delete zone area'], 500);
         }
     }
 
