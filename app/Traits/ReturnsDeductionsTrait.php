@@ -111,7 +111,7 @@ trait ReturnsDeductionsTrait
         // Mark the recovered entries in cb_landlord_account (only for the specific year/month)
         // Exclude merge batch landlords - those are handled by MASTERRETURN generation
         if ($advancesInserted > 0) {
-            DB::statement("
+            $recoveredIds = array_column(DB::select("
                 UPDATE cb_landlord_account la
                 SET is_recovered = 1,
                     recovery_year = ?,
@@ -136,9 +136,10 @@ trait ReturnsDeductionsTrait
                       SELECT 1 FROM cb_returns_merge_batches mb
                       WHERE mb.landlord_id = la.client_id
                   )
-            ", [$returnYear, $returnMonth, $returnPeriod, $returnYear, $returnMonth]);
+                RETURNING la.id
+            ", [$returnYear, $returnMonth, $returnPeriod, $returnYear, $returnMonth]), 'id');
 
-            $this->syncAdvanceRecoveryStatus($returnYear, $returnMonth);
+            $this->syncAdvanceRecoveryStatus($recoveredIds);
         }
 
         Log::info("ReturnsDeductionsTrait: Advance payment DR lines inserted", [
@@ -150,18 +151,19 @@ trait ReturnsDeductionsTrait
     }
 
     /**
-     * Propagate this pass's ADVANCE (0009) ledger recoveries back onto the
-     * originating ClientAdvance/AdvanceSchedule rows. insertAdvancePaymentLines()
-     * above only marks the cb_landlord_account row itself recovered — nothing else
-     * in the app ever reads that flag, so without this step an advance's own
-     * balance/schedule never reflects a repayment that already happened.
+     * Propagate just-recovered ADVANCE (0009) ledger rows onto ClientAdvance/AdvanceSchedule.
+     * Takes the caller's own updated ids (not a year/month re-query) so repeat calls in one request can't double-decrement.
+     *
+     * @param int[] $landlordAccountIds cb_landlord_account.id values just updated by the caller
      */
-    protected function syncAdvanceRecoveryStatus(int $returnYear, int $returnMonth): void
+    protected function syncAdvanceRecoveryStatus(array $landlordAccountIds): void
     {
-        $recoveredRows = LandlordAccount::where('entry_type_code', '0009')
-            ->where('is_recovered', 1)
-            ->where('recovery_year', $returnYear)
-            ->where('recovery_month', $returnMonth)
+        if (empty($landlordAccountIds)) {
+            return;
+        }
+
+        $recoveredRows = LandlordAccount::whereIn('id', $landlordAccountIds)
+            ->where('entry_type_code', '0009')
             ->whereNotNull('advance_id')
             ->get(['id', 'advance_id', 'schedule_id', 'debit_amount']);
 
