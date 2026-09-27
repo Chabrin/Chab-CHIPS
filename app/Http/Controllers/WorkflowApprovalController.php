@@ -751,6 +751,9 @@ class WorkflowApprovalController extends Controller
                 }
                 $item->current_status_id = 5;
                 $item->save();
+
+                // Send notification
+                SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Leave Application':
                 $item = \App\Models\LeaveRequest::findOrFail($id);
@@ -943,6 +946,9 @@ class WorkflowApprovalController extends Controller
                 }
                 $item->current_status_id = 5; // Approved
                 $item->save();
+
+                // Send notification
+                SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Communication Templates':
                 $item = \App\Models\CommunicationTemplate::findOrFail($id);
@@ -951,6 +957,9 @@ class WorkflowApprovalController extends Controller
                 }
                 $item->current_status_id = 5; // Approved
                 $item->save();
+
+                // Send notification
+                SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Leave Adjustments':
                 $adjustment = \App\Models\LeaveAdjustment::findOrFail($id);

@@ -9,6 +9,8 @@ use App\Models\StaffDiscipline;
 use App\Models\Communication;
 use App\Models\EmployeeTermination;
 use App\Models\CommunicationTemplate;
+use App\Models\ZoneAssignment;
+use App\Models\EmployeeAttendance;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -144,6 +146,9 @@ class SendApprovalNotification implements ShouldQueue
             'Leave Application' => 'leave_application',
             'Employee Termination' => 'contract_termination',
             'Staff Discipline Tracker' => 'disciplinary_action',
+            'Zone Assignments' => 'zone_assignment',
+            'Employee Attendance' => 'attendance_approval',
+            'Communication Templates' => 'communication_template_approval',
         ];
 
         return $map[$this->section] ?? null;
@@ -221,6 +226,56 @@ class SendApprovalNotification implements ShouldQueue
                     'description' => $discipline->description ?? '-',
                     'date' => date('d M Y'),
                     'department' => $discipline->staff->department->department_name ?? '-',
+                ];
+
+            case 'Zone Assignments':
+                $assignment = ZoneAssignment::with(['staff.department', 'staff.position', 'zone', 'property', 'assignment_type'])->find($this->itemId);
+                if (!$assignment) return null;
+
+                return [
+                    'staff' => $assignment->staff,
+                    'employee_name' => $assignment->staff->full_names ?? '-',
+                    'staff_number' => $assignment->staff->staff_number ?? '-',
+                    'position' => $assignment->staff->position->position_name ?? '-',
+                    'zone_name' => $assignment->zone->zone_name ?? '-',
+                    'property_name' => $assignment->property->property_name ?? '-',
+                    'assigned_as' => $assignment->assignment_type->name ?? '-',
+                    'date' => date('d M Y'),
+                    'department' => $assignment->staff->department->department_name ?? '-',
+                ];
+
+            case 'Employee Attendance':
+                $attendance = EmployeeAttendance::with(['staff.department', 'staff.position'])->find($this->itemId);
+                if (!$attendance) return null;
+
+                return [
+                    'staff' => $attendance->staff,
+                    'employee_name' => $attendance->staff->full_names ?? '-',
+                    'staff_number' => $attendance->staff->staff_number ?? '-',
+                    'position' => $attendance->staff->position->position_name ?? '-',
+                    'month_year' => $attendance->month_year ?? '-',
+                    'date' => date('d M Y'),
+                    'department' => $attendance->staff->department->department_name ?? '-',
+                ];
+
+            case 'Communication Templates':
+                $tpl = CommunicationTemplate::with('createdBy')->find($this->itemId);
+                if (!$tpl || !$tpl->createdBy) return null;
+
+                // No staff link on a template — notify whoever created it instead.
+                // Duck-typed stand-in: the job only ever reads email_address/full_names/phone_number.
+                $creator = (object) [
+                    'email_address' => $tpl->createdBy->email,
+                    'full_names' => $tpl->createdBy->name,
+                    'phone_number' => null,
+                ];
+
+                return [
+                    'staff' => $creator,
+                    'employee_name' => $creator->full_names ?? '-',
+                    'template_name' => $tpl->template_name ?? $tpl->template_type ?? '-',
+                    'template_type' => $tpl->template_type ?? '-',
+                    'date' => date('d M Y'),
                 ];
 
             default:

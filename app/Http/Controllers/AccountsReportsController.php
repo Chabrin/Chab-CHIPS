@@ -67,12 +67,16 @@ class AccountsReportsController extends Controller
                 $query->havingRaw('SUM(t.credit_amount) - SUM(t.debit_amount) < 0');
             }
 
-            $results = $query->get();
-
-            $data = $results->values()->map(function ($item, $index) {
+            // cursor(), not get(): "Show All" can return ~59k grouped rows, and
+            // materializing that as an Eloquent Collection (get()->map()) OOMs at
+            // the default 128M limit. cursor() + a plain array keeps this well under it.
+            $data = [];
+            $index = 0;
+            foreach ($query->cursor() as $item) {
                 $balance = (float) $item->closing_balance;
-                return [
-                    'no'              => $index + 1,
+                $index++;
+                $data[] = [
+                    'no'              => $index,
                     'tenant_ref'      => $item->tenant_ref ?? 'N/A',
                     'tenant_name'     => $item->tenant_name ?? 'N/A',
                     'property'        => $item->property_name ?? 'N/A',
@@ -81,12 +85,12 @@ class AccountsReportsController extends Controller
                     'status'          => $balance >= 0 ? 'CR' : 'DR',
                     'raw_balance'     => $balance,
                 ];
-            });
+            }
 
             return response()->json([
                 'success' => true,
                 'data'    => $data,
-                'count'   => $data->count(),
+                'count'   => $index,
                 'as_at'   => $asAtDate,
             ]);
         } catch (\Exception $e) {

@@ -744,6 +744,8 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to approve');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to approve');
         }).always(function() {
             setButtonLoading($btn, false);
         });
@@ -768,11 +770,13 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to reject');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to reject');
         }).always(function() {
             setButtonLoading($btn, false);
         });
     });
-    
+
     // Bulk Approve
     $('#bulk-approve').on('click', function() {
         let $btn = $(this);
@@ -793,6 +797,8 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to bulk approve');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to bulk approve');
         }).always(function() {
             setButtonLoading($btn, false);
         });
@@ -818,6 +824,8 @@ $(document).ready(function() {
             } else {
                 toastr.error(res.error || 'Failed to bulk reject');
             }
+        }).fail(function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to bulk reject');
         }).always(function() {
             setButtonLoading($btn, false);
         });

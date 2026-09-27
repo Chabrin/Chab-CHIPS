@@ -9,7 +9,7 @@ return new class extends Migration
     /**
      * Backfill sys_staff.current_status_id onto the new 1=Active/2=Inactive/
      * 3=Terminated/4=On Leave scheme. Old value 5 (Approved/Active) becomes 1,
-     * old value 28 (Terminated) becomes 3, and NULL defaults to 2 (Inactive).
+     * old value 28 (Terminated) becomes 3, and NULL defaults to 1 (Active).
      * Rows already at 1 or 2 coincidentally already match and are left alone.
      * Safe to re-run: each WHERE only matches rows still on the old scheme.
      */
@@ -21,7 +21,7 @@ return new class extends Migration
 
         DB::table('sys_staff')->where('current_status_id', 5)->update(['current_status_id' => 1]);
         DB::table('sys_staff')->where('current_status_id', 28)->update(['current_status_id' => 3]);
-        DB::table('sys_staff')->whereNull('current_status_id')->update(['current_status_id' => 2]);
+        DB::table('sys_staff')->whereNull('current_status_id')->update(['current_status_id' => 1]);
     }
 
     /**
