@@ -131,7 +131,7 @@
                         $('#loginBtnText').text('Proceeding...');
                         $('#loginSpinner').removeClass('d-none');
                         setTimeout(function() {
-                            window.location.href = '/dashboard';
+                            window.location.href = response.redirect || '/dashboard';
                         }, 1200);
                     }
                     $('#alert-container').html(alertHtml);
