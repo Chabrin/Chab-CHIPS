@@ -681,6 +681,9 @@
                         });
                     }
                     $('#bs_property').html(opts).trigger('change');
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load properties for this client.');
                 }
             });
         });
@@ -1144,6 +1147,9 @@
                             allowClear: true,
                             width: '100%'
                         });
+                    },
+                    error: function(xhr) {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load properties for this client.');
                     }
                 });
             });

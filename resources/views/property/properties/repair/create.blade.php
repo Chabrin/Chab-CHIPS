@@ -194,6 +194,9 @@
                         response.properties.forEach(function(property) {
                             $('#property_id').append(`<option value="${property.id}">${property.property_code} - ${property.property_name}</option>`);
                         });
+                    },
+                    error: function(xhr) {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load properties for this client.');
                     }
                 });
             }
@@ -216,6 +219,9 @@
                                 $(this).append(`<option value="${unit.id}" ${selected}>${unit.unit_number}</option>`);
                             }.bind(this));
                         });
+                    },
+                    error: function(xhr) {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load units for this property.');
                     }
                 });
             }
@@ -294,10 +300,13 @@
                         response.units.forEach(function(unit) {
                             $(`#unit_${itemCounter}`).append(`<option value="${unit.id}">${unit.unit_number}</option>`);
                         });
+                    },
+                    error: function(xhr) {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load units for this property.');
                     }
                 });
             }
-            
+
             itemCounter++;
             updateRemoveButtons('.repair-item-entry', '.remove-repair-item');
         });

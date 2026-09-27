@@ -378,6 +378,9 @@
                         );
                         $('#eligibilityInfo').removeClass('d-none');
                     }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to check advance eligibility.');
                 }
             });
         });

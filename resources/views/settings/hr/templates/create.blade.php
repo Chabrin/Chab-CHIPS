@@ -409,6 +409,9 @@ $(document).ready(function() {
                     allowClear: true,
                     width: '100%'
                 });
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff list.');
             }
         });
 
@@ -435,6 +438,9 @@ $(document).ready(function() {
                     allowClear: true,
                     width: '100%'
                 });
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load positions list.');
             }
         });
     }

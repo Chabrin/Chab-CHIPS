@@ -371,6 +371,9 @@
                     $('#stat-tenant-mismatch').text(response.tenant_mismatch);
                     $('#stat-ready').text(response.ready);
                     $('#bulkFillSlaBtn').html($('#bulkFillSlaBtn').html().replace(/for all.*/, 'for all ' + response.missing_sla));
+                },
+                error: function (xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load lease setup stats.');
                 }
             });
         }

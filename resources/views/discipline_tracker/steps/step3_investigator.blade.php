@@ -124,6 +124,9 @@
                                 });
                             }
                             $select.select2({ placeholder: 'Search investigator...', allowClear: true });
+                        },
+                        error: function(xhr) {
+                            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load investigator options.');
                         }
                     });
 

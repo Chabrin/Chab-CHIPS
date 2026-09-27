@@ -518,6 +518,9 @@
                         table.rows.add(response.data);
                         table.draw();
                     }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load return detail lines.');
                 }
             });
         }

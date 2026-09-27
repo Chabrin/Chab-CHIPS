@@ -1107,6 +1107,9 @@
                         } else {
                             $results.append('<div class="list-group-item text-muted" style="font-size:0.82rem;">No landlords found.</div>').show();
                         }
+                    },
+                    error: function(xhr) {
+                        toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to search landlords.');
                     }
                 });
             }, 280);

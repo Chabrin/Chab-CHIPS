@@ -181,6 +181,9 @@ $(document).ready(function() {
                     }
                 });
             }
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load severance elements.');
         }
     });
     

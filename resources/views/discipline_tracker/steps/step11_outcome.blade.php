@@ -266,6 +266,9 @@
                             
                             $('#decided_by_id').html(decidedByOptions).select2({ width: '100%' });
                             $('#approved_by').html(approvedByOptions).select2({ width: '100%' });
+                        },
+                        error: function(xhr) {
+                            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff options.');
                         }
                     });
 

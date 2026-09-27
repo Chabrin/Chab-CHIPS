@@ -3487,6 +3487,9 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     (response.data || []).forEach(function(t) {
                         $select.append('<option value="' + t.id + '">' + t.names + '</option>');
                     });
+                },
+                error: function() {
+                    toastr.error('Failed to load tenants for this property.');
                 }
             });
         }

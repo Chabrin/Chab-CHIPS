@@ -178,6 +178,9 @@
                             
                             $('#chairperson_id').html(chairOptions).select2({ placeholder: 'Select chairperson', allowClear: true });
                             $('#panel_members').html(panelOptions).select2({ placeholder: 'Select panel members' });
+                        },
+                        error: function(xhr) {
+                            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff for hearing panel.');
                         }
                     });
 
