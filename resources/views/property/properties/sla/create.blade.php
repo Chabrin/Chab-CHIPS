@@ -174,7 +174,7 @@
 
                                 <div class="col-12">
                                     <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch"
+                                        <input class="form-check-input control-toggle" type="checkbox" role="switch"
                                                id="charge_registration_fee" name="charge_registration_fee" value="1"
                                                {{ old('charge_registration_fee', true) ? 'checked' : '' }}>
                                         <label class="form-check-label" for="charge_registration_fee">
