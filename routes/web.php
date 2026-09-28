@@ -746,14 +746,10 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Tenant leases (MUST come before /tenants/{encryptedId} route)
     Route::get('/property/leases', [App\Http\Controllers\LeasesController::class, 'index'])->name('property.leases.index');
-    Route::get('/property/leases/data', [App\Http\Controllers\LeasesController::class, 'getAllLeases'])->name('property.leases.data');
-    Route::get('/property/leases/stats', [App\Http\Controllers\LeasesController::class, 'getStats'])->name('property.leases.stats');
-    Route::get('/property/leases/expiring', [App\Http\Controllers\LeasesController::class, 'getExpiringLeases'])->name('property.leases.expiring');
-    Route::get('/property/leases/no-end-date', [App\Http\Controllers\LeasesController::class, 'getNoEndDateLeases'])->name('property.leases.no-end-date');
-    Route::get('/property/leases/tenants-without-leases', [App\Http\Controllers\LeasesController::class, 'getTenantsWithoutLeases'])->name('property.leases.tenants-without');
+    Route::get('/property/leases/urgent', [App\Http\Controllers\LeasesController::class, 'getUrgentLeases'])->name('property.leases.urgent');
     Route::get('/property/leases/properties-units', [App\Http\Controllers\LeasesController::class, 'getPropertiesWithUnits'])->name('property.leases.properties-units');
     Route::post('/property/leases/bulk-renew', [App\Http\Controllers\LeasesController::class, 'bulkRenew'])->name('property.leases.bulk-renew');
-    Route::post('/property/leases/bulk-send-contracts', [App\Http\Controllers\LeasesController::class, 'bulkSendContracts'])->name('property.leases.bulk-send-contracts');
+    Route::post('/property/leases/{id}/renew', [App\Http\Controllers\LeasesController::class, 'renewLease'])->name('property.leases.renew');
     Route::post('/property/leases/store', [App\Http\Controllers\LeasesController::class, 'store'])->name('property.leases.store');
     Route::get('/property/leases/{encryptedId}/details', [App\Http\Controllers\LeasesController::class, 'showDetails'])->name('property.leases.details');
     Route::get('/property/leases/{encryptedId}/view-signed-contract', [App\Http\Controllers\LeasesController::class, 'viewSignedContract'])->name('property.leases.view-signed-contract');

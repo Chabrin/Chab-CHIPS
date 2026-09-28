@@ -38,84 +38,6 @@ class LeasesController extends Controller
     }
 
     /**
-     * Get portfolio-wide lease stats (AJAX)
-     */
-    public function getStats()
-    {
-        try {
-            $today = now();
-            $in90Days = now()->addDays(90);
-
-            $stats = LeaseAgreement::selectRaw("
-                COUNT(*) as total,
-                SUM(CASE WHEN date_end >= ? AND date_end <= ? AND current_status_id = 5 THEN 1 ELSE 0 END) as expiring_soon,
-                SUM(CASE WHEN date_end < ? THEN 1 ELSE 0 END) as expired,
-                SUM(CASE WHEN contract_signed_at IS NOT NULL THEN 1 ELSE 0 END) as signed,
-                SUM(CASE WHEN contract_sent_at IS NOT NULL AND contract_signed_at IS NULL THEN 1 ELSE 0 END) as sent_not_signed,
-                SUM(CASE WHEN contract_sent_at IS NULL THEN 1 ELSE 0 END) as not_sent,
-                SUM(CASE WHEN date_end IS NULL THEN 1 ELSE 0 END) as no_end_date
-            ", [$today, $in90Days, $today])->first();
-
-            return response()->json(['data' => $stats]);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading lease stats: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load stats'], 500);
-        }
-    }
-
-    /**
-     * Get active leases with no end date set (AJAX)
-     */
-    public function getNoEndDateLeases(Request $request)
-    {
-        try {
-            $query = LeaseAgreement::with(['tenant:id,names', 'property:id,property_name', 'unit:id,unit_code', 'client:id,names'])
-                ->whereNull('date_end');
-
-            if ($request->filled('client_id')) {
-                $query->where('client_id', $request->client_id);
-            }
-
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-
-            $leases = $query->select(['id', 'tenant_id', 'property_id', 'unit_id', 'client_id', 'ref_number', 'date_start', 'date_end', 'current_status_id', 'contract_sent_at', 'contract_signed_at', 'signed_pdf_path'])
-                ->orderBy('date_start', 'desc')
-                // 56,000+ leases currently have no end date — with no cap this loads every
-                // one of them plus four eager-loaded relations each, reliably exhausting
-                // PHP's memory limit (confirmed: fatal "Allowed memory size exhausted",
-                // not a catchable exception, so it never even reached this method's own
-                // try/catch or the logs). Matches getAllLeases()'s existing limit(500).
-                ->limit(500)
-                ->get()
-                ->map(function ($lease) {
-                    return [
-                        'id'                  => $lease->id,
-                        'encrypted_id'        => Crypt::encrypt($lease->id),
-                        'ref_number'          => $lease->ref_number,
-                        'tenant_name'         => $lease->tenant->names ?? 'N/A',
-                        'encrypted_tenant_id' => $lease->tenant_id ? Crypt::encrypt($lease->tenant_id) : null,
-                        'property_name'       => $lease->property->property_name ?? 'N/A',
-                        'unit_code'           => $lease->unit->unit_code ?? 'N/A',
-                        'client_name'         => $lease->client->names ?? 'N/A',
-                        'date_start'          => $lease->date_start,
-                        'current_status_id'   => $lease->current_status_id,
-                        'contract_status'     => $lease->contract_signed_at ? 'signed' : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
-                        'has_signed_pdf'      => !empty($lease->signed_pdf_path),
-                    ];
-                });
-
-            return response()->json(['data' => $leases]);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading no-end-date leases: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load leases'], 500);
-        }
-    }
-
-    /**
      * Stream the signed lease contract PDF for viewing.
      */
     public function viewSignedContract($encryptedId)
@@ -155,176 +77,49 @@ class LeasesController extends Controller
     }
 
     /**
-     * Get leases with filters (AJAX)
+     * Urgent leases: terminated, or ending within the next 3 days (includes
+     * already-passed end dates) — the "Expiring Leases (Urgent)" tab.
      */
-    public function getAllLeases(Request $request)
+    public function getUrgentLeases()
     {
         try {
-            $query = LeaseAgreement::with(['tenant:id,names', 'property:id,property_name', 'unit:id,unit_code', 'client:id,names']);
-            
-            // Apply filters
-            if ($request->filled('client_id')) {
-                $query->where('client_id', $request->client_id);
-            }
-            
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-            
-            if ($request->filled('tenant_id')) {
-                $query->where('tenant_id', $request->tenant_id);
-            }
-            
-            $leases = $query->select([
-                    'id',
-                    'tenant_id',
-                    'property_id',
-                    'unit_id',
-                    'client_id',
-                    'ref_number',
-                    'date_start',
-                    'date_end',
-                    'current_status_id',
-                    'lease_status',
-                    'years',
-                    'auto_renewal',
-                    'escalation_rate',
-                    'contract_sent_at',
-                    'contract_signed_at',
-                    'signed_pdf_path',
-                ])
-                ->orderBy('date_end', 'asc')
-                ->limit(500) // Limit results for performance
-                ->get()
-                ->map(function ($lease) {
-                    $daysToExpiry = now()->diffInDays($lease->date_end, false);
-                    $isExpiring = $daysToExpiry >= 0 && $daysToExpiry <= 90;
-                    $isExpired = $daysToExpiry < 0;
-                    
-                    return [
-                        'id' => $lease->id,
-                        'encrypted_id' => Crypt::encrypt($lease->id),
-                        'ref_number' => $lease->ref_number,
-                        'tenant_name' => $lease->tenant->names ?? 'N/A',
-                        'tenant_id' => $lease->tenant_id,
-                        'encrypted_tenant_id' => $lease->tenant_id ? Crypt::encrypt($lease->tenant_id) : null,
-                        'property_name' => $lease->property->property_name ?? 'N/A',
-                        'unit_code' => $lease->unit->unit_code ?? 'N/A',
-                        'unit_id' => $lease->unit_id,
-                        'client_name' => $lease->client->names ?? 'N/A',
-                        'date_start' => $lease->date_start,
-                        'date_end' => $lease->date_end,
-                        'days_to_expiry' => round($daysToExpiry),
-                        'is_expiring' => $isExpiring,
-                        'is_expired' => $isExpired,
-                        'current_status_id' => $lease->current_status_id,
-                        'lease_status' => $lease->lease_status,
-                        'years' => $lease->years,
-                        'auto_renewal' => $lease->auto_renewal,
-                        'contract_sent_at' => $lease->contract_sent_at,
-                        'contract_signed_at' => $lease->contract_signed_at,
-                        'contract_status' => $lease->contract_signed_at
-                            ? 'signed'
-                            : ($lease->contract_sent_at ? 'sent' : 'not_sent'),
-                        'has_signed_pdf' => !empty($lease->signed_pdf_path),
-                    ];
-                });
+            $cutoff = now()->addDays(3)->endOfDay();
 
-            return response()->json(['data' => $leases]);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading leases: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load leases'], 500);
-        }
-    }
-    
-    /**
-     * Get only expiring leases (within 90 days) - optimized query
-     */
-    public function getExpiringLeases()
-    {
-        try {
-            $today = now();
-            $in90Days = now()->addDays(90);
-            
             $leases = LeaseAgreement::with(['tenant:id,names', 'property:id,property_name', 'unit:id,unit_code'])
-                ->where('current_status_id', 5) // Only active leases
-                ->whereBetween('date_end', [$today, $in90Days])
-                ->select([
-                    'id',
-                    'tenant_id',
-                    'property_id',
-                    'unit_id',
-                    'ref_number',
-                    'date_end',
-                    'current_status_id'
-                ])
-                ->orderBy('date_end', 'asc')
-                ->get()
-                ->map(function ($lease) {
-                    $daysToExpiry = now()->diffInDays($lease->date_end, false);
-                    
-                    return [
-                        'id' => $lease->id,
-                        'encrypted_id' => Crypt::encrypt($lease->id),
-                        'ref_number' => $lease->ref_number,
-                        'tenant_name' => $lease->tenant->names ?? 'N/A',
-                        'encrypted_tenant_id' => $lease->tenant_id ? Crypt::encrypt($lease->tenant_id) : null,
-                        'property_name' => $lease->property->property_name ?? 'N/A',
-                        'unit_code' => $lease->unit->unit_code ?? 'N/A',
-                        'date_end' => $lease->date_end,
-                        'days_to_expiry' => round($daysToExpiry),
-                        'urgency' => $daysToExpiry <= 7 ? 'CRITICAL' : ($daysToExpiry <= 30 ? 'URGENT' : ($daysToExpiry <= 60 ? 'MODERATE' : 'LOW'))
-                    ];
-                });
-
-            return response()->json(['data' => $leases]);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading expiring leases: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load expiring leases'], 500);
-        }
-    }
-
-    /**
-     * Get tenants without leases (AJAX)
-     */
-    public function getTenantsWithoutLeases()
-    {
-        try {
-            // Was: LeaseAgreement::pluck('tenant_id')->unique() materialized into a
-            // whereNotIn('id', [...]) literal list — with 73,000+ leases this built a
-            // NOT IN clause with tens of thousands of bound parameters, past Postgres's
-            // 65,535 parameter limit (confirmed via a real "number of parameters must be
-            // between 0 and 65535" SQLSTATE error in the logs). A subquery form sends the
-            // same logic as a single correlated NOT IN (SELECT ...), no parameter list at all.
-            $tenantsWithoutLeases = Client::where('reference_number', 'LIKE', 'TEN-%')
-                ->whereNotIn('id', function ($query) {
-                    $query->select('tenant_id')
-                        ->from('sys_pm_lease_agreements')
-                        ->whereNotNull('tenant_id');
+                ->where(function ($q) use ($cutoff) {
+                    $q->where('lease_status', 'Terminated')
+                        ->orWhere(function ($q2) use ($cutoff) {
+                            $q2->whereNotNull('date_end')->where('date_end', '<=', $cutoff);
+                        });
                 })
-                ->select(['id', 'names', 'reference_number', 'mobile_number', 'email_address', 'registered_date'])
-                ->orderBy('names', 'asc')
+                ->select(['id', 'tenant_id', 'property_id', 'unit_id', 'ref_number', 'date_end', 'lease_status'])
+                // Every matching row has date_end <= today+3 (or is Terminated with no
+                // date at all), so DESC surfaces the ones closest to "now" — the most
+                // actionable — first, instead of burying them under leases years overdue.
+                // NULLS LAST keeps undated Terminated rows out of the way at the bottom.
+                ->orderByRaw('date_end DESC NULLS LAST')
                 ->limit(500)
                 ->get()
-                ->map(function ($tenant) {
+                ->map(function ($lease) {
                     return [
-                        'id' => $tenant->id,
-                        'encrypted_id' => Crypt::encrypt($tenant->id),
-                        'names' => $tenant->names,
-                        'reference_number' => $tenant->reference_number,
-                        'mobile_number' => $tenant->mobile_number ?? 'N/A',
-                        'email' => $tenant->email_address ?? 'N/A',
-                        'registered_date' => $tenant->registered_date,
+                        'id' => $lease->id,
+                        'encrypted_id' => Crypt::encrypt($lease->id),
+                        'ref_number' => $lease->ref_number,
+                        'tenant_name' => $lease->tenant->names ?? 'N/A',
+                        'encrypted_tenant_id' => $lease->tenant_id ? Crypt::encrypt($lease->tenant_id) : null,
+                        'property_name' => $lease->property->property_name ?? 'N/A',
+                        'unit_code' => $lease->unit->unit_code ?? 'N/A',
+                        'date_end' => $lease->date_end,
+                        'days_to_expiry' => $lease->date_end ? round(now()->diffInDays($lease->date_end, false)) : null,
+                        'lease_status' => $lease->lease_status,
                     ];
                 });
 
-            return response()->json(['data' => $tenantsWithoutLeases]);
+            return response()->json(['data' => $leases]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error loading tenants without leases: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load tenants'], 500);
+            Log::error('Error loading urgent leases: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load urgent leases'], 500);
         }
     }
 
@@ -442,60 +237,7 @@ class LeasesController extends Controller
 
             foreach ($leaseIds as $leaseId) {
                 $oldLease = LeaseAgreement::with(['invoiceableItems'])->findOrFail($leaseId);
-                
-                // Create new lease with updated dates and terms
-                $startDate = new \DateTime($oldLease->date_end);
-                $startDate->modify('+1 day'); // Start the day after old lease ends
-                
-                $endDate = clone $startDate;
-                $endDate->modify('+' . $validated['years'] . ' years');
-
-                $newLease = LeaseAgreement::create([
-                    'date_time' => now(),
-                    'client_id' => $oldLease->client_id,
-                    'property_id' => $oldLease->property_id,
-                    'unit_id' => $oldLease->unit_id,
-                    'tenant_id' => $oldLease->tenant_id,
-                    'date_start' => $startDate->format('Y-m-d'),
-                    'date_end' => $endDate->format('Y-m-d'),
-                    'years' => $validated['years'],
-                    'sla_id' => $oldLease->sla_id,
-                    'zone_id' => $oldLease->zone_id,
-                    'current_status_id' => 1,
-                    'auto_renewal' => $oldLease->auto_renewal,
-                    'initial_water_meter_reading' => $oldLease->initial_water_meter_reading,
-                    'escalation_rate' => $validated['escalation_rate'],
-                    'escalation_frequency' => $oldLease->escalation_frequency,
-                    'linked_lease_id' => $oldLease->id,
-                    'created_by_id' => Auth::id(),
-                    'ref_number' => null,
-                ]);
-
-                // Generate reference number
-                $unit = Unit::find($oldLease->unit_id);
-                $newLease->ref_number = sprintf('%s-L%05d', $unit->unit_code, $newLease->id);
-                $newLease->save();
-
-                // Copy invoiceable items with escalation applied
-                foreach ($oldLease->invoiceableItems as $item) {
-                    $escalatedAmount = $item->amount * (1 + ($validated['escalation_rate'] / 100));
-                    
-                    LeaseAgreementInvoiceableItem::create([
-                        'parent_id' => $newLease->id,
-                        'item_id' => $item->item_id,
-                        'amount' => $escalatedAmount,
-                        'cycle_id' => $item->cycle_id,
-                        'commissionable' => $item->commissionable,
-                        'comm_per' => $item->comm_per,
-                        'vatable' => $item->vatable,
-                        'prepay_client' => $item->prepay_client,
-                    ]);
-                }
-
-                // Mark old lease as renewed (status 2 or whatever your status is)
-                $oldLease->current_status_id = 2; // Renewed
-                $oldLease->save();
-
+                $this->renewSingleLeaseRecord($oldLease, $validated['years'], $validated['escalation_rate']);
                 $renewedCount++;
             }
 
@@ -532,75 +274,107 @@ class LeasesController extends Controller
     }
 
     /**
-     * Bulk-send lease contracts to tenants that haven't received one yet,
-     * or re-send to those who received but haven't signed.
+     * Renew a single lease from the "Expiring Leases (Urgent)" tab's Renew
+     * action — same lease-creation logic as bulkRenew(), just for one lease
+     * chosen directly rather than a batch matched by expiration criteria.
      */
-    public function bulkSendContracts(Request $request)
+    public function renewLease(Request $request, $id)
     {
-        $request->validate([
-            'type'        => 'required|in:not_sent,sent_not_signed',
-            'client_id'   => 'nullable|integer|exists:sys_pm_clients,id',
-            'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
-        ]);
-
+        DB::beginTransaction();
         try {
-            $query = LeaseAgreement::with(['tenant', 'property', 'unit', 'invoiceableItems', 'contractTemplate'])
-                ->where('current_status_id', 5);
+            $validated = $request->validate([
+                'years' => 'required|integer|min:1|max:10',
+                'escalation_rate' => 'required|numeric|min:0|max:100',
+            ]);
 
-            if ($request->type === 'not_sent') {
-                $query->whereNull('contract_sent_at');
-            } else {
-                $query->whereNotNull('contract_sent_at')->whereNull('contract_signed_at');
-            }
+            $oldLease = LeaseAgreement::with(['invoiceableItems'])->findOrFail($id);
+            $newLease = $this->renewSingleLeaseRecord($oldLease, $validated['years'], $validated['escalation_rate']);
 
-            if ($request->filled('client_id')) {
-                $query->where('client_id', $request->client_id);
-            }
+            DB::commit();
 
-            if ($request->filled('property_id')) {
-                $query->where('property_id', $request->property_id);
-            }
-
-            $leases = $query->get();
-
-            if ($leases->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No leases match this criteria.',
-                ], 400);
-            }
-
-            $sent   = 0;
-            $failed = 0;
-            $service = new LeaseContractService();
-
-            foreach ($leases as $lease) {
-                try {
-                    $service->sendToTenant($lease);
-                    $sent++;
-                } catch (\Exception $e) {
-                    $failed++;
-                    Log::error('Bulk send failed for lease ' . $lease->ref_number . ': ' . $e->getMessage());
-                }
-            }
-
-            $label = $request->type === 'not_sent' ? 'sent' : 'resent';
-            $message = "Contracts {$label}: {$sent}";
-            if ($failed > 0) {
-                $message .= ", failed: {$failed}";
-            }
+            Log::info('Lease renewed successfully', [
+                'old_lease_id' => $oldLease->id,
+                'new_lease_id' => $newLease->id,
+                'renewed_by' => Auth::id(),
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => $message,
-                'sent'    => $sent,
-                'failed'  => $failed,
+                'message' => 'Lease renewed successfully',
+                'new_ref_number' => $newLease->ref_number,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
+            DB::rollBack();
             ErrorDispatcher::dispatch($e);
-            Log::error('Error in bulkSendContracts: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to send contracts.'], 500);
+            Log::error('Error renewing lease: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to renew lease: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Creates the renewed lease record (dates, terms, escalated invoiceable
+     * items) and marks $oldLease as renewed. Shared by bulkRenew() and
+     * renewLease() — assumes it's already running inside a DB transaction.
+     */
+    private function renewSingleLeaseRecord(LeaseAgreement $oldLease, int $years, float $escalationRate): LeaseAgreement
+    {
+        // Create new lease with updated dates and terms
+        $startDate = new \DateTime($oldLease->date_end);
+        $startDate->modify('+1 day'); // Start the day after old lease ends
+
+        $endDate = clone $startDate;
+        $endDate->modify('+' . $years . ' years');
+
+        $newLease = LeaseAgreement::create([
+            'date_time' => now(),
+            'client_id' => $oldLease->client_id,
+            'property_id' => $oldLease->property_id,
+            'unit_id' => $oldLease->unit_id,
+            'tenant_id' => $oldLease->tenant_id,
+            'date_start' => $startDate->format('Y-m-d'),
+            'date_end' => $endDate->format('Y-m-d'),
+            'years' => $years,
+            'sla_id' => $oldLease->sla_id,
+            'zone_id' => $oldLease->zone_id,
+            'current_status_id' => 1,
+            'auto_renewal' => $oldLease->auto_renewal,
+            'initial_water_meter_reading' => $oldLease->initial_water_meter_reading,
+            'escalation_rate' => $escalationRate,
+            'escalation_frequency' => $oldLease->escalation_frequency,
+            'linked_lease_id' => $oldLease->id,
+            'created_by_id' => Auth::id(),
+            'ref_number' => null,
+        ]);
+
+        // Generate reference number
+        $unit = Unit::find($oldLease->unit_id);
+        $newLease->ref_number = sprintf('%s-L%05d', $unit->unit_code, $newLease->id);
+        $newLease->save();
+
+        // Copy invoiceable items with escalation applied
+        foreach ($oldLease->invoiceableItems as $item) {
+            $escalatedAmount = $item->amount * (1 + ($escalationRate / 100));
+
+            LeaseAgreementInvoiceableItem::create([
+                'parent_id' => $newLease->id,
+                'item_id' => $item->item_id,
+                'amount' => $escalatedAmount,
+                'cycle_id' => $item->cycle_id,
+                'commissionable' => $item->commissionable,
+                'comm_per' => $item->comm_per,
+                'vatable' => $item->vatable,
+                'prepay_client' => $item->prepay_client,
+            ]);
+        }
+
+        // Mark old lease as renewed (status 2 or whatever your status is)
+        $oldLease->current_status_id = 2; // Renewed
+        $oldLease->save();
+
+        return $newLease;
     }
 
     /**
