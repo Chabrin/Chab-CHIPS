@@ -280,43 +280,46 @@
 
                         if (searchTerm.length < 3) {
                             showToast('Please enter at least 3 characters to search', 'error');
-                            $('#search_payment_icon').hide();
-                            $('#search_payment_spinner').show();
-                            $('#search_payment_btn').prop('disabled', true);
+                            return;
+                        }
 
-                            $.ajax({
-                                url: '{{ route("ajax.tenant.payments.search.allocate") }}',
-                                type: 'POST',
-                                data: {
-                                    _token: '{{ csrf_token() }}',
-                                    search: searchTerm
-                                },
-                                success: function(response) {
-                                    if (response.success && response.payments.length > 0) {
-                                        paymentsData = response.payments;
-                                        $('#payment_select').empty().append('<option value="">-- Select Payment --</option>');
+                        $('#search_payment_icon').hide();
+                        $('#search_payment_spinner').show();
+                        $('#search_payment_btn').prop('disabled', true);
 
-                                        response.payments.forEach(function(payment) {
-                                            $('#payment_select').append(`<option value="${payment.id}">${payment.reference} - ${payment.payment_date} (Available: ${payment.unallocated_amount})</option>`);
-                                        });
+                        $.ajax({
+                            url: '{{ route("ajax.tenant.payments.search.allocate") }}',
+                            type: 'POST',
+                            data: {
+                                _token: '{{ csrf_token() }}',
+                                search: searchTerm
+                            },
+                            success: function(response) {
+                                if (response.success && response.payments.length > 0) {
+                                    paymentsData = response.payments;
+                                    $('#payment_select').empty().append('<option value="">-- Select Payment --</option>');
 
-                                        $('#payment_select').prop('disabled', false);
-                                        showToast(`Found ${response.payments.length} payments`, 'success');
-                                    } else {
-                                        showToast('No payments found with unallocated balance', 'error');
-                                        $('#payment_select').empty().append('<option value="">-- No Payments Found --</option>');
-                                    }
-                                },
-                                error: function() {
-                                    showToast('Error searching payments', 'error');
-                                },
-                                complete: function() {
-                                    $('#search_payment_icon').show();
-                                    $('#search_payment_spinner').hide();
-                                    $('#search_payment_btn').prop('disabled', false);
+                                    response.payments.forEach(function(payment) {
+                                        $('#payment_select').append(`<option value="${payment.id}">${payment.reference} - ${payment.payment_date} (Available: ${payment.unallocated_amount})</option>`);
+                                    });
+
+                                    $('#payment_select').prop('disabled', false);
+                                    showToast(`Found ${response.payments.length} payments`, 'success');
+                                } else {
+                                    showToast('No payments found with unallocated balance', 'error');
+                                    $('#payment_select').empty().append('<option value="">-- No Payments Found --</option>');
                                 }
-                            });
+                            },
+                            error: function() {
+                                showToast('Error searching payments', 'error');
+                            },
+                            complete: function() {
+                                $('#search_payment_icon').show();
+                                $('#search_payment_spinner').hide();
+                                $('#search_payment_btn').prop('disabled', false);
+                            }
                         });
+                    });
 
                     // Payment Selected
                     $('#payment_select').on('change', function() {
@@ -380,45 +383,49 @@
                     $('#search_invoice_btn').on('click', function() {
                             if (!selectedTenantId) {
                                 showToast('Please select a payment first', 'error');
+                                return;
+                            }
 
-                                $('#search_invoice_icon').hide();
-                                $('#search_invoice_spinner').show();
-                                $('#search_invoice_btn').prop('disabled', true);
+                            const searchTerm = $('#invoice_search_input').val().trim();
 
-                                $.ajax({
-                                    url: '{{ route("ajax.tenant.invoices.search") }}',
-                                    type: 'POST',
-                                    data: {
-                                        _token: '{{ csrf_token() }}',
-                                        tenant_id: selectedTenantId,
-                                        search: searchTerm
-                                    },
-                                    success: function(response) {
-                                        if (response.success && response.invoices.length > 0) {
-                                            invoicesData = response.invoices;
-                                            $('#invoice_select').empty().append('<option value="">-- Select Invoice --</option>');
+                            $('#search_invoice_icon').hide();
+                            $('#search_invoice_spinner').show();
+                            $('#search_invoice_btn').prop('disabled', true);
 
-                                            response.invoices.forEach(function(invoice) {
-                                                $('#invoice_select').append(`<option value="${invoice.id}">${invoice.reference_number} - Balance: ${invoice.balance}</option>`);
-                                            });
+                            $.ajax({
+                                url: '{{ route("ajax.tenant.invoices.search") }}',
+                                type: 'POST',
+                                data: {
+                                    _token: '{{ csrf_token() }}',
+                                    tenant_id: selectedTenantId,
+                                    search: searchTerm
+                                },
+                                success: function(response) {
+                                    if (response.success && response.invoices.length > 0) {
+                                        invoicesData = response.invoices;
+                                        $('#invoice_select').empty().append('<option value="">-- Select Invoice --</option>');
 
-                                            $('#invoice_select').prop('disabled', false);
-                                            showToast(`Found ${response.invoices.length} invoices`, 'success');
-                                        } else {
-                                            showToast('No unpaid invoices found for this tenant', 'error');
-                                            $('#invoice_select').empty().append('<option value="">-- No Invoices Found --</option>');
-                                        }
-                                    },
-                                    error: function() {
-                                        showToast('Error searching invoices', 'error');
-                                    },
-                                    complete: function() {
-                                        $('#search_invoice_icon').show();
-                                        $('#search_invoice_spinner').hide();
-                                        $('#search_invoice_btn').prop('disabled', false);
+                                        response.invoices.forEach(function(invoice) {
+                                            $('#invoice_select').append(`<option value="${invoice.id}">${invoice.reference_number} - Balance: ${invoice.balance}</option>`);
+                                        });
+
+                                        $('#invoice_select').prop('disabled', false);
+                                        showToast(`Found ${response.invoices.length} invoices`, 'success');
+                                    } else {
+                                        showToast('No unpaid invoices found for this tenant', 'error');
+                                        $('#invoice_select').empty().append('<option value="">-- No Invoices Found --</option>');
                                     }
-                                });
+                                },
+                                error: function() {
+                                    showToast('Error searching invoices', 'error');
+                                },
+                                complete: function() {
+                                    $('#search_invoice_icon').show();
+                                    $('#search_invoice_spinner').hide();
+                                    $('#search_invoice_btn').prop('disabled', false);
+                                }
                             });
+                        });
 
                         // Invoice Selected
                         $('#invoice_select').on('change', function() {
@@ -622,6 +629,9 @@
                                     } else {
                                         $('#existing_allocations_card').hide();
                                     }
+                                },
+                                error: function(xhr) {
+                                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load existing allocations.');
                                 }
                             });
                         }
