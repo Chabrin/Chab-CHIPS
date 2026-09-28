@@ -125,6 +125,9 @@ $(document).ready(function() {
                 allowClear: true
             });
             $staff_id.val("{{ $record->staff_id }}").trigger('change');
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff list.');
         }
     });
 
@@ -158,6 +161,9 @@ $(document).ready(function() {
                 allowClear: true
             });
             $staff_positions.val("{{ $record->position_id }}").trigger('change');
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff positions.');
         }
     });
 
@@ -191,6 +197,9 @@ $(document).ready(function() {
                 allowClear: true
             });
             $incident_id.val("{{ $record->incident_id }}").trigger('change');
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load incidents list.');
         }
     });
 
@@ -224,6 +233,9 @@ $(document).ready(function() {
                 allowClear: true
             });
             $action_taken_id.val("{{ $record->action_taken_id }}").trigger('change');
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load action-taken options.');
         }
     });
 

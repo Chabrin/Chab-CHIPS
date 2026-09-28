@@ -1035,6 +1035,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateZone'])->name('property.settings.zones.update');
     Route::delete('/property/settings/zones/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteZone'])->name('property.settings.zones.delete');
 
+    // Zone Areas Routes
+    Route::get('/property/settings/zone-areas/data', [App\Http\Controllers\PropertySettingsController::class, 'getZoneAreasList'])->name('property.settings.zone-areas.data');
+    Route::post('/property/settings/zone-areas', [App\Http\Controllers\PropertySettingsController::class, 'storeZoneArea'])->name('property.settings.zone-areas.store');
+    Route::post('/property/settings/zone-areas/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'updateZoneArea'])->name('property.settings.zone-areas.update');
+    Route::delete('/property/settings/zone-areas/{encryptedId}', [App\Http\Controllers\PropertySettingsController::class, 'deleteZoneArea'])->name('property.settings.zone-areas.delete');
+
     // Repairs Settings Routes
     Route::get('/property/settings/repairs', [App\Http\Controllers\PropertySettingsController::class, 'repairsIndex'])->name('property.settings.repairs.index');
     Route::get('/property/settings/repairs/property-elements/data', [App\Http\Controllers\PropertySettingsController::class, 'getPropertyElements'])->name('property.settings.repairs.property-elements.data');

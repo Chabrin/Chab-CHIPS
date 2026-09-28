@@ -406,7 +406,7 @@ trait ReturnsMasterReturnTrait
         ));
 
         if ($inserted > 0) {
-            DB::statement("
+            $recoveredIds = array_column(DB::select("
                 UPDATE cb_landlord_account
                 SET is_recovered         = 1,
                     recovery_year        = ?,
@@ -419,16 +419,21 @@ trait ReturnsMasterReturnTrait
                   AND year  = ?
                   AND month = ?
                   AND entry_type_code IN ({$placeholders})
+                RETURNING id
             ", array_merge(
                 [$returnYear, $returnMonth, $masterReturnCode, $clientId, $returnYear, $returnMonth],
                 $this->masterLandlordDeductionCodes
-            ));
+            )), 'id');
 
             Log::info('ReturnsMasterReturnTrait: landlord deductions absorbed into MASTERRETURN', [
                 'master_code' => $masterReturnCode,
                 'client_id'   => $clientId,
                 'count'       => $inserted,
             ]);
+
+            // Mirrors the standard returns path — without this, ClientAdvance.current_balance
+            // never reflects a merge-batch recovery.
+            $this->syncAdvanceRecoveryStatus($recoveredIds);
         }
 
         return $inserted;

@@ -289,6 +289,9 @@
                                     });
                                 }
                                 $('#minute_taker_id').html(options).select2({ placeholder: 'Select minute taker', allowClear: true });
+                            },
+                            error: function(xhr) {
+                                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load minute taker options.');
                             }
                         });
 

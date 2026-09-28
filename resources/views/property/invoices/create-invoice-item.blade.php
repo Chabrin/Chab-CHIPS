@@ -136,6 +136,9 @@
                         $('#item_type_id').append(`<option value="${item.id}">${item.item_name}</option>`);
                     });
                 }
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load invoiceable items.');
             }
         });
 

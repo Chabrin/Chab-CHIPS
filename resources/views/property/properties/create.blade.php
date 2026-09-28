@@ -465,7 +465,7 @@
             $.ajax({
                 url: "{{ route('ajax.staff.list') }}",
                 type: 'GET',
-                data: { zone_id: zoneId },
+                data: { zone_id: zoneId, position_slug: 'field_officer' },
                 success: function(response) {
                     if ($('#zone_id').val() != zoneId) return; // stale response, zone changed since this request fired
                     fieldOfficerSelect.empty().append('<option value="">Please select</option>');

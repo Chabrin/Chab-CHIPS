@@ -251,6 +251,9 @@
                         placeholder: 'Select Element',
                         allowClear: true
                     });
+                },
+                error: function() {
+                    toastr.error('Failed to load payroll elements.');
                 }
             });
 

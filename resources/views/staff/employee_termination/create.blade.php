@@ -117,6 +117,9 @@ $(document).ready(function() {
             }
             if ($staff_id.hasClass("select2-hidden-accessible")) $staff_id.select2('destroy');
             $staff_id.select2({ placeholder: 'Select Staff', allowClear: true });
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff list.');
         }
     });
 
@@ -145,6 +148,9 @@ $(document).ready(function() {
                 }
                 if ($contract_id.hasClass("select2-hidden-accessible")) $contract_id.select2('destroy');
                 $contract_id.select2({ placeholder: 'Select Contract', allowClear: true });
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load contracts for this staff member.');
             }
         });
     });
@@ -266,6 +272,9 @@ $(document).ready(function() {
                 // Set options for first row
                 $('#severance-elements-list select').html('<option value="">Select Element</option>' + severanceElementOptions);
             }
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load payroll elements.');
         }
     });
     

@@ -472,6 +472,9 @@ $(document).ready(function() {
                 @if(isset($template->general_config['staff_ids']))
                     $staffIds.val({!! json_encode($template->general_config['staff_ids']) !!}).trigger('change');
                 @endif
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff list.');
             }
         });
 
@@ -502,6 +505,9 @@ $(document).ready(function() {
                 @if(isset($template->general_config['position_ids']))
                     $positionIds.val({!! json_encode($template->general_config['position_ids']) !!}).trigger('change');
                 @endif
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load positions list.');
             }
         });
     }

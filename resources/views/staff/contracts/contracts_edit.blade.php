@@ -214,6 +214,9 @@
                     if (selectedValue) {
                         $select.val(selectedValue).trigger('change');
                     }
+                },
+                error: function() {
+                    toastr.error('Failed to load payroll elements.');
                 }
             });
 

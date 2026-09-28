@@ -165,7 +165,9 @@ class LandlordController extends Controller
                 return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
             }
 
-            $landlords = Client::select(
+            // Advance creation is a finance operation, not property-management —
+            // bypass the field-officer/zone visibility scope so any staff can search all landlords.
+            $landlords = Client::withoutGlobalScope('user_clients_properties')->select(
                 'sys_pm_clients.id',
                 'sys_pm_clients.names',
                 'sys_pm_clients.mobile_number',

@@ -751,6 +751,9 @@ class WorkflowApprovalController extends Controller
                 }
                 $item->current_status_id = 5;
                 $item->save();
+
+                // Send notification
+                SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Leave Application':
                 $item = \App\Models\LeaveRequest::findOrFail($id);
@@ -943,6 +946,9 @@ class WorkflowApprovalController extends Controller
                 }
                 $item->current_status_id = 5; // Approved
                 $item->save();
+
+                // Send notification
+                SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Communication Templates':
                 $item = \App\Models\CommunicationTemplate::findOrFail($id);
@@ -951,6 +957,9 @@ class WorkflowApprovalController extends Controller
                 }
                 $item->current_status_id = 5; // Approved
                 $item->save();
+
+                // Send notification
+                SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Leave Adjustments':
                 $adjustment = \App\Models\LeaveAdjustment::findOrFail($id);
@@ -976,12 +985,12 @@ class WorkflowApprovalController extends Controller
                     // Stage 2: Final confirmation
                     
                     // Check same person restriction
-                    // if ($adjustment->approved_by == Auth::id()) {
-                    //     return response()->json([
-                    //         'success' => false,
-                    //         'error' => 'You cannot approve the same adjustment twice. A different approver is required.'
-                    //     ], 422);
-                    // }
+                    if ($adjustment->approved_by == Auth::id()) {
+                        return response()->json([
+                            'success' => false,
+                            'error' => 'You cannot approve the same adjustment twice. A different approver is required.'
+                        ], 422);
+                    }
                     
                     // Mark days as refunded
                     \App\Models\LeaveRequestDaysTaken::whereIn('id', $adjustment->day_ids)

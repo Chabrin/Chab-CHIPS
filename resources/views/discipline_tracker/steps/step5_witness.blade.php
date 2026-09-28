@@ -163,6 +163,9 @@
                                 });
                             }
                             $select.select2({ placeholder: 'Select if internal staff', allowClear: true });
+                        },
+                        error: function(xhr) {
+                            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load staff list.');
                         }
                     });
 

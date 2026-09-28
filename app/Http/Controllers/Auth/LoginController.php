@@ -156,7 +156,8 @@ class LoginController extends Controller
                     } catch (\Throwable $e) {
                         Log::warning('Failed to write onelogin cache after 2fa setup: ' . $e->getMessage());
                     }
-                    return response()->json(['status' => 'success', 'message' => '2FA setup complete!']);
+                    $intendedUrl = $request->session()->pull('url.intended', route('dashboard'));
+                    return response()->json(['status' => 'success', 'message' => '2FA setup complete!', 'redirect' => $intendedUrl]);
                 }
                 return response()->json(['status' => 'error', 'message' => 'Invalid code.']);
             }
@@ -185,7 +186,8 @@ class LoginController extends Controller
                 } catch (\Throwable $e) {
                     Log::warning('Failed to write onelogin cache after 2fa verify: ' . $e->getMessage());
                 }
-                return response()->json(['status' => 'success', 'message' => '2FA verified!']);
+                $intendedUrl = $request->session()->pull('url.intended', route('dashboard'));
+                return response()->json(['status' => 'success', 'message' => '2FA verified!', 'redirect' => $intendedUrl]);
             }
 
             return response()->json(['status' => 'error', 'message' => 'Invalid code.']);
@@ -342,9 +344,12 @@ class LoginController extends Controller
                 Log::warning('Failed to write onelogin cache on login: ' . $e->getMessage());
             }
 
+            $intendedUrl = $request->session()->pull('url.intended', route('dashboard'));
+
             return response()->json([
-                'status'  => 'success',
-                'message' => 'Successfully logged in!'
+                'status' => 'success',
+                'message' => 'Successfully logged in!',
+                'redirect' => $intendedUrl
             ]);
         } catch (\Exception $e) {
             Log::error('Auth error: ' . $e->getMessage());

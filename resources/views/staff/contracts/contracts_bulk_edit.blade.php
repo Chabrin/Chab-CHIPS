@@ -410,6 +410,9 @@
         dataType: 'json',
         success: function(response) {
             payrollElements = response.elements || [];
+        },
+        error: function(xhr) {
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load payroll elements.');
         }
     });
 

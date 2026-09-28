@@ -224,6 +224,9 @@
                     if (response && response.length > 0) {
                         invoiceableCycles = response;
                     }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load invoiceable cycles.');
                 }
             });
         }
@@ -473,6 +476,9 @@
                         unitsRentMap[u.id] = parseFloat(String(u.rent_amount || '0').replace(/,/g, '')) || 0;
                     });
                     updateDepositPreview();
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load unit rents.');
                 }
             });
         }
@@ -496,6 +502,9 @@
                     } else {
                         $('#service_charges_amount').val('');
                     }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load billable items for this property.');
                 }
             });
         }
