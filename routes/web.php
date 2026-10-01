@@ -743,6 +743,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Tenant Deposits (MUST come before /tenants/{encryptedId} route)
     Route::get('/tenant/deposits', [App\Http\Controllers\InvoicingController::class, 'tenantDeposits'])->name('deposits.tenant.index');
     Route::get('/tenant/deposits/{id}', [App\Http\Controllers\InvoicingController::class, 'depositDetails'])->name('deposits.tenant.details');
+    Route::post('/ajax/deposits/search', [App\Http\Controllers\InvoicingController::class, 'searchDeposits'])->name('ajax.deposits.search');
+    Route::get('/ajax/deposits/details/{id}', [App\Http\Controllers\InvoicingController::class, 'getDepositDetails'])->name('ajax.deposits.details');
 
     // Tenant leases (MUST come before /tenants/{encryptedId} route)
     Route::get('/property/leases', [App\Http\Controllers\LeasesController::class, 'index'])->name('property.leases.index');
