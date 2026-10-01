@@ -718,11 +718,10 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                Log::info("Error saving" . $e->getMessage());
-                return response()->json(['success' => false, 'error' => 'Failed to save gender'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
+            return response()->json(['genders' => [], 'success' => false, 'error' => 'Failed to load genders'], 500);
         }
     }
 
@@ -745,11 +744,9 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['success' => false, 'error' => 'Failed to update gender'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            Log::info("Error saving" . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to save gender'], 500);
         }
     }
@@ -767,9 +764,8 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['success' => false, 'error' => 'Failed to delete gender'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update gender'], 500);
         }

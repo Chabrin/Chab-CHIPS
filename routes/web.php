@@ -1618,7 +1618,7 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/gender/list', [SettingsController::class, 'genderList'])->name('ajax.gender.list');
     Route::post('/ajax/gender', [SettingsController::class, 'genderStore'])->name('ajax.gender.store');
     Route::post('/ajax/gender/{id}', [SettingsController::class, 'genderUpdate'])->name('ajax.gender.update');
-    Route::delete('/ajax/salutation/{id}', [SettingsController::class, 'salutationDelete'])->name('ajax.salutation.delete');
+    Route::delete('/ajax/gender/{id}', [SettingsController::class, 'genderDelete'])->name('ajax.gender.delete');
 
     // Marital Status AJAX CRUD
     Route::get('/ajax/marital-status/list', [SettingsController::class, 'maritalStatusList'])->name('ajax.marital_status.list');
