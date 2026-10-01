@@ -6,6 +6,7 @@ use App\Models\Bank;
 use App\Models\Gender;
 use App\Models\Country;
 use App\Models\Currency;
+use App\Models\SystemCountry;
 use App\Models\Industry;
 use App\Models\BankBranch;
 use App\Models\Department;
@@ -106,7 +107,7 @@ class SettingsController extends Controller
     //currencyIndex to load View
     public function currencyIndex()
     {
-        $countries = Country::all();
+        $countries = SystemCountry::orderBy('country_name')->get();
         return view('settings.currency', compact('countries'));
     }
 
@@ -127,7 +128,7 @@ class SettingsController extends Controller
             $request->validate([
                 'currency_name' => 'required|string|max:100',
                 'currency_code' => 'required|string|max:10',
-                'country_id' => 'nullable|integer|exists:countries,id',
+                'country_id' => 'nullable|integer|exists:sys_set_countries,id',
             ]);
             $currency = new Currency();
             $currency->currency_name = $request->currency_name;
@@ -151,7 +152,7 @@ class SettingsController extends Controller
             $request->validate([
                 'currency_name' => 'required|string|max:100',
                 'currency_code' => 'required|string|max:10',
-                'country_id' => 'nullable|integer|exists:countries,id',
+                'country_id' => 'nullable|integer|exists:sys_set_countries,id',
             ]);
             $currency = Currency::findOrFail($id);
             $currency->currency_name = $request->currency_name;

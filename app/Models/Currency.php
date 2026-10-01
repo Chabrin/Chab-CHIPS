@@ -18,6 +18,6 @@ class Currency extends Model
     //add relationship to country
     public function country()
     {
-        return $this->belongsTo(Country::class);
+        return $this->belongsTo(SystemCountry::class, 'country_id');
     }
 }
