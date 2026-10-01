@@ -359,7 +359,12 @@ class SettingsController extends Controller
             $salutations = Salutation::whereNull('deleted_by')->get();
             return response()->json(['salutations' => $salutations]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to load salutations'], 500);
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['salutations' => [], 'success' => false, 'error' => 'Failed to load salutations'], 500);
         }
     }
 
@@ -380,13 +385,13 @@ class SettingsController extends Controller
             $salutation->added_by = Auth::user()->username;
             $salutation->save();
             return response()->json(['success' => true, 'salutation' => $salutation]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                Log::info("Error saving" . $e->getMessage());
-                return response()->json(['success' => false, 'error' => 'Failed to save salutation'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to save salutation'], 500);
         }
@@ -411,9 +416,8 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['success' => false, 'error' => 'Failed to update salutation'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update salutation'], 500);
         }
@@ -607,9 +611,8 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['success' => false, 'error' => 'Failed to delete salutation'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete salutation'], 500);
         }
