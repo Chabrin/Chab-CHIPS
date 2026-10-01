@@ -363,7 +363,7 @@
     }
 </style>
 
-@endsection
+
 
 <script>
     $(document).ready(function() {
@@ -1263,3 +1263,4 @@
         });
     });
 </script>
+@endsection

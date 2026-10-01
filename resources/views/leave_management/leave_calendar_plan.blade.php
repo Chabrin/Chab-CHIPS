@@ -93,7 +93,6 @@
 </div>
 
 
-@endsection
 <script>
     $(document).ready(function() {
         let table = $('#leave-calendar-plan-table').DataTable({
@@ -285,3 +284,4 @@
         });
     });
 </script>
+@endsection

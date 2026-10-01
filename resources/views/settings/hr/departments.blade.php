@@ -71,7 +71,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 <script>
     // use toastr for notifications
     $(document).ready(function() {
@@ -245,3 +245,4 @@
         });
     });
 </script>
+@endsection

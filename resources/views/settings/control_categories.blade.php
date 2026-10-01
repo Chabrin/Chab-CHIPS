@@ -73,7 +73,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 
 <script>
     $(function() {
@@ -170,3 +170,4 @@
         });
     });
 </script>
+@endsection

@@ -184,7 +184,7 @@
         height: 36px;
     }
 </style>
-@endsection
+
 
 <!-- Select2 JS -->
 <script src="{{ asset('assets/js/toastr.min.js') }}"></script>
@@ -427,3 +427,4 @@ $(document).ready(function() {
     loadStaffList();
 });
 </script>
+@endsection
