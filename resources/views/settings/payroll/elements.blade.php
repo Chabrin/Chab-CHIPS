@@ -92,11 +92,11 @@
                     </div>
                     <div class="row">
                         <div class="col-lg-6 mb-3">
-                            <label for="amount" class="form-label">Amount</label>
+                            <label for="amount" class="form-label">Amount <span style="color:red">*</span></label>
                             <input type="number" class="form-control" name="amount" id="amount" required placeholder="Enter amount">
                         </div>
                         <div class="col-lg-6 mb-3">
-                            <label for="staff_positions" class="form-label">Staff Positions</label>
+                            <label for="staff_positions" class="form-label">Staff Positions <span style="color:red">*</span></label>
                             <select class="form-select" name="staff_positions" id="staff_positions" required>
                                 <option value="" disabled selected>Select staff positions</option>
                                 <!-- Options to be populated dynamically -->
@@ -105,7 +105,7 @@
                     </div>
                     <div class="row">
                         <div class="col-lg-6 mb-3">
-                            <label for="payslip_position" class="form-label">Payslip Position</label>
+                            <label for="payslip_position" class="form-label">Payslip Position <span style="color:red">*</span></label>
                             <input type="number" class="form-control" name="payslip_position" id="payslip_position" required placeholder="Enter payslip position">
                         </div>
                     </div>
@@ -302,10 +302,16 @@
 
                     // Initialize Select2
                     $staff_positions.select2({
-                        dropdownParent: $('#addLeaveApplicationModal'), // Make sure this modal exists
-                        placeholder: 'Select Staff',
+                        dropdownParent: $('#addPayrollElementsModal'),
+                        placeholder: 'Select staff positions',
                         allowClear: true
                     });
+
+                    // Edit mode: apply the position chosen when the edit button was clicked
+                    let pending = $staff_positions.data('pending');
+                    if (pending) {
+                        $staff_positions.val(pending).trigger('change');
+                    }
                 },
                 error: function() {
                     toastr.error('Failed to load staff positions.');
@@ -315,7 +321,7 @@
 
         $('#payrollElementsForm').on('submit', function(e) {
             e.preventDefault();
-            var id = $('#payrollElementId').val(); // Add a hidden input for edit mode if needed
+            var id = $('#elementId').val();
             var url = id ? "{{ url('/ajax/payroll/elements') }}/" + id : "{{ url('/ajax/save/payroll/elements') }}";
             var method = 'POST';
             var formData = $(this).serialize() + '&_token={{ csrf_token() }}';
@@ -340,7 +346,7 @@
                         toastr.success('Saved successfully');
                         $('#addPayrollElementsModal').modal('hide');
                         $('#payrollElementsForm')[0].reset();
-                        $('#payrollElementId').val('');
+                        $('#elementId').val('');
                         table.ajax.reload(null, false);
                     } else {
                         toastr.error(res.error || 'Error saving');
@@ -370,6 +376,9 @@
             $('#formula').val($(this).data('formula_id'));
             $('#amount').val($(this).data('amount'));
             $('#payslip_position').val($(this).data('payslip_position'));
+
+            // The modal's show handler loads the positions list and applies this selection
+            $('#staff_positions').data('pending', $(this).data('staff_positions_id'));
 
             // Show modal first
             $('#addPayrollElementsModal').modal('show');
@@ -408,35 +417,6 @@
                 }
             });
 
-            // Populate staff positions and set selected value
-            $.ajax({
-                url: "{{ url('/ajax/payroll/elements/staff_positions/list') }}",
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    let $staff_positions = $('#staff_positions');
-                    $staff_positions.empty();
-                    $staff_positions.append($('<option>', {
-                        value: '',
-                        text: 'Select staff positions',
-                        disabled: true,
-                        selected: true
-                    }));
-                    if (response.staff_positions && Array.isArray(response.staff_positions)) {
-                        response.staff_positions.forEach(function(position) {
-                            $staff_positions.append($('<option>', {
-                                value: position.id,
-                                text: position.position_name
-                            }));
-                        });
-                    }
-                    // Set selected value after populating
-                    $staff_positions.val($(this).data('staff_positions_id'));
-                }.bind(this),
-                error: function() {
-                    toastr.error('Failed to load staff positions.');
-                }
-            });
         });
 
         $(document).on('click', '.delete-element', function() {
@@ -486,6 +466,7 @@
         $('#addPayrollElementsModal').on('hidden.bs.modal', function() {
             $('#payrollElementsForm')[0].reset();
             $('#elementId').val('');
+            $('#staff_positions').removeData('pending').val(null).trigger('change');
         });
     });
 </script>
