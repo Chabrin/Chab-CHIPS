@@ -274,11 +274,10 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['error' => 'Failed to load marital statuses'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['error' => 'Failed to load marital statuses'], 500);
+            return response()->json(['marital_statuses' => [], 'success' => false, 'error' => 'Failed to load marital statuses'], 500);
         }
     }
 
@@ -297,13 +296,13 @@ class SettingsController extends Controller
             $marital_status->added_by = Auth::user()->username;
             $marital_status->save();
             return response()->json(['success' => true, 'marital_status' => $marital_status]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                Log::info("Error saving" . $e->getMessage());
-                return response()->json(['success' => false, 'error' => 'Failed to save marital status'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to save marital status'], 500);
         }
@@ -325,9 +324,8 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['success' => false, 'error' => 'Failed to update marital status'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to update marital status'], 500);
         }
@@ -343,9 +341,8 @@ class SettingsController extends Controller
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $e) {
-                ErrorDispatcher::dispatch($e);
-                return response()->json(['success' => false, 'error' => 'Failed to delete marital status'], 500);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete marital status'], 500);
         }
