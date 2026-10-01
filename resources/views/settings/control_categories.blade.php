@@ -55,8 +55,8 @@
                         <input type="text" class="form-control" name="display_name" id="display_name" required>
                     </div>
                     <div class="mb-3">
-                        <label for="precedence" class="form-label">Precedence</label>
-                        <input type="number" class="form-control" name="precedence" id="precedence">
+                        <label for="precedence" class="form-label">Precedence <span style="color:red">*</span></label>
+                        <input type="number" class="form-control" name="precedence" id="precedence" required>
                     </div>
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
@@ -97,7 +97,7 @@
                     searchable: false,
                     render: function(data, type, row) {
                         return '<div class="d-flex gap-1">' +
-                            '<button class="btn btn-xs btn-light edit-cat" data-id="' + row.id + '" data-category_name="' + row.category_name + '" data-display_name="' + row.display_name + '" data-precedence="' + (row.precedence || '') + '">' +
+                            '<button class="btn btn-xs btn-light edit-cat" data-id="' + row.id + '" data-category_name="' + row.category_name + '" data-display_name="' + row.display_name + '" data-precedence="' + (row.precedence ?? '') + '">' +
                             '<span class="material-symbols-outlined">edit_document</span></button>' +
                             '<button class="btn btn-xs btn-danger delete-cat" data-id="' + row.id + '">' +
                             '<span class="material-symbols-outlined">delete_sweep</span></button>' +
@@ -110,7 +110,8 @@
         $('#categoryForm').on('submit', function(e) {
             e.preventDefault();
             var id = $('#categoryId').val();
-            var url = id ? "{{ url('/control-categories') }}/" + id : "{{ route('control_categories.store') }}";
+            // The store endpoint updates when the hidden "id" field is present
+            var url = "{{ route('control_categories.store') }}";
             var method = 'POST';
             var data = $(this).serialize() + '&_token={{ csrf_token() }}';
             var $btn = $('#saveCategoryBtn');
@@ -133,11 +134,17 @@
                 },
                 error: function(xhr) {
                     $btn.prop('disabled', false);
-                    var msg = 'Error';
-                    if (xhr.responseJSON && xhr.responseJSON.errors) msg = Object.values(xhr.responseJSON.errors).join('\n');
+                    var msg = 'Error saving category';
+                    if (xhr.responseJSON && xhr.responseJSON.errors) msg = Object.values(xhr.responseJSON.errors).join('<br>');
+                    else if (xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
                     toastr.error(msg);
                 }
             });
+        });
+
+        $('#addCategoryModal').on('hidden.bs.modal', function() {
+            $('#categoryForm')[0].reset();
+            $('#categoryId').val('');
         });
 
         $(document).on('click', '.edit-cat', function() {
@@ -164,7 +171,7 @@
                     } else toastr.error(res.error || 'Error');
                 },
                 error: function(xhr) {
-                    toastr.error('Error deleting');
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Error deleting');
                 }
             });
         });
