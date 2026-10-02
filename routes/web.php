@@ -1563,7 +1563,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::delete('/tax/bands/{id}', [TaxController::class, 'destroy'])->name('tax.destroy');
 
     // Transaction Types Management
-    Route::get('/finance/transaction-types', [TransactionTypesController::class, 'index'])->name('finance.transaction-types.index');
     Route::get('/finance/transaction-types/create', [TransactionTypesController::class, 'create'])->name('finance.transaction-types.create');
     Route::post('/finance/transaction-types', [TransactionTypesController::class, 'store'])->name('finance.transaction-types.store');
     Route::get('/finance/transaction-types/{id}/edit', [TransactionTypesController::class, 'edit'])->name('finance.transaction-types.edit');

@@ -184,7 +184,7 @@
 
                                         <div class="col-md-6 mb-3 company-only">
                                             <label for="company_name" class="form-label">Company Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('company_name') is-invalid @enderror" id="company_name" name="company_name" value="{{ old('company_name', $tenant->company_name ?? $tenant->names) }}" placeholder="Enter company name">
+                                            <input type="text" class="form-control @error('company_name') is-invalid @enderror" id="company_name" name="company_name" value="{{ old('company_name', $tenant->company_name ?? ($tenantRecord->names ?? null)) }}" placeholder="Enter company name">
                                             @error('company_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -246,11 +246,11 @@
                                             <label for="title" class="form-label">Title</label>
                                             <select class="form-select @error('title') is-invalid @enderror" id="title" name="title">
                                                 <option value="">Select</option>
-                                                <option value="Mr" {{ old('title', $tenant->title) == 'Mr' ? 'selected' : '' }}>Mr</option>
-                                                <option value="Mrs" {{ old('title', $tenant->title) == 'Mrs' ? 'selected' : '' }}>Mrs</option>
-                                                <option value="Ms" {{ old('title', $tenant->title) == 'Ms' ? 'selected' : '' }}>Ms</option>
-                                                <option value="Dr" {{ old('title', $tenant->title) == 'Dr' ? 'selected' : '' }}>Dr</option>
-                                                <option value="Prof" {{ old('title', $tenant->title) == 'Prof' ? 'selected' : '' }}>Prof</option>
+                                                <option value="Mr" {{ old('title', $tenantRecord->salutation->name ?? null) == 'Mr' ? 'selected' : '' }}>Mr</option>
+                                                <option value="Mrs" {{ old('title', $tenantRecord->salutation->name ?? null) == 'Mrs' ? 'selected' : '' }}>Mrs</option>
+                                                <option value="Ms" {{ old('title', $tenantRecord->salutation->name ?? null) == 'Ms' ? 'selected' : '' }}>Ms</option>
+                                                <option value="Dr" {{ old('title', $tenantRecord->salutation->name ?? null) == 'Dr' ? 'selected' : '' }}>Dr</option>
+                                                <option value="Prof" {{ old('title', $tenantRecord->salutation->name ?? null) == 'Prof' ? 'selected' : '' }}>Prof</option>
                                             </select>
                                             @error('title')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -258,7 +258,7 @@
                                         </div>
 
                                         @php
-                                            $namesWithoutTitle = trim(\Illuminate\Support\Str::after($tenant->names ?? '', $tenant->title ?? ''));
+                                            $namesWithoutTitle = trim(\Illuminate\Support\Str::after($tenantRecord->names ?? '', $tenantRecord->salutation->name ?? ''));
                                         @endphp
                                         <div class="col-md-6 mb-3 individual-only">
                                             <label for="names" class="form-label">Names <span class="text-danger">*</span></label>
@@ -268,13 +268,17 @@
                                             @enderror
                                         </div>
 
+                                        @php
+                                            $genderName = $tenantRecord->gender->name ?? null;
+                                            $genderSelected = $genderName ? ucfirst(strtolower($genderName)) : null;
+                                        @endphp
                                         <div class="col-md-4 mb-3 individual-only">
                                             <label for="gender" class="form-label">Gender</label>
                                             <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender">
                                                 <option value="">Please select</option>
-                                                <option value="Male" {{ old('gender', $tenant->gender) == 'Male' ? 'selected' : '' }}>Male</option>
-                                                <option value="Female" {{ old('gender', $tenant->gender) == 'Female' ? 'selected' : '' }}>Female</option>
-                                                <option value="Other" {{ old('gender', $tenant->gender) == 'Other' ? 'selected' : '' }}>Other</option>
+                                                <option value="Male" {{ old('gender', $genderSelected) == 'Male' ? 'selected' : '' }}>Male</option>
+                                                <option value="Female" {{ old('gender', $genderSelected) == 'Female' ? 'selected' : '' }}>Female</option>
+                                                <option value="Other" {{ old('gender', $genderSelected) == 'Other' ? 'selected' : '' }}>Other</option>
                                             </select>
                                             @error('gender')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -283,7 +287,7 @@
 
                                         <div class="col-md-4 mb-3">
                                             <label for="mobile_number" class="form-label">Mobile Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ old('mobile_number', $tenant->mobile_number) }}" placeholder="e.g., +254712345678" required>
+                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ old('mobile_number', $tenantRecord->phone ?? null) }}" placeholder="e.g., +254712345678" required>
                                             @error('mobile_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -291,7 +295,7 @@
 
                                         <div class="col-md-4 mb-3">
                                             <label for="registered_date" class="form-label">Registered Date <span class="text-danger">*</span></label>
-                                            <input type="date" class="form-control @error('registered_date') is-invalid @enderror" id="registered_date" name="registered_date" value="{{ old('registered_date', $tenant->registered_date ? \Carbon\Carbon::parse($tenant->registered_date)->format('Y-m-d') : '') }}" required>
+                                            <input type="date" class="form-control @error('registered_date') is-invalid @enderror" id="registered_date" name="registered_date" value="{{ old('registered_date', $tenantRecord->registered_date ? \Carbon\Carbon::parse($tenantRecord->registered_date)->format('Y-m-d') : '') }}" required>
                                             @error('registered_date')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -320,7 +324,7 @@
 
                                         <div class="col-md-4 mb-3">
                                             <label for="email_address" class="form-label">Email Address</label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $tenant->email_address) }}" placeholder="e.g., tenant@example.com">
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $tenantRecord->email ?? null) }}" placeholder="e.g., tenant@example.com">
                                             @error('email_address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -328,7 +332,7 @@
 
                                         <div class="col-md-4 mb-3">
                                             <label for="pin_number" class="form-label">PIN Number</label>
-                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number', $tenant->pin_number) }}" placeholder="e.g., P123456789">
+                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number', $tenantRecord->kra_pin ?? null) }}" placeholder="e.g., P123456789">
                                             @error('pin_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -336,7 +340,7 @@
 
                                         <div class="col-md-4 mb-3 individual-only">
                                             <label for="passport_number" class="form-label">Passport Number</label>
-                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror" id="passport_number" name="passport_number" value="{{ old('passport_number', $tenant->passport_number) }}" placeholder="e.g., AB123456">
+                                            <input type="text" class="form-control @error('passport_number') is-invalid @enderror" id="passport_number" name="passport_number" value="{{ old('passport_number', $tenantRecord->passport_number ?? null) }}" placeholder="e.g., AB123456">
                                             @error('passport_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -344,7 +348,7 @@
 
                                         <div class="col-md-4 mb-3 individual-only">
                                             <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id', $tenant->national_id) }}" placeholder="e.g., 12345678">
+                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id', $tenantRecord->national_id ?? null) }}" placeholder="e.g., 12345678">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -363,7 +367,7 @@
 
                                 <!-- Bank Accounts Tab -->
                                 <div class="tab-pane fade" id="bank-accounts" role="tabpanel">
-                                    @php $bankAccount = $tenant->bankAccounts->first(); @endphp
+                                    @php $bankAccount = $tenant->tenantBankDetails->first(); @endphp
                                     <div id="bankAccountsContainer">
                                         <div class="bank-account-entry mb-3 p-3 border rounded">
                                             <div class="row">
@@ -401,23 +405,23 @@
                                         </button>
                                     </div>
                                     <div id="otherContactsContainer">
-                                        @foreach($tenant->otherContacts as $index => $contact)
+                                        @foreach($tenant->tenantOtherContacts as $index => $contact)
                                         <div class="other-contact-entry mb-3 p-3 border rounded">
                                             <div class="row">
                                                 <div class="col-md-3 mb-3">
                                                     <label for="contact_name_{{ $index }}" class="form-label">Names</label>
-                                                    <input type="text" class="form-control" id="contact_name_{{ $index }}" name="other_contacts[{{ $index }}][name]" value="{{ old('other_contacts.'.$index.'.name', $contact->contact_names) }}">
+                                                    <input type="text" class="form-control" id="contact_name_{{ $index }}" name="other_contacts[{{ $index }}][name]" value="{{ old('other_contacts.'.$index.'.name', $contact->names) }}">
                                                 </div>
                                                 <div class="col-md-3 mb-3">
                                                     <label for="contact_email_{{ $index }}" class="form-label">Email</label>
-                                                    <input type="email" class="form-control" id="contact_email_{{ $index }}" name="other_contacts[{{ $index }}][email]" value="{{ old('other_contacts.'.$index.'.email', $contact->other_email) }}">
+                                                    <input type="email" class="form-control" id="contact_email_{{ $index }}" name="other_contacts[{{ $index }}][email]" value="{{ old('other_contacts.'.$index.'.email', $contact->email) }}">
                                                 </div>
                                                 <div class="col-md-4 mb-3">
                                                     <label for="contact_mobile_{{ $index }}" class="form-label">Mobile Number</label>
-                                                    <input type="text" class="form-control" id="contact_mobile_{{ $index }}" name="other_contacts[{{ $index }}][mobile]" value="{{ old('other_contacts.'.$index.'.mobile', $contact->other_mobile_number) }}">
+                                                    <input type="text" class="form-control" id="contact_mobile_{{ $index }}" name="other_contacts[{{ $index }}][mobile]" value="{{ old('other_contacts.'.$index.'.mobile', $contact->mobile_number) }}">
                                                 </div>
                                                 <div class="col-md-2 mb-3 d-flex align-items-end gap-1">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-other-contact {{ $tenant->otherContacts->count() <= 1 ? 'd-none' : '' }}">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-other-contact {{ $tenant->tenantOtherContacts->count() <= 1 ? 'd-none' : '' }}">
                                                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                     </button>
                                                 </div>
@@ -425,7 +429,7 @@
                                         </div>
                                         @endforeach
 
-                                        @if($tenant->otherContacts->count() == 0)
+                                        @if($tenant->tenantOtherContacts->count() == 0)
                                         <div class="other-contact-entry mb-3 p-3 border rounded">
                                             <div class="row">
                                                 <div class="col-md-3 mb-3">
@@ -511,12 +515,12 @@
                                         </button>
                                     </div>
                                     <div id="nextOfKinContainer">
-                                        @foreach($tenant->nextOfKins as $index => $kin)
+                                        @foreach($tenant->tenantNextOfKin as $index => $kin)
                                         <div class="nok-entry mb-4 p-3 border rounded">
                                             <div class="row">
                                                 <div class="col-md-3 mb-3">
                                                     <label for="kin_names_{{ $index }}" class="form-label">Kin Names</label>
-                                                    <input type="text" class="form-control" id="kin_names_{{ $index }}" name="next_of_kin[{{ $index }}][names]" value="{{ old('next_of_kin.'.$index.'.names', explode(' ', $kin->names)[0] ?? '') }}">
+                                                    <input type="text" class="form-control" id="kin_names_{{ $index }}" name="next_of_kin[{{ $index }}][names]" value="{{ old('next_of_kin.'.$index.'.names', $kin->kin_names) }}">
                                                 </div>
                                                 <div class="col-md-3 mb-3">
                                                     <label for="kin_mobile_{{ $index }}" class="form-label">Mobile Number</label>
@@ -527,7 +531,7 @@
                                                     <input type="email" class="form-control" id="kin_email_{{ $index }}" name="next_of_kin[{{ $index }}][email]" value="{{ old('next_of_kin.'.$index.'.email', $kin->email_address) }}">
                                                 </div>
                                                 <div class="col-md-2 mb-3 d-flex align-items-end gap-1">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-nok {{ $tenant->nextOfKins->count() <= 1 ? 'd-none' : '' }}">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-nok {{ $tenant->tenantNextOfKin->count() <= 1 ? 'd-none' : '' }}">
                                                         <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
                                                     </button>
                                                 </div>
@@ -548,17 +552,17 @@
                                                 </div>
                                                 <div class="col-md-3 mb-3">
                                                     <label for="kin_second_name_{{ $index }}" class="form-label">Second Name</label>
-                                                    <input type="text" class="form-control" id="kin_second_name_{{ $index }}" name="next_of_kin[{{ $index }}][second_name]" value="{{ old('next_of_kin.'.$index.'.second_name', explode(' ', $kin->names)[1] ?? '') }}">
+                                                    <input type="text" class="form-control" id="kin_second_name_{{ $index }}" name="next_of_kin[{{ $index }}][second_name]" value="{{ old('next_of_kin.'.$index.'.second_name', $kin->second_name) }}">
                                                 </div>
                                                 <div class="col-md-3 mb-3">
                                                     <label for="kin_last_name_{{ $index }}" class="form-label">Last Name</label>
-                                                    <input type="text" class="form-control" id="kin_last_name_{{ $index }}" name="next_of_kin[{{ $index }}][last_name]" value="{{ old('next_of_kin.'.$index.'.last_name', explode(' ', $kin->names)[2] ?? '') }}">
+                                                    <input type="text" class="form-control" id="kin_last_name_{{ $index }}" name="next_of_kin[{{ $index }}][last_name]" value="{{ old('next_of_kin.'.$index.'.last_name', '') }}">
                                                 </div>
                                             </div>
                                         </div>
                                         @endforeach
 
-                                        @if($tenant->nextOfKins->count() == 0)
+                                        @if($tenant->tenantNextOfKin->count() == 0)
                                         <div class="nok-entry mb-4 p-3 border rounded">
                                             <div class="row">
                                                 <div class="col-md-3 mb-3">
@@ -621,8 +625,8 @@
         
         // Store existing data for pre-population (single bank account only)
         let existingBankAccounts = [{
-            bank_id: {{ old('bank_accounts.0.bank_id', optional($tenant->bankAccounts->first())->bank_id ?? 'null') }},
-            branch_id: {{ old('bank_accounts.0.branch_id', optional($tenant->bankAccounts->first())->branch_id ?? 'null') }}
+            bank_id: {{ old('bank_accounts.0.bank_id', optional($tenant->tenantBankDetails->first())->bank_id ?? 'null') }},
+            branch_id: {{ old('bank_accounts.0.branch_id', optional($tenant->tenantBankDetails->first())->branch_id ?? 'null') }}
         }];
 
         // Toggle Individual vs Company fields based on Tenant Type
@@ -850,7 +854,7 @@
         });
 
         // Dynamic Other Contacts
-        let contactCounter = {{ $tenant->otherContacts->count() > 0 ? $tenant->otherContacts->count() : 1 }};
+        let contactCounter = {{ $tenant->tenantOtherContacts->count() > 0 ? $tenant->tenantOtherContacts->count() : 1 }};
         $('#addOtherContact').on('click', function() {
             const contactEntry = `
                 <div class="other-contact-entry mb-3 p-3 border rounded">
@@ -952,7 +956,7 @@
         });
 
         // Dynamic Next of Kin
-        let kinCounter = {{ $tenant->nextOfKins->count() > 0 ? $tenant->nextOfKins->count() : 1 }};
+        let kinCounter = {{ $tenant->tenantNextOfKin->count() > 0 ? $tenant->tenantNextOfKin->count() : 1 }};
         $('#addNextOfKin').on('click', function() {
             const kinEntry = `
                 <div class="nok-entry mb-4 p-3 border rounded">

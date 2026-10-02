@@ -13,14 +13,6 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class TransactionTypesController extends Controller
 {
-    /**
-     * Display a listing of transaction types.
-     */
-    public function index()
-    {
-        return view('finance.transaction-types.index');
-    }
-
     public function getData()
     {
         try {
@@ -138,7 +130,7 @@ class TransactionTypesController extends Controller
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading finance transaction type edit page: ' . $e->getMessage());
-            return redirect()->route('finance.transaction-types.index')->with('error', 'Failed to load transaction type edit page');
+            return redirect()->route('ledger.accounts.index')->with('error', 'Failed to load transaction type edit page');
         }
     }
 

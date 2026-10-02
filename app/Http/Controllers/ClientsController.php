@@ -15,6 +15,7 @@ use App\Models\ClientNextOfKin;
 use App\Models\ClientBankAccount;
 use App\Models\ReturnsMergeBatch;
 use App\Models\ReturnsMergeBatchItem;
+use App\Models\TenantRecord;
 use App\Services\ErrorDispatcher;
 use App\Models\ClientOtherContact;
 use App\Models\PropertyBankDetail;
@@ -390,7 +391,9 @@ class ClientsController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
             $client = Client::findOrFail($id);
-            return view('property.clients.details', compact('client'));
+            $unitTopologies = \App\Models\UnitTopology::orderBy('topology_name')->get();
+            $unitCategories = \App\Models\UnitCategory::orderBy('category_name')->get();
+            return view('property.clients.details', compact('client', 'unitTopologies', 'unitCategories'));
         } catch (\Exception $e) {
             Log::error('Error loading client details: ' . $e->getMessage());
             return redirect()->route('property.clients.index')->with('error', 'Client not found');
@@ -1353,15 +1356,18 @@ class ClientsController extends Controller
                 ->where('sys_pm_clients.reference_number', 'LIKE', 'TEN%')
                 ->leftJoin('sys_pm_properties', 'sys_pm_properties.id', '=', 'sys_pm_clients.property_id')
                 ->leftJoin('sys_pm_clients as landlord', 'landlord.id', '=', 'sys_pm_properties.client_id')
+                // Shared primary key with sys_pm_clients — names/phone/national_id now
+                // live here, not on sys_pm_clients (see TenantsController::syncTenantRecord()).
+                ->leftJoin('cb_tenant_records', 'cb_tenant_records.id', '=', 'sys_pm_clients.id')
                 ->leftJoin('cb_tenant_exits', function ($join) {
                     $join->on('cb_tenant_exits.tenant_id', '=', 'sys_pm_clients.id')
                          ->where('cb_tenant_exits.current_status_id', 2);
                 })
                 ->select(
                     'sys_pm_clients.id',
-                    'sys_pm_clients.names',
-                    'sys_pm_clients.mobile_number',
-                    'sys_pm_clients.national_id',
+                    'cb_tenant_records.names',
+                    'cb_tenant_records.phone as mobile_number',
+                    'cb_tenant_records.national_id',
                     'sys_pm_clients.property_id',
                     'sys_pm_properties.property_name',
                     'landlord.names as landlord_name',
@@ -1426,13 +1432,13 @@ class ClientsController extends Controller
 
             // Column filters (only apply when 3+ characters)
             if ($request->filled('filter_names') && strlen($request->filter_names) >= 3) {
-                $query->where('sys_pm_clients.names', 'ILIKE', '%' . $request->filter_names . '%');
+                $query->where('cb_tenant_records.names', 'ILIKE', '%' . $request->filter_names . '%');
             }
             if ($request->filled('filter_phone') && strlen($request->filter_phone) >= 3) {
-                $query->where('sys_pm_clients.mobile_number', 'ILIKE', '%' . $request->filter_phone . '%');
+                $query->where('cb_tenant_records.phone', 'ILIKE', '%' . $request->filter_phone . '%');
             }
             if ($request->filled('filter_id_number') && strlen($request->filter_id_number) >= 3) {
-                $query->where('sys_pm_clients.national_id', 'ILIKE', '%' . $request->filter_id_number . '%');
+                $query->where('cb_tenant_records.national_id', 'ILIKE', '%' . $request->filter_id_number . '%');
             }
             if ($request->filled('filter_property') && strlen($request->filter_property) >= 3) {
                 $query->where('sys_pm_properties.property_name', 'ILIKE', '%' . $request->filter_property . '%');
@@ -1441,7 +1447,7 @@ class ClientsController extends Controller
                 $query->where('landlord.names', 'ILIKE', '%' . $request->filter_landlord . '%');
             }
 
-            $tenants = $query->orderBy('sys_pm_clients.names')
+            $tenants = $query->orderBy('cb_tenant_records.names')
                 ->limit(1000)
                 ->get()
                 ->map(function ($t) {
@@ -1563,11 +1569,18 @@ class ClientsController extends Controller
                     'property' => fn ($query) => $query->withoutGlobalScope('user_properties'),
                     'unit.zone',
                     'deposits',
+                    'tenantBankDetails.bank',
+                    'tenantOtherContacts',
+                    'tenantNextOfKin',
                 ])
                 ->tenants()
                 ->findOrFail($id);
 
-            return view('property.tenants.details', compact('tenant'));
+            // Profile fields (names, gender, contact info, identification,
+            // registered_date) are sourced from here now, not from $tenant.
+            $tenantRecord = TenantRecord::with(['salutation', 'gender'])->find($id);
+
+            return view('property.tenants.details', compact('tenant', 'tenantRecord'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading tenant details: ' . $e->getMessage());

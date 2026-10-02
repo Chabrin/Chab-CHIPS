@@ -2,17 +2,18 @@
 
 namespace App\Models;
 
-use App\Observers\AuditLogsObserver;
 use Illuminate\Database\Eloquent\Model;
 
 class Salutation extends Model
 {
-    protected static function boot()
+    protected $table = 'cb_salutations';
+
+    protected $fillable = [
+        'name',
+    ];
+
+    public function tenantRecords()
     {
-        parent::boot();
-        static::observe(AuditLogsObserver::class);
+        return $this->hasMany(TenantRecord::class);
     }
-    protected $table = 'salutations';
-    public $timestamps = false;
-    protected $fillable = ['name', 'created_at', 'updated_at', 'description', 'deleted_at', 'deleted_by'];
 }

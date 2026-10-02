@@ -9,7 +9,7 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Edit Transaction Type</h4>
                         <div class="ms-auto">
-                            <a href="{{ route('finance.transaction-types.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                            <a href="{{ route('ledger.accounts.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to list</span>
                             </a>
@@ -51,7 +51,7 @@
                             </div>
 
                             <div class="mt-4 d-flex justify-content-end gap-2">
-                                <a href="{{ route('finance.transaction-types.index') }}" class="btn btn-secondary d-flex align-items-center">
+                                <a href="{{ route('ledger.accounts.index') }}" class="btn btn-secondary d-flex align-items-center">
                                     <span class="material-symbols-outlined">close</span>
                                     <span class="ms-1">Cancel</span>
                                 </a>
@@ -165,7 +165,7 @@ $(function() {
                 $btn.prop('disabled', false);
                 if (res.success) {
                     toastr.success(res.message || 'Transaction type updated successfully');
-                    window.location.href = '{{ route('finance.transaction-types.index') }}';
+                    window.location.href = '{{ route('ledger.accounts.index') }}';
                 } else {
                     toastr.error(res.error || 'Failed to update transaction type');
                 }

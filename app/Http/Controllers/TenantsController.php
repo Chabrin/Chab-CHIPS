@@ -15,10 +15,13 @@ use App\Models\MoveInInspection;
 use App\Models\TenantPaymentAllocated;
 use App\Models\ClientDocument;
 use App\Models\LeaseAgreement;
-use App\Models\ClientNextOfKin;
-use App\Models\ClientBankDetail;
+use App\Models\Gender;
+use App\Models\Salutation;
+use App\Models\TenantRecord;
+use App\Models\TenantBankDetail;
+use App\Models\TenantOtherContact;
+use App\Models\TenantNextOfKin;
 use App\Services\ErrorDispatcher;
-use App\Models\ClientOtherContact;
 use App\Services\TenantBalanceService;
 use App\Models\TenantAccountTransaction;
 use Illuminate\Support\Facades\DB;
@@ -244,8 +247,6 @@ class TenantsController extends Controller
             return response()->json(['exists' => false]);
         }
 
-        $column = $tenantType === 3 ? 'company_registration_number' : 'national_id';
-
         // When checking from the edit form, exclude the record being edited so it
         // doesn't get flagged as a duplicate of itself.
         $excludeId = null;
@@ -257,16 +258,28 @@ class TenantsController extends Controller
             }
         }
 
-        $match = Client::tenants()
-            ->where($column, $value)
-            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
-            ->select(['id', 'names', 'reference_number'])
-            ->first();
+        if ($tenantType === 3) {
+            // Company registration number has no cb_tenant_records equivalent —
+            // sys_pm_clients is still the only place it lives.
+            $match = Client::tenants()
+                ->where('company_registration_number', $value)
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->select(['id', 'names', 'reference_number'])
+                ->first();
+            $referenceNumber = $match->reference_number ?? null;
+        } else {
+            $match = TenantRecord::where('national_id', $value)
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->with('legacyClient:id,reference_number')
+                ->select(['id', 'names', 'national_id'])
+                ->first();
+            $referenceNumber = $match->legacyClient->reference_number ?? null;
+        }
 
         return response()->json([
             'exists' => (bool) $match,
             'name' => $match->names ?? null,
-            'reference_number' => $match->reference_number ?? null,
+            'reference_number' => $referenceNumber,
         ]);
     }
 
@@ -1190,7 +1203,68 @@ class TenantsController extends Controller
             'current_status_id' => 1, // Pending — awaiting maker-checker approval
         ];
 
-        return Client::create($tenantData);
+        $tenant = Client::create($tenantData);
+
+        // sys_pm_clients stays the record leases/payments/invoicing key off (tenant_id
+        // FKs everywhere still point here), but cb_tenant_records — same id, shared
+        // primary key — is now the normalized source for the tenant's own profile data.
+        $this->syncTenantRecord($tenant, $validated);
+
+        return $tenant;
+    }
+
+    /**
+     * Mirrors a tenant's profile fields into cb_tenant_records (+ Gender/Salutation
+     * lookups), keyed by the same id as the sys_pm_clients row it belongs to.
+     */
+    private function syncTenantRecord(Client $tenant, array $validated): void
+    {
+        $isCompany = (int) $validated['tenant_type'] === 3;
+
+        // Computed independently from $validated, not read off $tenant — Client's own
+        // 'names' column is no longer kept in sync on update() (see updateTenant()),
+        // so it can't be trusted as the fresh value here.
+        $names = $isCompany
+            ? trim($validated['company_name'] ?? '')
+            : trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
+
+        $genderId = (!$isCompany && !empty($validated['gender']))
+            ? Gender::where('name', strtoupper($validated['gender']))->value('id')
+            : null;
+
+        $salutationId = (!$isCompany && !empty($validated['title']))
+            ? Salutation::where('name', $validated['title'])->value('id')
+            : null;
+
+        $nationalId = $isCompany ? null : ($validated['national_id'] ?? null);
+        $passportNumber = $isCompany ? null : ($validated['passport_number'] ?? null);
+        $idDocumentType = !empty($nationalId) ? 'NATIONAL_ID' : (!empty($passportNumber) ? 'PASSPORT' : null);
+
+        $addressParts = array_filter([
+            trim((string) ($validated['address'] ?? '')),
+            trim((string) ($validated['address_2'] ?? '')),
+            trim((string) ($validated['address_3'] ?? '')),
+        ], fn ($part) => $part !== '');
+        $physicalAddress = !empty($addressParts) ? mb_substr(implode(', ', $addressParts), 0, 500) : null;
+
+        TenantRecord::updateOrCreate(
+            ['id' => $tenant->id],
+            [
+                'tenant_type' => $isCompany ? 'COMPANY' : 'INDIVIDUAL',
+                'salutation_id' => $salutationId,
+                'names' => $names,
+                'gender_id' => $genderId,
+                'phone' => $validated['mobile_number'] ?? null,
+                'email' => $validated['email_address'] ?? null,
+                'physical_address' => $physicalAddress,
+                'nationality' => null,
+                'id_document_type' => $idDocumentType,
+                'national_id' => $nationalId,
+                'passport_number' => $passportNumber,
+                'kra_pin' => $validated['pin_number'] ?? null,
+                'registered_date' => $validated['registered_date'] ?? null,
+            ]
+        );
     }
 
     /**
@@ -1254,7 +1328,7 @@ class TenantsController extends Controller
     }
 
     /**
-     * Save bank accounts to sys_pm_clients_17_repeat
+     * Save bank accounts to tenants_bank_details
      */
     private function saveBankAccounts(Request $request, int $tenantId)
     {
@@ -1262,29 +1336,7 @@ class TenantsController extends Controller
             return;
         }
 
-        $isFirst = ClientBankDetail::where('client_id', $tenantId)->count() === 0;
-
-        if($bankData = $request->input('bank_accounts')[0] ?? null) {
-            $bankId = $bankData['bank_id'] ?? null;
-            $branchId = $bankData['branch_id'] ?? null;
-            $accountName = $bankData['account_name'] ?? null;
-            $accountNumber = $bankData['account_number'] ?? null;
-
-            // Skip only if the entire row is blank
-            if (!empty($bankId) || !empty($branchId) || !empty($accountName) || !empty($accountNumber)) {
-                ClientBankDetail::create([
-                    'client_id' => $tenantId,
-                    'bank_id' => $bankId ?: null,
-                    'branch_id' => $branchId ?: null,
-                    'account_name' => $accountName ?: null,
-                    'account_number' => $accountNumber ?: null,
-                    'is_default' => 1, // First account is default
-                    'added_by' => Auth::id(),
-                    'added_on' => now(),
-                ]);
-                $isFirst = false; // Mark that the first account has been added
-            }
-        }
+        $isFirst = true;
 
         foreach ($request->input('bank_accounts') as $bankData) {
             $bankId = $bankData['bank_id'] ?? null;
@@ -1297,15 +1349,13 @@ class TenantsController extends Controller
                 continue;
             }
 
-            ClientBankDetail::create([
-                'client_id' => $tenantId,
+            TenantBankDetail::create([
+                'tenant_id' => $tenantId,
                 'bank_id' => $bankId ?: null,
                 'branch_id' => $branchId ?: null,
                 'account_name' => $accountName ?: null,
                 'account_number' => $accountNumber ?: null,
-                'is_default' => $isFirst ? 1 : 0,
-                'added_by' => Auth::id(),
-                'added_on' => now(),
+                'is_default' => $isFirst,
             ]);
 
             $isFirst = false;
@@ -1313,7 +1363,7 @@ class TenantsController extends Controller
     }
 
     /**
-     * Save other contacts to sys_pm_clients_19_repeat
+     * Save other contacts to tenants_other_contacts
      */
     private function saveOtherContacts(Request $request, int $tenantId)
     {
@@ -1326,11 +1376,11 @@ class TenantsController extends Controller
                 continue;
             }
 
-            ClientOtherContact::create([
-                'parent_id' => $tenantId,
-                'contact_names' => $contactData['name'],
-                'other_email' => $contactData['email'] ?? null,
-                'other_mobile_number' => $contactData['mobile'] ?? null,
+            TenantOtherContact::create([
+                'tenant_id' => $tenantId,
+                'names' => $contactData['name'],
+                'email' => $contactData['email'] ?? null,
+                'mobile_number' => $contactData['mobile'] ?? null,
             ]);
         }
     }
@@ -1378,16 +1428,15 @@ class TenantsController extends Controller
                 continue;
             }
 
-            // Combine names for full name
-            $fullNames = trim(
-                ($kinData['names'] ?? '') . ' ' .
-                    ($kinData['second_name'] ?? '') . ' ' .
-                    ($kinData['last_name'] ?? '')
-            );
+            // tenants_nextof_kin only has kin_names + second_name (no separate
+            // last_name column) — fold the form's last_name into kin_names so the
+            // form itself doesn't need to change.
+            $kinNames = trim(($kinData['names'] ?? '') . ' ' . ($kinData['last_name'] ?? ''));
 
-            ClientNextOfKin::create([
-                'parent_id' => $tenantId,
-                'names' => $fullNames,
+            TenantNextOfKin::create([
+                'tenant_id' => $tenantId,
+                'kin_names' => $kinNames,
+                'second_name' => $kinData['second_name'] ?? null,
                 'mobile_number' => $kinData['mobile'] ?? null,
                 'email_address' => $kinData['email'] ?? null,
                 'relationship' => $kinData['relationship'] ?? null,
@@ -1407,13 +1456,18 @@ class TenantsController extends Controller
                 'property',
                 'sla',
                 'unit',
-                'bankAccounts.bank',
-                'otherContacts',
+                'tenantBankDetails.bank',
+                'tenantOtherContacts',
                 'documents',
-                'nextOfKins'
+                'tenantNextOfKin'
             ])->findOrFail($id);
 
             $countries = SystemCountry::orderBy('country_name')->get();
+
+            // Profile fields (names, title, gender, contact info, identification,
+            // registered_date) are now sourced from here, not from $tenant — see
+            // updateTenant()/syncTenantRecord().
+            $tenantRecord = TenantRecord::with(['salutation', 'gender'])->find($id);
 
             // Get client/landlord for this tenant\
             $client_id = $tenant->property->client_id ?? null;
@@ -1425,7 +1479,7 @@ class TenantsController extends Controller
 
             // dd($tenant, $client);
 
-            return view('property.properties.tenants.edit', compact('tenant', 'client', 'countries'));
+            return view('property.properties.tenants.edit', compact('tenant', 'tenantRecord', 'client', 'countries'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading tenant edit form: ' . $e->getMessage());
@@ -1490,24 +1544,22 @@ class TenantsController extends Controller
     {
         $isCompany = (int) $validated['tenant_type'] === 3;
 
-        // Combine title + names for Individual; Company has no title, just its own name.
-        $names = $isCompany
-            ? trim($validated['company_name'])
-            : trim(($validated['title'] ?? '') . ' ' . ($validated['names'] ?? ''));
-
+        // Per-tenant profile fields that round-trip cleanly to a single cb_tenant_records
+        // column (names, title, gender, mobile, email, pin/kra, national_id,
+        // passport_number, registered_date) are no longer written to sys_pm_clients here
+        // — syncTenantRecord() below is now the only thing that updates those.
+        //
+        // Two fields stay dual-maintained, by necessity of cb_tenant_records' own shape
+        // (both as specified): address/address_2/address_3 collapse into ONE
+        // physical_address column there, so they can't be split back out losslessly on
+        // a later edit; nationality_id is a real FK (drives the country <select>) but
+        // cb_tenant_records only has a plain nullable 'nationality' string with no
+        // resolvable source today. sys_pm_clients also still gets lease/unit assignment
+        // and company-contact fields, which cb_tenant_records has no columns for at all.
         $tenant->update([
-            'names' => $names,
-            'title' => $isCompany ? null : ($validated['title'] ?? null),
-            'gender' => $isCompany ? null : ($validated['gender'] ?? null),
-            'mobile_number' => $validated['mobile_number'],
-            'email_address' => $validated['email_address'] ?? null,
-            'pin_number' => $validated['pin_number'] ?? null,
-            'national_id' => $isCompany ? null : ($validated['national_id'] ?? null),
-            'passport_number' => $isCompany ? null : ($validated['passport_number'] ?? null),
             'address' => $validated['address'] ?? null,
             'address_2' => $validated['address_2'] ?? null,
             'address_3' => $validated['address_3'] ?? null,
-            'registered_date' => $validated['registered_date'],
             'nationality_id' => $isCompany ? null : ($validated['nationality_id'] ?? null),
             'prefered_messages_language_id' => $validated['preferred_language'] ?? 'English',
             'client_type_id' => $validated['tenant_type'],
@@ -1529,6 +1581,8 @@ class TenantsController extends Controller
             'photo' => $photoPath,
             'updated_by' => Auth::id(),
         ]);
+
+        $this->syncTenantRecord($tenant, $validated);
     }
 
     /**
@@ -1537,7 +1591,7 @@ class TenantsController extends Controller
     private function updateBankAccounts(Request $request, int $tenantId)
     {
         // Delete existing bank details
-        ClientBankDetail::where('client_id', $tenantId)->delete();
+        TenantBankDetail::where('tenant_id', $tenantId)->delete();
 
         // Save new bank details
         if ($request->has('bank_accounts')) {
@@ -1554,16 +1608,14 @@ class TenantsController extends Controller
                     continue;
                 }
 
-                ClientBankDetail::create([
-                    'client_id' => $tenantId,
+                TenantBankDetail::create([
+                    'tenant_id' => $tenantId,
                     // Cast empty strings to null - bank_id/branch_id are integer columns
                     'bank_id' => $bankId ?: null,
                     'branch_id' => $branchId ?: null,
                     'account_name' => $accountName ?: null,
                     'account_number' => $accountNumber ?: null,
-                    'is_default' => $isFirst ? 1 : 0,
-                    'added_by' => Auth::id(),
-                    'added_on' => now(),
+                    'is_default' => $isFirst,
                 ]);
 
                 $isFirst = false;
@@ -1577,7 +1629,7 @@ class TenantsController extends Controller
     private function updateOtherContacts(Request $request, int $tenantId)
     {
         // Delete existing contacts
-        ClientOtherContact::where('parent_id', $tenantId)->delete();
+        TenantOtherContact::where('tenant_id', $tenantId)->delete();
 
         // Save new contacts
         if ($request->has('other_contacts')) {
@@ -1586,11 +1638,11 @@ class TenantsController extends Controller
                     continue;
                 }
 
-                ClientOtherContact::create([
-                    'parent_id' => $tenantId,
-                    'contact_names' => $contactData['name'],
-                    'other_email' => $contactData['email'] ?? null,
-                    'other_mobile_number' => $contactData['mobile'] ?? null,
+                TenantOtherContact::create([
+                    'tenant_id' => $tenantId,
+                    'names' => $contactData['name'],
+                    'email' => $contactData['email'] ?? null,
+                    'mobile_number' => $contactData['mobile'] ?? null,
                 ]);
             }
         }
@@ -1629,7 +1681,7 @@ class TenantsController extends Controller
     private function updateNextOfKin(Request $request, int $tenantId)
     {
         // Delete existing next of kin
-        ClientNextOfKin::where('parent_id', $tenantId)->delete();
+        TenantNextOfKin::where('tenant_id', $tenantId)->delete();
 
         // Save new next of kin
         if ($request->has('next_of_kin')) {
@@ -1638,16 +1690,15 @@ class TenantsController extends Controller
                     continue;
                 }
 
-                // Combine names for full name
-                $fullNames = trim(
-                    ($kinData['names'] ?? '') . ' ' .
-                        ($kinData['second_name'] ?? '') . ' ' .
-                        ($kinData['last_name'] ?? '')
-                );
+                // tenants_nextof_kin only has kin_names + second_name (no separate
+                // last_name column) — fold the form's last_name into kin_names so the
+                // form itself doesn't need to change.
+                $kinNames = trim(($kinData['names'] ?? '') . ' ' . ($kinData['last_name'] ?? ''));
 
-                ClientNextOfKin::create([
-                    'parent_id' => $tenantId,
-                    'names' => $fullNames,
+                TenantNextOfKin::create([
+                    'tenant_id' => $tenantId,
+                    'kin_names' => $kinNames,
+                    'second_name' => $kinData['second_name'] ?? null,
                     'mobile_number' => $kinData['mobile'] ?? null,
                     'email_address' => $kinData['email'] ?? null,
                     'relationship' => $kinData['relationship'] ?? null,

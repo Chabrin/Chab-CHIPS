@@ -519,6 +519,14 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 <div class="tab-content" id="unitsSubTabsContent">
                                     <!-- Units Listing sub-tab -->
                                     <div class="tab-pane fade show active" id="units-listing-pane" role="tabpanel">
+                                        <div class="d-flex justify-content-end mb-2">
+                                            @permission('create_units')
+                                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitBtn" disabled title="Select a specific property first">
+                                                <span class="material-symbols-outlined me-1" style="font-size:18px;">add_circle</span>
+                                                Add Unit
+                                            </button>
+                                            @endpermission
+                                        </div>
                                         <div class="table-responsive custom-scrollbar">
                                             <table id="unitsTable" class="display" style="width:100%;">
                                                 <thead>
@@ -683,18 +691,27 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Invoicing Tab -->
                             <div class="tab-pane fade" id="invoicing" role="tabpanel" aria-labelledby="invoicing-tab">
-                                <ul class="nav nav-tabs mb-3" id="invoicingSubTabs" role="tablist">
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link active" id="rent-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#rent-invoicing-pane" type="button" role="tab">
-                                            Rent Invoicing
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <ul class="nav nav-tabs mb-0" id="invoicingSubTabs" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active" id="rent-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#rent-invoicing-pane" type="button" role="tab">
+                                                Rent Invoicing
+                                            </button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" id="utility-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#utility-invoicing-pane" type="button" role="tab">
+                                                Utilities Invoicing
+                                            </button>
+                                        </li>
+                                    </ul>
+                                    <span id="rentInvGenerateBtnWrap">
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="rentInvGenerateBtn" disabled>
+                                            <span class="spinner-border spinner-border-sm me-2 d-none" id="rentInvGenerateSpinner"></span>
+                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">calculate</span>
+                                            Generate to Staging
                                         </button>
-                                    </li>
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link" id="utility-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#utility-invoicing-pane" type="button" role="tab">
-                                            Utilities Invoicing
-                                        </button>
-                                    </li>
-                                </ul>
+                                    </span>
+                                </div>
 
                                 <div class="tab-content" id="invoicingSubTabsContent">
                                     <!-- Rent Invoicing sub-tab -->
@@ -747,14 +764,6 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                         <input type="date" id="rentInvSelectedDate" class="form-control mt-2" style="display:none; max-width:220px;">
                                                         <p class="text-muted small fst-italic mb-0 mt-2">Rent is prorated from the effective date to the end of the billing month, based on each unit's rent amount.</p>
                                                     </div>
-                                                </div>
-
-                                                <div class="mt-3">
-                                                    <button type="button" class="btn btn-primary d-flex align-items-center" id="rentInvGenerateBtn" disabled>
-                                                        <span class="spinner-border spinner-border-sm me-2 d-none" id="rentInvGenerateSpinner"></span>
-                                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">calculate</span>
-                                                        Generate to Staging
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1128,6 +1137,136 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 </div>
                             </div>
 
+                        </div>
+
+                        <!-- Add Unit Modal (reuses the same property.units.store backend as the property details page) -->
+                        <div class="modal fade" id="addUnitModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Add Unit</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <form id="addUnitForm">
+                                            <input type="hidden" id="addUnitPropertyId" name="property_id" value="">
+                                            <input type="hidden" name="client_id" value="{{ $client->id }}">
+
+                                            <div class="row">
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control" id="unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="unit_name" class="form-label">Unit Name</label>
+                                                    <input type="text" class="form-control" id="unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="unit_type_id" class="form-label">Unit Type <span class="text-danger">*</span></label>
+                                                    <select class="form-select" id="unit_type_id" name="unit_type_id" required>
+                                                        <option value="">Please select</option>
+                                                        <option value="1">Normal</option>
+                                                        <option value="2">Owner Occupied</option>
+                                                        <option value="3">Caretaker</option>
+                                                    </select>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="usage_type_id" class="form-label">Usage Type <span class="text-danger">*</span></label>
+                                                    <select class="form-select" id="usage_type_id" name="usage_type_id" required>
+                                                        <option value="">Please select</option>
+                                                        <option value="1">Commercial</option>
+                                                        <option value="3">Hybrid</option>
+                                                        <option value="2">Residential</option>
+                                                    </select>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="unit_condition_id" class="form-label">Unit Condition <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control" id="unit_condition_id" name="unit_condition_id" placeholder="e.g. Good, Fair, Needs repair" required>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="occupancy_status_id" class="form-label">Occupation Status</label>
+                                                    <select class="form-select" id="occupancy_status_id" name="occupancy_status_id">
+                                                        <option value="31" selected>Vacant</option>
+                                                        <option value="38">Occupied</option>
+                                                    </select>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="topology_id" class="form-label">Topology</label>
+                                                    <select class="form-select" id="topology_id" name="topology_id">
+                                                        <option value="">Please select</option>
+                                                        @foreach($unitTopologies as $topology)
+                                                        <option value="{{ $topology->id }}">{{ $topology->topology_name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="category_id" class="form-label">Category</label>
+                                                    <select class="form-select" id="category_id" name="category_id">
+                                                        <option value="">Please select</option>
+                                                        @foreach($unitCategories as $category)
+                                                        <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="vat_able" class="form-label">VAT</label>
+                                                    <select class="form-select" id="vat_able" name="vat_able">
+                                                        <option value="No">No</option>
+                                                        <option value="Yes">Yes</option>
+                                                    </select>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="rent_amount" class="form-label">Rent Amount</label>
+                                                    <input type="number" step="0.01" class="form-control" id="rent_amount" name="rent_amount" placeholder="0.00">
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="initial_water_meter_reading" class="form-label">Initial Water Meter Reading</label>
+                                                    <input type="number" step="0.01" class="form-control" id="initial_water_meter_reading" name="initial_water_meter_reading" placeholder="0">
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+
+                                                <div class="col-md-12 mb-3">
+                                                    <label for="description" class="form-label">Description</label>
+                                                    <textarea class="form-control" id="description" name="description" rows="3" placeholder="Optional notes about the unit"></textarea>
+                                                    <div class="invalid-feedback"></div>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex justify-content-end gap-2">
+                                                <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
+                                                    <span class="material-symbols-outlined">close</span>
+                                                    <span class="ms-1">Cancel</span>
+                                                </button>
+                                                <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveUnitBtn">
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="saveUnitSpinner"></span>
+                                                    <span class="material-symbols-outlined" id="saveUnitIcon">check_circle</span>
+                                                    <span class="ms-1" id="saveUnitText">Save</span>
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Bulk Upload Modal -->
@@ -2770,6 +2909,77 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 $('#pushUnitUploadsToMainBtn').prop('disabled', true);
                 $('#unitBulkUploadPropertyName').text('');
             }
+
+            // Add Unit needs one specific property too — a unit can't belong to "All Properties"
+            $('#addUnitBtn').prop('disabled', !propertyId)
+                .attr('title', propertyId ? '' : 'Select a specific property first');
+        });
+
+        // ── Add Unit Modal (client details page) ──────────────────────────────
+        $('#addUnitBtn').on('click', function() {
+            var propertyId = $('#propertySelect').val();
+            if (!propertyId) return;
+
+            $('#addUnitForm')[0].reset();
+            $('#addUnitPropertyId').val(propertyId);
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+            $('#addUnitModal').modal('show');
+        });
+
+        $('#addUnitForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var $btn = $('#saveUnitBtn');
+            var $spinner = $('#saveUnitSpinner');
+            var $icon = $('#saveUnitIcon');
+            var $text = $('#saveUnitText');
+
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
+            $spinner.removeClass('d-none');
+            $icon.addClass('d-none');
+            $text.text('Saving...');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: "{{ route('property.units.store') }}",
+                type: 'POST',
+                data: $(this).serialize() + '&_token={{ csrf_token() }}',
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Unit added successfully');
+                        $('#addUnitModal').modal('hide');
+                        $('#addUnitForm')[0].reset();
+                        loadUnits($('#propertySelect').val());
+                    } else {
+                        toastr.error(res.error || 'Failed to save unit');
+                    }
+                },
+                error: function(xhr) {
+                    if (xhr.status === 422 && xhr.responseJSON && xhr.responseJSON.errors) {
+                        var errors = xhr.responseJSON.errors;
+                        Object.keys(errors).forEach(function(field) {
+                            var $field = $('#addUnitForm [name="' + field + '"]');
+                            $field.addClass('is-invalid');
+                            $field.siblings('.invalid-feedback').text(errors[field][0]);
+                        });
+                        toastr.error('Please correct the highlighted fields');
+                    } else {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to save unit';
+                        toastr.error(msg);
+                    }
+                },
+                complete: function() {
+                    $spinner.addClass('d-none');
+                    $icon.removeClass('d-none');
+                    $text.text('Save');
+                    $btn.prop('disabled', false);
+                }
+            });
+        });
+
+        $('#addUnitModal').on('hidden.bs.modal', function() {
+            $('#addUnitForm')[0].reset();
+            $('#addUnitForm .is-invalid').removeClass('is-invalid');
         });
 
         // Initialize Bootstrap dropdowns (if needed)
@@ -3502,6 +3712,18 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 invoicingPropertiesLoaded = true;
             }
         });
+
+        // "Generate to Staging" lives in the sub-tab row now (moved up next to the
+        // tabs, since Utilities Invoicing has its own separate generate flow) — only
+        // show it while the Rent Invoicing sub-tab is active. Note: this app's global
+        // CSS forces `.btn { display: inline-flex !important; }`, which beats jQuery's
+        // show()/hide()/toggle() on the button itself, so the WRAPPER span is what
+        // gets toggled instead.
+        function syncRentInvGenerateBtnVisibility() {
+            $('#rentInvGenerateBtnWrap').toggle($('#rent-invoicing-subtab').hasClass('active'));
+        }
+        $('#invoicingSubTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', syncRentInvGenerateBtnVisibility);
+        syncRentInvGenerateBtnVisibility();
 
         // ---------- Rent Invoicing ----------
 

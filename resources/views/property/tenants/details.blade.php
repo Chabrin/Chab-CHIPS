@@ -6,7 +6,7 @@
             <div class="col-sm-12">
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Tenant - {{ $tenant->names }}</h5>
+                        <h5 class="mb-0">Tenant - {{ $tenantRecord->names ?? $tenant->names }}</h5>
                         <div class="ms-auto d-flex gap-2">
                             <a href="{{ url('/tenants/listing') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
@@ -27,8 +27,8 @@
                         <div class="mb-3">
                             <p class="text-muted mb-0" style="font-size: 0.875rem;">
                                 <strong>Ref #:</strong> {{ $tenant->reference_number ?? 'N/A' }} |
-                                <strong>PIN:</strong> {{ $tenant->pin_number ?? 'N/A' }} |
-                                <strong>Mobile:</strong> {{ $tenant->mobile_number ?? 'N/A' }}
+                                <strong>PIN:</strong> {{ $tenantRecord->kra_pin ?? 'N/A' }} |
+                                <strong>Mobile:</strong> {{ $tenantRecord->phone ?? 'N/A' }}
                             </p>
                         </div>
 
@@ -81,20 +81,20 @@
                                         <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">person</span> {{ $tenant->client_type_id == 3 ? 'Company Information' : 'Personal Information' }}</div>
                                         <div class="info-row">
                                             <span class="info-label">{{ $tenant->client_type_id == 3 ? 'Company Name:' : 'Full Names:' }}</span>
-                                            <span class="info-value">{{ $tenant->names ?? '-' }}</span>
+                                            <span class="info-value">{{ $tenantRecord->names ?? $tenant->names ?? '-' }}</span>
                                         </div>
                                         @if($tenant->client_type_id != 3)
                                         <div class="info-row">
                                             <span class="info-label">Gender:</span>
-                                            <span class="info-value">{{ $tenant->gender ?? '-' }}</span>
+                                            <span class="info-value">{{ $tenantRecord->gender->name ?? '-' }}</span>
                                         </div>
                                         @endif
                                         <div class="info-row">
                                             <span class="info-label">Mobile Number:</span>
                                             <span class="info-value">
-                                                {{ $tenant->mobile_number ?? '-' }}
-                                                @if($tenant->mobile_number)
-                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->mobile_number }}" title="Copy">content_copy</span>
+                                                {{ $tenantRecord->phone ?? '-' }}
+                                                @if($tenantRecord->phone ?? null)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenantRecord->phone }}" title="Copy">content_copy</span>
                                                 @endif
                                             </span>
                                         </div>
@@ -110,9 +110,9 @@
                                         <div class="info-row">
                                             <span class="info-label">PIN Number:</span>
                                             <span class="info-value">
-                                                {{ $tenant->pin_number ?? '-' }}
-                                                @if($tenant->pin_number)
-                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->pin_number }}" title="Copy">content_copy</span>
+                                                {{ $tenantRecord->kra_pin ?? '-' }}
+                                                @if($tenantRecord->kra_pin ?? null)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenantRecord->kra_pin }}" title="Copy">content_copy</span>
                                                 @endif
                                             </span>
                                         </div>
@@ -130,9 +130,9 @@
                                         <div class="info-row">
                                             <span class="info-label">National ID:</span>
                                             <span class="info-value">
-                                                {{ $tenant->national_id ?? '-' }}
-                                                @if($tenant->national_id)
-                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenant->national_id }}" title="Copy">content_copy</span>
+                                                {{ $tenantRecord->national_id ?? '-' }}
+                                                @if($tenantRecord->national_id ?? null)
+                                                <span class="material-symbols-outlined copy-icon" data-copy="{{ $tenantRecord->national_id }}" title="Copy">content_copy</span>
                                                 @endif
                                             </span>
                                         </div>
@@ -194,11 +194,11 @@
                                         <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">mail</span> Contact</div>
                                         <div class="info-row">
                                             <span class="info-label">Email Address:</span>
-                                            <span class="info-value">{{ $tenant->email_address ?? '-' }}</span>
+                                            <span class="info-value">{{ $tenantRecord->email ?? '-' }}</span>
                                         </div>
                                         <div class="info-row">
                                             <span class="info-label">Phone:</span>
-                                            <span class="info-value">{{ $tenant->phone ?? '-' }}</span>
+                                            <span class="info-value">{{ $tenantRecord->phone ?? '-' }}</span>
                                         </div>
                                         <div class="info-row">
                                             <span class="info-label">Physical Address:</span>
@@ -206,13 +206,13 @@
                                         </div>
                                         <div class="info-row">
                                             <span class="info-label">Registered Date:</span>
-                                            <span class="info-value">{{ $tenant->registered_date ? $tenant->registered_date->format('d-m-Y') : '-' }}</span>
+                                            <span class="info-value">{{ ($tenantRecord->registered_date ?? null) ? $tenantRecord->registered_date->format('d-m-Y') : '-' }}</span>
                                         </div>
 
                                         <div class="section-divider"></div>
                                         <div class="section-title"><span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">account_balance</span> Bank Account</div>
-                                        @if($tenant->bankAccounts && $tenant->bankAccounts->count() > 0)
-                                            @foreach($tenant->bankAccounts as $account)
+                                        @if($tenant->tenantBankDetails && $tenant->tenantBankDetails->count() > 0)
+                                            @foreach($tenant->tenantBankDetails as $account)
                                             <div class="info-row">
                                                 <span class="info-label">Bank:</span>
                                                 <span class="info-value">{{ $account->bank->bank_name ?? '-' }}</span>
@@ -253,11 +253,11 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                @forelse($tenant->otherContacts as $contact)
+                                                @forelse($tenant->tenantOtherContacts as $contact)
                                                 <tr>
-                                                    <td>{{ $contact->contact_names ?? '-' }}</td>
-                                                    <td>{{ $contact->other_email ?? '-' }}</td>
-                                                    <td>{{ $contact->other_mobile_number ?? '-' }}</td>
+                                                    <td>{{ $contact->names ?? '-' }}</td>
+                                                    <td>{{ $contact->email ?? '-' }}</td>
+                                                    <td>{{ $contact->mobile_number ?? '-' }}</td>
                                                 </tr>
                                                 @empty
                                                 <tr>
@@ -285,9 +285,9 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                @forelse($tenant->nextOfKins as $kin)
+                                                @forelse($tenant->tenantNextOfKin as $kin)
                                                 <tr>
-                                                    <td>{{ $kin->names ?? '-' }}</td>
+                                                    <td>{{ trim($kin->kin_names . ' ' . $kin->second_name) ?: '-' }}</td>
                                                     <td>{{ $kin->relationship ?? '-' }}</td>
                                                     <td>{{ $kin->mobile_number ?? '-' }}</td>
                                                     <td>{{ $kin->email_address ?? '-' }}</td>

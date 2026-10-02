@@ -220,6 +220,23 @@ class Client extends Model
         return $this->hasMany(ClientOtherContact::class, 'parent_id', 'id');
     }
 
+    // Tenant-only normalized tables (cb_tenant_records shares this row's id) —
+    // additive alongside the above, which stay in place for landlord records.
+    public function tenantBankDetails()
+    {
+        return $this->hasMany(TenantBankDetail::class, 'tenant_id', 'id');
+    }
+
+    public function tenantOtherContacts()
+    {
+        return $this->hasMany(TenantOtherContact::class, 'tenant_id', 'id');
+    }
+
+    public function tenantNextOfKin()
+    {
+        return $this->hasMany(TenantNextOfKin::class, 'tenant_id', 'id');
+    }
+
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');

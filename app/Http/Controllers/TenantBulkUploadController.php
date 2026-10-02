@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
-use App\Models\ClientNextOfKin;
-use App\Models\ClientOtherContact;
+use App\Models\Gender;
 use App\Models\Property;
+use App\Models\Salutation;
 use App\Models\SystemCountry;
 use App\Models\TempUploadedTenant;
+use App\Models\TenantNextOfKin;
+use App\Models\TenantOtherContact;
+use App\Models\TenantRecord;
 use App\Models\Unit;
 use App\Traits\LeaseCreationTrait;
 use App\Traits\TenantRecordHelperTrait;
@@ -595,10 +598,12 @@ class TenantBulkUploadController extends Controller
             throw new \RuntimeException("Unit '{$unitCode}' is already assigned to a tenant");
         }
 
-        $duplicate = Client::tenants()->where('national_id', $nationalId)
-            ->select('id', 'names', 'reference_number')->first();
+        $duplicate = TenantRecord::where('national_id', $nationalId)
+            ->with('legacyClient:id,reference_number')
+            ->select('id', 'names', 'national_id')->first();
         if ($duplicate) {
-            throw new \RuntimeException("National ID '{$nationalId}' already belongs to tenant {$duplicate->names} ({$duplicate->reference_number})");
+            $duplicateRef = $duplicate->legacyClient->reference_number ?? 'unknown ref';
+            throw new \RuntimeException("National ID '{$nationalId}' already belongs to tenant {$duplicate->names} ({$duplicateRef})");
         }
 
         $slaId = $this->resolveSlaId($property->id);
@@ -628,19 +633,41 @@ class TenantBulkUploadController extends Controller
             'current_status_id' => 1, // Pending — awaiting maker-checker approval
         ]);
 
+        // sys_pm_clients stays the record leases/payments/invoicing key off, but
+        // cb_tenant_records — same id, shared primary key — is the normalized
+        // source for the tenant's own profile data (see TenantsController's
+        // single-tenant create/edit, which does the same).
+        TenantRecord::updateOrCreate(
+            ['id' => $tenant->id],
+            [
+                'tenant_type' => 'INDIVIDUAL',
+                'salutation_id' => $title !== '' ? Salutation::where('name', $title)->value('id') : null,
+                'names' => $tenant->names,
+                'gender_id' => Gender::where('name', strtoupper($normalizedGender))->value('id'),
+                'phone' => $mobile,
+                'email' => $email !== '' ? $email : null,
+                'nationality' => $nationality->country_name ?? null,
+                'id_document_type' => $nationalId !== '' ? 'NATIONAL_ID' : ($passport !== '' ? 'PASSPORT' : null),
+                'national_id' => $nationalId !== '' ? $nationalId : null,
+                'passport_number' => $passport !== '' ? $passport : null,
+                'kra_pin' => $pin !== '' ? $pin : null,
+                'registered_date' => now()->toDateString(),
+            ]
+        );
+
         if ($otherContactName !== '') {
-            ClientOtherContact::create([
-                'parent_id' => $tenant->id,
-                'contact_names' => $otherContactName,
-                'other_email' => $otherContactEmail !== '' ? $otherContactEmail : null,
-                'other_mobile_number' => $otherContactPhone !== '' ? $otherContactPhone : null,
+            TenantOtherContact::create([
+                'tenant_id' => $tenant->id,
+                'names' => $otherContactName,
+                'email' => $otherContactEmail !== '' ? $otherContactEmail : null,
+                'mobile_number' => $otherContactPhone !== '' ? $otherContactPhone : null,
             ]);
         }
 
         if ($kinName !== '') {
-            ClientNextOfKin::create([
-                'parent_id' => $tenant->id,
-                'names' => $kinName,
+            TenantNextOfKin::create([
+                'tenant_id' => $tenant->id,
+                'kin_names' => $kinName,
                 'mobile_number' => $kinMobile !== '' ? $kinMobile : null,
                 'email_address' => $kinEmail !== '' ? $kinEmail : null,
                 'relationship' => $kinRelationship !== '' ? $kinRelationship : null,

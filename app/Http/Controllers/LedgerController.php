@@ -45,10 +45,11 @@ class LedgerController extends Controller
     {
         $user = Auth::user();
         return view('ledger.accounts', [
-            'canReadClasses'     => $user->isAbleTo('read_gl_classes'),
-            'canReadGroups'      => $user->isAbleTo('read_gl_groups'),
-            'canReadCategories'  => $user->isAbleTo('read_gl_categories'),
-            'canReadAccounts'    => $user->isAbleTo('read_gl_accounts'),
+            'canReadClasses'          => $user->isAbleTo('read_gl_classes'),
+            'canReadGroups'           => $user->isAbleTo('read_gl_groups'),
+            'canReadCategories'       => $user->isAbleTo('read_gl_categories'),
+            'canReadAccounts'         => $user->isAbleTo('read_gl_accounts'),
+            'canReadTransactionTypes' => $user->isAbleTo('read_transaction_types'),
         ]);
     }
 
