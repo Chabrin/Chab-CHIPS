@@ -44,7 +44,7 @@
     </div>
 </div>
 
-@endsection
+
 <script>
 $(document).ready(function() {
     // DataTable
@@ -304,3 +304,4 @@ $(document).ready(function() {
     });
 });
 </script>
+@endsection

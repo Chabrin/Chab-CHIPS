@@ -132,8 +132,6 @@
     </div>
 </div>
 
-@endsection
-
 <script>
     $(function() {
         function loadControlsForCategory(categoryId, $container) {
@@ -263,8 +261,9 @@
                 error: function(xhr) {
                     $spinner.addClass('d-none');
                     $btn.prop('disabled', false);
-                    var msg = 'Error';
-                    if (xhr.responseJSON && xhr.responseJSON.errors) msg = Object.values(xhr.responseJSON.errors).join('\n');
+                    var msg = 'Error saving setting';
+                    if (xhr.responseJSON && xhr.responseJSON.errors) msg = Object.values(xhr.responseJSON.errors).join('<br>');
+                    else if (xhr.responseJSON && xhr.responseJSON.error) msg = xhr.responseJSON.error;
                     toastr.error(msg);
                 }
             });
@@ -307,12 +306,13 @@
                     if (res.success) toastr.success('Saved');
                     else toastr.error(res.error || 'Error');
                 },
-                error: function() {
+                error: function(xhr) {
                     $spinner.addClass('d-none');
                     $btn.prop('disabled', false);
-                    toastr.error('Save error');
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Save error');
                 }
             });
         });
     });
 </script>
+@endsection

@@ -72,7 +72,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 <script>
     // use toastr for notifications; no per-view toast function
     $(document).ready(function() {
@@ -184,6 +184,10 @@
         $(document).on('click', '.delete-salutation', function() {
             var $btn = $(this);
             var $icon = $btn.find('.material-symbols-outlined').first();
+            var name = $btn.siblings('.edit-salutation').data('name');
+            if (!confirm('Are you sure you want to delete "' + name + '"?')) {
+                return;
+            }
             $icon.show();
             $btn.find('.material-symbols-outlined').last().hide();
             $btn.prop('disabled', true);
@@ -222,3 +226,4 @@
         });
     });
 </script>
+@endsection

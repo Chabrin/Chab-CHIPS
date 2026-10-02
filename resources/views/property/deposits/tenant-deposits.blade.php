@@ -128,7 +128,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 <script>
     $(document).ready(function() {
         var table = $('#deposits-table').DataTable({
@@ -297,3 +297,4 @@
         }
     });
 </script>
+@endsection

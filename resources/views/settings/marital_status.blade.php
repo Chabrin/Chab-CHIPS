@@ -67,7 +67,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 <script>
     // use toastr for notifications
     $(document).ready(function() {
@@ -174,6 +174,10 @@
         $(document).on('click', '.delete-marital-status', function() {
             var $btn = $(this);
             var $icon = $btn.find('.material-symbols-outlined').first();
+            var name = $btn.siblings('.edit-marital-status').data('name');
+            if (!confirm('Are you sure you want to delete "' + name + '"?')) {
+                return;
+            }
             $icon.show();
             $btn.find('.material-symbols-outlined').last().hide();
             $btn.prop('disabled', true);
@@ -212,3 +216,4 @@
         });
     });
 </script>
+@endsection

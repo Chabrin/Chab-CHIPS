@@ -73,7 +73,7 @@ class SystemControlController extends Controller
     public function index()
     {
         $categories = ControlCategory::orderBy('precedence')->get();
-        return view('settings.cb_system_configs', compact('categories'));
+        return view('settings.system_controls', compact('categories'));
     }
 
     // ajax list controls for a category

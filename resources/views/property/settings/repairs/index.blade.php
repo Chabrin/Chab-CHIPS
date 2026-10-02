@@ -140,7 +140,7 @@
     </div>
 </div>
 
-@endsection
+
 
 <script>
 $(document).ready(function() {
@@ -253,7 +253,7 @@ $(document).ready(function() {
     });
 
     // Load property elements dropdown
-    function loadPropertyElementsDropdown() {
+    function loadPropertyElementsDropdown(done) {
         $.ajax({
             url: "{{ url('property/settings/repairs/property-elements/dropdown') }}",
             type: 'GET',
@@ -267,6 +267,7 @@ $(document).ready(function() {
                         })
                     );
                 });
+                if (typeof done === 'function') done();
             },
             error: function() {
                 toastr.error('Failed to load property elements');
@@ -392,12 +393,10 @@ $(document).ready(function() {
         $('.invalid-feedback').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
         
-        loadPropertyElementsDropdown();
-        
-        // Set element after dropdown loads
-        setTimeout(function() {
+        // Select the repair type's element once the dropdown has loaded
+        loadPropertyElementsDropdown(function() {
             $('#propertyElementSelect').val(elementId);
-        }, 500);
+        });
         
         $('#repairTypeModal').modal('show');
     });
@@ -478,3 +477,4 @@ $(document).ready(function() {
     });
 });
 </script>
+@endsection

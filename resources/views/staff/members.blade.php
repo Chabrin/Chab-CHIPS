@@ -642,7 +642,7 @@
     </div>
 </div>
 
-@endsection
+
 
 <style>
     /* small spinner animation for material icons when .spin is toggled by JS */
@@ -1450,3 +1450,4 @@
         });
     });
 </script>
+@endsection

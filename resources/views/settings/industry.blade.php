@@ -77,7 +77,7 @@
     </div>
 </div>
 
-@endsection
+
 <script>
     // use toastr for notifications
     $(function() {
@@ -191,6 +191,10 @@
         $(document).on('click', '.delete-industry', function() {
             var $btn = $(this);
             var $icon = $btn.find('.material-symbols-outlined').first();
+            var name = $btn.siblings('.edit-industry').data('industry_name');
+            if (!confirm('Are you sure you want to delete "' + name + '"?')) {
+                return;
+            }
             $icon.show();
             $btn.find('.material-symbols-outlined').last().hide();
             $btn.prop('disabled', true);
@@ -229,3 +233,4 @@
         });
     });
 </script>
+@endsection

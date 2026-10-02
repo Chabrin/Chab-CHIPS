@@ -61,7 +61,7 @@
                         <select class="form-control" name="country_id" id="country_id">
                             <option value="">Select Country</option>
                             @foreach($countries as $country)
-                            <option value="{{ $country->id }}">{{ $country->name }}</option>
+                            <option value="{{ $country->id }}">{{ $country->country_name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -80,7 +80,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 <script>
     // use toastr for notifications
     $(function() {
@@ -105,7 +105,7 @@
                 {
                     data: null,
                     render: function(data, type, row) {
-                        return row.country && row.country.name ? row.country.name : 'N/A';
+                        return row.country && row.country.country_name ? row.country.country_name : 'N/A';
                     }
                 },
                 {
@@ -193,6 +193,10 @@
         $(document).on('click', '.delete-currency', function() {
             var $btn = $(this);
             var $icon = $btn.find('.material-symbols-outlined').first();
+            var name = $btn.siblings('.edit-currency').data('currency_name');
+            if (!confirm('Are you sure you want to delete "' + name + '"?')) {
+                return;
+            }
             $icon.show();
             $btn.find('.material-symbols-outlined').last().hide();
             $btn.prop('disabled', true);
@@ -231,3 +235,4 @@
         });
     });
 </script>
+@endsection

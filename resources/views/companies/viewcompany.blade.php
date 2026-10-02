@@ -326,7 +326,7 @@
         </div>
     </div>
 </div>
-@endsection
+
 
 
 {{-- company-data removed; assign via add/edit views instead --}}
@@ -1016,3 +1016,4 @@
         // Assign/Change UI removed; fund manager selection will be in add/edit forms instead
     });
 </script>
+@endsection
