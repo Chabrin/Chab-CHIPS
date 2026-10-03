@@ -6,15 +6,11 @@ use App\Models\Unit;
 use App\Models\Zone;
 use App\Models\Staff;
 use App\Models\Client;
-use App\Models\Deposit;
 use App\Models\Property;
 use App\Models\ZoneArea;
-use App\Models\SystemCountry;
 use App\Models\UnitTopology;
 use App\Models\UnitCategory;
 use App\Models\ClientBankAccount;
-use App\Models\TenantAccountTransaction;
-use App\Traits\TenantRecordHelperTrait;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\DB;
@@ -27,8 +23,6 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class BulkUploadController extends Controller
 {
-    use TenantRecordHelperTrait;
-
     /**
      * Download sample file for bulk upload
      */
@@ -43,8 +37,6 @@ class BulkUploadController extends Controller
                 return $this->generatePropertiesSample($clientId);
             } elseif ($type === 'units') {
                 return $this->generateUnitsSample($clientId, $propertyId);
-            } elseif ($type === 'tenants') {
-                return $this->generateTenantsSample();
             }
             
             return redirect()->back()->with('error', 'Invalid upload type');
@@ -234,131 +226,6 @@ class BulkUploadController extends Controller
     }
     
     /**
-     * Generate tenants sample file. Not client/property-scoped — this upload is
-     * launched from /tenants/listing with no client context, so a row identifies
-     * its unit (if known yet) by Unit Code alone (format "{property_reference}-
-     * {unit_number}", copy-pasteable from a property's Units tab). Unit Code may
-     * be left blank; such rows are created without a unit and land in the
-     * "Pending Unit" queue on the tenant listing for manual assignment via
-     * TenantsController::assignUnit(). No Rent Amount/SLA columns — both are
-     * derived server-side from the unit/property once known, same as the
-     * interactive create-tenant form (TenantRecordHelperTrait). No move-in
-     * inspection columns — that stays a separate, manual step.
-     */
-    private function generateTenantsSample()
-    {
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-
-        // 24 columns: unit + tenant-type selector, then Individual-only,
-        // Company-only, then fields shared by both.
-        $headers = [
-            'Unit Code',
-            'Tenant Type',
-            'Title',
-            'Names',
-            'Gender',
-            'National ID',
-            'Nationality',
-            'Passport Number',
-            'Company Name',
-            'Registration Number',
-            'Contact Person Name',
-            'Contact Person Title',
-            'Contact Person Mobile',
-            'Contact Person Email',
-            'Mobile Number',
-            'Email Address',
-            'PIN Number',
-            'Address',
-            'Lease Start Date',
-            'Lease Years',
-            'Frequency',
-            'Deposit Amount',
-            'Deposit Held By',
-            'Registered Date',
-        ];
-
-        $sheet->fromArray($headers, null, 'A1');
-
-        $headerStyle = [
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => '4472C4']],
-        ];
-        $sheet->getStyle('A1:X1')->applyFromArray($headerStyle);
-
-        // Two sample rows: an Individual with a Unit Code, and a Company left
-        // blank on purpose, to show both parts of the two-step flow at a glance.
-        $sampleData = [
-            [
-                '', 'Individual', 'Mr', 'John Kamau Mwangi', 'Male', '12345678', 'Kenya', '',
-                '', '', '', '', '', '',
-                '254712345678', 'john.kamau@email.com', '', 'P.O. Box 100, Nairobi',
-                date('Y-m-d'), '1', 'Monthly', '35000', 'Company', date('Y-m-d'),
-            ],
-            [
-                '', 'Company', '', '', '', '', '', '',
-                'Acme Traders Ltd', 'C.123456', 'Jane Wanjiru', 'Office Manager', '254723456789', 'jane.wanjiru@acme.co.ke',
-                '254723456789', 'accounts@acme.co.ke', '', 'P.O. Box 200, Nairobi',
-                date('Y-m-d'), '2', 'Quarterly', '50000', 'Landlord', date('Y-m-d'),
-            ],
-        ];
-
-        $sheet->fromArray($sampleData, null, 'A2');
-
-        // Reference/notes block, left of a blank gap column (Y) so it never
-        // overwrites a real data header.
-        $refCol = 'Z';
-        $refRow = 1;
-
-        $sheet->setCellValue($refCol . $refRow, 'Notes:');
-        $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Leave Unit Code blank to create the tenant without a unit for now — it will appear under "Pending Unit" on the tenant listing for manual assignment afterward.');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Unit Code is shown on a property\'s Units tab (format: PROPERTY_REFERENCE-UNIT_NUMBER).');
-        $refRow += 2;
-
-        $sheet->setCellValue($refCol . $refRow, 'Valid Values:');
-        $sheet->getStyle($refCol . $refRow)->getFont()->setBold(true);
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Tenant Type: Individual, Company');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Title: Mr, Mrs, Ms, Dr, Prof');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Gender: Male, Female, Other');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Frequency: Annually, Monthly, Quarterly, Semi-Annually, Biennially');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Deposit Held By: Company, Landlord');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Mobile Format: 254XXXXXXXXX (12 digits)');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Nationality: full country name, e.g. Kenya');
-        $refRow += 2;
-
-        $sheet->setCellValue($refCol . $refRow, 'Required for Individual: Title/Names, National ID, Nationality');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Required for Company: Company Name');
-        $refRow++;
-        $sheet->setCellValue($refCol . $refRow, 'Always required: Tenant Type, Mobile Number, Registered Date');
-
-        foreach (range('A', 'Z') as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
-
-        $writer = new Xlsx($spreadsheet);
-        $filename = 'tenants_bulk_upload_sample_' . date('Ymd') . '.xlsx';
-
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment;filename="' . $filename . '"');
-        header('Cache-Control: max-age=0');
-
-        $writer->save('php://output');
-        exit;
-    }
-    
-    /**
      * Process bulk upload
      */
     public function upload(Request $request)
@@ -366,10 +233,8 @@ class BulkUploadController extends Controller
         DB::beginTransaction();
         try {
             $request->validate([
-                // Only required for properties/units, which are scoped to a client;
-                // the tenants upload is launched from /tenants/listing with no client context.
-                'client_id' => 'required_unless:upload_type,tenants|nullable|integer|exists:sys_pm_clients,id',
-                'upload_type' => 'required|in:properties,units,tenants',
+                'client_id' => 'required|integer|exists:sys_pm_clients,id',
+                'upload_type' => 'required|in:properties,units',
                 'bulk_file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
                 'property_id' => 'nullable|integer|exists:sys_pm_properties,id',
             ]);
@@ -391,18 +256,11 @@ class BulkUploadController extends Controller
                 $result = $this->processProperties($data, $clientId);
             } elseif ($uploadType === 'units') {
                 $result = $this->processUnits($data, $clientId, $propertyId);
-            } elseif ($uploadType === 'tenants') {
-                $result = $this->processTenants($data);
             }
 
             DB::commit();
 
             $message = "Bulk upload successful! Created {$result['success']} records. {$result['failed']} failed.";
-
-            if ($uploadType === 'tenants') {
-                return redirect()->route('property.tenants.listing', !empty($result['pending_unit']) ? ['status' => 'pending_unit'] : [])
-                    ->with('success', $message);
-            }
 
             if ($propertyId) {
                 return redirect()->route('property.properties.show', Crypt::encrypt($propertyId))
@@ -679,239 +537,5 @@ class BulkUploadController extends Controller
         $normalized = strtolower(trim((string) $value));
 
         return in_array($normalized, ['1', 'yes', 'y', 'true'], true) ? 'Yes' : 'No';
-    }
-    
-    /**
-     * Process tenants bulk upload. Column layout (24 columns — see
-     * generateTenantsSample()): Unit Code, Tenant Type, Title, Names, Gender,
-     * National ID, Nationality, Passport Number, Company Name, Registration
-     * Number, Contact Person Name/Title/Mobile/Email, Mobile Number, Email
-     * Address, PIN Number, Address, Lease Start Date, Lease Years, Frequency,
-     * Deposit Amount, Deposit Held By, Registered Date.
-     *
-     * Unit Code is optional: when given, the row's property/SLA/rent are
-     * resolved from that unit (TenantRecordHelperTrait) exactly like the
-     * interactive form; when blank, the tenant is created with
-     * property_id/unit_id/sla_id/rent_amount all null and shows up in the
-     * "Pending Unit" queue on the tenant listing.
-     *
-     * Individual/Company required fields and null-out-the-inapplicable-half
-     * pattern mirror TenantsController::validateIndividualOrCompanyFields()/
-     * createTenant() exactly, so the two paths can't drift apart.
-     */
-    private function processTenants($data)
-    {
-        $success = 0;
-        $failed = 0;
-        $errors = [];
-        $pendingUnit = false;
-
-        $validTitles = ['mr', 'mrs', 'ms', 'dr', 'prof'];
-        $validGenders = ['male', 'female', 'other'];
-        $frequencyMap = [
-            'annually' => 'Annually',
-            'monthly' => 'Monthly',
-            'quarterly' => 'Quarterly',
-            'semi-annually' => 'Semi-Annually',
-            'biennially' => 'Biennially',
-        ];
-        $depositHolderMap = ['company' => 'Company', 'landlord' => 'Landlord'];
-
-        foreach ($data as $index => $row) {
-            $rowNum = $index + 2; // +2: Excel is 1-indexed and has a header row
-
-            try {
-                // Skip fully blank rows
-                if (empty(array_filter($row, fn ($cell) => trim((string) $cell) !== ''))) {
-                    continue;
-                }
-
-                $tenantTypeLabel = strtolower(trim($row[1] ?? ''));
-                if (!in_array($tenantTypeLabel, ['individual', 'company'], true)) {
-                    $errors[] = "Row {$rowNum}: Tenant Type must be Individual or Company";
-                    $failed++;
-                    continue;
-                }
-                $isCompany = $tenantTypeLabel === 'company';
-
-                $mobileNumber = trim($row[14] ?? '');
-                if ($mobileNumber === '') {
-                    $errors[] = "Row {$rowNum}: Mobile Number is required";
-                    $failed++;
-                    continue;
-                }
-
-                $unit = null;
-                $slaId = null;
-                $rentAmount = 0;
-                $unitCode = trim($row[0] ?? '');
-                if ($unitCode !== '') {
-                    $unit = Unit::where('unit_code', $unitCode)->first();
-                    if (!$unit) {
-                        $errors[] = "Row {$rowNum}: Unit Code '{$unitCode}' not found";
-                        $failed++;
-                        continue;
-                    }
-                    $slaId = $this->resolveSlaId($unit->property_id);
-                    $rentAmount = $this->resolveRentAmount($unit->id);
-                } else {
-                    $pendingUnit = true;
-                }
-
-                $tenantData = [
-                    'reference_number' => $this->generateTenantReferenceNumber(),
-                    'mobile_number' => $mobileNumber,
-                    'email_address' => $row[15] !== '' ? ($row[15] ?? null) : null,
-                    'pin_number' => $row[16] !== '' ? ($row[16] ?? null) : null,
-                    'address' => $row[17] !== '' ? ($row[17] ?? null) : null,
-                    'registered_date' => !empty($row[23]) ? date('Y-m-d', strtotime($row[23])) : now()->toDateString(),
-                    'prefered_messages_language_id' => 'English',
-                    'client_type_id' => $isCompany ? 3 : 1,
-                    // 2 = Tenant, per Client::tenants() scope — same fix already applied
-                    // to interactive creation (see TenantsController::createTenant()).
-                    'type_id' => 2,
-                    'property_id' => $unit->property_id ?? null,
-                    'sla_id' => $slaId,
-                    'unit_id' => $unit->id ?? null,
-                    'lease_start_date' => !empty($row[18]) ? date('Y-m-d', strtotime($row[18])) : now()->toDateString(),
-                    'lease_years' => $row[19] !== '' && $row[19] !== null ? (int) $row[19] : 1,
-                    'rent_amount' => $rentAmount,
-                    'escalation_rate' => 0,
-                    'frequency' => $frequencyMap[strtolower(trim($row[20] ?? ''))] ?? 'Monthly',
-                    'overdraft_penalty' => 5, // company-standard default, not user-entered
-                    'created_by' => Auth::id(),
-                    'date_time' => now(),
-                    'current_status_id' => 1, // Pending — awaiting maker-checker approval
-                ];
-
-                if ($isCompany) {
-                    $companyName = trim($row[8] ?? '');
-                    if ($companyName === '') {
-                        $errors[] = "Row {$rowNum}: Company Name is required for a Company tenant";
-                        $failed++;
-                        continue;
-                    }
-
-                    $tenantData['names'] = $companyName;
-                    $tenantData['title'] = null;
-                    $tenantData['gender'] = null;
-                    $tenantData['national_id'] = null;
-                    $tenantData['passport_number'] = null;
-                    $tenantData['nationality_id'] = null;
-                    $tenantData['company_name'] = $companyName;
-                    $tenantData['company_registration_number'] = $row[9] !== '' ? ($row[9] ?? null) : null;
-                    $tenantData['contact_person_name'] = $row[10] !== '' ? ($row[10] ?? null) : null;
-                    $tenantData['contact_person_title'] = $row[11] !== '' ? ($row[11] ?? null) : null;
-                    $tenantData['contact_person_mobile'] = $row[12] !== '' ? ($row[12] ?? null) : null;
-                    $tenantData['contact_person_email'] = $row[13] !== '' ? ($row[13] ?? null) : null;
-                } else {
-                    $names = trim($row[3] ?? '');
-                    $nationalId = trim($row[5] ?? '');
-                    $nationalityName = trim($row[6] ?? '');
-
-                    $missing = [];
-                    if ($names === '') {
-                        $missing[] = 'Names';
-                    }
-                    if ($nationalId === '') {
-                        $missing[] = 'National ID';
-                    }
-
-                    $nationality = null;
-                    if ($nationalityName !== '') {
-                        $nationality = SystemCountry::whereRaw('LOWER(TRIM(country_name)) = ?', [strtolower($nationalityName)])->first();
-                        if (!$nationality) {
-                            $missing[] = "Nationality '{$nationalityName}' not recognized";
-                        }
-                    } else {
-                        $missing[] = 'Nationality';
-                    }
-
-                    if (!empty($missing)) {
-                        $errors[] = "Row {$rowNum}: " . implode(', ', $missing) . ' required for an Individual tenant';
-                        $failed++;
-                        continue;
-                    }
-
-                    $title = trim($row[2] ?? '');
-                    $title = in_array(strtolower($title), $validTitles, true) ? $title : null;
-
-                    $gender = trim($row[4] ?? '');
-                    $gender = in_array(strtolower($gender), $validGenders, true) ? ucfirst(strtolower($gender)) : null;
-
-                    $tenantData['names'] = trim(($title ?? '') . ' ' . $names);
-                    $tenantData['title'] = $title;
-                    $tenantData['gender'] = $gender;
-                    $tenantData['national_id'] = $nationalId;
-                    $tenantData['passport_number'] = $row[7] !== '' ? ($row[7] ?? null) : null;
-                    $tenantData['nationality_id'] = $nationality->id;
-                    $tenantData['company_name'] = null;
-                    $tenantData['company_registration_number'] = null;
-                    $tenantData['contact_person_name'] = null;
-                    $tenantData['contact_person_title'] = null;
-                    $tenantData['contact_person_mobile'] = null;
-                    $tenantData['contact_person_email'] = null;
-                }
-
-                $tenant = Client::create($tenantData);
-
-                // Deposit (optional) — mirrors TenantsController::saveDeposit(). Only
-                // recordable once a unit/property is known; a deposit amount entered
-                // on a pending-unit row is picked up once the unit is later assigned
-                // is NOT supported today, so it's simply skipped with a log entry.
-                $depositAmount = (float) ($row[21] ?? 0);
-                if ($depositAmount > 0) {
-                    if ($unit) {
-                        $now = now();
-                        $narration = 'Move-in security deposit';
-
-                        Deposit::create([
-                            'date_time' => $now,
-                            'deposit_date' => $now,
-                            'tenant_id' => $tenant->id,
-                            'client_id' => $unit->property->client_id ?? null,
-                            'property_id' => $unit->property_id,
-                            'sla_id' => $slaId,
-                            'unit_id' => $unit->id,
-                            'amount' => $depositAmount,
-                            'held_by' => $depositHolderMap[strtolower(trim($row[22] ?? ''))] ?? null,
-                            'created_by_id' => Auth::id(),
-                            'current_status_id' => 1,
-                            'narration' => $narration,
-                        ]);
-
-                        TenantAccountTransaction::create([
-                            'date_time' => $now,
-                            'narration' => $narration,
-                            'pay_for' => 'Security Deposit',
-                            'dr_cr' => 'CR',
-                            'debit_amount' => 0,
-                            'credit_amount' => $depositAmount,
-                            'tenant_id' => $tenant->id,
-                            'property_id' => $unit->property_id,
-                            'unit_id' => $unit->id,
-                            'client_id' => $unit->property->client_id ?? null,
-                            'sla_id' => $slaId,
-                            'current_status_id' => 1,
-                            'entry_by' => Auth::id(),
-                        ]);
-                    } else {
-                        Log::warning("Row {$rowNum}: Deposit Amount given but no Unit Code — deposit not recorded, tenant is pending unit assignment");
-                    }
-                }
-
-                $success++;
-            } catch (\Exception $e) {
-                $errors[] = "Row {$rowNum}: {$e->getMessage()}";
-                Log::error("Row {$rowNum}: Failed to create tenant - " . $e->getMessage() . ' - Data: ' . json_encode($row));
-                $failed++;
-            }
-        }
-
-        if (!empty($errors)) {
-            Log::error('Tenant bulk upload errors: ' . json_encode($errors));
-        }
-
-        return ['success' => $success, 'failed' => $failed, 'pending_unit' => $pendingUnit];
     }
 }
