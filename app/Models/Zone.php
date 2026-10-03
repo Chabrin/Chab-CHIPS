@@ -24,6 +24,7 @@ class Zone extends Model
         'zone_name',
         'zone_manager_id',
         'zone_supervisor_id',
+        'zone_auditor_id',
     ];
 
     protected $casts = [
@@ -49,6 +50,11 @@ class Zone extends Model
     public function zoneSupervisor()
     {
         return $this->belongsTo(Staff::class, 'zone_supervisor_id');
+    }
+
+    public function zoneAuditor()
+    {
+        return $this->belongsTo(Staff::class, 'zone_auditor_id');
     }
 
     public function fieldOfficers()

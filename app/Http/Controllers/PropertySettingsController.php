@@ -492,7 +492,7 @@ class PropertySettingsController extends Controller
     {
         try {
             $userId = Auth::id();
-            $query = Zone::select(['id', 'zone_name', 'estates_id', 'zone_manager_id', 'zone_supervisor_id']);
+            $query = Zone::select(['id', 'zone_name', 'estates_id', 'zone_manager_id', 'zone_supervisor_id', 'zone_auditor_id']);
 
             // Non-global users only see zones where they're the manager or supervisor
             // (staff-based, same pattern as Property's own visibility scope).
@@ -511,7 +511,7 @@ class PropertySettingsController extends Controller
                 });
             }
 
-            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names'])
+            $zones = $query->with(['zoneManager:id,full_names', 'zoneSupervisor:id,full_names', 'zoneAuditor:id,full_names'])
                 ->orderBy('zone_name', 'asc')
                 ->get()
                 ->map(function ($zone) {
@@ -524,6 +524,8 @@ class PropertySettingsController extends Controller
                         'zone_manager_name' => $zone->zoneManager->full_names ?? '-',
                         'zone_supervisor_id' => $zone->zone_supervisor_id,
                         'zone_supervisor_name' => $zone->zoneSupervisor->full_names ?? '-',
+                        'zone_auditor_id' => $zone->zone_auditor_id,
+                        'zone_auditor_name' => $zone->zoneAuditor->full_names ?? '-',
                         'can_update' => Auth::user()->isAbleTo('update_property_settings_items'),
                         'can_delete' => Auth::user()->isAbleTo('delete_property_settings_items'),
                     ];
@@ -550,6 +552,7 @@ class PropertySettingsController extends Controller
                 'estates_id' => 'nullable|integer',
                 'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
                 'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_auditor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
@@ -588,6 +591,7 @@ class PropertySettingsController extends Controller
                 'estates_id' => 'nullable|integer',
                 'zone_manager_id' => 'nullable|integer|exists:sys_staff,id',
                 'zone_supervisor_id' => 'nullable|integer|exists:sys_staff,id',
+                'zone_auditor_id' => 'nullable|integer|exists:sys_staff,id',
             ], [
                 'zone_name.unique' => 'A zone with this name already exists.',
             ]);
@@ -625,7 +629,8 @@ class PropertySettingsController extends Controller
     }
 
     /**
-     * A zone can't have the same staff member as both manager and supervisor.
+     * A zone can't have the same staff member filling more than one of
+     * manager/supervisor/auditor.
      */
     private function assertNoOverlappingZoneRoles(array $validated): void
     {
@@ -633,6 +638,20 @@ class PropertySettingsController extends Controller
             && $validated['zone_manager_id'] === $validated['zone_supervisor_id']) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'zone_supervisor_id' => ['A zone cannot have the same staff member as both manager and supervisor.'],
+            ]);
+        }
+
+        if (!empty($validated['zone_manager_id']) && !empty($validated['zone_auditor_id'])
+            && $validated['zone_manager_id'] === $validated['zone_auditor_id']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'zone_auditor_id' => ['A zone cannot have the same staff member as both manager and auditor.'],
+            ]);
+        }
+
+        if (!empty($validated['zone_supervisor_id']) && !empty($validated['zone_auditor_id'])
+            && $validated['zone_supervisor_id'] === $validated['zone_auditor_id']) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'zone_auditor_id' => ['A zone cannot have the same staff member as both supervisor and auditor.'],
             ]);
         }
     }

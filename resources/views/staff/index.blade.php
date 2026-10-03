@@ -78,7 +78,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         <td>{{ $member->national_id ?? '-' }}</td>
                                         <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
                                         <td>
-                                            <span class="badge {{ \App\Models\Staff::STATUS_BADGE_CLASSES[$member->current_status_id] ?? 'badge-light-secondary' }} status-badge" data-status-id="{{ $member->current_status_id }}">{{ \App\Models\Staff::STATUSES[$member->current_status_id] ?? 'Unknown' }}</span>
+                                            <span class="status-badge" data-status-id="{{ $member->current_status_id }}">{{ \App\Models\Staff::STATUSES[$member->current_status_id] ?? 'Unknown' }}</span>
                                         </td>
                                         <td>
                                             <div class="d-flex flex-row gap-1">
@@ -204,7 +204,6 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
     var canCreateUsers = '{{ $canCreateUsers ? "1" : "0" }}' === '1';
     var canUpdateStaff = '{{ $canUpdateStaff ? "1" : "0" }}' === '1';
     var csrfToken = '{{ csrf_token() }}';
-    var statusBadgeClasses = @json(\App\Models\Staff::STATUS_BADGE_CLASSES);
     var statusLabels = @json(\App\Models\Staff::STATUSES);
 
     $(document).ready(function() {
@@ -363,12 +362,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                     },
                     success: function(response) {
                         if (response.success) {
-                            // Update badge in the row
+                            // Update status text in the row
                             var badge = currentRow.find('.status-badge');
-                            $.each(statusBadgeClasses, function(id, cls) {
-                                badge.removeClass(cls);
-                            });
-                            badge.addClass(statusBadgeClasses[newStatusId] || 'badge-light-secondary');
                             badge.text(statusLabels[newStatusId] || 'Unknown');
                             badge.data('status-id', newStatusId);
 

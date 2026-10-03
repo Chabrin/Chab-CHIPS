@@ -27,6 +27,7 @@
                                         <th>Zone Name</th>
                                         <th>Zone Manager</th>
                                         <th>Zone Supervisor</th>
+                                        <th>Zone Auditor</th>
                                         <th style="width: 100px;">Actions</th>
                                     </tr>
                                 </thead>
@@ -101,6 +102,13 @@
                         <label for="zoneSupervisorSelect" class="form-label">Zone Supervisor</label>
                         <select class="form-select" id="zoneSupervisorSelect" name="zone_supervisor_id">
                             <option value="">Select zone supervisor</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="zoneAuditorSelect" class="form-label">Zone Auditor</label>
+                        <select class="form-select" id="zoneAuditorSelect" name="zone_auditor_id">
+                            <option value="">Select zone auditor</option>
                         </select>
                         <div class="invalid-feedback"></div>
                     </div>
@@ -197,6 +205,10 @@ $(document).ready(function() {
                 render: data => data && data !== '-' ? data : '<span class="text-muted">-</span>'
             },
             {
+                data: 'zone_auditor_name',
+                render: data => data && data !== '-' ? data : '<span class="text-muted">-</span>'
+            },
+            {
                 data: null,
                 orderable: false,
                 searchable: false,
@@ -266,17 +278,19 @@ $(document).ready(function() {
 
     // ============ ZONE CRUD ============
 
-    // Loads the staff list into the Zone Manager / Zone Supervisor selects,
-    // each filtered to staff whose position slug matches (sys_set_staff_positions.slug_name
-    // = 'zone_manager' / 'zone_supervisor'), preselecting the given ids (used by both Add
-    // and Edit). If the zone's currently assigned manager/supervisor no longer holds a
-    // matching position, they're added back in as an extra option (labeled "current") so
-    // saving the form without touching that field doesn't silently wipe the assignment.
-    function loadZoneRoleSelects(managerId, supervisorId, managerName, supervisorName) {
+    // Loads the staff list into the Zone Manager / Zone Supervisor / Zone Auditor
+    // selects, each filtered to staff whose position slug matches (sys_set_staff_positions.slug_name
+    // = 'zone_manager' / 'zone_supervisor' / 'zone_auditor'), preselecting the given ids
+    // (used by both Add and Edit). If the zone's currently assigned manager/supervisor/
+    // auditor no longer holds a matching position, they're added back in as an extra
+    // option (labeled "current") so saving the form without touching that field doesn't
+    // silently wipe the assignment.
+    function loadZoneRoleSelects(managerId, supervisorId, auditorId, managerName, supervisorName, auditorName) {
         const $manager = $('#zoneManagerSelect');
         const $supervisor = $('#zoneSupervisorSelect');
+        const $auditor = $('#zoneAuditorSelect');
 
-        [$manager, $supervisor].forEach($select => {
+        [$manager, $supervisor, $auditor].forEach($select => {
             if ($select.hasClass('select2-hidden-accessible')) {
                 $select.select2('destroy');
             }
@@ -294,10 +308,17 @@ $(document).ready(function() {
             dataType: 'json',
             data: { position_slug: 'zone_supervisor' }
         });
+        const auditorsRequest = $.ajax({
+            url: '{{ route("ajax.staff.list") }}',
+            type: 'GET',
+            dataType: 'json',
+            data: { position_slug: 'zone_auditor' }
+        });
 
-        return $.when(managersRequest, supervisorsRequest).then(function(managersResp, supervisorsResp) {
+        return $.when(managersRequest, supervisorsRequest, auditorsRequest).then(function(managersResp, supervisorsResp, auditorsResp) {
             const managers = managersResp[0].staff || [];
             const supervisors = supervisorsResp[0].staff || [];
+            const auditors = auditorsResp[0].staff || [];
 
             $manager.empty().append($('<option>', { value: '', text: 'Select zone manager' }));
             managers.forEach(function(staff) {
@@ -315,11 +336,21 @@ $(document).ready(function() {
                 $supervisor.append($('<option>', { value: supervisorId, text: supervisorName + ' (current)' }));
             }
 
+            $auditor.empty().append($('<option>', { value: '', text: 'Select zone auditor' }));
+            auditors.forEach(function(staff) {
+                $auditor.append($('<option>', { value: staff.id, text: staff.full_names }));
+            });
+            if (auditorId && !auditors.some(s => String(s.id) === String(auditorId)) && auditorName && auditorName !== '-') {
+                $auditor.append($('<option>', { value: auditorId, text: auditorName + ' (current)' }));
+            }
+
             $manager.val(managerId || '');
             $supervisor.val(supervisorId || '');
+            $auditor.val(auditorId || '');
 
             $manager.select2({ placeholder: 'Select zone manager', allowClear: true, width: '100%', dropdownParent: $('#zoneModal') });
             $supervisor.select2({ placeholder: 'Select zone supervisor', allowClear: true, width: '100%', dropdownParent: $('#zoneModal') });
+            $auditor.select2({ placeholder: 'Select zone auditor', allowClear: true, width: '100%', dropdownParent: $('#zoneModal') });
         }, function() {
             toastr.error('Failed to load staff list');
         });
@@ -333,7 +364,7 @@ $(document).ready(function() {
         $('.invalid-feedback').text('').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
 
-        loadZoneRoleSelects(null, null).then(function() {
+        loadZoneRoleSelects(null, null, null).then(function() {
             $('#zoneModal').modal('show');
         });
     });
@@ -349,7 +380,7 @@ $(document).ready(function() {
         $('.invalid-feedback').text('').hide();
         $('.form-control, .form-select').removeClass('is-invalid');
 
-        loadZoneRoleSelects(data.zone_manager_id, data.zone_supervisor_id, data.zone_manager_name, data.zone_supervisor_name).then(function() {
+        loadZoneRoleSelects(data.zone_manager_id, data.zone_supervisor_id, data.zone_auditor_id, data.zone_manager_name, data.zone_supervisor_name, data.zone_auditor_name).then(function() {
             $('#zoneModal').modal('show');
         });
     });

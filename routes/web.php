@@ -1397,6 +1397,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/create/permission', [RolesController::class, 'addPermissionView'])->name('permissions.addview');
     // System Users
     Route::get('/roles/users', [UsersController::class, 'systemUsers'])->name('system.users');
+    Route::get('/users/{id}/details', [UsersController::class, 'showUserDetails'])->name('user.details');
     Route::get('/users/ajax/list', [UsersController::class, 'systemUsersAjax'])->name('user.ajax.list');
     Route::get('/users/ajax/staff-search', [UsersController::class, 'staffSearch'])->name('user.ajax.staff.search');
     // Must precede '/users/ajax/{id}' or the wildcard swallows this route.
@@ -1406,9 +1407,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/users/ajax/update/{id}', [UsersController::class, 'updateSystemUser'])->name('user.ajax.update');
     Route::post('/users/ajax/suspend/{id}', [UsersController::class, 'suspendUser'])->name('user.ajax.suspend');
     Route::post('/users/ajax/activate/{id}', [UsersController::class, 'activateUser'])->name('user.ajax.activate');
-    Route::post('/users/ajax/bulk-activate', [UsersController::class, 'bulkActivateUsers'])->name('user.ajax.bulk-activate');
-    Route::post('/users/ajax/bulk-suspend', [UsersController::class, 'bulkSuspendUsers'])->name('user.ajax.bulk-suspend');
-    Route::post('/users/ajax/bulk-reset-password', [UsersController::class, 'bulkResetPassword'])->name('user.ajax.bulk-reset-password');
 
     Route::get('/user/profile', [LoginController::class, 'profile'])->name('user.profile');
     Route::post('/user/password/update', [LoginController::class, 'updatePassword'])->name('user.password.update');

@@ -245,100 +245,48 @@ class UsersController extends Controller
         }
     }
 
-    public function bulkActivateUsers(Request $request)
+    public function showUserDetails($id)
     {
         try {
-            $validated = $request->validate([
-                'ids' => 'required|array|min:1',
-                'ids.*' => 'integer|exists:josya_users,id',
-            ]);
+            $user = DB::table('josya_users as u')
+                ->leftJoin('cb_role_user as ru', 'u.id', '=', 'ru.user_id')
+                ->leftJoin('cb_roles as r', 'ru.role_id', '=', 'r.id')
+                ->leftJoin('sys_user_staff_links as usl', 'u.id', '=', 'usl.user_id')
+                ->where('u.id', $id)
+                ->select('u.id', 'u.name', 'u.username', 'u.email', 'r.display_name as role_name', 'u.block',
+                         'usl.staff_id')
+                ->first();
 
-            $count = User::whereIn('id', $validated['ids'])->update(['block' => 0]);
+            if (!$user) {
+                return redirect()->route('system.users')->with('error', 'User not found');
+            }
 
-            return response()->json([
-                'success' => true,
-                'message' => $count . ' user(s) activated successfully',
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error bulk activating users: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => 'Failed to activate users'], 500);
-        }
-    }
+            $staff = null;
 
-    public function bulkSuspendUsers(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'ids' => 'required|array|min:1',
-                'ids.*' => 'integer|exists:josya_users,id',
-            ]);
+            if ($user->staff_id) {
+                $staff = DB::table('sys_staff as s')
+                    ->leftJoin('sys_set_staff_positions as p', 's.position_id', '=', 'p.id')
+                    ->leftJoin('sys_set_departments as d', 's.department_id', '=', 'd.id')
+                    ->leftJoin('sys_set_zones as z', 's.zone_id', '=', 'z.id')
+                    ->where('s.id', $user->staff_id)
+                    ->select(
+                        's.id', 's.full_names', 's.staff_number', 's.current_status_id', 's.mobile_number',
+                        's.email_address', 's.national_id', 's.hire_date',
+                        'p.position_name', 'd.department_name', 'z.zone_name'
+                    )
+                    ->first();
 
-            $count = User::whereIn('id', $validated['ids'])->update(['block' => 1]);
-
-            return response()->json([
-                'success' => true,
-                'message' => $count . ' user(s) suspended successfully',
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error bulk suspending users: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => 'Failed to suspend users'], 500);
-        }
-    }
-
-    public function bulkResetPassword(Request $request)
-    {
-        try {
-            // Bcrypt is intentionally slow (~200-300ms/hash), so hashing one password
-            // per selected user can comfortably exceed PHP's default 30s limit once
-            // more than ~100 users are selected at once (e.g. via "select all").
-            set_time_limit(600);
-
-            $validated = $request->validate([
-                'ids' => 'required|array|min:1',
-                'ids.*' => 'integer|exists:josya_users,id',
-                'mode' => 'required|in:auto,fixed',
-                'fixed_password' => 'required_if:mode,fixed|nullable|string|min:8|max:255',
-            ]);
-
-            $users = User::whereIn('id', $validated['ids'])->get();
-            $results = [];
-
-            DB::transaction(function () use ($users, $validated, &$results) {
-                foreach ($users as $user) {
-                    $plainPassword = $validated['mode'] === 'fixed'
-                        ? $validated['fixed_password']
-                        : Str::password(12);
-
-                    $user->password = $plainPassword;
-                    $user->requireReset = true;
-                    $user->save();
-
-                    $results[] = [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'password' => $plainPassword,
-                    ];
+                if ($staff) {
+                    $staff->status_label = \App\Models\Staff::STATUSES[$staff->current_status_id] ?? null;
+                    $staff->hire_date = $staff->hire_date ? \Carbon\Carbon::parse($staff->hire_date)->format('d M Y') : null;
                 }
-            });
+            }
 
-            return response()->json([
-                'success' => true,
-                'message' => count($results) . ' user(s) had their password reset',
-                'results' => $results,
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            return view('users.details', compact('user', 'staff'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('Error bulk resetting passwords: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => 'Failed to reset passwords'], 500);
+            Log::error('Error loading user details: ' . $e->getMessage());
+            return redirect()->route('system.users')->with('error', 'Failed to load user details');
         }
     }
 
