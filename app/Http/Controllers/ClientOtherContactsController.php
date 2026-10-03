@@ -84,6 +84,43 @@ class ClientOtherContactsController extends Controller
         }
     }
 
+    public function update(Request $request, $encryptedId)
+    {
+        DB::beginTransaction();
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $contact = ClientOtherContact::find($id);
+
+            if (!$contact) {
+                return response()->json(['success' => false, 'message' => 'Contact not found'], 404);
+            }
+
+            $validated = $request->validate([
+                'names' => 'required|string|max:255',
+                'email' => 'nullable|email|max:255',
+                'mobile' => 'nullable|string|max:20',
+            ]);
+
+            $contact->update([
+                'contact_names' => $validated['names'],
+                'other_email' => $validated['email'] ?? null,
+                'other_mobile_number' => $validated['mobile'] ?? null,
+            ]);
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Contact updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating other contact: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update contact: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function destroy($encryptedId)
     {
         DB::beginTransaction();

@@ -86,6 +86,45 @@ class ClientPartnersController extends Controller
         }
     }
 
+    public function update(Request $request, $encryptedId)
+    {
+        DB::beginTransaction();
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $partner = ClientPartner::find($id);
+
+            if (!$partner) {
+                return response()->json(['success' => false, 'message' => 'Partner not found'], 404);
+            }
+
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'national_id' => 'nullable|string|max:50',
+                'kra_pin' => 'nullable|string|max:50',
+                'phone' => 'nullable|string|max:20',
+            ]);
+
+            $partner->update([
+                'name' => $validated['name'],
+                'national_id' => $validated['national_id'] ?? null,
+                'kra_pin' => $validated['kra_pin'] ?? null,
+                'phone' => $validated['phone'] ?? null,
+            ]);
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Partner updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating partner: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update partner: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function destroy($encryptedId)
     {
         DB::beginTransaction();

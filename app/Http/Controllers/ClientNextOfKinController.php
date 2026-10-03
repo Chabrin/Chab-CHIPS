@@ -102,6 +102,58 @@ class ClientNextOfKinController extends Controller
         }
     }
 
+    public function update(Request $request, $encryptedId)
+    {
+        DB::beginTransaction();
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $kin = ClientNextOfKin::find($id);
+
+            if (!$kin) {
+                return response()->json(['success' => false, 'message' => 'Next of kin not found'], 404);
+            }
+
+            $validated = $request->validate([
+                'first_name' => 'required|string|max:255',
+                'second_name' => 'nullable|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'mobile' => 'nullable|string|max:20',
+                'email' => 'nullable|email|max:255',
+                'relation' => 'nullable|string|max:100',
+                'national_id' => 'nullable|string|max:50',
+            ]);
+
+            $fullName = trim(
+                $validated['first_name'] . ' ' .
+                    ($validated['second_name'] ?? '') . ' ' .
+                    $validated['last_name']
+            );
+
+            $kin->update([
+                'kin_first_name' => $validated['first_name'],
+                'kin_second_name' => $validated['second_name'] ?? null,
+                'kin_last_name' => $validated['last_name'],
+                'names' => $fullName,
+                'mobile_number' => $validated['mobile'] ?? null,
+                'email_address' => $validated['email'] ?? null,
+                'relationship' => $validated['relation'] ?? null,
+                'national_id' => $validated['national_id'] ?? null,
+            ]);
+
+            DB::commit();
+
+            return response()->json(['success' => true, 'message' => 'Next of kin updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            DB::rollBack();
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating next of kin: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update next of kin: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function destroy($encryptedId)
     {
         DB::beginTransaction();

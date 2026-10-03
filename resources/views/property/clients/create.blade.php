@@ -18,12 +18,24 @@
         box-shadow: none !important;
     }
     .repeater-table td {
-        padding: 12px 22px 12px 0 !important;
+        padding: 90px 160px 90px 0 !important;
         vertical-align: middle;
         white-space: nowrap;
-        font-size: 16px;
+        font-size: 44px;
+        line-height: 1.8;
     }
     .repeater-table td:last-child {
+        padding-right: 0 !important;
+    }
+    .repeater-table th {
+        padding: 0 60px 20px 0 !important;
+        font-size: 16px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+    .repeater-table th:last-child {
         padding-right: 0 !important;
     }
     .repeater-table tbody tr:hover {
@@ -84,12 +96,6 @@
                                     <button class="nav-link" id="contacts-tab" data-bs-toggle="tab" data-bs-target="#contacts" type="button" role="tab" aria-controls="contacts" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">contact_phone</span>
                                         Other Contacts
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab" aria-controls="documents" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">folder</span>
-                                        Files & Documents
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
@@ -641,6 +647,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Bank</th><th>Branch</th><th>Account Name</th><th>Account Number</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="bankAccountsTableBody">
                                                 <tr><td colspan="5" class="text-center text-muted">No bank accounts added yet</td></tr>
                                             </tbody>
@@ -659,6 +666,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Names</th><th>Email</th><th>Mobile Number</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="contactsTableBody">
                                                 <tr><td colspan="4" class="text-center text-muted">No contacts added yet</td></tr>
                                             </tbody>
@@ -666,42 +674,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Files & Documents Tab -->
-                                <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
-                                    <div id="documentsContainer">
-                                        <div class="document-entry mb-4 p-3 border rounded">
-                                            <div class="row">
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="file_type_0" class="form-label">File Type</label>
-                                                    <select class="form-select" id="file_type_0" name="documents[0][file_type]">
-                                                        <option value="">Please select</option>
-                                                        <option value="National ID">National ID</option>
-                                                        <option value="Passport">Passport</option>
-                                                        <option value="PIN Certificate">PIN Certificate</option>
-                                                        <option value="Contract">Contract</option>
-                                                        <option value="Other">Other</option>
-                                                    </select>
-                                                </div>
-                                
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="document_file_0" class="form-label">Documents</label>
-                                                    <input type="file" class="form-control" id="document_file_0" name="documents[0][file]">
-                                                </div>
-                                
-                                                <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-document" style="display: none;">
-                                                        <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addDocument">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                        Add Another Document
-                                    </button>
-                                </div>
-                                
                                 <!-- Next of Kin Tab -->
                                 <div class="tab-pane fade" id="nextofkin" role="tabpanel" aria-labelledby="nextofkin-tab">
                                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -713,6 +685,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Name</th><th>Mobile Number</th><th>Email</th><th>Relation</th><th>National ID</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="nextOfKinTableBody">
                                                 <tr><td colspan="6" class="text-center text-muted">No next of kin added yet</td></tr>
                                             </tbody>
@@ -731,6 +704,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Name</th><th>National ID</th><th>KRA PIN</th><th>Phone</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="partnersTableBody">
                                                 <tr><td colspan="5" class="text-center text-muted">No partners added yet</td></tr>
                                             </tbody>
@@ -1147,8 +1121,29 @@
             });
         }
 
-        function removeIcon(encryptedId, reloadKey) {
-            return '<td class="text-end"><span class="material-symbols-outlined remove-draft-row text-primary" role="button" title="Remove" style="font-size:20px;cursor:pointer;" data-id="' + encryptedId + '" data-reload="' + reloadKey + '">delete</span></td>';
+        // Enforce capital case on the Banks/Other Contacts/Next of Kin/Partners
+        // modal forms (names, account name, IDs, etc.) — matches the rest of the
+        // app's naming convention. Email inputs are a different type, so they're
+        // untouched; phone/number fields are unaffected by uppercasing digits.
+        $(document).on('input', '#addBankModal input[type="text"], #addContactModal input[type="text"], #addNextOfKinModal input[type="text"], #addPartnerModal input[type="text"]', function() {
+            var pos = this.selectionStart;
+            this.value = this.value.toUpperCase();
+            this.setSelectionRange(pos, pos);
+        });
+
+        function escAttr(v) {
+            return (v === null || v === undefined) ? '' : String(v).replace(/"/g, '&quot;');
+        }
+
+        function actionIcons(editCls, encryptedId, reloadKey, rawAttrs) {
+            var attrs = '';
+            Object.keys(rawAttrs || {}).forEach(function(key) {
+                attrs += ' data-' + key + '="' + escAttr(rawAttrs[key]) + '"';
+            });
+            return '<td class="text-end">' +
+                '<span class="material-symbols-outlined ' + editCls + ' text-primary" role="button" title="Edit" style="font-size:20px;cursor:pointer;margin-right:14px;" data-id="' + encryptedId + '"' + attrs + '>edit</span>' +
+                '<span class="material-symbols-outlined remove-draft-row text-primary" role="button" title="Remove" style="font-size:20px;cursor:pointer;" data-id="' + encryptedId + '" data-reload="' + reloadKey + '">delete</span>' +
+                '</td>';
         }
 
         function reloadBanksTable() {
@@ -1158,7 +1153,10 @@
                     '<td>' + (row.branch_name || '-') + '</td>' +
                     '<td>' + (row.account_name || '-') + '</td>' +
                     '<td>' + (row.account_number || '-') + '</td>' +
-                    removeIcon(row.encrypted_id, 'banks') +
+                    actionIcons('edit-bank-row', row.encrypted_id, 'banks', {
+                        'bank-id': row.bank_id, 'branch-id': row.branch_id,
+                        'account-name': row.account_name, 'account-number': row.account_number
+                    }) +
                     '</tr>';
             });
         }
@@ -1169,7 +1167,9 @@
                     '<td>' + (row.names || '-') + '</td>' +
                     '<td>' + (row.email || '-') + '</td>' +
                     '<td>' + (row.mobile || '-') + '</td>' +
-                    removeIcon(row.encrypted_id, 'contacts') +
+                    actionIcons('edit-contact-row', row.encrypted_id, 'contacts', {
+                        names: row.names, email: row.email, mobile: row.mobile
+                    }) +
                     '</tr>';
             });
         }
@@ -1183,7 +1183,10 @@
                     '<td>' + (row.email || '-') + '</td>' +
                     '<td>' + (row.relation || '-') + '</td>' +
                     '<td>' + (row.national_id || '-') + '</td>' +
-                    removeIcon(row.encrypted_id, 'nextofkin') +
+                    actionIcons('edit-nextofkin-row', row.encrypted_id, 'nextofkin', {
+                        'first-name': row.first_name, 'second-name': row.second_name, 'last-name': row.last_name,
+                        mobile: row.mobile, email: row.email, relation: row.relation, 'national-id': row.national_id
+                    }) +
                     '</tr>';
             });
         }
@@ -1195,7 +1198,9 @@
                     '<td>' + (row.national_id || '-') + '</td>' +
                     '<td>' + (row.kra_pin || '-') + '</td>' +
                     '<td>' + (row.phone || '-') + '</td>' +
-                    removeIcon(row.encrypted_id, 'partner') +
+                    actionIcons('edit-partner-row', row.encrypted_id, 'partner', {
+                        name: row.name, 'national-id': row.national_id, 'kra-pin': row.kra_pin, phone: row.phone
+                    }) +
                     '</tr>';
             });
         }
@@ -1213,28 +1218,53 @@
             removeDraftRow(id, reload);
         });
 
-        function saveDraftRow(payload, modalId, resetFn, onDone, saveBtnId) {
+        // Clear every modal's edit-mode flag + fields whenever it closes (save,
+        // cancel, or backdrop click) so the next "Add" click always starts fresh.
+        var modalResets = {
+            addBankModal: function() {
+                $('#modal_bank_id, #modal_branch_id').val('');
+                $('#modal_account_name, #modal_account_number').val('');
+            },
+            addContactModal: function() {
+                $('#modal_contact_names, #modal_contact_email, #modal_contact_mobile').val('');
+            },
+            addNextOfKinModal: function() {
+                $('#modal_nok_first_name, #modal_nok_second_name, #modal_nok_last_name, #modal_nok_mobile, #modal_nok_email, #modal_nok_national_id').val('');
+                $('#modal_nok_relation').val('');
+            },
+            addPartnerModal: function() {
+                $('#modal_partner_name, #modal_partner_national_id, #modal_partner_kra_pin, #modal_partner_phone').val('');
+            }
+        };
+        Object.keys(modalResets).forEach(function(modalId) {
+            document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
+                $(this).removeData('editId');
+                modalResets[modalId]();
+            });
+        });
+
+        function saveDraftRow(payload, modalId, saveBtnId, reloadFn) {
             var $btn = $('#' + saveBtnId);
             var $spinner = $btn.find('.spinner-border');
+            var editId = $('#' + modalId).data('editId');
             $spinner.removeClass('d-none');
             $btn.prop('disabled', true);
 
             $.ajax({
-                url: draftRepeaterUrl(),
-                type: 'POST',
+                url: editId ? (draftRepeaterUrl() + '/' + editId) : draftRepeaterUrl(),
+                type: editId ? 'PUT' : 'POST',
                 data: Object.assign({ _token: '{{ csrf_token() }}', draft_token: draftToken }, payload),
                 success: function(res) {
                     if (res.success) {
-                        toastr.success(res.message || 'Added successfully');
+                        toastr.success(res.message || 'Saved successfully');
                         bootstrap.Modal.getOrCreateInstance(document.getElementById(modalId)).hide();
-                        resetFn();
-                        onDone();
+                        reloadFn();
                     } else {
-                        toastr.error(res.message || 'Failed to add entry.');
+                        toastr.error(res.message || 'Failed to save entry.');
                     }
                 },
                 error: function(xhr) {
-                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to add entry.';
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save entry.';
                     toastr.error(msg);
                 },
                 complete: function() {
@@ -1251,10 +1281,7 @@
                 branch_id: $('#modal_branch_id').val(),
                 account_name: $('#modal_account_name').val(),
                 account_number: $('#modal_account_number').val()
-            }, 'addBankModal', function() {
-                $('#modal_bank_id, #modal_branch_id').val('');
-                $('#modal_account_name, #modal_account_number').val('');
-            }, reloadBanksTable, 'saveBankBtn');
+            }, 'addBankModal', 'saveBankBtn', reloadBanksTable);
         });
 
         $('#saveContactBtn').on('click', function() {
@@ -1263,9 +1290,7 @@
                 names: $('#modal_contact_names').val(),
                 email: $('#modal_contact_email').val(),
                 mobile: $('#modal_contact_mobile').val()
-            }, 'addContactModal', function() {
-                $('#modal_contact_names, #modal_contact_email, #modal_contact_mobile').val('');
-            }, reloadContactsTable, 'saveContactBtn');
+            }, 'addContactModal', 'saveContactBtn', reloadContactsTable);
         });
 
         $('#saveNextOfKinBtn').on('click', function() {
@@ -1278,10 +1303,7 @@
                 email: $('#modal_nok_email').val(),
                 relation: $('#modal_nok_relation').val(),
                 national_id: $('#modal_nok_national_id').val()
-            }, 'addNextOfKinModal', function() {
-                $('#modal_nok_first_name, #modal_nok_second_name, #modal_nok_last_name, #modal_nok_mobile, #modal_nok_email, #modal_nok_national_id').val('');
-                $('#modal_nok_relation').val('');
-            }, reloadNextOfKinTable, 'saveNextOfKinBtn');
+            }, 'addNextOfKinModal', 'saveNextOfKinBtn', reloadNextOfKinTable);
         });
 
         $('#savePartnerBtn').on('click', function() {
@@ -1291,9 +1313,51 @@
                 national_id: $('#modal_partner_national_id').val(),
                 kra_pin: $('#modal_partner_kra_pin').val(),
                 phone: $('#modal_partner_phone').val()
-            }, 'addPartnerModal', function() {
-                $('#modal_partner_name, #modal_partner_national_id, #modal_partner_kra_pin, #modal_partner_phone').val('');
-            }, reloadPartnersTable, 'savePartnerBtn');
+            }, 'addPartnerModal', 'savePartnerBtn', reloadPartnersTable);
+        });
+
+        // Edit icon: prefill the Add modal with this row's current values and
+        // switch it into edit mode (the modal's editId data flag) before opening.
+        $(document).on('click', '.edit-bank-row', function() {
+            var $el = $(this);
+            $('#modal_bank_id').val($el.data('bankId')).trigger('change');
+            $('#modal_branch_id').val($el.data('branchId'));
+            $('#modal_account_name').val($el.data('accountName'));
+            $('#modal_account_number').val($el.data('accountNumber'));
+            $('#addBankModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addBankModal')).show();
+        });
+
+        $(document).on('click', '.edit-contact-row', function() {
+            var $el = $(this);
+            $('#modal_contact_names').val($el.data('names'));
+            $('#modal_contact_email').val($el.data('email'));
+            $('#modal_contact_mobile').val($el.data('mobile'));
+            $('#addContactModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addContactModal')).show();
+        });
+
+        $(document).on('click', '.edit-nextofkin-row', function() {
+            var $el = $(this);
+            $('#modal_nok_first_name').val($el.data('firstName'));
+            $('#modal_nok_second_name').val($el.data('secondName'));
+            $('#modal_nok_last_name').val($el.data('lastName'));
+            $('#modal_nok_mobile').val($el.data('mobile'));
+            $('#modal_nok_email').val($el.data('email'));
+            $('#modal_nok_relation').val($el.data('relation'));
+            $('#modal_nok_national_id').val($el.data('nationalId'));
+            $('#addNextOfKinModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addNextOfKinModal')).show();
+        });
+
+        $(document).on('click', '.edit-partner-row', function() {
+            var $el = $(this);
+            $('#modal_partner_name').val($el.data('name'));
+            $('#modal_partner_national_id').val($el.data('nationalId'));
+            $('#modal_partner_kra_pin').val($el.data('kraPin'));
+            $('#modal_partner_phone').val($el.data('phone'));
+            $('#addPartnerModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addPartnerModal')).show();
         });
 
         // Populate the modal's Bank/Branch selects once bank data has loaded
@@ -1312,51 +1376,6 @@
         reloadContactsTable();
         reloadNextOfKinTable();
         reloadPartnersTable();
-
-        // Add Document functionality
-        let documentCounter = 1;
-        $('#addDocument').on('click', function() {
-            const documentEntry = `
-                <div class="document-entry mb-4 p-3 border rounded">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="file_type_${documentCounter}" class="form-label">File Type</label>
-                            <select class="form-select" id="file_type_${documentCounter}" name="documents[${documentCounter}][file_type]">
-                                <option value="">Please select</option>
-                                <option value="National ID">National ID</option>
-                                <option value="Passport">Passport</option>
-                                <option value="PIN Certificate">PIN Certificate</option>
-                                <option value="Contract">Contract</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="document_file_${documentCounter}" class="form-label">Documents</label>
-                            <input type="file" class="form-control" id="document_file_${documentCounter}" name="documents[${documentCounter}][file]">
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-outline-primary btn-sm remove-document">
-                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('#documentsContainer').append(documentEntry);
-            documentCounter++;
-
-            if ($('.document-entry').length > 1) {
-                $('.remove-document').show();
-            }
-        });
-
-        // Remove Document
-        $(document).on('click', '.remove-document', function() {
-            $(this).closest('.document-entry').remove();
-            if ($('.document-entry').length === 1) {
-                $('.remove-document').hide();
-            }
-        });
 
         // If there are validation errors, find which tab has errors and activate it
         var firstErrorField = $('.is-invalid').first();

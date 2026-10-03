@@ -99,48 +99,10 @@ class ClientDraftRepeatersController extends Controller
     {
         try {
             $kind = $request->input('kind');
-
-            $rules = [
+            $rules = array_merge([
                 'draft_token' => 'required|string|max:64',
                 'kind' => ['required', Rule::in(ClientDraftRepeater::KINDS)],
-            ];
-
-            switch ($kind) {
-                case 'bank':
-                    $rules += [
-                        'bank_id' => 'required|integer|exists:sys_set_banks,id',
-                        'branch_id' => 'nullable|integer|exists:sys_set_banks_branches,id',
-                        'account_name' => 'required|string|max:255',
-                        'account_number' => 'required|string|max:50',
-                    ];
-                    break;
-                case 'contact':
-                    $rules += [
-                        'names' => 'required|string|max:255',
-                        'email' => 'nullable|email|max:255',
-                        'mobile' => 'nullable|string|max:20',
-                    ];
-                    break;
-                case 'nextofkin':
-                    $rules += [
-                        'first_name' => 'required|string|max:255',
-                        'second_name' => 'nullable|string|max:255',
-                        'last_name' => 'required|string|max:255',
-                        'mobile' => 'nullable|string|max:20',
-                        'email' => 'nullable|email|max:255',
-                        'relation' => 'nullable|string|max:100',
-                        'national_id' => 'nullable|string|max:50',
-                    ];
-                    break;
-                case 'partner':
-                    $rules += [
-                        'name' => 'required|string|max:255',
-                        'national_id' => 'nullable|string|max:50',
-                        'kra_pin' => 'nullable|string|max:50',
-                        'phone' => 'nullable|string|max:20',
-                    ];
-                    break;
-            }
+            ], $this->rulesForKind($kind));
 
             $validated = $request->validate($rules);
 
@@ -157,6 +119,71 @@ class ClientDraftRepeatersController extends Controller
             ErrorDispatcher::dispatch($e);
             Log::error('Error storing draft repeater: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to add: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function update(Request $request, $encryptedId)
+    {
+        try {
+            $id = Crypt::decrypt($encryptedId);
+            $row = ClientDraftRepeater::find($id);
+
+            if (!$row) {
+                return response()->json(['success' => false, 'message' => 'Row not found'], 404);
+            }
+
+            $kind = $row->kind;
+            $validated = $request->validate($this->rulesForKind($kind));
+            $validated['draft_token'] = $row->draft_token;
+            $validated['kind'] = $kind;
+
+            $row->update($this->mapToColumns($validated));
+
+            return response()->json(['success' => true, 'message' => 'Updated successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error updating draft repeater: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to update: ' . $e->getMessage()], 500);
+        }
+    }
+
+    private function rulesForKind(?string $kind): array
+    {
+        switch ($kind) {
+            case 'bank':
+                return [
+                    'bank_id' => 'required|integer|exists:sys_set_banks,id',
+                    'branch_id' => 'nullable|integer|exists:sys_set_banks_branches,id',
+                    'account_name' => 'required|string|max:255',
+                    'account_number' => 'required|string|max:50',
+                ];
+            case 'contact':
+                return [
+                    'names' => 'required|string|max:255',
+                    'email' => 'nullable|email|max:255',
+                    'mobile' => 'nullable|string|max:20',
+                ];
+            case 'nextofkin':
+                return [
+                    'first_name' => 'required|string|max:255',
+                    'second_name' => 'nullable|string|max:255',
+                    'last_name' => 'required|string|max:255',
+                    'mobile' => 'nullable|string|max:20',
+                    'email' => 'nullable|email|max:255',
+                    'relation' => 'nullable|string|max:100',
+                    'national_id' => 'nullable|string|max:50',
+                ];
+            case 'partner':
+                return [
+                    'name' => 'required|string|max:255',
+                    'national_id' => 'nullable|string|max:50',
+                    'kra_pin' => 'nullable|string|max:50',
+                    'phone' => 'nullable|string|max:20',
+                ];
+            default:
+                return [];
         }
     }
 

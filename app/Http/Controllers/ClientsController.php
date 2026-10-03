@@ -8,7 +8,6 @@ use App\Models\Client;
 use App\Models\Property;
 use App\Models\BankBranch;
 use Illuminate\Http\Request;
-use App\Models\ClientDocument;
 use App\Models\ClientBankDetail;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
@@ -1697,9 +1696,6 @@ class ClientsController extends Controller
             $client = $this->createClient($validated, $referenceNumber, $photoPath);
             //Log::info('Client created with ID: ' . $client->id . ' by User ID: ' . Auth::id());
 
-            $this->saveDocuments($request, $client->id);
-            Log::info('Documents saved for client ID: ' . $client->id);
-
             $this->commitDraftRepeaters($request->input('draft_token'), $client->id);
             Log::info('Draft banks/contacts/next-of-kin/partners committed for client ID: ' . $client->id);
 
@@ -1762,13 +1758,6 @@ class ClientsController extends Controller
             // Tags this submission's staged Banks/Other Contacts/Next of Kin/Partners
             // modal entries (see ClientDraftRepeatersController / commitDraftRepeaters()).
             'draft_token' => 'nullable|string|max:64',
-
-            // Documents validation — the only repeater still submitted inline via the
-            // main form (Banks/Other Contacts/Next of Kin/Partners are now AJAX modals).
-            'documents' => 'nullable|array',
-            'documents.*.file_type' => 'nullable|string',
-            'documents.*.other_file_type' => 'nullable|string|max:255',
-            'documents.*.file' => 'nullable|file|max:10240',
         ]);
     }
 
@@ -2039,41 +2028,6 @@ class ClientsController extends Controller
     }
 
     /**
-     * Save documents to sys_pm_clients_65_repeat
-     */
-    private function saveDocuments(Request $request, int $clientId)
-    {
-        if (!$request->has('documents')) {
-            return;
-        }
-
-        foreach ($request->input('documents') as $index => $documentData) {
-            // Skip if no file uploaded
-            if (!$request->hasFile("documents.{$index}.file")) {
-                continue;
-            }
-
-            $file = $request->file("documents.{$index}.file");
-            if ($file && $file->isValid()) {
-                // Store the file
-                $filePath = $file->store('clients/' . $clientId . '/documents', 'public');
-
-                // Determine file type
-                $fileType = $documentData['file_type'] ?? 'Other';
-                if ($fileType === 'Other' && !empty($documentData['other_file_type'])) {
-                    $fileType = $documentData['other_file_type'];
-                }
-
-                ClientDocument::create([
-                    'parent_id' => $clientId,
-                    'documents' => $filePath,
-                    'file_type' => $fileType,
-                ]);
-            }
-        }
-    }
-
-    /**
      * Show the form for editing a client
      */
     public function edit($encryptedId)
@@ -2085,7 +2039,6 @@ class ClientsController extends Controller
                 'bankAccounts.bank',
                 'bankAccounts.branch',
                 'otherContacts',
-                'documents',
                 'nextOfKins',
                 'partners'
             ])->findOrFail($id);
@@ -2133,10 +2086,7 @@ class ClientsController extends Controller
             // Banks/Other Contacts/Next of Kin/Partners are managed via their own AJAX
             // modals on this page now (real client id already exists) — see
             // ClientBankDetailsController / ClientOtherContactsController /
-            // ClientNextOfKinController / ClientPartnersController. Only Documents still
-            // submits inline via this form.
-            $this->updateDocuments($request, $client->id);
-            Log::info('Documents updated for client ID: ' . $client->id);
+            // ClientNextOfKinController / ClientPartnersController.
 
             DB::commit();
 
@@ -2195,15 +2145,6 @@ class ClientsController extends Controller
             'contact_person_mobile' => $isCompany ? ($validated['contact_person_mobile'] ?? null) : null,
             'contact_person_email' => $isCompany ? ($validated['contact_person_email'] ?? null) : null,
         ]);
-    }
-
-    /**
-     * Update documents
-     */
-    private function updateDocuments(Request $request, int $clientId)
-    {
-        // Only add new documents, don't delete existing ones
-        $this->saveDocuments($request, $clientId);
     }
 
     /**

@@ -16,12 +16,24 @@
         box-shadow: none !important;
     }
     .repeater-table td {
-        padding: 12px 22px 12px 0 !important;
+        padding: 90px 160px 90px 0 !important;
         vertical-align: middle;
         white-space: nowrap;
-        font-size: 16px;
+        font-size: 44px;
+        line-height: 1.8;
     }
     .repeater-table td:last-child {
+        padding-right: 0 !important;
+    }
+    .repeater-table th {
+        padding: 0 60px 20px 0 !important;
+        font-size: 16px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+    .repeater-table th:last-child {
         padding-right: 0 !important;
     }
     .repeater-table tbody tr:hover {
@@ -82,12 +94,6 @@
                                     <button class="nav-link" id="contacts-tab" data-bs-toggle="tab" data-bs-target="#contacts" type="button" role="tab" aria-controls="contacts" aria-selected="false">
                                         <span class="material-symbols-outlined">contact_phone</span>
                                         Other Contacts
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab" aria-controls="documents" aria-selected="false">
-                                        <span class="material-symbols-outlined">folder</span>
-                                        Files & Documents
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
@@ -407,6 +413,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Bank</th><th>Branch</th><th>Account Name</th><th>Account Number</th><th>Default</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="bankAccountsTableBody">
                                                 <tr><td colspan="6" class="text-center text-muted">No bank accounts added yet</td></tr>
                                             </tbody>
@@ -425,6 +432,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Names</th><th>Email</th><th>Mobile Number</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="contactsTableBody">
                                                 <tr><td colspan="4" class="text-center text-muted">No contacts added yet</td></tr>
                                             </tbody>
@@ -432,74 +440,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Files & Documents Tab -->
-                                <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
-                                    <div class="row">
-                                        <div class="col-12 mb-3">
-                                            <h6 class="text-muted border-bottom pb-2">Upload Documents</h6>
-                                        </div>
-
-                                        @if($client->documents && $client->documents->count() > 0)
-                                        <div class="col-12 mb-4">
-                                            <h6 class="text-muted">Existing Documents</h6>
-                                            <div class="list-group">
-                                                @foreach($client->documents as $document)
-                                                <div class="list-group-item d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        <strong>{{ $document->file_type }}</strong>
-                                                        <br>
-                                                        <small class="text-muted">{{ basename($document->documents) }}</small>
-                                                    </div>
-                                                    <a href="{{ Storage::url($document->documents) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                        <span class="material-symbols-outlined" style="font-size:16px;">download</span>
-                                                        Download
-                                                    </a>
-                                                </div>
-                                                @endforeach
-                                            </div>
-                                        </div>
-                                        @endif
-
-                                        <div class="col-12 mb-3">
-                                            <h6 class="text-muted">Add New Documents</h6>
-                                        </div>
-
-                                        <div class="col-12 mb-3 text-end">
-                                            <button type="button" class="btn btn-success btn-sm" id="addDocument">
-                                                <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
-                                                Add Document
-                                            </button>
-                                        </div>
-
-                                        <div id="documentsContainer">
-                                            <div class="document-entry mb-4 p-3 border rounded">
-                                                <div class="row">
-                                                    <div class="col-md-4 mb-3">
-                                                        <label for="file_type_0" class="form-label">File Type</label>
-                                                        <select class="form-select" id="file_type_0" name="documents[0][file_type]">
-                                                            <option value="">Please select</option>
-                                                            <option value="National ID">National ID</option>
-                                                            <option value="Passport">Passport</option>
-                                                            <option value="PIN Certificate">PIN Certificate</option>
-                                                            <option value="Contract">Contract</option>
-                                                            <option value="Other">Other</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-6 mb-3">
-                                                        <label for="document_file_0" class="form-label">Documents</label>
-                                                        <input type="file" class="form-control" id="document_file_0" name="documents[0][file]">
-                                                    </div>
-                                                    <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                        <button type="button" class="btn btn-danger btn-sm remove-document" style="display:none;">
-                                                            <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
                                 <!-- Next of Kin Tab -->
                                 <div class="tab-pane fade" id="nextofkin" role="tabpanel" aria-labelledby="nextofkin-tab">
                                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -511,6 +451,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Name</th><th>Mobile Number</th><th>Email</th><th>Relation</th><th>National ID</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="nextOfKinTableBody">
                                                 <tr><td colspan="6" class="text-center text-muted">No next of kin added yet</td></tr>
                                             </tbody>
@@ -529,6 +470,7 @@
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table repeater-table">
+                                            <thead><tr><th>Name</th><th>National ID</th><th>KRA PIN</th><th>Phone</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="partnersTableBody">
                                                 <tr><td colspan="5" class="text-center text-muted">No partners added yet</td></tr>
                                             </tbody>
@@ -891,8 +833,29 @@
         // ─────────────────────────────────────────────────────────────────
         var clientEncryptedId = $('#client_encrypted_id').val();
 
-        function removeIcon(url, reloadKey) {
-            return '<td class="text-end"><span class="material-symbols-outlined remove-real-row text-primary" role="button" title="Remove" style="font-size:20px;cursor:pointer;" data-url="' + url + '" data-reload="' + reloadKey + '">delete</span></td>';
+        // Enforce capital case on the Banks/Other Contacts/Next of Kin/Partners
+        // modal forms (names, account name, IDs, etc.) — matches the rest of the
+        // app's naming convention. Email inputs are a different type, so they're
+        // untouched; phone/number fields are unaffected by uppercasing digits.
+        $(document).on('input', '#addBankModal input[type="text"], #addContactModal input[type="text"], #addNextOfKinModal input[type="text"], #addPartnerModal input[type="text"]', function() {
+            var pos = this.selectionStart;
+            this.value = this.value.toUpperCase();
+            this.setSelectionRange(pos, pos);
+        });
+
+        function escAttr(v) {
+            return (v === null || v === undefined) ? '' : String(v).replace(/"/g, '&quot;');
+        }
+
+        function actionIcons(editCls, encryptedId, baseUrl, reloadKey, rawAttrs) {
+            var attrs = '';
+            Object.keys(rawAttrs || {}).forEach(function(key) {
+                attrs += ' data-' + key + '="' + escAttr(rawAttrs[key]) + '"';
+            });
+            return '<td class="text-end">' +
+                '<span class="material-symbols-outlined ' + editCls + ' text-primary" role="button" title="Edit" style="font-size:20px;cursor:pointer;margin-right:14px;" data-id="' + encryptedId + '"' + attrs + '>edit</span>' +
+                '<span class="material-symbols-outlined remove-real-row text-primary" role="button" title="Remove" style="font-size:20px;cursor:pointer;" data-url="' + baseUrl + '/' + encryptedId + '" data-reload="' + reloadKey + '">delete</span>' +
+                '</td>';
         }
 
         function reloadBanksTable() {
@@ -910,7 +873,11 @@
                         '<td>' + (row.account_name || '-') + '</td>' +
                         '<td>' + (row.account_number || '-') + '</td>' +
                         '<td>' + (row.is_default ? '<span class="badge bg-primary">Default</span>' : '-') + '</td>' +
-                        removeIcon("{{ url('/ajax/clients/bank-details') }}/" + row.encrypted_id, 'banks') +
+                        actionIcons('edit-bank-row', row.encrypted_id, "{{ url('/ajax/clients/bank-details') }}", 'banks', {
+                            'bank-id': row.bank_id, 'branch-id': row.branch_id,
+                            'account-name': row.account_name, 'account-number': row.account_number,
+                            'is-default': row.is_default ? 1 : 0
+                        }) +
                         '</tr>';
                 });
                 $('#bankAccountsTableBody').html(html);
@@ -930,7 +897,9 @@
                         '<td>' + (row.names || '-') + '</td>' +
                         '<td>' + (row.email || '-') + '</td>' +
                         '<td>' + (row.mobile || '-') + '</td>' +
-                        removeIcon("{{ url('/ajax/clients/other-contacts') }}/" + row.encrypted_id, 'contacts') +
+                        actionIcons('edit-contact-row', row.encrypted_id, "{{ url('/ajax/clients/other-contacts') }}", 'contacts', {
+                            names: row.names, email: row.email, mobile: row.mobile
+                        }) +
                         '</tr>';
                 });
                 $('#contactsTableBody').html(html);
@@ -953,7 +922,10 @@
                         '<td>' + (row.email || '-') + '</td>' +
                         '<td>' + (row.relation || '-') + '</td>' +
                         '<td>' + (row.national_id || '-') + '</td>' +
-                        removeIcon("{{ url('/ajax/clients/next-of-kin') }}/" + row.encrypted_id, 'nextofkin') +
+                        actionIcons('edit-nextofkin-row', row.encrypted_id, "{{ url('/ajax/clients/next-of-kin') }}", 'nextofkin', {
+                            'first-name': row.first_name, 'second-name': row.second_name, 'last-name': row.last_name,
+                            mobile: row.mobile, email: row.email, relation: row.relation, 'national-id': row.national_id
+                        }) +
                         '</tr>';
                 });
                 $('#nextOfKinTableBody').html(html);
@@ -974,7 +946,9 @@
                         '<td>' + (row.national_id || '-') + '</td>' +
                         '<td>' + (row.kra_pin || '-') + '</td>' +
                         '<td>' + (row.phone || '-') + '</td>' +
-                        removeIcon("{{ url('/ajax/clients/partners') }}/" + row.encrypted_id, 'partner') +
+                        actionIcons('edit-partner-row', row.encrypted_id, "{{ url('/ajax/clients/partners') }}", 'partner', {
+                            name: row.name, 'national-id': row.national_id, 'kra-pin': row.kra_pin, phone: row.phone
+                        }) +
                         '</tr>';
                 });
                 $('#partnersTableBody').html(html);
@@ -1005,28 +979,54 @@
             });
         });
 
-        function saveRealRow(url, payload, modalId, resetFn, reloadFn, saveBtnId) {
+        // Clear every modal's edit-mode flag + fields whenever it closes (save,
+        // cancel, or backdrop click) so the next "Add" click always starts fresh.
+        var modalResets = {
+            addBankModal: function() {
+                $('#modal_bank_id, #modal_branch_id').val('');
+                $('#modal_account_name, #modal_account_number').val('');
+                $('#modal_is_default').prop('checked', false);
+            },
+            addContactModal: function() {
+                $('#modal_contact_names, #modal_contact_email, #modal_contact_mobile').val('');
+            },
+            addNextOfKinModal: function() {
+                $('#modal_nok_first_name, #modal_nok_second_name, #modal_nok_last_name, #modal_nok_mobile, #modal_nok_email, #modal_nok_national_id').val('');
+                $('#modal_nok_relation').val('');
+            },
+            addPartnerModal: function() {
+                $('#modal_partner_name, #modal_partner_national_id, #modal_partner_kra_pin, #modal_partner_phone').val('');
+            }
+        };
+        Object.keys(modalResets).forEach(function(modalId) {
+            document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
+                $(this).removeData('editId');
+                modalResets[modalId]();
+            });
+        });
+
+        function saveRealRow(baseUrl, payload, modalId, saveBtnId, reloadFn) {
             var $btn = $('#' + saveBtnId);
             var $spinner = $btn.find('.spinner-border');
+            var editId = $('#' + modalId).data('editId');
             $spinner.removeClass('d-none');
             $btn.prop('disabled', true);
 
             $.ajax({
-                url: url,
-                type: 'POST',
+                url: editId ? (baseUrl + '/' + editId) : baseUrl,
+                type: editId ? 'PUT' : 'POST',
                 data: Object.assign({ _token: '{{ csrf_token() }}' }, payload),
                 success: function(res) {
                     if (res.success) {
-                        toastr.success(res.message || 'Added successfully');
+                        toastr.success(res.message || 'Saved successfully');
                         bootstrap.Modal.getOrCreateInstance(document.getElementById(modalId)).hide();
-                        resetFn();
                         reloadFn();
                     } else {
-                        toastr.error(res.message || 'Failed to add entry.');
+                        toastr.error(res.message || 'Failed to save entry.');
                     }
                 },
                 error: function(xhr) {
-                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to add entry.';
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save entry.';
                     toastr.error(msg);
                 },
                 complete: function() {
@@ -1037,33 +1037,27 @@
         }
 
         $('#saveBankBtn').on('click', function() {
-            saveRealRow("{{ route('ajax.clients.bank-details.store') }}", {
+            saveRealRow("{{ url('/ajax/clients/bank-details') }}", {
                 client_id: clientEncryptedId,
                 bank_id: $('#modal_bank_id').val(),
                 branch_id: $('#modal_branch_id').val(),
                 account_name: $('#modal_account_name').val(),
                 account_number: $('#modal_account_number').val(),
                 is_default: $('#modal_is_default').is(':checked') ? 1 : 0
-            }, 'addBankModal', function() {
-                $('#modal_bank_id, #modal_branch_id').val('');
-                $('#modal_account_name, #modal_account_number').val('');
-                $('#modal_is_default').prop('checked', false);
-            }, reloadBanksTable, 'saveBankBtn');
+            }, 'addBankModal', 'saveBankBtn', reloadBanksTable);
         });
 
         $('#saveContactBtn').on('click', function() {
-            saveRealRow("{{ route('ajax.clients.other-contacts.store') }}", {
+            saveRealRow("{{ url('/ajax/clients/other-contacts') }}", {
                 client_id: clientEncryptedId,
                 names: $('#modal_contact_names').val(),
                 email: $('#modal_contact_email').val(),
                 mobile: $('#modal_contact_mobile').val()
-            }, 'addContactModal', function() {
-                $('#modal_contact_names, #modal_contact_email, #modal_contact_mobile').val('');
-            }, reloadContactsTable, 'saveContactBtn');
+            }, 'addContactModal', 'saveContactBtn', reloadContactsTable);
         });
 
         $('#saveNextOfKinBtn').on('click', function() {
-            saveRealRow("{{ route('ajax.clients.next-of-kin.store') }}", {
+            saveRealRow("{{ url('/ajax/clients/next-of-kin') }}", {
                 client_id: clientEncryptedId,
                 first_name: $('#modal_nok_first_name').val(),
                 second_name: $('#modal_nok_second_name').val(),
@@ -1072,22 +1066,62 @@
                 email: $('#modal_nok_email').val(),
                 relation: $('#modal_nok_relation').val(),
                 national_id: $('#modal_nok_national_id').val()
-            }, 'addNextOfKinModal', function() {
-                $('#modal_nok_first_name, #modal_nok_second_name, #modal_nok_last_name, #modal_nok_mobile, #modal_nok_email, #modal_nok_national_id').val('');
-                $('#modal_nok_relation').val('');
-            }, reloadNextOfKinTable, 'saveNextOfKinBtn');
+            }, 'addNextOfKinModal', 'saveNextOfKinBtn', reloadNextOfKinTable);
         });
 
         $('#savePartnerBtn').on('click', function() {
-            saveRealRow("{{ route('ajax.clients.partners.store') }}", {
+            saveRealRow("{{ url('/ajax/clients/partners') }}", {
                 client_id: clientEncryptedId,
                 name: $('#modal_partner_name').val(),
                 national_id: $('#modal_partner_national_id').val(),
                 kra_pin: $('#modal_partner_kra_pin').val(),
                 phone: $('#modal_partner_phone').val()
-            }, 'addPartnerModal', function() {
-                $('#modal_partner_name, #modal_partner_national_id, #modal_partner_kra_pin, #modal_partner_phone').val('');
-            }, reloadPartnersTable, 'savePartnerBtn');
+            }, 'addPartnerModal', 'savePartnerBtn', reloadPartnersTable);
+        });
+
+        // Edit icon: prefill the Add modal with this row's current values and
+        // switch it into edit mode (the modal's editId data flag) before opening.
+        $(document).on('click', '.edit-bank-row', function() {
+            var $el = $(this);
+            $('#modal_bank_id').val($el.data('bankId')).trigger('change');
+            $('#modal_branch_id').val($el.data('branchId'));
+            $('#modal_account_name').val($el.data('accountName'));
+            $('#modal_account_number').val($el.data('accountNumber'));
+            $('#modal_is_default').prop('checked', !!$el.data('isDefault'));
+            $('#addBankModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addBankModal')).show();
+        });
+
+        $(document).on('click', '.edit-contact-row', function() {
+            var $el = $(this);
+            $('#modal_contact_names').val($el.data('names'));
+            $('#modal_contact_email').val($el.data('email'));
+            $('#modal_contact_mobile').val($el.data('mobile'));
+            $('#addContactModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addContactModal')).show();
+        });
+
+        $(document).on('click', '.edit-nextofkin-row', function() {
+            var $el = $(this);
+            $('#modal_nok_first_name').val($el.data('firstName'));
+            $('#modal_nok_second_name').val($el.data('secondName'));
+            $('#modal_nok_last_name').val($el.data('lastName'));
+            $('#modal_nok_mobile').val($el.data('mobile'));
+            $('#modal_nok_email').val($el.data('email'));
+            $('#modal_nok_relation').val($el.data('relation'));
+            $('#modal_nok_national_id').val($el.data('nationalId'));
+            $('#addNextOfKinModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addNextOfKinModal')).show();
+        });
+
+        $(document).on('click', '.edit-partner-row', function() {
+            var $el = $(this);
+            $('#modal_partner_name').val($el.data('name'));
+            $('#modal_partner_national_id').val($el.data('nationalId'));
+            $('#modal_partner_kra_pin').val($el.data('kraPin'));
+            $('#modal_partner_phone').val($el.data('phone'));
+            $('#addPartnerModal').data('editId', $el.data('id'));
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('addPartnerModal')).show();
         });
 
         reloadBanksTable();
@@ -1109,79 +1143,6 @@
             }
             
             $(this).val(value);
-        });
-
-        // Add Document functionality
-        let documentCounter = 1;
-        $('#addDocument').on('click', function() {
-            const documentEntry = `
-                <div class="document-entry mb-4 p-3 border rounded">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="file_type_${documentCounter}" class="form-label">File Type</label>
-                            <select class="form-select" id="file_type_${documentCounter}" name="documents[${documentCounter}][file_type]">
-                                <option value="">Please select</option>
-                                <option value="National ID">National ID</option>
-                                <option value="Passport">Passport</option>
-                                <option value="PIN Certificate">PIN Certificate</option>
-                                <option value="Contract">Contract</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="document_file_${documentCounter}" class="form-label">Documents</label>
-                            <input type="file" class="form-control" id="document_file_${documentCounter}" name="documents[${documentCounter}][file]">
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-danger btn-sm remove-document">
-                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('#documentsContainer').append(documentEntry);
-            documentCounter++;
-
-            if ($('.document-entry').length > 1) {
-                $('.remove-document').show();
-            }
-        });
-
-        // Remove Document
-        $(document).on('click', '.remove-document', function() {
-            $(this).closest('.document-entry').remove();
-            if ($('.document-entry').length === 1) {
-                $('.remove-document').hide();
-            }
-        });
-
-        // Delete existing document
-        $(document).on('click', '.delete-existing-document', function() {
-            if (confirm('Are you sure you want to delete this document?')) {
-                const documentId = $(this).data('id');
-                const row = $(this).closest('tr');
-                
-                $.ajax({
-                    url: `/property/clients/documents/${documentId}`,
-                    type: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                    },
-                    success: function(response) {
-                        row.fadeOut(300, function() {
-                            $(this).remove();
-                            if ($('#existing-documents-table tbody tr').length === 0) {
-                                $('#existing-documents-table').parent().remove();
-                            }
-                        });
-                        alert('Document deleted successfully');
-                    },
-                    error: function(xhr) {
-                        alert('Error deleting document');
-                    }
-                });
-            }
         });
 
         // If there are validation errors, find which tab has errors and activate it
