@@ -344,15 +344,17 @@
                                             @error('passport_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <small class="text-danger d-none duplicate-check-message" id="passport_number_duplicate"></small>
                                         </div>
 
                                         <div class="col-md-4 mb-3 individual-only">
-                                            <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
+                                            <label for="national_id" class="form-label">National ID</label>
                                             <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id', $tenantRecord->national_id ?? null) }}" placeholder="e.g., 12345678">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                             <small class="text-danger d-none duplicate-check-message" id="national_id_duplicate"></small>
+                                            <small class="text-muted d-block">National ID or Passport Number is required.</small>
                                         </div>
 
                                         <div class="col-md-12 mb-3">
@@ -636,7 +638,7 @@
             $('.individual-only').toggle(!isCompany);
             $('.company-only').toggle(isCompany);
 
-            $('#names, #nationality_id, #national_id').prop('required', !isCompany);
+            $('#names, #nationality_id').prop('required', !isCompany);
             $('#company_name').prop('required', isCompany);
         }
 
@@ -667,6 +669,7 @@
                 type: 'GET',
                 data: {
                     tenant_type: tenantType,
+                    field: fieldId,
                     value: value,
                     exclude_id: '{{ Crypt::encrypt($tenant->id) }}'
                 },
@@ -709,6 +712,10 @@
             checkDuplicateIdentifier('national_id', 1, 'National ID');
         });
 
+        $('#passport_number').on('blur', function() {
+            checkDuplicateIdentifier('passport_number', 1, 'Passport Number');
+        });
+
         $('#company_registration_number').on('blur', function() {
             checkDuplicateIdentifier('company_registration_number', 3, 'Registration Number');
         });
@@ -727,6 +734,10 @@
             liveDuplicateCheck('national_id', 1, 'National ID');
         });
 
+        $('#passport_number').on('input', function() {
+            liveDuplicateCheck('passport_number', 1, 'Passport Number');
+        });
+
         $('#company_registration_number').on('input', function() {
             liveDuplicateCheck('company_registration_number', 3, 'Registration Number');
         });
@@ -735,18 +746,39 @@
         // the active tenant type.
         $('#unitTenantForm').on('submit', function(e) {
             var isCompany = $('#tenant_type').val() === '3';
-            var $field = isCompany ? $('#company_registration_number') : $('#national_id');
-            var value = $field.val().trim();
+            var $tabButton = document.getElementById('tenant-info-tab');
 
-            if ($field.data('duplicate-flagged') === value && $field.data('duplicate-confirmed') !== value) {
+            // Individuals need a National ID or a Passport Number (server enforces the same rule).
+            if (!isCompany && !$('#national_id').val().trim() && !$('#passport_number').val().trim()) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
-                var tabButton = document.getElementById('tenant-info-tab');
-                if (tabButton) {
-                    bootstrap.Tab.getOrCreateInstance(tabButton).show();
+                if ($tabButton) {
+                    bootstrap.Tab.getOrCreateInstance($tabButton).show();
                 }
-                toastr.error('Please resolve the duplicate ' + (isCompany ? 'registration number' : 'National ID') + ' before submitting.');
-                $field.trigger('blur');
+                toastr.error('National ID or Passport Number is required.');
+                $('#national_id').focus();
+                return;
+            }
+
+            // Block while a flagged-but-unconfirmed duplicate is showing on any identifier in use.
+            var identifiers = isCompany
+                ? [['company_registration_number', 'registration number']]
+                : [['national_id', 'National ID'], ['passport_number', 'Passport Number']];
+
+            for (var i = 0; i < identifiers.length; i++) {
+                var $field = $('#' + identifiers[i][0]);
+                var value = $field.val().trim();
+
+                if ($field.data('duplicate-flagged') === value && $field.data('duplicate-confirmed') !== value) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    if ($tabButton) {
+                        bootstrap.Tab.getOrCreateInstance($tabButton).show();
+                    }
+                    toastr.error('Please resolve the duplicate ' + identifiers[i][1] + ' before submitting.');
+                    $field.trigger('blur');
+                    return;
+                }
             }
         });
 

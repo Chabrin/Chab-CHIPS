@@ -232,9 +232,9 @@ class TenantsController extends Controller
     }
 
     /**
-     * Check whether a tenant already exists with the given National ID
-     * (Individual) or Registration Number (Company). Used for the live
-     * on-blur "duplicate — continue anyway?" confirmation on the create/edit
+     * Check whether a tenant already exists with the given National ID or
+     * Passport Number (Individual) or Registration Number (Company). Used for
+     * the live on-blur "duplicate — continue anyway?" confirmation on the create/edit
      * forms — this is advisory only, not enforced server-side beyond
      * presence (see validateIndividualOrCompanyFields()).
      */
@@ -268,10 +268,12 @@ class TenantsController extends Controller
                 ->first();
             $referenceNumber = $match->reference_number ?? null;
         } else {
-            $match = TenantRecord::where('national_id', $value)
+            // Individuals are identified by National ID or Passport Number (either is enough).
+            $column = $request->input('field') === 'passport_number' ? 'passport_number' : 'national_id';
+            $match = TenantRecord::where($column, $value)
                 ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                 ->with('legacyClient:id,reference_number')
-                ->select(['id', 'names', 'national_id'])
+                ->select(['id', 'names', $column])
                 ->first();
             $referenceNumber = $match->legacyClient->reference_number ?? null;
         }
@@ -1056,8 +1058,8 @@ class TenantsController extends Controller
             if (empty($validated['nationality_id'])) {
                 $missing['nationality_id'] = ['Nationality is required for an Individual tenant.'];
             }
-            if (empty($validated['national_id'])) {
-                $missing['national_id'] = ['National ID is required for an Individual tenant.'];
+            if (empty($validated['national_id']) && empty($validated['passport_number'])) {
+                $missing['national_id'] = ['National ID or Passport Number is required for an Individual tenant.'];
             }
             if (!empty($missing)) {
                 throw \Illuminate\Validation\ValidationException::withMessages($missing);
