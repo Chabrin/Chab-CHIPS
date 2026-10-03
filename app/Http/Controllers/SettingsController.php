@@ -756,7 +756,7 @@ class SettingsController extends Controller
     {
         $gender = Gender::findOrFail($id);
         $validated = $request->validate([
-            'name' => 'required|string|max:50|unique:gender,name,' . $id . ',id,deleted_at,NULL',
+            'name' => 'required|string|max:50|unique:cb_genders,name,' . $id . ',id,deleted_at,NULL',
             'description' => 'nullable|string|max:255',
         ]);
         try {
