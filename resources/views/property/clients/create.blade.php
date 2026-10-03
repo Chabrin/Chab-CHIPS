@@ -104,12 +104,6 @@
                                         Next of Kin
                                     </button>
                                 </li>
-                                <li class="nav-item partnership-only" role="presentation">
-                                    <button class="nav-link" id="partners-tab" data-bs-toggle="tab" data-bs-target="#partners" type="button" role="tab" aria-controls="partners" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">groups</span>
-                                        Partners
-                                    </button>
-                                </li>
                             </ul>
 
                             <!-- Tab Content -->
@@ -117,19 +111,6 @@
                                 <!-- Personal Details Tab -->
                                 <div class="tab-pane fade show active" id="personal" role="tabpanel" aria-labelledby="personal-tab">
                                     <div class="row">
-                                        <!-- Registration Information Section -->
-                                        <div class="col-12 mb-3">
-                                            <h6 class="text-muted border-bottom pb-2">Registration Information</h6>
-                                        </div>
-                                        
-                                        <div class="col-md-4 mb-3">
-                                            <label for="select_time" class="form-label">Select Time</label>
-                                            <input type="datetime-local" class="form-control @error('select_time') is-invalid @enderror" id="select_time" name="select_time" value="{{ old('select_time', now()->format('Y-m-d\TH:i')) }}">
-                                            @error('select_time')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                
                                         <div class="col-md-4 mb-3">
                                             <label for="registered_date" class="form-label">Registration Date</label>
                                             <input type="datetime-local" class="form-control @error('registered_date') is-invalid @enderror" id="registered_date" name="registered_date" value="{{ old('registered_date', now()->format('Y-m-d\TH:i')) }}">
@@ -150,10 +131,6 @@
                                             @enderror
                                         </div>
 
-                                        <!-- Personal Information Section -->
-                                        <div class="col-12 mb-3 mt-3 individual-only">
-                                            <h6 class="text-muted border-bottom pb-2">Personal Information</h6>
-                                        </div>
 
                                         <div class="col-md-3 mb-3 individual-only" id="individualFields">
                                             <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
@@ -206,11 +183,6 @@
                                             @error('gender')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
-                                        </div>
-
-                                        <!-- Company / Partnership Information Section -->
-                                        <div class="col-12 mb-3 mt-3 company-only partnership-only" id="companyHeading">
-                                            <h6 class="text-muted border-bottom pb-2" id="entityInfoHeading">Company Information</h6>
                                         </div>
 
                                         <div class="col-md-6 mb-3 company-only partnership-only" id="companyFields">
@@ -486,31 +458,6 @@
                                             @enderror
                                         </div>
                                 
-                                        <div class="col-md-3 mb-3">
-                                            <label for="preferred_language_id" class="form-label">Preferred Language</label>
-                                            <select class="form-select @error('preferred_language_id') is-invalid @enderror" id="preferred_language_id" name="preferred_language_id">
-                                                <option value="">Select Language</option>
-                                                <option value="1" {{ old('preferred_language_id') == '1' ? 'selected' : '' }}>English</option>
-                                                <option value="2" {{ old('preferred_language_id') == '2' ? 'selected' : '' }}>Swahili</option>
-                                            </select>
-                                            @error('preferred_language')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                
-                                        <div class="col-md-3 mb-3">
-                                            <label for="photo" class="form-label">Client Photo</label>
-                                            <input type="file" class="form-control @error('photo') is-invalid @enderror" id="photo" name="photo" accept="image/*">
-                                            <small class="text-muted">Max 2MB (JPG, PNG, GIF)</small>
-                                            @error('photo')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                
-                                        <!-- Identification Documents Section -->
-                                        <div class="col-12 mb-3 mt-3">
-                                            <h6 class="text-muted border-bottom pb-2">Identification & Tax Information</h6>
-                                        </div>
                                 
                                         <div class="col-md-3 mb-3 individual-only" id="individualIdFields">
                                             <label for="national_id" class="form-label">National ID</label>
@@ -545,12 +492,6 @@
                                             @enderror
                                         </div>
 
-                                        <!-- Contact Person Section (Company only) -->
-                                        <div class="col-12 mb-3 mt-3 company-only" id="contactPersonHeading">
-                                            <h6 class="text-muted border-bottom pb-2">Contact Person</h6>
-                                            <small class="text-muted">The individual who deals with this account day-to-day</small>
-                                        </div>
-
                                         <div class="col-md-3 mb-3 company-only" id="companyContactFields">
                                             <label for="contact_person_name" class="form-label">Contact Person Name</label>
                                             <input type="text" class="form-control @error('contact_person_name') is-invalid @enderror" id="contact_person_name" name="contact_person_name" value="{{ old('contact_person_name') }}" placeholder="Enter contact person's name">
@@ -583,11 +524,6 @@
                                             @enderror
                                         </div>
 
-                                        <!-- Contact Information Section -->
-                                        <div class="col-12 mb-3 mt-3">
-                                            <h6 class="text-muted border-bottom pb-2">Contact Information</h6>
-                                        </div>
-                                
                                         <div class="col-md-4 mb-3">
                                             <label for="mobile_number" class="form-label">Mobile Number <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ old('mobile_number') }}" placeholder="254XXXXXXXXX" maxlength="12" pattern="254[0-9]{9}" required>
@@ -605,33 +541,31 @@
                                             @enderror
                                         </div>
                                 
-                                        <!-- Address Information Section -->
-                                        <div class="col-12 mb-3 mt-3">
-                                            <h6 class="text-muted border-bottom pb-2">Address Information</h6>
-                                        </div>
-                                
                                         <div class="col-md-12 mb-3">
-                                            <label for="address" class="form-label">Primary Address</label>
-                                            <textarea class="form-control @error('address') is-invalid @enderror" id="address" name="address" rows="2" placeholder="Enter primary address">{{ old('address') }}</textarea>
+                                            <label for="address" class="form-label">Address</label>
+                                            <textarea class="form-control @error('address') is-invalid @enderror" id="address" name="address" rows="2" placeholder="Enter address">{{ old('address') }}</textarea>
                                             @error('address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                
-                                        <div class="col-md-6 mb-3">
-                                            <label for="address_2" class="form-label">Secondary Address</label>
-                                            <textarea class="form-control @error('address_2') is-invalid @enderror" id="address_2" name="address_2" rows="2" placeholder="Enter secondary address">{{ old('address_2') }}</textarea>
-                                            @error('address_2')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                
-                                        <div class="col-md-6 mb-3">
-                                            <label for="address_3" class="form-label">Additional Address</label>
-                                            <textarea class="form-control @error('address_3') is-invalid @enderror" id="address_3" name="address_3" rows="2" placeholder="Enter additional address">{{ old('address_3') }}</textarea>
-                                            @error('address_3')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
+
+                                        <!-- Partners (Partnership and Trust only) -->
+                                        <div class="col-12 mt-3 partnership-only">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h6 class="mb-0">Partners</h6>
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPartnerModal">
+                                                    <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
+                                                    Add
+                                                </button>
+                                            </div>
+                                            <div class="table-responsive">
+                                                <table class="table repeater-table">
+                                                    <thead><tr><th>Name</th><th>National ID</th><th>KRA PIN</th><th>Phone</th><th class="text-end">Action</th></tr></thead>
+                                                    <tbody id="partnersTableBody">
+                                                        <tr><td colspan="5" class="text-center text-muted">No partners added yet</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -688,25 +622,6 @@
                                             <thead><tr><th>Name</th><th>Mobile Number</th><th>Email</th><th>Relation</th><th>National ID</th><th class="text-end">Action</th></tr></thead>
                                             <tbody id="nextOfKinTableBody">
                                                 <tr><td colspan="6" class="text-center text-muted">No next of kin added yet</td></tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Partners Tab (Partnership and Trust only) -->
-                                <div class="tab-pane fade partnership-only" id="partners" role="tabpanel" aria-labelledby="partners-tab">
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <h6 class="mb-0">Partners</h6>
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPartnerModal">
-                                            <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
-                                            Add
-                                        </button>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table repeater-table">
-                                            <thead><tr><th>Name</th><th>National ID</th><th>KRA PIN</th><th>Phone</th><th class="text-end">Action</th></tr></thead>
-                                            <tbody id="partnersTableBody">
-                                                <tr><td colspan="5" class="text-center text-muted">No partners added yet</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
@@ -925,7 +840,6 @@
             $('.company-only').toggle(isEntity);
             $('.partnership-only').toggle(isPartnership);
 
-            $('#entityInfoHeading').text(isPartnership ? 'Partnership / Trust Information' : 'Company Information');
             $('#entityNameLabel').html(isPartnership ? 'Partnership/Trust Name <span class="text-danger">*</span>' : 'Company Name <span class="text-danger">*</span>');
             $('#company_name').attr('placeholder', isPartnership ? 'Enter partnership/trust name' : 'Enter company name');
 
