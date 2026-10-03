@@ -1,9 +1,34 @@
 @extends('layouts.main')
 @section('content')
 <style>
-    /* Individual is the default selection, so hide Company-only fields until
-       toggleClientTypeFields() runs (or immediately, if old('client_type_id') was 3). */
-    .company-only { display: none; }
+    /* Individual is the default selection, so hide Company/Partnership-only fields
+       until toggleClientTypeFields() runs (or immediately, if old('client_type_id')
+       was 3 or 4). */
+    .company-only, .partnership-only { display: none; }
+
+    /* Banks/Other Contacts/Next of Kin/Partners — compact, line-free rows
+       rather than a bordered table (table-borderless alone gets overridden by
+       the theme's own table styling, so these are explicit + !important). */
+    .repeater-table { margin-bottom: 0; width: auto; }
+    .repeater-table,
+    .repeater-table tr,
+    .repeater-table td,
+    .repeater-table th {
+        border: none !important;
+        box-shadow: none !important;
+    }
+    .repeater-table td {
+        padding: 12px 22px 12px 0 !important;
+        vertical-align: middle;
+        white-space: nowrap;
+        font-size: 16px;
+    }
+    .repeater-table td:last-child {
+        padding-right: 0 !important;
+    }
+    .repeater-table tbody tr:hover {
+        background-color: transparent !important;
+    }
 </style>
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -39,6 +64,7 @@
 
                         <form action="{{ route('property.clients.store') }}" method="POST" id="clientCreateForm" enctype="multipart/form-data">
                             @csrf
+                            <input type="hidden" name="draft_token" id="draft_token" value="{{ $draftToken }}">
 
                             <!-- Nav Tabs -->
                             <ul class="nav nav-tabs" id="clientCreateTabs" role="tablist">
@@ -70,6 +96,12 @@
                                     <button class="nav-link" id="nextofkin-tab" data-bs-toggle="tab" data-bs-target="#nextofkin" type="button" role="tab" aria-controls="nextofkin" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">family_restroom</span>
                                         Next of Kin
+                                    </button>
+                                </li>
+                                <li class="nav-item partnership-only" role="presentation">
+                                    <button class="nav-link" id="partners-tab" data-bs-toggle="tab" data-bs-target="#partners" type="button" role="tab" aria-controls="partners" aria-selected="false">
+                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">groups</span>
+                                        Partners
                                     </button>
                                 </li>
                             </ul>
@@ -105,6 +137,7 @@
                                             <select class="form-select @error('client_type_id') is-invalid @enderror" id="client_type_id" name="client_type_id" required>
                                                 <option value="1" {{ old('client_type_id', '1') == '1' ? 'selected' : '' }}>Individual</option>
                                                 <option value="3" {{ old('client_type_id') == '3' ? 'selected' : '' }}>Company</option>
+                                                <option value="4" {{ old('client_type_id') == '4' ? 'selected' : '' }}>Partnership and Trust</option>
                                             </select>
                                             @error('client_type_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -169,13 +202,13 @@
                                             @enderror
                                         </div>
 
-                                        <!-- Company Information Section -->
-                                        <div class="col-12 mb-3 mt-3 company-only" id="companyHeading">
-                                            <h6 class="text-muted border-bottom pb-2">Company Information</h6>
+                                        <!-- Company / Partnership Information Section -->
+                                        <div class="col-12 mb-3 mt-3 company-only partnership-only" id="companyHeading">
+                                            <h6 class="text-muted border-bottom pb-2" id="entityInfoHeading">Company Information</h6>
                                         </div>
 
-                                        <div class="col-md-6 mb-3 company-only" id="companyFields">
-                                            <label for="company_name" class="form-label">Company Name <span class="text-danger">*</span></label>
+                                        <div class="col-md-6 mb-3 company-only partnership-only" id="companyFields">
+                                            <label for="company_name" class="form-label" id="entityNameLabel">Company Name <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('company_name') is-invalid @enderror" id="company_name" name="company_name" value="{{ old('company_name') }}" placeholder="Enter company name">
                                             @error('company_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -599,95 +632,40 @@
 
                                 <!-- Bank Details Tab -->
                                 <div class="tab-pane fade" id="banking" role="tabpanel" aria-labelledby="banking-tab">
-                                    <div id="bankAccountsContainer">
-                                        <div class="bank-entry mb-4 p-3 border rounded">
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="bank_id_0" class="form-label">Bank</label>
-                                                    <select class="form-select bank-select @error('banks.0.bank_id') is-invalid @enderror" id="bank_id_0" name="banks[0][bank_id]" data-index="0">
-                                                        <option value="">Please select</option>
-                                                        <!-- Banks will be populated via AJAX -->
-                                                    </select>
-                                                    @error('banks.0.bank_id')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="branch_id_0" class="form-label">Branch</label>
-                                                    <select class="form-select branch-select @error('banks.0.branch_id') is-invalid @enderror" id="branch_id_0" name="banks[0][branch_id]" data-index="0">
-                                                        <option value="">Please select</option>
-                                                        <!-- Branches will be populated based on bank selection -->
-                                                    </select>
-                                                    @error('banks.0.branch_id')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-5 mb-3">
-                                                    <label for="account_name_0" class="form-label">Account Name</label>
-                                                    <input type="text" class="form-control @error('banks.0.account_name') is-invalid @enderror" id="account_name_0" name="banks[0][account_name]" value="{{ old('banks.0.account_name') }}" placeholder="Enter account name">
-                                                    @error('banks.0.account_name')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-5 mb-3">
-                                                    <label for="account_number_0" class="form-label">Account Number</label>
-                                                    <input type="text" class="form-control @error('banks.0.account_number') is-invalid @enderror" id="account_number_0" name="banks[0][account_number]" value="{{ old('banks.0.account_number') }}" placeholder="Enter account number">
-                                                    @error('banks.0.account_number')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-
-                                                <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-bank" style="display: none;">
-                                                        <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="mb-0">Bank Accounts</h6>
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addBankModal">
+                                            <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
+                                            Add
+                                        </button>
                                     </div>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addBank">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                        Add Another Bank Account
-                                    </button>
+                                    <div class="table-responsive">
+                                        <table class="table repeater-table">
+                                            <tbody id="bankAccountsTableBody">
+                                                <tr><td colspan="5" class="text-center text-muted">No bank accounts added yet</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                                
+
                                 <!-- Other Contacts Tab -->
                                 <div class="tab-pane fade" id="contacts" role="tabpanel" aria-labelledby="contacts-tab">
-                                    <div id="contactsContainer">
-                                        <div class="contact-entry mb-4 p-3 border rounded">
-                                            <div class="row">
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="contact_names_0" class="form-label">Names</label>
-                                                    <input type="text" class="form-control" id="contact_names_0" name="contacts[0][names]" value="{{ old('contacts.0.names') }}" placeholder="Enter contact name">
-                                                </div>
-                                
-                                                <div class="col-md-3 mb-3">
-                                                    <label for="contact_email_0" class="form-label">Email</label>
-                                                    <input type="email" class="form-control" id="contact_email_0" name="contacts[0][email]" value="{{ old('contacts.0.email') }}" placeholder="name@example.com">
-                                                </div>
-                                
-                                                <div class="col-md-3 mb-3">
-                                                    <label for="contact_mobile_0" class="form-label">Mobile Number</label>
-                                                    <input type="text" class="form-control" id="contact_mobile_0" name="contacts[0][mobile]" value="{{ old('contacts.0.mobile') }}" placeholder="254XXXXXXXXX">
-                                                </div>
-                                
-                                                <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-contact" style="display: none;">
-                                                        <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="mb-0">Other Contacts</h6>
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addContactModal">
+                                            <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
+                                            Add
+                                        </button>
                                     </div>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addContact">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                        Add Another Contact
-                                    </button>
+                                    <div class="table-responsive">
+                                        <table class="table repeater-table">
+                                            <tbody id="contactsTableBody">
+                                                <tr><td colspan="4" class="text-center text-muted">No contacts added yet</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                                
+
                                 <!-- Files & Documents Tab -->
                                 <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
                                     <div id="documentsContainer">
@@ -726,87 +704,210 @@
                                 
                                 <!-- Next of Kin Tab -->
                                 <div class="tab-pane fade" id="nextofkin" role="tabpanel" aria-labelledby="nextofkin-tab">
-                                    <div id="nextOfKinContainer">
-                                        <div class="nok-entry mb-4 p-3 border rounded">
-                                            <div class="row">
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="nok_first_name_0" class="form-label">First Name</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.first_name') is-invalid @enderror" id="nok_first_name_0" name="next_of_kin[0][first_name]" value="{{ old('next_of_kin.0.first_name') }}" placeholder="Enter first name">
-                                                    @error('next_of_kin.0.first_name')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="nok_second_name_0" class="form-label">Second Name</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.second_name') is-invalid @enderror" id="nok_second_name_0" name="next_of_kin[0][second_name]" value="{{ old('next_of_kin.0.second_name') }}" placeholder="Enter second name">
-                                                    @error('next_of_kin.0.second_name')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="nok_last_name_0" class="form-label">Last Name</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.last_name') is-invalid @enderror" id="nok_last_name_0" name="next_of_kin[0][last_name]" value="{{ old('next_of_kin.0.last_name') }}" placeholder="Enter last name">
-                                                    @error('next_of_kin.0.last_name')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="nok_mobile_0" class="form-label">Mobile Number</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.mobile') is-invalid @enderror" id="nok_mobile_0" name="next_of_kin[0][mobile]" value="{{ old('next_of_kin.0.mobile') }}" placeholder="254XXXXXXXXX">
-                                                    @error('next_of_kin.0.mobile')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="nok_email_0" class="form-label">Email Address</label>
-                                                    <input type="email" class="form-control @error('next_of_kin.0.email') is-invalid @enderror" id="nok_email_0" name="next_of_kin[0][email]" value="{{ old('next_of_kin.0.email') }}" placeholder="name@example.com">
-                                                    @error('next_of_kin.0.email')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="nok_relation_0" class="form-label">Relation</label>
-                                                    <select class="form-select @error('next_of_kin.0.relation') is-invalid @enderror" id="nok_relation_0" name="next_of_kin[0][relation]">
-                                                        <option value="">Please select</option>
-                                                        <option value="Spouse" {{ old('next_of_kin.0.relation') == 'Spouse' ? 'selected' : '' }}>Spouse</option>
-                                                        <option value="Parent" {{ old('next_of_kin.0.relation') == 'Parent' ? 'selected' : '' }}>Parent</option>
-                                                        <option value="Sibling" {{ old('next_of_kin.0.relation') == 'Sibling' ? 'selected' : '' }}>Sibling</option>
-                                                        <option value="Child" {{ old('next_of_kin.0.relation') == 'Child' ? 'selected' : '' }}>Child</option>
-                                                        <option value="Other" {{ old('next_of_kin.0.relation') == 'Other' ? 'selected' : '' }}>Other</option>
-                                                    </select>
-                                                    @error('next_of_kin.0.relation')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-10 mb-3">
-                                                    <label for="nok_national_id_0" class="form-label">National ID</label>
-                                                    <input type="text" class="form-control @error('next_of_kin.0.national_id') is-invalid @enderror" id="nok_national_id_0" name="next_of_kin[0][national_id]" value="{{ old('next_of_kin.0.national_id') }}" placeholder="Enter national ID number">
-                                                    @error('next_of_kin.0.national_id')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-                                
-                                                <div class="col-md-2 mb-3 d-flex align-items-end">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm remove-nok" style="display: none;">
-                                                        <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="mb-0">Next of Kin</h6>
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addNextOfKinModal">
+                                            <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
+                                            Add
+                                        </button>
                                     </div>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="addNextOfKin">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">add</span>
-                                        Add Another Next of Kin
-                                    </button>
+                                    <div class="table-responsive">
+                                        <table class="table repeater-table">
+                                            <tbody id="nextOfKinTableBody">
+                                                <tr><td colspan="6" class="text-center text-muted">No next of kin added yet</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Partners Tab (Partnership and Trust only) -->
+                                <div class="tab-pane fade partnership-only" id="partners" role="tabpanel" aria-labelledby="partners-tab">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="mb-0">Partners</h6>
+                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPartnerModal">
+                                            <span class="material-symbols-outlined me-1" style="font-size:16px;">add</span>
+                                            Add
+                                        </button>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table repeater-table">
+                                            <tbody id="partnersTableBody">
+                                                <tr><td colspan="5" class="text-center text-muted">No partners added yet</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </form>
+
+                        <!-- Add Bank Account Modal -->
+                        <div class="modal fade" id="addBankModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Add Bank Account</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Bank</label>
+                                            <select class="form-select" id="modal_bank_id">
+                                                <option value="">Please select</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Branch</label>
+                                            <select class="form-select" id="modal_branch_id">
+                                                <option value="">Please select</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Account Name</label>
+                                            <input type="text" class="form-control" id="modal_account_name" placeholder="Enter account name">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Account Number</label>
+                                            <input type="text" class="form-control" id="modal_account_number" placeholder="Enter account number">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="saveBankBtn">
+                                            <span class="spinner-border spinner-border-sm me-2 d-none"></span>
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Contact Modal -->
+                        <div class="modal fade" id="addContactModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Add Contact</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Names</label>
+                                            <input type="text" class="form-control" id="modal_contact_names" placeholder="Enter contact name">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Email</label>
+                                            <input type="email" class="form-control" id="modal_contact_email" placeholder="name@example.com">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Mobile Number</label>
+                                            <input type="text" class="form-control" id="modal_contact_mobile" placeholder="254XXXXXXXXX">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="saveContactBtn">
+                                            <span class="spinner-border spinner-border-sm me-2 d-none"></span>
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Next of Kin Modal -->
+                        <div class="modal fade" id="addNextOfKinModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Add Next of Kin</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row">
+                                            <div class="col-md-4 mb-3">
+                                                <label class="form-label">First Name</label>
+                                                <input type="text" class="form-control" id="modal_nok_first_name" placeholder="Enter first name">
+                                            </div>
+                                            <div class="col-md-4 mb-3">
+                                                <label class="form-label">Second Name</label>
+                                                <input type="text" class="form-control" id="modal_nok_second_name" placeholder="Enter second name">
+                                            </div>
+                                            <div class="col-md-4 mb-3">
+                                                <label class="form-label">Last Name</label>
+                                                <input type="text" class="form-control" id="modal_nok_last_name" placeholder="Enter last name">
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Mobile Number</label>
+                                                <input type="text" class="form-control" id="modal_nok_mobile" placeholder="254XXXXXXXXX">
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Email Address</label>
+                                                <input type="email" class="form-control" id="modal_nok_email" placeholder="name@example.com">
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">Relation</label>
+                                                <select class="form-select" id="modal_nok_relation">
+                                                    <option value="">Please select</option>
+                                                    <option value="Spouse">Spouse</option>
+                                                    <option value="Parent">Parent</option>
+                                                    <option value="Sibling">Sibling</option>
+                                                    <option value="Child">Child</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">National ID</label>
+                                                <input type="text" class="form-control" id="modal_nok_national_id" placeholder="Enter national ID number">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="saveNextOfKinBtn">
+                                            <span class="spinner-border spinner-border-sm me-2 d-none"></span>
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Partner Modal -->
+                        <div class="modal fade" id="addPartnerModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Add Partner</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Name</label>
+                                            <input type="text" class="form-control" id="modal_partner_name" placeholder="Enter partner's name">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">National ID</label>
+                                            <input type="text" class="form-control" id="modal_partner_national_id" placeholder="Enter national ID number">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">KRA PIN</label>
+                                            <input type="text" class="form-control" id="modal_partner_kra_pin" placeholder="Enter KRA PIN">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Phone</label>
+                                            <input type="text" class="form-control" id="modal_partner_phone" placeholder="254XXXXXXXXX">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="savePartnerBtn">
+                                            <span class="spinner-border spinner-border-sm me-2 d-none"></span>
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -835,16 +936,31 @@
             });
         });
 
-        // Toggle Individual vs Company fields based on Client Type
+        // Toggle Individual vs Company vs Partnership/Trust fields based on Client Type
         function toggleClientTypeFields() {
-            var isCompany = $('#client_type_id').val() === '3';
+            var typeId = $('#client_type_id').val();
+            var isIndividual = typeId === '1';
+            var isCompany = typeId === '3';
+            var isPartnership = typeId === '4';
+            var isEntity = isCompany || isPartnership;
 
-            $('.individual-only').toggle(!isCompany);
-            $('.company-only').toggle(isCompany);
+            $('.individual-only').toggle(isIndividual);
+            // .company-only also covers the shared entity-name field (used by both
+            // Company and Partnership) — company_registration_number/contact-person
+            // fields inside it are further scoped to Company alone, below.
+            $('.company-only').toggle(isEntity);
+            $('.partnership-only').toggle(isPartnership);
 
-            // First/Last Name/Gender are required for Individual; Company Name for Company.
-            $('#first_name, #last_name, #gender').prop('required', !isCompany);
-            $('#company_name').prop('required', isCompany);
+            $('#entityInfoHeading').text(isPartnership ? 'Partnership / Trust Information' : 'Company Information');
+            $('#entityNameLabel').html(isPartnership ? 'Partnership/Trust Name <span class="text-danger">*</span>' : 'Company Name <span class="text-danger">*</span>');
+            $('#company_name').attr('placeholder', isPartnership ? 'Enter partnership/trust name' : 'Enter company name');
+
+            // Registration number + contact person are Company-only, not shared with Partnership.
+            $('.company-only:not(.partnership-only)').toggle(isCompany);
+
+            // First/Last Name/Gender are required for Individual; entity name for Company/Partnership.
+            $('#first_name, #last_name, #gender').prop('required', isIndividual);
+            $('#company_name').prop('required', isEntity);
         }
 
         $('#client_type_id').on('change', toggleClientTypeFields);
@@ -955,31 +1071,15 @@
                     $select.append(`<option value="${bank.id}" ${selected}>${bank.bank_name}</option>`);
                 });
             });
+
+            // Add Bank Account modal's select isn't part of the main form, so it's
+            // populated directly rather than via the .bank-select class above.
+            let $modalBank = $('#modal_bank_id');
+            $modalBank.empty().append('<option value="">Please select</option>');
+            banksData.forEach(function(bank) {
+                $modalBank.append(`<option value="${bank.id}">${bank.bank_name}</option>`);
+            });
         }
-
-        // Handle bank change to load branches (delegated event)
-        $(document).on('change', '.bank-select', function() {
-            var bankId = $(this).val();
-            var index = $(this).data('index');
-            var branchSelect = $('#branch_id_' + index);
-
-            branchSelect.html('<option value="">Please select</option>');
-
-            if (bankId) {
-                // Filter branches by selected bank
-                var filteredBranches = branchesData.filter(function(branch) {
-                    return branch.bank_id == bankId;
-                });
-
-                if (filteredBranches.length > 0) {
-                    filteredBranches.forEach(function(branch) {
-                        branchSelect.append(`<option value="${branch.id}">${branch.branch_name}</option>`);
-                    });
-                } else {
-                    branchSelect.append('<option value="">No branches available</option>');
-                }
-            }
-        });
 
         // Mobile number validation
         $('#mobile_number').on('input', function() {
@@ -1002,101 +1102,216 @@
             $(this).val(value);
         });
 
-        // Add Bank Account functionality
-        let bankCounter = 1;
-        $('#addBank').on('click', function() {
-            const bankEntry = `
-                <div class="bank-entry mb-4 p-3 border rounded">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="bank_id_${bankCounter}" class="form-label">Bank</label>
-                            <select class="form-select bank-select" id="bank_id_${bankCounter}" name="banks[${bankCounter}][bank_id]" data-index="${bankCounter}">
-                                <option value="">Please select</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="branch_id_${bankCounter}" class="form-label">Branch</label>
-                            <select class="form-select branch-select" id="branch_id_${bankCounter}" name="banks[${bankCounter}][branch_id]" data-index="${bankCounter}">
-                                <option value="">Please select</option>
-                            </select>
-                        </div>
-                        <div class="col-md-5 mb-3">
-                            <label for="account_name_${bankCounter}" class="form-label">Account Name</label>
-                            <input type="text" class="form-control" id="account_name_${bankCounter}" name="banks[${bankCounter}][account_name]" placeholder="Enter account name">
-                        </div>
-                        <div class="col-md-5 mb-3">
-                            <label for="account_number_${bankCounter}" class="form-label">Account Number</label>
-                            <input type="text" class="form-control" id="account_number_${bankCounter}" name="banks[${bankCounter}][account_number]" placeholder="Enter account number">
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-outline-primary btn-sm remove-bank">
-                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('#bankAccountsContainer').append(bankEntry);
-            bankCounter++;
+        // ─────────────────────────────────────────────────────────────────
+        // Banks / Other Contacts / Next of Kin / Partners — modal + AJAX
+        // table, staged in clients_draft_repeaters (tagged by draft_token)
+        // until the client itself is saved. See ClientDraftRepeatersController.
+        // ─────────────────────────────────────────────────────────────────
+        var draftToken = $('#draft_token').val();
 
-            // Populate banks for new entry
-            populateBankDropdowns();
+        function draftRepeaterUrl() {
+            return "{{ url('/ajax/clients/draft-repeaters') }}";
+        }
 
-            // Show delete buttons for all entries if more than one
-            if ($('.bank-entry').length > 1) {
-                $('.remove-bank').show();
+        function loadDraftTable(kind, tbodySelector, emptyColspan, rowRenderer) {
+            $.get(draftRepeaterUrl(), { draft_token: draftToken, kind: kind })
+                .done(function(res) {
+                    var rows = (res && res.data) ? res.data : [];
+                    if (!rows.length) {
+                        $(tbodySelector).html('<tr><td colspan="' + emptyColspan + '" class="text-center text-muted">No entries added yet</td></tr>');
+                        return;
+                    }
+                    var html = '';
+                    rows.forEach(function(row) {
+                        html += rowRenderer(row);
+                    });
+                    $(tbodySelector).html(html);
+                })
+                .fail(function() {
+                    toastr.error('Failed to load entries.');
+                });
+        }
+
+        function removeDraftRow(encryptedId, onDone) {
+            $.ajax({
+                url: draftRepeaterUrl() + '/' + encryptedId,
+                type: 'DELETE',
+                data: { _token: '{{ csrf_token() }}' },
+                success: function() {
+                    toastr.success('Removed successfully');
+                    onDone();
+                },
+                error: function() {
+                    toastr.error('Failed to remove entry.');
+                }
+            });
+        }
+
+        function removeIcon(encryptedId, reloadKey) {
+            return '<td class="text-end"><span class="material-symbols-outlined remove-draft-row text-primary" role="button" title="Remove" style="font-size:20px;cursor:pointer;" data-id="' + encryptedId + '" data-reload="' + reloadKey + '">delete</span></td>';
+        }
+
+        function reloadBanksTable() {
+            loadDraftTable('bank', '#bankAccountsTableBody', 5, function(row) {
+                return '<tr>' +
+                    '<td>' + (row.bank_name || '-') + '</td>' +
+                    '<td>' + (row.branch_name || '-') + '</td>' +
+                    '<td>' + (row.account_name || '-') + '</td>' +
+                    '<td>' + (row.account_number || '-') + '</td>' +
+                    removeIcon(row.encrypted_id, 'banks') +
+                    '</tr>';
+            });
+        }
+
+        function reloadContactsTable() {
+            loadDraftTable('contact', '#contactsTableBody', 4, function(row) {
+                return '<tr>' +
+                    '<td>' + (row.names || '-') + '</td>' +
+                    '<td>' + (row.email || '-') + '</td>' +
+                    '<td>' + (row.mobile || '-') + '</td>' +
+                    removeIcon(row.encrypted_id, 'contacts') +
+                    '</tr>';
+            });
+        }
+
+        function reloadNextOfKinTable() {
+            loadDraftTable('nextofkin', '#nextOfKinTableBody', 6, function(row) {
+                var name = [row.first_name, row.second_name, row.last_name].filter(Boolean).join(' ');
+                return '<tr>' +
+                    '<td>' + (name || '-') + '</td>' +
+                    '<td>' + (row.mobile || '-') + '</td>' +
+                    '<td>' + (row.email || '-') + '</td>' +
+                    '<td>' + (row.relation || '-') + '</td>' +
+                    '<td>' + (row.national_id || '-') + '</td>' +
+                    removeIcon(row.encrypted_id, 'nextofkin') +
+                    '</tr>';
+            });
+        }
+
+        function reloadPartnersTable() {
+            loadDraftTable('partner', '#partnersTableBody', 5, function(row) {
+                return '<tr>' +
+                    '<td>' + (row.name || '-') + '</td>' +
+                    '<td>' + (row.national_id || '-') + '</td>' +
+                    '<td>' + (row.kra_pin || '-') + '</td>' +
+                    '<td>' + (row.phone || '-') + '</td>' +
+                    removeIcon(row.encrypted_id, 'partner') +
+                    '</tr>';
+            });
+        }
+
+        var reloadFns = {
+            banks: reloadBanksTable,
+            contacts: reloadContactsTable,
+            nextofkin: reloadNextOfKinTable,
+            partner: reloadPartnersTable
+        };
+
+        $(document).on('click', '.remove-draft-row', function() {
+            var id = $(this).data('id');
+            var reload = reloadFns[$(this).data('reload')];
+            removeDraftRow(id, reload);
+        });
+
+        function saveDraftRow(payload, modalId, resetFn, onDone, saveBtnId) {
+            var $btn = $('#' + saveBtnId);
+            var $spinner = $btn.find('.spinner-border');
+            $spinner.removeClass('d-none');
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: draftRepeaterUrl(),
+                type: 'POST',
+                data: Object.assign({ _token: '{{ csrf_token() }}', draft_token: draftToken }, payload),
+                success: function(res) {
+                    if (res.success) {
+                        toastr.success(res.message || 'Added successfully');
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById(modalId)).hide();
+                        resetFn();
+                        onDone();
+                    } else {
+                        toastr.error(res.message || 'Failed to add entry.');
+                    }
+                },
+                error: function(xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to add entry.';
+                    toastr.error(msg);
+                },
+                complete: function() {
+                    $spinner.addClass('d-none');
+                    $btn.prop('disabled', false);
+                }
+            });
+        }
+
+        $('#saveBankBtn').on('click', function() {
+            saveDraftRow({
+                kind: 'bank',
+                bank_id: $('#modal_bank_id').val(),
+                branch_id: $('#modal_branch_id').val(),
+                account_name: $('#modal_account_name').val(),
+                account_number: $('#modal_account_number').val()
+            }, 'addBankModal', function() {
+                $('#modal_bank_id, #modal_branch_id').val('');
+                $('#modal_account_name, #modal_account_number').val('');
+            }, reloadBanksTable, 'saveBankBtn');
+        });
+
+        $('#saveContactBtn').on('click', function() {
+            saveDraftRow({
+                kind: 'contact',
+                names: $('#modal_contact_names').val(),
+                email: $('#modal_contact_email').val(),
+                mobile: $('#modal_contact_mobile').val()
+            }, 'addContactModal', function() {
+                $('#modal_contact_names, #modal_contact_email, #modal_contact_mobile').val('');
+            }, reloadContactsTable, 'saveContactBtn');
+        });
+
+        $('#saveNextOfKinBtn').on('click', function() {
+            saveDraftRow({
+                kind: 'nextofkin',
+                first_name: $('#modal_nok_first_name').val(),
+                second_name: $('#modal_nok_second_name').val(),
+                last_name: $('#modal_nok_last_name').val(),
+                mobile: $('#modal_nok_mobile').val(),
+                email: $('#modal_nok_email').val(),
+                relation: $('#modal_nok_relation').val(),
+                national_id: $('#modal_nok_national_id').val()
+            }, 'addNextOfKinModal', function() {
+                $('#modal_nok_first_name, #modal_nok_second_name, #modal_nok_last_name, #modal_nok_mobile, #modal_nok_email, #modal_nok_national_id').val('');
+                $('#modal_nok_relation').val('');
+            }, reloadNextOfKinTable, 'saveNextOfKinBtn');
+        });
+
+        $('#savePartnerBtn').on('click', function() {
+            saveDraftRow({
+                kind: 'partner',
+                name: $('#modal_partner_name').val(),
+                national_id: $('#modal_partner_national_id').val(),
+                kra_pin: $('#modal_partner_kra_pin').val(),
+                phone: $('#modal_partner_phone').val()
+            }, 'addPartnerModal', function() {
+                $('#modal_partner_name, #modal_partner_national_id, #modal_partner_kra_pin, #modal_partner_phone').val('');
+            }, reloadPartnersTable, 'savePartnerBtn');
+        });
+
+        // Populate the modal's Bank/Branch selects once bank data has loaded
+        $(document).on('change', '#modal_bank_id', function() {
+            var bankId = $(this).val();
+            var $branch = $('#modal_branch_id');
+            $branch.html('<option value="">Please select</option>');
+            if (bankId) {
+                branchesData.filter(function(b) { return b.bank_id == bankId; }).forEach(function(b) {
+                    $branch.append('<option value="' + b.id + '">' + b.branch_name + '</option>');
+                });
             }
         });
 
-        // Remove Bank Account
-        $(document).on('click', '.remove-bank', function() {
-            $(this).closest('.bank-entry').remove();
-            if ($('.bank-entry').length === 1) {
-                $('.remove-bank').hide();
-            }
-        });
-
-        // Add Contact functionality
-        let contactCounter = 1;
-        $('#addContact').on('click', function() {
-            const contactEntry = `
-                <div class="contact-entry mb-4 p-3 border rounded">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="contact_names_${contactCounter}" class="form-label">Names</label>
-                            <input type="text" class="form-control" id="contact_names_${contactCounter}" name="contacts[${contactCounter}][names]" placeholder="Enter contact name">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label for="contact_email_${contactCounter}" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="contact_email_${contactCounter}" name="contacts[${contactCounter}][email]" placeholder="name@example.com">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label for="contact_mobile_${contactCounter}" class="form-label">Mobile Number</label>
-                            <input type="text" class="form-control" id="contact_mobile_${contactCounter}" name="contacts[${contactCounter}][mobile]" placeholder="254XXXXXXXXX">
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-outline-primary btn-sm remove-contact">
-                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('#contactsContainer').append(contactEntry);
-            contactCounter++;
-
-            if ($('.contact-entry').length > 1) {
-                $('.remove-contact').show();
-            }
-        });
-
-        // Remove Contact
-        $(document).on('click', '.remove-contact', function() {
-            $(this).closest('.contact-entry').remove();
-            if ($('.contact-entry').length === 1) {
-                $('.remove-contact').hide();
-            }
-        });
+        reloadBanksTable();
+        reloadContactsTable();
+        reloadNextOfKinTable();
+        reloadPartnersTable();
 
         // Add Document functionality
         let documentCounter = 1;
@@ -1140,71 +1355,6 @@
             $(this).closest('.document-entry').remove();
             if ($('.document-entry').length === 1) {
                 $('.remove-document').hide();
-            }
-        });
-
-        // Add Next of Kin functionality
-        let nokCounter = 1;
-        $('#addNextOfKin').on('click', function() {
-            const nokEntry = `
-                <div class="nok-entry mb-4 p-3 border rounded">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="nok_first_name_${nokCounter}" class="form-label">First Name</label>
-                            <input type="text" class="form-control" id="nok_first_name_${nokCounter}" name="next_of_kin[${nokCounter}][first_name]" placeholder="Enter first name">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="nok_second_name_${nokCounter}" class="form-label">Second Name</label>
-                            <input type="text" class="form-control" id="nok_second_name_${nokCounter}" name="next_of_kin[${nokCounter}][second_name]" placeholder="Enter second name">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="nok_last_name_${nokCounter}" class="form-label">Last Name</label>
-                            <input type="text" class="form-control" id="nok_last_name_${nokCounter}" name="next_of_kin[${nokCounter}][last_name]" placeholder="Enter last name">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="nok_mobile_${nokCounter}" class="form-label">Mobile Number</label>
-                            <input type="text" class="form-control" id="nok_mobile_${nokCounter}" name="next_of_kin[${nokCounter}][mobile]" placeholder="254XXXXXXXXX">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="nok_email_${nokCounter}" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="nok_email_${nokCounter}" name="next_of_kin[${nokCounter}][email]" placeholder="name@example.com">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="nok_relation_${nokCounter}" class="form-label">Relation</label>
-                            <select class="form-select" id="nok_relation_${nokCounter}" name="next_of_kin[${nokCounter}][relation]">
-                                <option value="">Please select</option>
-                                <option value="Spouse">Spouse</option>
-                                <option value="Parent">Parent</option>
-                                <option value="Sibling">Sibling</option>
-                                <option value="Child">Child</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                        <div class="col-md-10 mb-3">
-                            <label for="nok_national_id_${nokCounter}" class="form-label">National ID</label>
-                            <input type="text" class="form-control" id="nok_national_id_${nokCounter}" name="next_of_kin[${nokCounter}][national_id]" placeholder="Enter national ID number">
-                        </div>
-                        <div class="col-md-2 mb-3 d-flex align-items-end">
-                            <button type="button" class="btn btn-outline-primary btn-sm remove-nok">
-                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('#nextOfKinContainer').append(nokEntry);
-            nokCounter++;
-
-            if ($('.nok-entry').length > 1) {
-                $('.remove-nok').show();
-            }
-        });
-
-        // Remove Next of Kin
-        $(document).on('click', '.remove-nok', function() {
-            $(this).closest('.nok-entry').remove();
-            if ($('.nok-entry').length === 1) {
-                $('.remove-nok').hide();
             }
         });
 

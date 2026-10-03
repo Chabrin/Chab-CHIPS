@@ -263,13 +263,13 @@ class TenantsController extends Controller
             // sys_pm_clients is still the only place it lives.
             $match = Client::tenants()
                 ->where('company_registration_number', $value)
-                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                 ->select(['id', 'names', 'reference_number'])
                 ->first();
             $referenceNumber = $match->reference_number ?? null;
         } else {
             $match = TenantRecord::where('national_id', $value)
-                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                 ->with('legacyClient:id,reference_number')
                 ->select(['id', 'names', 'national_id'])
                 ->first();
@@ -393,7 +393,7 @@ class TenantsController extends Controller
                 ->select('id', 'names', 'reference_number')
                 ->limit(30)
                 ->get()
-                ->map(fn ($c) => ['id' => $c->id, 'text' => $c->names . ' (' . $c->reference_number . ')']);
+                ->map(fn($c) => ['id' => $c->id, 'text' => $c->names . ' (' . $c->reference_number . ')']);
 
             return response()->json(['results' => $landlords]);
         } catch (\Exception $e) {
@@ -439,7 +439,7 @@ class TenantsController extends Controller
             }
 
             $properties = $query->get()
-                ->map(fn ($p) => ['id' => $p->id, 'text' => $p->property_name . ' (' . $p->reference_number . ')']);
+                ->map(fn($p) => ['id' => $p->id, 'text' => $p->property_name . ' (' . $p->reference_number . ')']);
 
             return response()->json(['results' => $properties]);
         } catch (\Exception $e) {
@@ -615,7 +615,7 @@ class TenantsController extends Controller
                 ->orderBy('sys_pm_clients.names')
                 ->limit(50)
                 ->get()
-                ->map(fn ($t) => [
+                ->map(fn($t) => [
                     'id' => $t->id,
                     'encrypted_id' => Crypt::encrypt($t->id),
                     'names' => $t->names ?? 'N/A',
@@ -655,7 +655,7 @@ class TenantsController extends Controller
                 ])
                 ->orderByDesc('exit_date')
                 ->get()
-                ->map(fn ($h) => [
+                ->map(fn($h) => [
                     'id' => $h->id,
                     'property_name' => $h->property->property_name ?? '-',
                     'unit_code' => $h->unit->unit_code ?? $h->unit->unit_name ?? '-',
@@ -675,7 +675,6 @@ class TenantsController extends Controller
             return response()->json(['success' => false, 'message' => 'Failed to load tenant history'], 500);
         }
     }
-
     /**
      * A tenant's CURRENT on-record assignment, if any — distinct from
      * tenantHistory() above (which is what they've EVER had). Read from the
@@ -1244,7 +1243,7 @@ class TenantsController extends Controller
             trim((string) ($validated['address'] ?? '')),
             trim((string) ($validated['address_2'] ?? '')),
             trim((string) ($validated['address_3'] ?? '')),
-        ], fn ($part) => $part !== '');
+        ], fn($part) => $part !== '');
         $physicalAddress = !empty($addressParts) ? mb_substr(implode(', ', $addressParts), 0, 500) : null;
 
         TenantRecord::updateOrCreate(
@@ -1886,20 +1885,20 @@ class TenantsController extends Controller
             $totalBalance = (clone $query)->sum('inv.current_balance');
 
             $rows = $query->select(
-                    'inv.id',
-                    'inv.tenant_id',
-                    'inv.property_id',
-                    'inv.unit_id',
-                    'inv.total_amount',
-                    'inv.current_balance',
-                    'inv.reference_number',
-                    'inv.return_type_id',
-                    'inv.date_due',
-                    't.names as tenant_name',
-                    't.mobile_number',
-                    'p.property_name',
-                    'u.unit_code'
-                )
+                'inv.id',
+                'inv.tenant_id',
+                'inv.property_id',
+                'inv.unit_id',
+                'inv.total_amount',
+                'inv.current_balance',
+                'inv.reference_number',
+                'inv.return_type_id',
+                'inv.date_due',
+                't.names as tenant_name',
+                't.mobile_number',
+                'p.property_name',
+                'u.unit_code'
+            )
                 ->orderByDesc('inv.current_balance')
                 ->limit(1000)
                 ->get()

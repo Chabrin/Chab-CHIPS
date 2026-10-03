@@ -269,6 +269,12 @@ class Client extends Model
         return $this->hasMany(TenantNextOfKin::class, 'tenant_id', 'id');
     }
 
+    // Partnership and Trust clients (client_type_id = 4) — the individual partners' KYC.
+    public function partners()
+    {
+        return $this->hasMany(ClientPartner::class, 'client_id', 'id');
+    }
+
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');

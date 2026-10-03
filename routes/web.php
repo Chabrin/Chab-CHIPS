@@ -688,6 +688,27 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/client-bank-details/banks', [App\Http\Controllers\ClientBankDetailsController::class, 'getBanks'])->name('ajax.client-bank-details.banks');
     Route::get('/ajax/client-bank-details/branches/{bankId}', [App\Http\Controllers\ClientBankDetailsController::class, 'getBranches'])->name('ajax.client-bank-details.branches');
 
+    // Client create-page staging (Banks/Other Contacts/Next of Kin/Partners modals,
+    // before the client has a real id — see ClientDraftRepeatersController)
+    Route::get('/ajax/clients/draft-repeaters', [App\Http\Controllers\ClientDraftRepeatersController::class, 'index'])->name('ajax.clients.draft-repeaters');
+    Route::post('/ajax/clients/draft-repeaters', [App\Http\Controllers\ClientDraftRepeatersController::class, 'store'])->name('ajax.clients.draft-repeaters.store');
+    Route::delete('/ajax/clients/draft-repeaters/{encryptedId}', [App\Http\Controllers\ClientDraftRepeatersController::class, 'destroy'])->name('ajax.clients.draft-repeaters.destroy');
+
+    // Client Other Contacts AJAX CRUD (edit page, real client id)
+    Route::get('/ajax/clients/{encryptedClientId}/other-contacts', [App\Http\Controllers\ClientOtherContactsController::class, 'getClientOtherContacts'])->name('ajax.clients.other-contacts');
+    Route::post('/ajax/clients/other-contacts', [App\Http\Controllers\ClientOtherContactsController::class, 'store'])->name('ajax.clients.other-contacts.store');
+    Route::delete('/ajax/clients/other-contacts/{encryptedId}', [App\Http\Controllers\ClientOtherContactsController::class, 'destroy'])->name('ajax.clients.other-contacts.destroy');
+
+    // Client Next of Kin AJAX CRUD (edit page, real client id)
+    Route::get('/ajax/clients/{encryptedClientId}/next-of-kin', [App\Http\Controllers\ClientNextOfKinController::class, 'getClientNextOfKin'])->name('ajax.clients.next-of-kin');
+    Route::post('/ajax/clients/next-of-kin', [App\Http\Controllers\ClientNextOfKinController::class, 'store'])->name('ajax.clients.next-of-kin.store');
+    Route::delete('/ajax/clients/next-of-kin/{encryptedId}', [App\Http\Controllers\ClientNextOfKinController::class, 'destroy'])->name('ajax.clients.next-of-kin.destroy');
+
+    // Client Partners AJAX CRUD (Partnership & Trust clients, edit page, real client id)
+    Route::get('/ajax/clients/{encryptedClientId}/partners', [App\Http\Controllers\ClientPartnersController::class, 'getClientPartners'])->name('ajax.clients.partners');
+    Route::post('/ajax/clients/partners', [App\Http\Controllers\ClientPartnersController::class, 'store'])->name('ajax.clients.partners.store');
+    Route::delete('/ajax/clients/partners/{encryptedId}', [App\Http\Controllers\ClientPartnersController::class, 'destroy'])->name('ajax.clients.partners.destroy');
+
     // Tenants
     Route::get('/tenants/listing', [App\Http\Controllers\ClientsController::class, 'tenantsListing'])->name('property.tenants.listing');
     Route::get('/ajax/tenants/listing/data', [App\Http\Controllers\ClientsController::class, 'getTenantsListingData'])->name('ajax.tenants.listing.data');

@@ -12,7 +12,8 @@ use App\Models\ClientDocument;
 use App\Models\ClientBankDetail;
 use App\Models\LeaseAgreement;
 use App\Models\ClientNextOfKin;
-use App\Models\ClientBankAccount;
+use App\Models\ClientPartner;
+use App\Models\ClientDraftRepeater;
 use App\Models\ReturnsMergeBatch;
 use App\Models\ReturnsMergeBatchItem;
 use App\Models\TenantRecord;
@@ -1624,7 +1625,11 @@ class ClientsController extends Controller
     public function create()
     {
         try {
-            return view('property.clients.create');
+            // Tags Banks/Other Contacts/Next of Kin/Partners modal entries added before
+            // the client itself (and its real id) exists — see ClientDraftRepeatersController.
+            $draftToken = (string) \Illuminate\Support\Str::uuid();
+
+            return view('property.clients.create', compact('draftToken'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading client create form: ' . $e->getMessage());
@@ -1692,17 +1697,11 @@ class ClientsController extends Controller
             $client = $this->createClient($validated, $referenceNumber, $photoPath);
             //Log::info('Client created with ID: ' . $client->id . ' by User ID: ' . Auth::id());
 
-            $this->saveBankAccounts($request, $client->id);
-            Log::info('Bank accounts saved for client ID: ' . $client->id);
-
-            $this->saveOtherContacts($request, $client->id);
-            Log::info('Other contacts saved for client ID: ' . $client->id);
-
             $this->saveDocuments($request, $client->id);
             Log::info('Documents saved for client ID: ' . $client->id);
 
-            $this->saveNextOfKin($request, $client->id);
-            Log::info('Next of kin saved for client ID: ' . $client->id);
+            $this->commitDraftRepeaters($request->input('draft_token'), $client->id);
+            Log::info('Draft banks/contacts/next-of-kin/partners committed for client ID: ' . $client->id);
 
             DB::commit();
 
@@ -1752,7 +1751,7 @@ class ClientsController extends Controller
             'mobile_number' => 'required|string|size:12|regex:/^254[0-9]{9}$/',
             'email_address' => 'nullable|email|max:255',
             'nationality_id' => 'nullable|integer',
-            'client_type_id' => 'required|integer|in:1,2,3',
+            'client_type_id' => 'required|integer|in:1,2,3,4',
             'vat_number' => 'nullable|string|max:50',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'overdraft_penalty' => 'nullable|numeric',
@@ -1760,35 +1759,16 @@ class ClientsController extends Controller
             'address_2' => 'nullable|string',
             'address_3' => 'nullable|string',
 
-            // Bank accounts validation
-            'banks' => 'nullable|array',
-            'banks.*.bank_id' => 'nullable|integer',
-            'banks.*.branch_id' => 'nullable|integer',
-            'banks.*.account_name' => 'nullable|string|max:255',
-            'banks.*.account_number' => 'nullable|string|max:50',
-            'banks.*.return_percentage' => 'nullable|numeric',
+            // Tags this submission's staged Banks/Other Contacts/Next of Kin/Partners
+            // modal entries (see ClientDraftRepeatersController / commitDraftRepeaters()).
+            'draft_token' => 'nullable|string|max:64',
 
-            // Other contacts validation
-            'contacts' => 'nullable|array',
-            'contacts.*.names' => 'nullable|string|max:255',
-            'contacts.*.email' => 'nullable|email|max:255',
-            'contacts.*.mobile' => 'nullable|string|max:20',
-
-            // Documents validation
+            // Documents validation — the only repeater still submitted inline via the
+            // main form (Banks/Other Contacts/Next of Kin/Partners are now AJAX modals).
             'documents' => 'nullable|array',
             'documents.*.file_type' => 'nullable|string',
             'documents.*.other_file_type' => 'nullable|string|max:255',
             'documents.*.file' => 'nullable|file|max:10240',
-
-            // Next of Kin validation
-            'next_of_kin' => 'nullable|array',
-            'next_of_kin.*.first_name' => 'nullable|string|max:255',
-            'next_of_kin.*.second_name' => 'nullable|string|max:255',
-            'next_of_kin.*.last_name' => 'nullable|string|max:255',
-            'next_of_kin.*.mobile' => 'nullable|string|max:20',
-            'next_of_kin.*.email' => 'nullable|email|max:255',
-            'next_of_kin.*.relation' => 'nullable|string|max:100',
-            'next_of_kin.*.national_id' => 'nullable|string|max:50',
         ]);
     }
 
@@ -1802,7 +1782,9 @@ class ClientsController extends Controller
      */
     private function validateIndividualOrCompanyFields(array $validated, ?int $excludeClientId = null): void
     {
-        if ((int) $validated['client_type_id'] === 3) {
+        $clientTypeId = (int) $validated['client_type_id'];
+
+        if ($clientTypeId === 3) {
             if (empty($validated['company_name'])) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'company_name' => ['Company name is required for a Company client.'],
@@ -1816,6 +1798,14 @@ class ClientsController extends Controller
                     ->exists()) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'company_registration_number' => ['A landlord with this registration number already exists.'],
+                ]);
+            }
+        } elseif ($clientTypeId === 4) {
+            // Partnership and Trust: entity name only (reuses company_name) — no
+            // registration number, no uniqueness check; KYC lives on the partners.
+            if (empty($validated['company_name'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'company_name' => ['Partnership/Trust name is required.'],
                 ]);
             }
         } else {
@@ -1926,9 +1916,13 @@ class ClientsController extends Controller
      */
     private function createClient(array $validated, string $referenceNumber, ?string $photoPath)
     {
-        $isCompany = (int) $validated['client_type_id'] === 3;
+        $clientTypeId = (int) $validated['client_type_id'];
+        $isCompany = $clientTypeId === 3;
+        // Company and Partnership/Trust both store their entity name in company_name —
+        // only Company additionally gets a registration number / contact person.
+        $isEntity = $isCompany || $clientTypeId === 4;
 
-        $names = $isCompany
+        $names = $isEntity
             ? trim($validated['company_name'])
             : trim($validated['first_name'] . ' ' . ($validated['middle_name'] ?? '') . ' ' . $validated['last_name']);
 
@@ -1941,15 +1935,15 @@ class ClientsController extends Controller
             // it was previously set to client_type_id itself, which silently made every
             // Company landlord invisible to landlord-scoped reports/lists.
             'type_id' => 1,
-            'title' => $isCompany ? null : $validated['title'],
+            'title' => $isEntity ? null : $validated['title'],
             'names' => $names,
-            'second_name' => $isCompany ? null : ($validated['middle_name'] ?? null),
-            'last_name' => $isCompany ? null : $validated['last_name'],
-            'national_id' => $isCompany ? null : ($validated['national_id'] ?? null),
-            'passport_number' => $isCompany ? null : ($validated['passport_number'] ?? null),
-            'gender' => $isCompany ? null : $validated['gender'],
+            'second_name' => $isEntity ? null : ($validated['middle_name'] ?? null),
+            'last_name' => $isEntity ? null : $validated['last_name'],
+            'national_id' => $isEntity ? null : ($validated['national_id'] ?? null),
+            'passport_number' => $isEntity ? null : ($validated['passport_number'] ?? null),
+            'gender' => $isEntity ? null : $validated['gender'],
             'pin_number' => $validated['pin_number'] ?? null,
-            'nationality_id' => $isCompany ? null : ($validated['nationality_id'] ?? null),
+            'nationality_id' => $isEntity ? null : ($validated['nationality_id'] ?? null),
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'] ?? null,
             'vat_number' => $validated['vat_number'] ?? null,
@@ -1962,7 +1956,7 @@ class ClientsController extends Controller
             'date_time' => $validated['select_time'] ?? now(),
             'current_status_id' => '1',
             'created_by' => Auth::id(),
-            'company_name' => $isCompany ? $validated['company_name'] : null,
+            'company_name' => $isEntity ? $validated['company_name'] : null,
             'company_registration_number' => $isCompany ? ($validated['company_registration_number'] ?? null) : null,
             'contact_person_name' => $isCompany ? ($validated['contact_person_name'] ?? null) : null,
             'contact_person_title' => $isCompany ? ($validated['contact_person_title'] ?? null) : null,
@@ -1974,55 +1968,74 @@ class ClientsController extends Controller
     }
 
     /**
-     * Save bank accounts to sys_pm_clients_17_repeat
+     * Commit this submission's staged Banks/Other Contacts/Next of Kin/Partners
+     * modal entries (ClientDraftRepeater, tagged by draft_token — see
+     * ClientDraftRepeatersController) into the real tables now that the client
+     * has a real id, then clear the staged rows. Runs inside store()'s
+     * transaction, so a failure anywhere in store() leaves the staged rows
+     * intact for the user to retry with — only a successful commit clears them.
      */
-    private function saveBankAccounts(Request $request, int $clientId)
+    private function commitDraftRepeaters(?string $draftToken, int $clientId): void
     {
-        if (!$request->has('banks')) {
+        if (empty($draftToken)) {
             return;
         }
 
-        foreach ($request->input('banks') as $bankData) {
-            // Skip empty entries
-            if (empty($bankData['bank_id']) && empty($bankData['account_number'])) {
-                continue;
+        $rows = ClientDraftRepeater::where('draft_token', $draftToken)->get();
+
+        foreach ($rows as $row) {
+            switch ($row->kind) {
+                case 'bank':
+                    ClientBankDetail::create([
+                        'client_id' => $clientId,
+                        'bank_id' => $row->bank_id,
+                        'branch_id' => $row->branch_id,
+                        'account_number' => $row->account_number,
+                        'account_name' => $row->account_name,
+                        'is_default' => 0,
+                        'added_by' => Auth::id(),
+                        'added_on' => now(),
+                    ]);
+                    break;
+                case 'contact':
+                    ClientOtherContact::create([
+                        'parent_id' => $clientId,
+                        'contact_names' => $row->contact_name,
+                        'other_email' => $row->contact_email,
+                        'other_mobile_number' => $row->contact_mobile,
+                    ]);
+                    break;
+                case 'nextofkin':
+                    $fullName = trim(
+                        ($row->kin_first_name ?? '') . ' ' .
+                            ($row->kin_second_name ?? '') . ' ' .
+                            ($row->kin_last_name ?? '')
+                    );
+                    ClientNextOfKin::create([
+                        'parent_id' => $clientId,
+                        'kin_first_name' => $row->kin_first_name,
+                        'kin_second_name' => $row->kin_second_name,
+                        'kin_last_name' => $row->kin_last_name,
+                        'names' => $fullName,
+                        'mobile_number' => $row->kin_mobile,
+                        'email_address' => $row->kin_email,
+                        'relationship' => $row->kin_relationship,
+                        'national_id' => $row->kin_national_id,
+                    ]);
+                    break;
+                case 'partner':
+                    ClientPartner::create([
+                        'client_id' => $clientId,
+                        'name' => $row->partner_name,
+                        'national_id' => $row->partner_national_id,
+                        'kra_pin' => $row->partner_kra_pin,
+                        'phone' => $row->partner_phone,
+                    ]);
+                    break;
             }
-
-            ClientBankDetail::create([
-                'client_id'=> $clientId,
-                'bank_id'=> $bankData['bank_id'] ?? null,
-                'branch_id' => $bankData['branch_id'] ?? null,
-                'account_number' => $bankData['account_number'] ?? null,
-                'account_name' => $bankData['account_name'] ?? null,
-                'is_default' => $bankData['is_default'] ?? 0,
-                'added_by' => Auth::id(),
-                'added_on' => now(),
-            ]);
-        }
-    }
-
-    /**
-     * Save other contacts to sys_pm_clients_19_repeat
-     */
-    private function saveOtherContacts(Request $request, int $clientId)
-    {
-        if (!$request->has('contacts')) {
-            return;
         }
 
-        foreach ($request->input('contacts') as $contactData) {
-            // Skip empty entries
-            if (empty($contactData['names']) && empty($contactData['email']) && empty($contactData['mobile'])) {
-                continue;
-            }
-
-            ClientOtherContact::create([
-                'parent_id' => $clientId,
-                'contact_names' => $contactData['names'] ?? null,
-                'other_email' => $contactData['email'] ?? null,
-                'other_mobile_number' => $contactData['mobile'] ?? null,
-            ]);
-        }
+        ClientDraftRepeater::where('draft_token', $draftToken)->delete();
     }
 
     /**
@@ -2061,43 +2074,6 @@ class ClientsController extends Controller
     }
 
     /**
-     * Save next of kin to sys_pm_clients_66_repeat
-     */
-    private function saveNextOfKin(Request $request, int $clientId)
-    {
-        if (!$request->has('next_of_kin')) {
-            return;
-        }
-
-        foreach ($request->input('next_of_kin') as $kinData) {
-            // Skip empty entries
-            if (empty($kinData['first_name']) && empty($kinData['last_name']) && empty($kinData['mobile'])) {
-                continue;
-            }
-
-            // Construct full name
-            $fullName = trim(
-                ($kinData['first_name'] ?? '') . ' ' .
-                    ($kinData['second_name'] ?? '') . ' ' .
-                    ($kinData['last_name'] ?? '')
-            );
-
-            ClientNextOfKin::create([
-                'parent_id' => $clientId,
-                'kin_first_name' => $kinData['first_name'] ?? null,
-                'kin_second_name' => $kinData['second_name'] ?? null,
-                'kin_last_name' => $kinData['last_name'] ?? null,
-                'names' => $fullName,
-                'mobile_number' => $kinData['mobile'] ?? null,
-                'email_address' => $kinData['email'] ?? null,
-                'relationship' => $kinData['relation'] ?? null,
-                'national_id' => $kinData['national_id'] ?? null,
-            ]);
-        }
-    }
-
-
-    /**
      * Show the form for editing a client
      */
     public function edit($encryptedId)
@@ -2110,7 +2086,8 @@ class ClientsController extends Controller
                 'bankAccounts.branch',
                 'otherContacts',
                 'documents',
-                'nextOfKins'
+                'nextOfKins',
+                'partners'
             ])->findOrFail($id);
 
             // dd($client);
@@ -2153,18 +2130,13 @@ class ClientsController extends Controller
             $this->updateClient($client, $validated, $photoPath);
             Log::info('Client updated with ID: ' . $id . ' by User ID: ' . Auth::id());
 
-            // Update related records
-            $this->updateBankAccounts($request, $client->id);
-            Log::info('Bank accounts updated for client ID: ' . $client->id);
-
-            $this->updateOtherContacts($request, $client->id);
-            Log::info('Other contacts updated for client ID: ' . $client->id);
-
+            // Banks/Other Contacts/Next of Kin/Partners are managed via their own AJAX
+            // modals on this page now (real client id already exists) — see
+            // ClientBankDetailsController / ClientOtherContactsController /
+            // ClientNextOfKinController / ClientPartnersController. Only Documents still
+            // submits inline via this form.
             $this->updateDocuments($request, $client->id);
             Log::info('Documents updated for client ID: ' . $client->id);
-
-            $this->updateNextOfKin($request, $client->id);
-            Log::info('Next of kin updated for client ID: ' . $client->id);
 
             DB::commit();
 
@@ -2186,24 +2158,26 @@ class ClientsController extends Controller
      */
     private function updateClient(Client $client, array $validated, ?string $photoPath)
     {
-        $isCompany = (int) $validated['client_type_id'] === 3;
+        $clientTypeId = (int) $validated['client_type_id'];
+        $isCompany = $clientTypeId === 3;
+        $isEntity = $isCompany || $clientTypeId === 4;
 
-        $names = $isCompany
+        $names = $isEntity
             ? trim($validated['company_name'])
             : trim($validated['first_name'] . ' ' . ($validated['middle_name'] ?? '') . ' ' . $validated['last_name']);
 
         $client->update([
             'client_type_id' => $validated['client_type_id'],
             'type_id' => 1, // Landlord — see comment in createClient()
-            'title' => $isCompany ? null : $validated['title'],
+            'title' => $isEntity ? null : $validated['title'],
             'names' => $names,
-            'second_name' => $isCompany ? null : ($validated['middle_name'] ?? null),
-            'last_name' => $isCompany ? null : $validated['last_name'],
-            'national_id' => $isCompany ? null : ($validated['national_id'] ?? null),
-            'passport_number' => $isCompany ? null : ($validated['passport_number'] ?? null),
-            'gender' => $isCompany ? null : $validated['gender'],
+            'second_name' => $isEntity ? null : ($validated['middle_name'] ?? null),
+            'last_name' => $isEntity ? null : $validated['last_name'],
+            'national_id' => $isEntity ? null : ($validated['national_id'] ?? null),
+            'passport_number' => $isEntity ? null : ($validated['passport_number'] ?? null),
+            'gender' => $isEntity ? null : $validated['gender'],
             'pin_number' => $validated['pin_number'] ?? null,
-            'nationality_id' => $isCompany ? null : ($validated['nationality_id'] ?? null),
+            'nationality_id' => $isEntity ? null : ($validated['nationality_id'] ?? null),
             'mobile_number' => $validated['mobile_number'],
             'email_address' => $validated['email_address'] ?? null,
             'vat_number' => $validated['vat_number'] ?? null,
@@ -2214,7 +2188,7 @@ class ClientsController extends Controller
             'prefered_messages_language_id' => $validated['preferred_language_id'],
             'registered_date' => $validated['select_time'] ?? $client->registered_date,
             'date_time' => $validated['select_time'] ?? $client->date_time,
-            'company_name' => $isCompany ? $validated['company_name'] : null,
+            'company_name' => $isEntity ? $validated['company_name'] : null,
             'company_registration_number' => $isCompany ? ($validated['company_registration_number'] ?? null) : null,
             'contact_person_name' => $isCompany ? ($validated['contact_person_name'] ?? null) : null,
             'contact_person_title' => $isCompany ? ($validated['contact_person_title'] ?? null) : null,
@@ -2224,48 +2198,12 @@ class ClientsController extends Controller
     }
 
     /**
-     * Update bank accounts
-     */
-    private function updateBankAccounts(Request $request, int $clientId)
-    {
-        // Delete existing bank accounts
-        ClientBankAccount::where('parent_id', $clientId)->delete();
-
-        // Save new bank accounts
-        $this->saveBankAccounts($request, $clientId);
-    }
-
-    /**
-     * Update other contacts
-     */
-    private function updateOtherContacts(Request $request, int $clientId)
-    {
-        // Delete existing contacts
-        ClientOtherContact::where('parent_id', $clientId)->delete();
-
-        // Save new contacts
-        $this->saveOtherContacts($request, $clientId);
-    }
-
-    /**
      * Update documents
      */
     private function updateDocuments(Request $request, int $clientId)
     {
         // Only add new documents, don't delete existing ones
         $this->saveDocuments($request, $clientId);
-    }
-
-    /**
-     * Update next of kin
-     */
-    private function updateNextOfKin(Request $request, int $clientId)
-    {
-        // Delete existing next of kin
-        ClientNextOfKin::where('parent_id', $clientId)->delete();
-
-        // Save new next of kin
-        $this->saveNextOfKin($request, $clientId);
     }
 
     /**
