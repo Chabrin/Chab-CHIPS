@@ -37,11 +37,6 @@
                                             <span class="material-symbols-outlined me-2" style="font-size:18px;">search_check</span> Move-In Inspections
                                         </a>
                                     </li>
-                                    <li>
-                                        <button type="button" class="dropdown-item d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#bulkUploadTenantsModal">
-                                            <span class="material-symbols-outlined me-2" style="font-size:18px;">upload_file</span> Bulk Upload Tenants
-                                        </button>
-                                    </li>
                                 </ul>
                             </div>
                         </div>
@@ -78,63 +73,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Bulk Upload Tenants Modal -->
-<div class="modal fade" id="bulkUploadTenantsModal" tabindex="-1" aria-labelledby="bulkUploadTenantsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="bulkUploadTenantsModalLabel">
-                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align: middle;">upload_file</span>
-                    Bulk Upload Tenants
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="{{ route('property.bulk.upload') }}" method="POST" enctype="multipart/form-data" id="bulkUploadTenantsForm">
-                @csrf
-                <input type="hidden" name="upload_type" value="tenants">
-
-                <div class="modal-body">
-                    <div class="mb-4 p-3 bg-light rounded">
-                        <div class="d-flex align-items-start">
-                            <span class="material-symbols-outlined text-primary me-2" style="font-size:24px;">info</span>
-                            <div class="flex-grow-1">
-                                <h6 class="mb-2">Download Sample Template</h6>
-                                <p class="mb-2 text-muted small">
-                                    Fill in the tenants to create. Leave "Unit Code" blank for a tenant whose unit
-                                    isn't known yet — they'll appear under "Pending Unit" for manual assignment
-                                    afterward. Move-in inspections are not part of this upload.
-                                </p>
-                                <a href="{{ route('property.bulk.sample') }}?type=tenants" class="btn btn-outline-primary btn-sm">
-                                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">download</span>
-                                    Download Sample File
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="tenants_bulk_file" class="form-label fw-bold">
-                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">attach_file</span>
-                            Upload File <span class="text-danger">*</span>
-                        </label>
-                        <input type="file" class="form-control" id="tenants_bulk_file" name="bulk_file" accept=".xlsx,.xls,.csv" required>
-                        <small class="form-text text-muted">Accepted formats: Excel (.xlsx, .xls) or CSV (.csv)</small>
-                    </div>
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="uploadTenantsBtn">
-                        <span class="spinner-border spinner-border-sm me-2 d-none" id="uploadTenantsSpinner"></span>
-                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">upload</span>
-                        Upload &amp; Process
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
@@ -354,18 +292,6 @@
 
         // Initial load
         loadData();
-
-        // Bulk Upload Tenants modal
-        $('#bulkUploadTenantsForm').on('submit', function () {
-            $('#uploadTenantsSpinner').removeClass('d-none');
-            $('#uploadTenantsBtn').prop('disabled', true);
-        });
-
-        $('#bulkUploadTenantsModal').on('hidden.bs.modal', function () {
-            $('#bulkUploadTenantsForm')[0].reset();
-            $('#uploadTenantsSpinner').addClass('d-none');
-            $('#uploadTenantsBtn').prop('disabled', false);
-        });
 
         // Assign Unit modal — Landlord (optional) -> Property -> Unit cascade
         var selectedPropertyId = null;

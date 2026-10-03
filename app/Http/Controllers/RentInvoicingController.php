@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Rent Invoicing sub-tab of the client page's Invoicing tab. Two-stage flow,
- * same shape as TenantBulkUploadController/UnitBulkUploadController:
+ * same shape as UnitBulkUploadController:
  *
  *   1. generate() — computes prorated rent for eligible Active leases and
  *      stages one row per lease into temp_generated_invoices. Nothing is

@@ -19,9 +19,8 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Bulk upload of units from the Units tab of a landlord's client page
- * (property.clients.show). Same two-stage staging flow as
- * TenantBulkUploadController — read that class's docblock for the full
- * rationale, this one mirrors it exactly:
+ * (property.clients.show). Two-stage staging flow (the former
+ * TenantBulkUploadController, since removed, worked the same way):
  *
  *   1. import() — an uploaded template is parsed and dumped into the
  *      temp_uploaded_units staging table. Only Unit Number/Usage Type
