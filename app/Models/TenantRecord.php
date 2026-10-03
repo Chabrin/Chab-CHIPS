@@ -8,9 +8,6 @@ class TenantRecord extends Model
 {
     protected $table = 'cb_tenant_records';
 
-    // No DB-level enum for tenant_type — validate application-side against this list.
-    public const TENANT_TYPES = ['INDIVIDUAL', 'COMPANY', 'CARETAKER', 'OWNERS'];
-
     // No DB-level enum for id_document_type — validate application-side against this list.
     public const ID_DOCUMENT_TYPES = ['PASSPORT', 'NATIONAL_ID'];
 
