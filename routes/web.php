@@ -645,12 +645,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/tenants', [App\Http\Controllers\ClientsController::class, 'tenantIndex'])->name('property.tenants.index');
     Route::get('/property/tenants/data', [App\Http\Controllers\ClientsController::class, 'getTenantsData'])->name('property.tenants.data');
     Route::get('/ajax/property/tenants', [App\Http\Controllers\ClientsController::class, 'getTenants'])->name('ajax.property.tenants.get');
-    Route::get('/property/tenants/bulk-upload/template', [App\Http\Controllers\TenantBulkUploadController::class, 'downloadTemplate'])->name('property.tenants.bulk-upload.template');
-    Route::post('/property/tenants/bulk-upload/import', [App\Http\Controllers\TenantBulkUploadController::class, 'import'])->name('property.tenants.bulk-upload.import');
-    Route::get('/property/tenants/uploads/data', [App\Http\Controllers\TenantBulkUploadController::class, 'uploadsData'])->name('property.tenants.uploads.data');
-    Route::put('/property/tenants/uploads/{id}', [App\Http\Controllers\TenantBulkUploadController::class, 'updateUpload'])->name('property.tenants.uploads.update');
-    Route::delete('/property/tenants/uploads/{id}', [App\Http\Controllers\TenantBulkUploadController::class, 'destroyUpload'])->name('property.tenants.uploads.delete');
-    Route::post('/property/tenants/uploads/bulk-delete', [App\Http\Controllers\TenantBulkUploadController::class, 'destroySelectedUploads'])->name('property.tenants.uploads.bulk-delete');
 
     Route::get('/property/units/bulk-upload/template', [App\Http\Controllers\UnitBulkUploadController::class, 'downloadTemplate'])->name('property.units.bulk-upload.template');
     Route::post('/property/units/bulk-upload/import', [App\Http\Controllers\UnitBulkUploadController::class, 'import'])->name('property.units.bulk-upload.import');
@@ -675,7 +669,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/client-invoices/data', [App\Http\Controllers\ClientInvoicesController::class, 'data'])->name('property.client-invoices.data');
     Route::get('/property/client-invoices/{encryptedId}/details', [App\Http\Controllers\ClientInvoicesController::class, 'details'])->name('property.client-invoices.details');
     Route::get('/property/client-invoices/{encryptedId}/pdf', [App\Http\Controllers\ClientInvoicesController::class, 'pdf'])->name('property.client-invoices.pdf');
-    Route::post('/property/tenants/uploads/push', [App\Http\Controllers\TenantBulkUploadController::class, 'pushToMain'])->name('property.tenants.uploads.push');
     Route::get('/ajax/banks-and-branches', [ClientsController::class, 'getBanksAndBranches'])->name('ajax.banks.branches');
 
     // Client Bank Details AJAX CRUD
