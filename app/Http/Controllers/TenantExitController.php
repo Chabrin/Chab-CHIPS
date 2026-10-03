@@ -82,27 +82,36 @@ class TenantExitController extends Controller
             }
 
             $tenants = Client::tenants()
-                ->select('id', 'names', 'mobile_number', 'email_address', 'national_id',
-                         'reference_number', 'property_id', 'unit_id')
+                ->leftJoin('cb_tenant_records', 'cb_tenant_records.id', '=', 'sys_pm_clients.id')
+                ->select(
+                    'sys_pm_clients.id',
+                    'sys_pm_clients.reference_number',
+                    'sys_pm_clients.property_id',
+                    'sys_pm_clients.unit_id',
+                    DB::raw('COALESCE(cb_tenant_records.names, sys_pm_clients.names) as tenant_name'),
+                    DB::raw('COALESCE(cb_tenant_records.phone, sys_pm_clients.mobile_number) as tenant_mobile'),
+                    DB::raw('COALESCE(cb_tenant_records.email, sys_pm_clients.email_address) as tenant_email'),
+                    DB::raw('COALESCE(cb_tenant_records.national_id, sys_pm_clients.national_id) as tenant_national_id')
+                )
                 ->where(function ($q) use ($search) {
-                    $q->where('names',            'ILIKE', "%{$search}%")
-                      ->orWhere('reference_number','ILIKE', "%{$search}%")
-                      ->orWhere('mobile_number',   'ILIKE', "%{$search}%")
-                      ->orWhere('email_address',   'ILIKE', "%{$search}%")
-                      ->orWhere('national_id',     'ILIKE', "%{$search}%");
+                    $q->where('sys_pm_clients.reference_number', 'ILIKE', "%{$search}%")
+                      ->orWhere('cb_tenant_records.names',       'ILIKE', "%{$search}%")
+                      ->orWhere('cb_tenant_records.phone',       'ILIKE', "%{$search}%")
+                      ->orWhere('cb_tenant_records.email',       'ILIKE', "%{$search}%")
+                      ->orWhere('cb_tenant_records.national_id', 'ILIKE', "%{$search}%");
                 })
                 ->with(['unit:id,unit_name,unit_code', 'property:id,property_name'])
-                ->orderBy('names')
+                ->orderBy('tenant_name')
                 ->limit(30)
                 ->get()
                 ->map(fn ($t) => [
                     'id'               => $t->id,
                     'encrypted_id'     => Crypt::encrypt($t->id),
-                    'names'            => $t->names,
+                    'names'            => $t->tenant_name,
                     'reference_number' => $t->reference_number,
-                    'mobile_number'    => $t->mobile_number,
-                    'email_address'    => $t->email_address,
-                    'national_id'      => $t->national_id,
+                    'mobile_number'    => $t->tenant_mobile,
+                    'email_address'    => $t->tenant_email,
+                    'national_id'      => $t->tenant_national_id,
                     'property_name'    => $t->property->property_name ?? '-',
                     'unit_name'        => $t->unit->unit_name ?? $t->unit->unit_code ?? '-',
                     'unit_id'          => $t->unit_id,
@@ -780,6 +789,7 @@ class TenantExitController extends Controller
             $query = TenantExit::query()
                 ->whereNotNull('cb_tenant_exits.process_1_completed_at') // Physically vacated (P1 done)
                 ->join('sys_pm_clients as c',       'cb_tenant_exits.tenant_id',    '=', 'c.id')
+                ->leftJoin('cb_tenant_records as tr', 'tr.id',                      '=', 'c.id')
                 ->join('sys_pm_properties as pr',   'cb_tenant_exits.property_id',  '=', 'pr.id')
                 ->join('sys_pm_units as u',         'cb_tenant_exits.unit_id',      '=', 'u.id')
                 ->leftJoin('sys_pm_clients as ll',  'pr.client_id',                 '=', 'll.id')
@@ -798,11 +808,11 @@ class TenantExitController extends Controller
                     'cb_tenant_exits.actual_exit_date',
                     'cb_tenant_exits.finalised_at',
                     'cb_tenant_exits.vacate_type',
-                    'c.names as tenant_name',
+                    DB::raw('COALESCE(tr.names, c.names) as tenant_name'),
                     'c.reference_number as tenant_ref',
-                    'c.mobile_number as tenant_mobile',
-                    'c.email_address as tenant_email',
-                    'c.national_id as tenant_national_id',
+                    DB::raw('COALESCE(tr.phone, c.mobile_number) as tenant_mobile'),
+                    DB::raw('COALESCE(tr.email, c.email_address) as tenant_email'),
+                    DB::raw('COALESCE(tr.national_id, c.national_id) as tenant_national_id'),
                     'pr.property_name',
                     'pr.client_id as landlord_id',
                     'll.names as landlord_name',
@@ -826,6 +836,10 @@ class TenantExitController extends Controller
                     'c.mobile_number',
                     'c.email_address',
                     'c.national_id',
+                    'tr.names',
+                    'tr.phone',
+                    'tr.email',
+                    'tr.national_id',
                     'pr.property_name',
                     'pr.client_id',
                     'll.names',
@@ -840,7 +854,10 @@ class TenantExitController extends Controller
                     $q->where('c.names',             'ILIKE', "%{$search}%")
                       ->orWhere('c.reference_number', 'ILIKE', "%{$search}%")
                       ->orWhere('c.mobile_number',    'ILIKE', "%{$search}%")
-                      ->orWhere('c.national_id',      'ILIKE', "%{$search}%");
+                      ->orWhere('c.national_id',      'ILIKE', "%{$search}%")
+                      ->orWhere('tr.names',           'ILIKE', "%{$search}%")
+                      ->orWhere('tr.phone',           'ILIKE', "%{$search}%")
+                      ->orWhere('tr.national_id',     'ILIKE', "%{$search}%");
                 });
             }
 

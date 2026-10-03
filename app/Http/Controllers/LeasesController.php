@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Unit;
 use App\Models\Client;
+use App\Models\TenantRecord;
 use App\Models\Property;
 use App\Traits\TenantRecordHelperTrait;
 use App\Traits\LeaseCreationTrait;
@@ -85,7 +86,7 @@ class LeasesController extends Controller
         try {
             $cutoff = now()->addDays(3)->endOfDay();
 
-            $leases = LeaseAgreement::with(['tenant:id,names', 'property:id,property_name', 'unit:id,unit_code'])
+            $leases = LeaseAgreement::with(['tenant:id,names', 'tenant.tenantRecord:id,names', 'property:id,property_name', 'unit:id,unit_code'])
                 ->where(function ($q) use ($cutoff) {
                     $q->where('lease_status', 'Terminated')
                         ->orWhere(function ($q2) use ($cutoff) {
@@ -886,7 +887,13 @@ class LeasesController extends Controller
             // user's assigned properties — same fix applied everywhere else
             // this session (e.g. UnitsController::getAvailableUnits()).
             $tenantIds = $leases->pluck('tenant_id')->merge($leases->pluck('unit_tenant_id'))->filter()->unique();
-            $tenantNames = Client::withAll()->whereIn('id', $tenantIds)->pluck('names', 'id');
+            // pluck() bypasses the Client::getNamesAttribute() accessor, so read straight
+            // from cb_tenant_records; fall back to sys_pm_clients only for ids with no
+            // tenant record yet (shouldn't happen for real tenants, but keeps this safe).
+            // union() (not merge()) — merge() uses array_merge(), which re-indexes
+            // integer keys like these tenant ids instead of overwriting by key.
+            $tenantNames = TenantRecord::whereIn('id', $tenantIds)->pluck('names', 'id')
+                ->union(Client::withAll()->whereIn('id', $tenantIds)->pluck('names', 'id'));
 
             $data = $leases->map(function ($l) use ($tenantNames) {
                 $hasMismatch = $l->unit_tenant_id && $l->unit_tenant_id != $l->tenant_id;

@@ -161,7 +161,7 @@ class InvoicingController extends Controller
             // has 795k+ rows, so loading/serializing every filtered match at once
             // (the previous behaviour) could exhaust memory/time and break the
             // DataTables ajax call with no useful error.
-            $invoices = $query->with(['tenant', 'property', 'unit'])
+            $invoices = $query->with(['tenant.tenantRecord', 'property', 'unit'])
                 ->orderBy($orderBy, $orderDir)
                 ->skip($start)
                 ->take($length)
@@ -384,16 +384,18 @@ class InvoicingController extends Controller
 
             $query = LeaseAgreement::where('property_id', $request->property_id)
                 ->whereNotNull('tenant_id')
-                ->with(['tenant:id,names,mobile_number,national_id,reference_number,email_address', 'unit:id,unit_code'])
+                ->with(['tenant:id,names,mobile_number,national_id,reference_number,email_address', 'tenant.tenantRecord:id,names,phone,email,national_id', 'unit:id,unit_code'])
                 ->select('id', 'tenant_id', 'property_id', 'unit_id', 'ref_number');
 
             if ($request->filled('search')) {
                 $search = $request->input('search');
                 $query->whereHas('tenant', function ($q) use ($search) {
-                    $q->where('names', 'ILIKE', "%{$search}%")
-                        ->orWhere('mobile_number', 'ILIKE', "%{$search}%")
-                        ->orWhere('national_id', 'ILIKE', "%{$search}%")
-                        ->orWhere('reference_number', 'ILIKE', "%{$search}%");
+                    $q->where('reference_number', 'ILIKE', "%{$search}%")
+                        ->orWhereHas('tenantRecord', function ($tr) use ($search) {
+                            $tr->where('names', 'ILIKE', "%{$search}%")
+                                ->orWhere('phone', 'ILIKE', "%{$search}%")
+                                ->orWhere('national_id', 'ILIKE', "%{$search}%");
+                        });
                 });
             }
 
@@ -439,13 +441,21 @@ class InvoicingController extends Controller
             }
 
             $tenantsRaw = Client::tenants()
-                ->select('id', 'names', 'mobile_number', 'email_address', 'national_id', 'reference_number')
+                ->leftJoin('cb_tenant_records', 'cb_tenant_records.id', '=', 'sys_pm_clients.id')
+                ->select(
+                    'sys_pm_clients.id',
+                    'sys_pm_clients.reference_number',
+                    DB::raw('COALESCE(cb_tenant_records.names, sys_pm_clients.names) as tenant_name'),
+                    DB::raw('COALESCE(cb_tenant_records.phone, sys_pm_clients.mobile_number) as tenant_mobile'),
+                    DB::raw('COALESCE(cb_tenant_records.email, sys_pm_clients.email_address) as tenant_email'),
+                    DB::raw('COALESCE(cb_tenant_records.national_id, sys_pm_clients.national_id) as tenant_national_id')
+                )
                 ->where(function ($q) use ($search) {
-                    $q->where('names', 'ILIKE', "%{$search}%")
-                        ->orWhere('reference_number', 'ILIKE', "%{$search}%")
-                        ->orWhere('mobile_number', 'ILIKE', "%{$search}%")
-                        ->orWhere('email_address', 'ILIKE', "%{$search}%")
-                        ->orWhere('national_id', 'ILIKE', "%{$search}%")
+                    $q->where('sys_pm_clients.reference_number', 'ILIKE', "%{$search}%")
+                        ->orWhere('cb_tenant_records.names', 'ILIKE', "%{$search}%")
+                        ->orWhere('cb_tenant_records.phone', 'ILIKE', "%{$search}%")
+                        ->orWhere('cb_tenant_records.email', 'ILIKE', "%{$search}%")
+                        ->orWhere('cb_tenant_records.national_id', 'ILIKE', "%{$search}%")
                         ->orWhereExists(function ($sub) use ($search) {
                             $sub->select(DB::raw(1))
                                 ->from('sys_pm_lease_agreements as la')
@@ -454,7 +464,7 @@ class InvoicingController extends Controller
                                 ->where('u.unit_code', 'ILIKE', "%{$search}%");
                         });
                 })
-                ->orderBy('names')
+                ->orderBy('tenant_name')
                 ->limit(50)
                 ->get();
 
@@ -477,10 +487,10 @@ class InvoicingController extends Controller
                 return [
                     'id'               => $t->id,
                     'encrypted_id'     => encrypt($t->id),
-                    'names'            => $t->names ?? 'N/A',
-                    'mobile_number'    => $t->mobile_number,
-                    'email_address'    => $t->email_address,
-                    'national_id'      => $t->national_id,
+                    'names'            => $t->tenant_name ?? 'N/A',
+                    'mobile_number'    => $t->tenant_mobile,
+                    'email_address'    => $t->tenant_email,
+                    'national_id'      => $t->tenant_national_id,
                     'reference_number' => $t->reference_number,
                     'unit_codes'       => $unitCodesByTenant[$t->id] ?? [],
                 ];
@@ -1137,7 +1147,7 @@ class InvoicingController extends Controller
     public function exportTenantInvoices(Request $request)
     {
         try {
-            $query = DebtorInvoice::with(['tenant', 'property', 'unit', 'lease'])
+            $query = DebtorInvoice::with(['tenant.tenantRecord', 'property', 'unit', 'lease'])
                 ->tenantInvoices();
 
             // Apply same filters as search
@@ -1385,7 +1395,7 @@ class InvoicingController extends Controller
     public function searchDeposits(Request $request)
     {
         try {
-            $query = Deposit::with(['tenant', 'property', 'unit', 'lease']);
+            $query = Deposit::with(['tenant.tenantRecord', 'property', 'unit', 'lease']);
 
             // Apply filters
             if ($request->filled('tenant_id')) {
@@ -1448,7 +1458,7 @@ class InvoicingController extends Controller
     public function getDepositDetails($id)
     {
         try {
-            $deposit = Deposit::with(['tenant', 'property', 'unit', 'lease'])->findOrFail($id);
+            $deposit = Deposit::with(['tenant.tenantRecord', 'property', 'unit', 'lease'])->findOrFail($id);
 
             // Get linked invoices - assuming there's a relationship or join table
             // If deposits link directly to invoices via invoice_id field in deposits table
@@ -1506,7 +1516,7 @@ class InvoicingController extends Controller
     public function depositDetails($id)
     {
         try {
-            $deposit = Deposit::with(['tenant', 'property', 'unit', 'lease', 'invoices', 'allocations.invoice'])
+            $deposit = Deposit::with(['tenant.tenantRecord', 'property', 'unit', 'lease', 'invoices', 'allocations.invoice'])
                 ->findOrFail($id);
 
             return view('property.deposits.deposit-details', compact('deposit'));

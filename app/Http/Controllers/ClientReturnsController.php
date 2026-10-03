@@ -840,10 +840,7 @@ class ClientReturnsController extends Controller
             $batch = ClientReturnsBatch::findOrFail($id);
 
             $returns = DB::table('sys_pm_clients_returns as cr')
-                ->join('sys_pm_clients as t', function ($join) {
-                    $join->on('t.id', '=', 'cr.tenant_id')
-                        ->where('t.type_id', '=', 2);
-                })
+                ->join('cb_tenant_records as t', 't.id', '=', 'cr.tenant_id')
                 ->join('sys_pm_units as u', 'u.id', '=', 'cr.unit_id')
                 ->join('sys_pm_debtors_invoices as i', 'i.id', '=', 'cr.invoice_id')
                 ->where('cr.batch_id', $batch->batch_id)

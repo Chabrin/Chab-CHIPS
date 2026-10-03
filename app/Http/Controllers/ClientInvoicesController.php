@@ -25,7 +25,7 @@ class ClientInvoicesController extends Controller
         try {
             $request->validate(['property_id' => 'required|integer|exists:sys_pm_properties,id']);
 
-            $invoices = DebtorInvoice::with(['tenant:id,names', 'unit:id,unit_code'])
+            $invoices = DebtorInvoice::with(['tenant:id,names', 'tenant.tenantRecord:id,names', 'unit:id,unit_code'])
                 ->where('property_id', $request->property_id)
                 ->tenantInvoices()
                 ->orderByDesc('date_time')
@@ -63,7 +63,7 @@ class ClientInvoicesController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $invoice = DebtorInvoice::with(['tenant', 'property', 'unit'])->findOrFail($id);
+            $invoice = DebtorInvoice::with(['tenant.tenantRecord', 'property', 'unit'])->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -104,7 +104,7 @@ class ClientInvoicesController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $invoice = DebtorInvoice::with(['tenant', 'property', 'unit'])->findOrFail($id);
+            $invoice = DebtorInvoice::with(['tenant.tenantRecord', 'property', 'unit'])->findOrFail($id);
 
             $pdf = Pdf::loadView('property.invoices.invoice-pdf', ['invoice' => $invoice]);
             $pdf->setPaper('A4', 'portrait');

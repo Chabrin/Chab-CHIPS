@@ -685,12 +685,15 @@ class PropertyConfirmationController extends Controller
                 $base = \App\Models\TenantExitSettlement::where('current_status_id', 1); // Pending
                 if ($search !== '') {
                     $base->where(function ($q) use ($search) {
-                        $q->whereHas('exit.tenant', fn($rq) => $rq->where('names', 'ILIKE', "%{$search}%"))
+                        $q->whereHas('exit.tenant', function ($rq) use ($search) {
+                            $rq->where('names', 'ILIKE', "%{$search}%")
+                                ->orWhereHas('tenantRecord', fn($tr) => $tr->where('names', 'ILIKE', "%{$search}%"));
+                        })
                             ->orWhereHas('exit.property', fn($rq) => $rq->where('property_name', 'ILIKE', "%{$search}%"));
                     });
                 }
                 $recordsTotal = (clone $base)->count();
-                $records = $base->with(['exit.tenant', 'exit.property', 'settledBy', 'consents'])
+                $records = $base->with(['exit.tenant.tenantRecord', 'exit.property', 'settledBy', 'consents'])
                     ->orderBy('settled_at', 'desc')
                     ->skip($start)->take($length)
                     ->get()

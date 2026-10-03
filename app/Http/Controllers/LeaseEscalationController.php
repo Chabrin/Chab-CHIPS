@@ -177,7 +177,7 @@ class LeaseEscalationController extends Controller
 
             $units = Unit::where('property_id', $propertyId)
                 ->with(['latestLeaseAgreement' => function ($q) {
-                    $q->with(['invoiceableItems', 'tenant:id,names']);
+                    $q->with(['invoiceableItems', 'tenant:id,names', 'tenant.tenantRecord:id,names']);
                 }])
                 ->select('id', 'unit_code', 'unit_name', 'usage_type_id', 'rent_amount', 'occupancy_status_id')
                 ->get()

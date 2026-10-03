@@ -146,6 +146,38 @@ class Client extends Model
         return $this->email_address;
     }
 
+    // Shared-PK link to the normalized tenant table (cb_tenant_records.id === sys_pm_clients.id).
+    // Null for landlord rows (type_id=1) and any tenant not yet migrated.
+    public function tenantRecord()
+    {
+        return $this->hasOne(TenantRecord::class, 'id', 'id');
+    }
+
+    // Read-only overrides: once a tenant row has a cb_tenant_records counterpart, these
+    // attributes resolve from there instead of the (no-longer-written-to) sys_pm_clients
+    // columns. Falls back to the raw column for landlords / unmigrated rows. Writes are
+    // untouched — mutators aren't defined, so `$client->names = 'x'` still targets the
+    // sys_pm_clients column directly.
+    public function getNamesAttribute($value)
+    {
+        return $this->tenantRecord?->names ?? $value;
+    }
+
+    public function getMobileNumberAttribute($value)
+    {
+        return $this->tenantRecord?->phone ?? $value;
+    }
+
+    public function getEmailAddressAttribute($value)
+    {
+        return $this->tenantRecord?->email ?? $value;
+    }
+
+    public function getNationalIdAttribute($value)
+    {
+        return $this->tenantRecord?->national_id ?? $value;
+    }
+
     public function scopeTypeOne($query)
     {
         return $query->where('type_id', 1);

@@ -53,7 +53,7 @@ trait ReturnsRentLinesTrait
             FROM sys_pm_debtors_invoices i
             JOIN sys_pm_properties p ON p.id = i.property_id
             JOIN sys_pm_units u ON u.id = i.unit_id
-            JOIN sys_pm_clients t ON t.id = i.tenant_id
+            JOIN cb_tenant_records t ON t.id = i.tenant_id
             LEFT JOIN sys_pm_service_agreements s ON s.property_id = i.property_id
             LEFT JOIN sys_pm_clients c ON c.id = s.client_d
         ";

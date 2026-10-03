@@ -269,7 +269,7 @@ class ReturnThresholdService
     {
         $query = DB::table('sys_pm_clients_returns as cr')
             ->join('sys_pm_debtors_invoices as i', 'cr.invoice_id', '=', 'i.id')
-            ->join('sys_pm_clients as c', 'cr.tenant_id', '=', 'c.id')
+            ->join('cb_tenant_records as c', 'cr.tenant_id', '=', 'c.id')
             ->join('sys_pm_units as u', 'cr.unit_id', '=', 'u.id')
             ->join('sys_set_invoiceable_items as si', 'cr.trans_type_id', '=', 'si.id')
             ->where('cr.return_date', $returnMonth)

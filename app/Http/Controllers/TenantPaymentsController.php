@@ -751,7 +751,7 @@ class TenantPaymentsController extends Controller
                 return response()->json(['success' => false, 'message' => 'Date range cannot exceed 32 days'], 400);
             }
 
-            $query = TenantPaymentAllocated::with('tenant')
+            $query = TenantPaymentAllocated::with('tenant.tenantRecord')
                 ->where('property_id', $request->property_id)
                 ->where('current_status_id', 1)
                 ->whereDate('date_time', '>=', $request->date_from)
@@ -805,7 +805,7 @@ class TenantPaymentsController extends Controller
             $property = Property::find($request->property_id);
             $propertyName = $property->property_name ?? 'Unknown';
 
-            $payments = TenantPaymentAllocated::with('tenant')
+            $payments = TenantPaymentAllocated::with('tenant.tenantRecord')
                 ->where('property_id', $request->property_id)
                 ->where('current_status_id', 1)
                 ->whereDate('date_time', '>=', $request->date_from)
