@@ -67,11 +67,6 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </a>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item d-flex align-items-center" href="{{ route('property.properties.create', ['client' => Crypt::encrypt($client->id)]) }}">
-                                                <span class="material-symbols-outlined me-2" style="font-size:18px;">add_home</span> Add Property
-                                            </a>
-                                        </li>
-                                        <li>
                                             <a class="dropdown-item d-flex align-items-center" href="{{ route('service.agreements.create', ['client' => Crypt::encrypt($client->id)]) }}">
                                                 <span class="material-symbols-outlined me-2" style="font-size:18px;">approval_delegation</span> Add SLA
                                             </a>
@@ -95,7 +90,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         <ul class="nav nav-tabs mb-4" id="clientTabs" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span> Profile
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span> Overview
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="bank-tab" data-bs-toggle="tab" data-bs-target="#bank" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">account_balance</span> Bank
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
@@ -173,10 +173,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                         <!-- Tabs Content -->
                         <div class="tab-content" id="clientTabsContent">
 
-                            <!-- Profile Information Tab -->
+                            <!-- Overview Tab -->
                             <div class="tab-pane fade show active" id="profile" role="tabpanel" aria-labelledby="profile-tab">
                                 <div class="row g-3">
-                                    <div class="col-lg-3 col-md-6">
+                                    <div class="col-lg-4 col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
                                                 <h6 class="mb-0" style="font-size:0.9rem;">
@@ -186,12 +186,16 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </div>
                                             <div class="card-body py-2">
                                                 <div class="row g-1">
-                                                    <div class="col-5"><small class="text-muted">{{ $client->client_type_id == 3 ? 'Company Name:' : 'Full Names:' }}</small></div>
+                                                    <div class="col-5"><small class="text-muted">Client Type:</small></div>
+                                                    <div class="col-7"><small><strong>
+                                                        {{ $client->client_type_id == 3 ? 'Company' : ($client->client_type_id == 4 ? 'Partnership and Trust' : 'Individual') }}
+                                                    </strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">{{ $client->client_type_id == 3 ? 'Company Name:' : ($client->client_type_id == 4 ? 'Partnership Name:' : 'Full Names:') }}</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->names ?? '-' }}</strong></small></div>
                                                     @if($client->client_type_id == 3)
                                                     <div class="col-5"><small class="text-muted">Registration No:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->company_registration_number ?? '-' }}</strong></small></div>
-                                                    @else
+                                                    @elseif($client->client_type_id != 4)
                                                     <div class="col-5"><small class="text-muted">National ID:</small></div>
                                                     <div class="col-7"><small><strong>{{ $client->national_id ?? '-' }}</strong></small></div>
                                                     @endif
@@ -226,38 +230,129 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-lg-9 col-md-6">
-                                        <div class="card h-100">
-                                            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
-                                                <h6 class="mb-0" style="font-size:0.9rem;">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">account_balance</span>
-                                                    Bank Details
-                                                </h6>
-                                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bankDetailModal" id="addBankDetailBtn">
-                                                    <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">add</span> Add Bank
-                                                </button>
-                                            </div>
-                                            <div class="card-body py-2">
-                                                <div class="table-responsive">
-                                                    <table id="bankDetailsTable" class="table table-sm table-hover" style="width:100%;font-size:0.85rem;">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>#</th>
-                                                                <th>Bank</th>
-                                                                <th>Branch</th>
-                                                                <th>Account Name</th>
-                                                                <th>Account Number</th>
-                                                                <th>Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody id="bankDetailsTableBody">
-                                                            <tr>
-                                                                <td colspan="6" class="text-center text-muted">Loading...</td>
-                                                            </tr>
-                                                        </tbody>
-                                                    </table>
+
+                                    <div class="col-lg-8 col-md-6">
+                                        <div class="row g-3">
+                                            @if($client->client_type_id == 4)
+                                            <div class="col-12">
+                                                <div class="card">
+                                                    <div class="card-header bg-light py-2">
+                                                        <h6 class="mb-0" style="font-size:0.9rem;">
+                                                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">groups</span>
+                                                            Partners
+                                                        </h6>
+                                                    </div>
+                                                    <div class="card-body py-2">
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            @forelse($client->partners as $partner)
+                                                            <div class="border rounded-3 p-2" style="min-width:190px;">
+                                                                <div class="d-flex align-items-center gap-1 mb-1">
+                                                                    <span class="material-symbols-outlined text-primary" style="font-size:16px;">person</span>
+                                                                    <small><strong>{{ $partner->name }}</strong></small>
+                                                                </div>
+                                                                <div class="small text-muted">ID: {{ $partner->national_id ?? '-' }}</div>
+                                                                <div class="small text-muted">KRA PIN: {{ $partner->kra_pin ?? '-' }}</div>
+                                                                <div class="small text-muted">{{ $partner->phone ?? '-' }}</div>
+                                                            </div>
+                                                            @empty
+                                                            <small class="text-muted">No partners recorded.</small>
+                                                            @endforelse
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            @endif
+
+                                            <div class="col-12 col-xl-6">
+                                                <div class="card h-100">
+                                                    <div class="card-header bg-light py-2">
+                                                        <h6 class="mb-0" style="font-size:0.9rem;">
+                                                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">family_restroom</span>
+                                                            Next of Kin
+                                                        </h6>
+                                                    </div>
+                                                    <div class="card-body py-2">
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            @forelse($client->nextOfKins as $kin)
+                                                            <div class="border rounded-3 p-2" style="min-width:170px;">
+                                                                <div class="d-flex align-items-center gap-1 mb-1">
+                                                                    <span class="material-symbols-outlined text-primary" style="font-size:16px;">diversity_1</span>
+                                                                    <small><strong>{{ $kin->names ?: trim(($kin->kin_first_name ?? '') . ' ' . ($kin->kin_last_name ?? '')) ?: '-' }}</strong></small>
+                                                                </div>
+                                                                <div class="small text-muted">{{ $kin->relationship ?? '-' }}</div>
+                                                                <div class="small text-muted">{{ $kin->mobile_number ?? '-' }}</div>
+                                                                <div class="small text-muted">{{ $kin->email_address ?? '-' }}</div>
+                                                            </div>
+                                                            @empty
+                                                            <small class="text-muted">No next of kin recorded.</small>
+                                                            @endforelse
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-xl-6">
+                                                <div class="card h-100">
+                                                    <div class="card-header bg-light py-2">
+                                                        <h6 class="mb-0" style="font-size:0.9rem;">
+                                                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">contact_phone</span>
+                                                            Other Contacts
+                                                        </h6>
+                                                    </div>
+                                                    <div class="card-body py-2">
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            @forelse($client->otherContacts as $contact)
+                                                            <div class="border rounded-3 p-2" style="min-width:170px;">
+                                                                <div class="d-flex align-items-center gap-1 mb-1">
+                                                                    <span class="material-symbols-outlined text-primary" style="font-size:16px;">person</span>
+                                                                    <small><strong>{{ $contact->contact_names ?? '-' }}</strong></small>
+                                                                </div>
+                                                                <div class="small text-muted">{{ $contact->other_mobile_number ?? '-' }}</div>
+                                                                <div class="small text-muted">{{ $contact->other_email ?? '-' }}</div>
+                                                            </div>
+                                                            @empty
+                                                            <small class="text-muted">No other contacts recorded.</small>
+                                                            @endforelse
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bank Tab -->
+                            <div class="tab-pane fade" id="bank" role="tabpanel" aria-labelledby="bank-tab">
+                                <div class="card">
+                                    <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0" style="font-size:0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">account_balance</span>
+                                            Bank Details
+                                        </h6>
+                                        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#bankDetailModal" id="addBankDetailBtn">
+                                            <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;">add</span> Add Bank
+                                        </button>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        <div class="table-responsive">
+                                            <table id="bankDetailsTable" class="table table-sm table-hover" style="width:100%;font-size:0.85rem;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Bank</th>
+                                                        <th>Branch</th>
+                                                        <th>Account Name</th>
+                                                        <th>Account Number</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="bankDetailsTableBody">
+                                                    <tr>
+                                                        <td colspan="6" class="text-center text-muted">Loading...</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 </div>
@@ -425,6 +520,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Properties Tab -->
                             <div class="tab-pane fade" id="properties" role="tabpanel" aria-labelledby="properties-tab">
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
+                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">add_home</span> Add Property
+                                    </button>
+                                </div>
                                 <div class="table-responsive custom-scrollbar">
                                     <table id="propertiesTable" class="display" style="width:100%;">
                                         <thead>
@@ -1472,6 +1572,8 @@ COPY PERMISSIONS (paste when re-enabling checks):
     </div>
 </div>
 
+@include('property.properties.partials.add-property-modal', ['presetClient' => $client])
+
 <!-- Bank Detail Modal -->
 <div class="modal fade" id="bankDetailModal" tabindex="-1" aria-labelledby="bankDetailModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-md">
@@ -1756,6 +1858,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
         var propertiesDropdownLoaded = false;
         var tenantPropertiesDropdownLoaded = false;
         var leasesPropertiesDropdownLoaded = false;
+
+        $(document).on('propertyCreated', function(e, res) {
+            loadProperties();
+        });
 
         // Initialize Properties DataTable immediately but with empty data
         propertiesTable = $('#propertiesTable').DataTable({

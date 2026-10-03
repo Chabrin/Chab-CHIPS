@@ -304,34 +304,6 @@ class PropertiesController extends Controller
     }
 
     /**
-     * Show the form for creating a new property
-     */
-    public function create(Request $request)
-    {
-        try {
-            $clientId = null;
-            $client = null;
-            $isClientPreSelected = false;
-    
-            Log::info('Create property request parameters: ', $request->all());
-            
-            // If client parameter is provided, decrypt it
-            if ($request->has('client')) {
-                $clientId = Crypt::decrypt($request->client);
-                // Load client with bank accounts and bank relationship
-                $client = Client::with(['bankAccounts.bank'])->findOrFail($clientId);
-                $isClientPreSelected = true;
-            }
-            
-            return view('property.properties.create', compact('client', 'isClientPreSelected'));
-        } catch (\Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error loading property create form: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to load form');
-        }
-    }
-
-    /**
      * Search clients for property form (AJAX)
      */
     public function searchClients(Request $request)
@@ -480,17 +452,34 @@ class PropertiesController extends Controller
             ]);
     
             DB::commit();
-    
-            return redirect()->route('property.clients.show', Crypt::encrypt($validated['client_id']))
+
+            $redirectUrl = route('property.clients.show', Crypt::encrypt($validated['client_id']));
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Property created successfully with reference number: ' . $referenceNumber,
+                    'redirect_url' => $redirectUrl,
+                    'property' => ['id' => $property->id, 'encrypted_id' => Crypt::encrypt($property->id)],
+                ]);
+            }
+
+            return redirect($redirectUrl)
                 ->with('success', 'Property created successfully with reference number: ' . $referenceNumber);
-    
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+            }
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating property: ' . $e->getMessage());
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Failed to create property: ' . $e->getMessage()], 500);
+            }
             return redirect()->back()->with('error', 'Failed to create property: ' . $e->getMessage())->withInput();
         }
     }

@@ -1000,7 +1000,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Properties
     Route::get('/property/listings', [App\Http\Controllers\PropertiesController::class, 'index'])->name('property.properties.index');
-    Route::get('/property/listings/create', [App\Http\Controllers\PropertiesController::class, 'create'])->name('property.properties.create');
     Route::get('/property/properties/data', [PropertiesController::class, 'getProperties'])->name('property.properties.data');
 
     // Inactive Properties (read-only listing, opens the same details page)

@@ -6,14 +6,6 @@
     </a>
 </li>
 @endpermission
-@permission('create_properties')
-<li>
-    <a class="dropdown-item d-flex align-items-center" href="{{ route('property.properties.create', ['client' => Crypt::encrypt($client->id)]) }}">
-        <span class="material-symbols-outlined me-2" style="font-size:18px;">add_home</span>
-        Add Property
-    </a>
-</li>
-@endpermission
 @permission('create_service_agreements')
 <li>
     <a class="dropdown-item d-flex align-items-center" href="{{ route('service.agreements.create', ['client' => Crypt::encrypt($client->id)]) }}">

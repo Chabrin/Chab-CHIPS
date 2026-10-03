@@ -390,7 +390,7 @@ class ClientsController extends Controller
     {
         try {
             $id = Crypt::decrypt($encryptedId);
-            $client = Client::findOrFail($id);
+            $client = Client::with(['otherContacts', 'nextOfKins', 'partners', 'bankAccounts.bank'])->findOrFail($id);
             $unitTopologies = \App\Models\UnitTopology::orderBy('topology_name')->get();
             $unitCategories = \App\Models\UnitCategory::orderBy('category_name')->get();
             return view('property.clients.details', compact('client', 'unitTopologies', 'unitCategories'));

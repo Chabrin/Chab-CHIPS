@@ -15,10 +15,10 @@
                             </a>
                             @endpermission
                             @permission('create_properties')
-                            <a href="{{ route('property.properties.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
+                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
                                 <span class="material-symbols-outlined">add_circle</span>
                                 <span class="ms-1">Add Property</span>
-                            </a>
+                            </button>
                             @endpermission
                         </div>
                     </div>
@@ -170,6 +170,16 @@
             // Navigate to the details page
             window.location.href = href;
         });
+
+        $(document).on('propertyCreated', function(e, res) {
+            if (res.redirect_url) {
+                window.location.href = res.redirect_url;
+            } else {
+                table.ajax.reload();
+            }
+        });
     });
 </script>
+
+@include('property.properties.partials.add-property-modal')
 @endsection

@@ -64,7 +64,10 @@ class OnboardingPipelineController extends Controller
                     $landlord->reference_number ?? '-',
                     $landlord->current_status_id,
                     $landlord->date_time,
-                    $this->singleNextStep($landlord->current_status_id, 'Add Property', 'create_properties', 'property.properties.create', $landlord->id)
+                    // Add Property is now a modal on the client details page (no standalone
+                    // create page to link to anymore) — send them there, "encryptedId" matches
+                    // that route's own parameter name, not the "client" key used elsewhere here.
+                    $this->singleNextStep($landlord->current_status_id, 'Add Property', 'create_properties', 'property.clients.show', $landlord->id, 'encryptedId')
                 );
             });
     }
@@ -216,23 +219,23 @@ class OnboardingPipelineController extends Controller
      * a single link (if approved and permitted), a "no permission" marker (approved but not
      * permitted), or the current pending/rejected status (not approved yet).
      */
-    private function singleNextStep(?int $statusId, string $label, string $permission, string $route, ?int $landlordId): array
+    private function singleNextStep(?int $statusId, string $label, string $permission, string $route, ?int $landlordId, string $paramKey = 'client'): array
     {
         if (! $this->isApproved($statusId)) {
             return $this->statusStep($statusId);
         }
 
-        return ['type' => 'link', 'link' => $this->buildLink($label, $permission, $route, $landlordId)];
+        return ['type' => 'link', 'link' => $this->buildLink($label, $permission, $route, $landlordId, $paramKey)];
     }
 
-    private function buildLink(string $label, string $permission, string $route, ?int $landlordId): array
+    private function buildLink(string $label, string $permission, string $route, ?int $landlordId, string $paramKey = 'client'): array
     {
         $hasPermission = Auth::user()->hasPermission($permission);
 
         return [
             'label' => $label,
             'has_permission' => $hasPermission,
-            'url' => ($hasPermission && $landlordId) ? route($route, ['client' => Crypt::encrypt($landlordId)]) : null,
+            'url' => ($hasPermission && $landlordId) ? route($route, [$paramKey => Crypt::encrypt($landlordId)]) : null,
         ];
     }
 
