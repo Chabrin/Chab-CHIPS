@@ -17,6 +17,7 @@ class TenantRecord extends Model
     protected $fillable = [
         'id',
         'tenant_type',
+        'company_registration_number',
         'salutation_id',
         'names',
         'gender_id',

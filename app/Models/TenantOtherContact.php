@@ -10,6 +10,7 @@ class TenantOtherContact extends Model
 
     protected $fillable = [
         'tenant_id',
+        'title',
         'names',
         'email',
         'mobile_number',
