@@ -655,6 +655,19 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/property/units/uploads/bulk-delete', [App\Http\Controllers\UnitBulkUploadController::class, 'destroySelectedUploads'])->name('property.units.uploads.bulk-delete');
     Route::post('/property/units/uploads/push', [App\Http\Controllers\UnitBulkUploadController::class, 'pushToMain'])->name('property.units.uploads.push');
 
+    // Units & tenants bulk upload (staged, client page Bulk Upload tab)
+    Route::get('/property/unit-tenant-upload/template', [App\Http\Controllers\UnitTenantUploadController::class, 'downloadTemplate'])->name('property.unit-tenant-upload.template');
+    Route::post('/property/unit-tenant-upload/import', [App\Http\Controllers\UnitTenantUploadController::class, 'import'])->name('property.unit-tenant-upload.import');
+    Route::get('/property/unit-tenant-upload/batches', [App\Http\Controllers\UnitTenantUploadController::class, 'batches'])->name('property.unit-tenant-upload.batches');
+    Route::get('/property/unit-tenant-upload/batches/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'show'])->name('property.unit-tenant-upload.show')->whereNumber('id');
+    Route::post('/property/unit-tenant-upload/batches/{id}/submit', [App\Http\Controllers\UnitTenantUploadController::class, 'submit'])->name('property.unit-tenant-upload.submit')->whereNumber('id');
+    Route::post('/property/unit-tenant-upload/batches/{id}/cancel', [App\Http\Controllers\UnitTenantUploadController::class, 'cancel'])->name('property.unit-tenant-upload.cancel')->whereNumber('id');
+    Route::delete('/property/unit-tenant-upload/batches/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyBatch'])->name('property.unit-tenant-upload.destroy')->whereNumber('id');
+    Route::put('/property/unit-tenant-upload/units/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'updateUnit'])->name('property.unit-tenant-upload.units.update')->whereNumber('id');
+    Route::delete('/property/unit-tenant-upload/units/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyUnit'])->name('property.unit-tenant-upload.units.destroy')->whereNumber('id');
+    Route::put('/property/unit-tenant-upload/tenants/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'updateTenant'])->name('property.unit-tenant-upload.tenants.update')->whereNumber('id');
+    Route::delete('/property/unit-tenant-upload/tenants/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyTenant'])->name('property.unit-tenant-upload.tenants.destroy')->whereNumber('id');
+
     // Rent Invoicing (staged, client page Invoicing tab)
     Route::post('/property/rent-invoicing/generate', [App\Http\Controllers\RentInvoicingController::class, 'generate'])->name('property.rent-invoicing.generate');
     Route::get('/property/rent-invoicing/staged', [App\Http\Controllers\RentInvoicingController::class, 'stagedData'])->name('property.rent-invoicing.staged');

@@ -709,22 +709,57 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                     </div>
                                 </div>
 
-                                <div class="table-responsive custom-scrollbar">
-                                    <table id="tenantsTable" class="display" style="width:100%;">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Names</th>
-                                                <th>Mobile Number</th>
-                                                <th>Email Address</th>
-                                                <th>Unit Name</th>
-                                                <th>Reference Number</th>
-                                                <th>Registered Date</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
+                                <ul class="nav nav-tabs mb-3" id="tenantsSubTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="tenants-listing-subtab" data-bs-toggle="tab" data-bs-target="#tenants-listing-pane" type="button" role="tab">
+                                            Tenants Listing
+                                        </button>
+                                    </li>
+                                    @permission('create_units')
+                                    @permission('create_tenants')
+                                    @permission('create_lease_agreements')
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="tenants-bulk-upload-subtab" data-bs-toggle="tab" data-bs-target="#tenants-bulk-upload-pane" type="button" role="tab">
+                                            Bulk Upload
+                                        </button>
+                                    </li>
+                                    @endpermission
+                                    @endpermission
+                                    @endpermission
+                                </ul>
+
+                                <div class="tab-content" id="tenantsSubTabsContent">
+                                    <!-- Tenants Listing sub-tab -->
+                                    <div class="tab-pane fade show active" id="tenants-listing-pane" role="tabpanel">
+                                        <div class="table-responsive custom-scrollbar">
+                                            <table id="tenantsTable" class="display" style="width:100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Names</th>
+                                                        <th>Mobile Number</th>
+                                                        <th>Email Address</th>
+                                                        <th>Unit Name</th>
+                                                        <th>Reference Number</th>
+                                                        <th>Registered Date</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    @permission('create_units')
+                                    @permission('create_tenants')
+                                    @permission('create_lease_agreements')
+                                    <!-- Bulk Upload sub-tab (units & tenants, staged) -->
+                                    <div class="tab-pane fade" id="tenants-bulk-upload-pane" role="tabpanel">
+                                        @include('property.clients.include.unit-tenant-upload')
+                                    </div>
+                                    @endpermission
+                                    @endpermission
+                                    @endpermission
                                 </div>
                             </div>
 

@@ -12,5 +12,6 @@ class UnitTopology extends Model
 
     protected $fillable = [
         'topology_name',
+        'slug',
     ];
 }
