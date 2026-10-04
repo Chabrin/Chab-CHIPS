@@ -16,7 +16,7 @@ a handful of shared traits (e.g. `Unit::generateUnitCode()` is reused by manual 
 both bulk-upload paths).
 
 The most consequential open issue here isn't new: it's the `current_status_id` overload documented
-in `docs/status-conventions.md`. The two newest features (`TenantBulkUploadController`,
+in `docs/status-conventions.md`. The two newest features (the units & tenants bulk upload,
 `UnitBulkUploadController`) show both a correction of a previously-documented instance of that bug
 and a fresh example of the same class of gap elsewhere (see Known Issues).
 
@@ -33,7 +33,7 @@ and a fresh example of the same class of gap elsewhere (see Known Issues).
 | PropertySettingsController | `app/Http/Controllers/PropertySettingsController.php` | 928 |
 | BulkUploadController (legacy, generic) | `app/Http/Controllers/BulkUploadController.php` | 916 |
 | SLAController | `app/Http/Controllers/SLAController.php` | 753 |
-| TenantBulkUploadController (new) | `app/Http/Controllers/TenantBulkUploadController.php` | 672 |
+| UnitTenantUploadController (new) | `app/Http/Controllers/UnitTenantUploadController.php` | ~190 (logic in `app/Services/UnitTenantUpload/`) |
 | LeaseEscalationController | `app/Http/Controllers/LeaseEscalationController.php` | 606 |
 | InspectionsController | `app/Http/Controllers/InspectionsController.php` | 562 |
 | TenantMovementController | `app/Http/Controllers/TenantMovementController.php` | 567 |
@@ -59,7 +59,7 @@ and `InspectionsController`; no separately-named singular variants exist.)
 `Unit.php` (169), `ServiceAgreement.php` (101), `Recovery.php` (97), `LeaseAgreement.php` (90),
 `ZoneAssignment.php` (77, table `sys_pm_zones_assignments`), `RepairRequest.php` (66),
 `Inspection.php` (43), `InspectionUnit.php` (36), `ConfirmationLog.php` (32),
-`TempUploadedTenant.php` (40, new), `TempUploadedUnit.php` (31, new) — plus related satellite
+`TempUploadedUnit.php` (31), `TempUploadBatch/TempBatchUnit/TempBatchTenant.php` (new) — plus related satellite
 models (`RepairRequestItem/Element/Type`, `MoveInInspection`, `InspectionPicture`,
 `TenantExitInspection`, `Zone`, `ZoneArea`, `ZoneAssignmentZone/Type`).
 
@@ -108,8 +108,12 @@ flagging:
    **directly** — no staging step; good rows land straight in the live tables in the same request
    a bad row is merely logged and skipped.
 
-2. **New `TenantBulkUploadController` + `UnitBulkUploadController`** (added in commits `00c6965c`,
-   `b6cc2fe1`, `ab1824e7`, this week) — a two-stage, per-property design:
+2. **`UnitBulkUploadController` (staged units) and the units & tenants upload** — a two-stage,
+   per-property design. `TenantBulkUploadController` and `TempUploadedTenant` were removed on
+   2026-10-04 and replaced by `UnitTenantUploadController` (one 3-sheet file: units, individual
+   tenants, corporate tenants; services in `app/Services/UnitTenantUpload/`; staging in
+   `temp_upload_batches` / `temp_batch_units` / `temp_batch_tenants`, soft-deleted; submit creates
+   unit → tenant → 1-year lease per row). The description below is of the original design:
    - `downloadTemplate` generates an Excel template (units: blank; tenants: **pre-filled**, one
      row per currently-vacant unit on that property).
    - `import` parses the uploaded file into a **staging table** (`TempUploadedTenant`/
@@ -167,8 +171,9 @@ can now create a `Unit` or `Client` row (manual `store()`, legacy `BulkUploadCon
 - **Two bulk-upload systems now coexist with no deprecation signal** — routes for both the legacy
   `BulkUploadController` and the new per-entity controllers remain registered; unclear whether
   Properties bulk upload (only on the legacy path) will ever get a new-style equivalent.
-- **Open question, not investigated further**: whether `TempUploadedTenant`/`TempUploadedUnit`
-  rows are purged after a successful `pushToMain`, or accumulate indefinitely.
+- **Open question, not investigated further**: whether `TempUploadedUnit` rows are purged after a
+  successful `pushToMain`, or accumulate indefinitely. (The newer batch tables keep submitted rows
+  on purpose, flagged `submitted_at`.)
 
 ## Status Code Reference (Management domain)
 
