@@ -4,12 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use App\Traits\HasZoneAccessScope;
 
 class Client extends Model
 {
     use Notifiable;
+    use HasZoneAccessScope;
 
     protected $table = 'sys_pm_clients';
     protected $primaryKey = 'id';
@@ -87,25 +87,11 @@ class Client extends Model
         parent::boot();
         static::addGlobalScope('user_clients_properties', function ($query) {
 
-            if (!Auth::check()) {
-                return;
+            $staffId = self::zoneAccessState();
+
+            if ($staffId === null) {
+                return; // unrestricted: not authenticated, or cb_roles.is_global
             }
-
-            $userId = Auth::id();
-
-            $isGlobal = DB::table('cb_role_user as ru')
-                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                ->where('ru.user_id', $userId)
-                ->where('r.is_global', true)
-                ->exists();
-
-            if ($isGlobal) {
-                return;
-            }
-
-            $staffId = DB::table('sys_user_staff_links')
-                ->where('user_id', $userId)
-                ->value('staff_id');
 
             if (!$staffId) {
                 $query->whereRaw('1 = 0');
@@ -121,14 +107,8 @@ class Client extends Model
                     ->where(function ($clientMatch) {
                         $clientMatch->whereColumn('spp.client_id', 'sys_pm_clients.id')
                             ->orWhereColumn('spp.id', 'sys_pm_clients.property_id');
-                    })
-                    ->where(function ($q) use ($staffId) {
-                        $q->where('spp.field_officer_id', $staffId)
-                            ->orWhere('spp.zone_manager_id', $staffId)
-                            ->orWhere('spp.zone_supervisor_id', $staffId)
-                            ->orWhere('spz.zone_manager_id', $staffId)
-                            ->orWhere('spz.zone_supervisor_id', $staffId);
                     });
+                self::addZoneAccessPredicate($sub, $staffId);
             });
         });
     }

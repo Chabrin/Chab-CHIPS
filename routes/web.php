@@ -527,6 +527,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/zone/assignments/field-officers', [HrSettingsController::class, 'fieldOfficersReport'])->name('ajax.zoneAssignments.fieldOfficers');
     Route::get('/ajax/hr/zone/assignments/zone-managers', [HrSettingsController::class, 'zoneManagersReport'])->name('ajax.zoneAssignments.zoneManagers');
     Route::get('/ajax/hr/zone/assignments/zone-supervisors', [HrSettingsController::class, 'zoneSupervisorsReport'])->name('ajax.zoneAssignments.zoneSupervisors');
+    Route::get('/ajax/hr/zone/assignments/zone-auditors', [HrSettingsController::class, 'zoneAuditorsReport'])->name('ajax.zoneAssignments.zoneAuditors');
     Route::get('/ajax/hr/zone/assignments/property-managers', [HrSettingsController::class, 'propertyManagersReport'])->name('ajax.zoneAssignments.propertyManagers');
     Route::get('/ajax/hr/zone/assignments/staff-properties', [HrSettingsController::class, 'zoneAssignmentStaffProperties'])->name('ajax.zoneAssignments.staffProperties');
     Route::get('/ajax/hr/zone/assignments/unallocated', [HrSettingsController::class, 'unallocatedPropertiesReport'])->name('ajax.zoneAssignments.unallocated');

@@ -36,6 +36,12 @@
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="zone-auditors-tab" data-bs-toggle="tab" data-bs-target="#zone-auditors-pane" type="button">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">fact_check</span>
+                                    Zone Auditors
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="property-managers-tab" data-bs-toggle="tab" data-bs-target="#property-managers-pane" type="button">
                                     <span class="material-symbols-outlined" style="font-size:18px;">badge</span>
                                     Property Managers
@@ -125,6 +131,24 @@
                             <div class="tab-pane fade" id="zone-supervisors-pane" role="tabpanel">
                                 <div class="table-responsive custom-scrollbar">
                                     <table id="zoneSupervisorsTable" class="display" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Name</th>
+                                                <th>Mobile</th>
+                                                <th>Email</th>
+                                                <th>Properties</th>
+                                                <th>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="tab-pane fade" id="zone-auditors-pane" role="tabpanel">
+                                <div class="table-responsive custom-scrollbar">
+                                    <table id="zoneAuditorsTable" class="display" style="width:100%;">
                                         <thead>
                                             <tr>
                                                 <th>#</th>
@@ -356,6 +380,15 @@
             { data: 'email_address', render: data => data || '-' },
             { data: 'properties_count', render: data => (typeof data === 'number' ? data : parseInt(data) || 0) },
             detailsColumn('zone_supervisor')
+        ]);
+
+        const zoneAuditorsTable = loadReportTable('#zoneAuditorsTable', "{{ url('/ajax/hr/zone/assignments/zone-auditors') }}", [
+            rowNumberColumn,
+            nameLinkColumn('zone_auditor'),
+            { data: 'mobile_number', render: data => data || '-' },
+            { data: 'email_address', render: data => data || '-' },
+            { data: 'properties_count', render: data => (typeof data === 'number' ? data : parseInt(data) || 0) },
+            detailsColumn('zone_auditor')
         ]);
 
         loadReportTable('#propertyManagersTable', "{{ url('/ajax/hr/zone/assignments/property-managers') }}", [
@@ -787,6 +820,7 @@
                     fieldOfficersTable.ajax.reload(null, false);
                     zoneManagersTable.ajax.reload(null, false);
                     zoneSupervisorsTable.ajax.reload(null, false);
+                    zoneAuditorsTable.ajax.reload(null, false);
                 },
                 error: function(xhr) {
                     $icon.removeClass('spin');

@@ -18,11 +18,13 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use App\Models\LeaseAgreementInvoiceableItem;
 use App\Services\LeaseContractService;
+use App\Traits\HasZoneAccessScope;
 
 class LeasesController extends Controller
 {
     use TenantRecordHelperTrait;
     use LeaseCreationTrait;
+    use HasZoneAccessScope;
 
     /**
      * Display a listing of lease agreements
@@ -86,13 +88,31 @@ class LeasesController extends Controller
         try {
             $cutoff = now()->addDays(3)->endOfDay();
 
-            $leases = LeaseAgreement::with(['tenant:id,names', 'tenant.tenantRecord:id,names', 'property:id,property_name', 'unit:id,unit_code'])
+            $leasesQuery = LeaseAgreement::with(['tenant:id,names', 'tenant.tenantRecord:id,names', 'property:id,property_name', 'unit:id,unit_code'])
                 ->where(function ($q) use ($cutoff) {
                     $q->where('lease_status', 'Terminated')
                         ->orWhere(function ($q2) use ($cutoff) {
                             $q2->whereNotNull('date_end')->where('date_end', '<=', $cutoff);
                         });
-                })
+                });
+
+            // Scope leases to properties assigned to the logged-in user (unless role is_global) —
+            // shared with Client::boot()'s global scope and ClientsController's tenant listing.
+            $staffId = self::zoneAccessState();
+
+            if ($staffId === 0) {
+                $leasesQuery->whereRaw('1 = 0');
+            } elseif ($staffId !== null) {
+                $leasesQuery->whereExists(function ($sub) use ($staffId) {
+                    $sub->selectRaw('1')
+                        ->from('sys_pm_properties as spp')
+                        ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
+                        ->whereColumn('spp.id', 'sys_pm_lease_agreements.property_id');
+                    self::addZoneAccessPredicate($sub, $staffId);
+                });
+            }
+
+            $leases = $leasesQuery
                 ->select(['id', 'tenant_id', 'property_id', 'unit_id', 'ref_number', 'date_end', 'lease_status'])
                 // Every matching row has date_end <= today+3 (or is Terminated with no
                 // date at all), so DESC surfaces the ones closest to "now" — the most

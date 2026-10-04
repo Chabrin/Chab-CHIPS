@@ -1107,6 +1107,39 @@ class HrSettingsController extends Controller
     }
 
     /**
+     * Zone Auditors report — one row per staff member set as zone_auditor_id
+     * on at least one zone (sys_set_zones), with a count of properties across
+     * all zones they audit. Unlike Field Officer/Zone Manager/Zone Supervisor,
+     * there's no zone_auditor_id column on sys_pm_properties — the assignment
+     * lives on the zone itself, so properties are reached via zone_id.
+     */
+    public function zoneAuditorsReport()
+    {
+        try {
+            $rows = DB::table('sys_set_zones as z')
+                ->join('sys_staff as s', 's.id', '=', 'z.zone_auditor_id')
+                ->leftJoin('sys_pm_properties as p', 'p.zone_id', '=', 'z.id')
+                ->select(
+                    's.id',
+                    's.full_names',
+                    's.mobile_number',
+                    's.email_address',
+                    DB::raw('COUNT(DISTINCT p.id) as properties_count')
+                )
+                ->whereNotNull('z.zone_auditor_id')
+                ->groupBy('s.id', 's.full_names', 's.mobile_number', 's.email_address')
+                ->orderBy('s.full_names')
+                ->get();
+
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading zone auditors report: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load zone auditors'], 500);
+        }
+    }
+
+    /**
      * Property Managers report — staff holding the "PROPERTY MANAGER" position.
      * Properties don't carry a property_manager_id column, so this is listed by
      * staff position rather than a per-property count.
@@ -1146,13 +1179,15 @@ class HrSettingsController extends Controller
             $type = $request->input('type');
             $staffId = $request->input('staff_id');
 
-            if (!isset($columnMap[$type]) || !$staffId) {
+            if ($type !== 'zone_auditor' && !isset($columnMap[$type])) {
                 return response()->json(['error' => 'Invalid role type or staff id'], 400);
             }
 
-            $column = $columnMap[$type];
+            if (!$staffId) {
+                return response()->json(['error' => 'Invalid role type or staff id'], 400);
+            }
 
-            $rows = DB::table('sys_pm_properties as p')
+            $query = DB::table('sys_pm_properties as p')
                 ->leftJoin('sys_pm_clients as c', 'c.id', '=', 'p.client_id')
                 ->leftJoin('sys_set_zones as z', 'z.id', '=', 'p.zone_id')
                 ->select(
@@ -1161,10 +1196,18 @@ class HrSettingsController extends Controller
                     'p.reference_number',
                     'c.names as client_name',
                     'z.zone_name'
-                )
-                ->where("p.$column", $staffId)
-                ->orderBy('p.reference_number')
-                ->get();
+                );
+
+            if ($type === 'zone_auditor') {
+                // No zone_auditor_id column on properties — the assignment lives
+                // on the zone, so match properties through their zone's auditor.
+                $query->where('z.zone_auditor_id', $staffId);
+            } else {
+                $column = $columnMap[$type];
+                $query->where("p.$column", $staffId);
+            }
+
+            $rows = $query->orderBy('p.reference_number')->get();
 
             return response()->json(['data' => $rows]);
         } catch (\Exception $e) {

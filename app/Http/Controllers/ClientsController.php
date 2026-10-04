@@ -25,9 +25,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
+use App\Traits\HasZoneAccessScope;
 
 class ClientsController extends Controller
 {
+    use HasZoneAccessScope;
+
     /**
      * Display a listing of clients
      */
@@ -1396,38 +1399,21 @@ class ClientsController extends Controller
             }
 
 
-            // Scope tenants to properties assigned to the logged-in user (unless role is_global)
-            $userId = Auth::id();
-            $isGlobal = DB::table('cb_role_user as ru')
-                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                ->where('ru.user_id', $userId)
-                ->where('r.is_global', true)
-                ->exists();
+            // Scope tenants to properties assigned to the logged-in user (unless role is_global) —
+            // shared with Client::boot()'s global scope and LeasesController::getUrgentLeases().
+            $staffId = self::zoneAccessState();
 
-            if (!$isGlobal) {
-                $staffId = DB::table('sys_user_staff_links')
-                    ->where('user_id', $userId)
-                    ->value('staff_id');
-
-                if (!$staffId) {
-                    $query->whereRaw('1 = 0');
-                } else {
-                    // Mirrors Client::boot()'s scope: staff-based property/zone match, not sys_pm_zones_assignments (dead).
-                    $query->whereExists(function ($sub) use ($staffId) {
-                        $sub->selectRaw('1')
-                            ->from('sys_pm_lease_agreements')
-                            ->join('sys_pm_properties as spp', 'spp.id', '=', 'sys_pm_lease_agreements.property_id')
-                            ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
-                            ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id')
-                            ->where(function ($q) use ($staffId) {
-                                $q->where('spp.field_officer_id', $staffId)
-                                    ->orWhere('spp.zone_manager_id', $staffId)
-                                    ->orWhere('spp.zone_supervisor_id', $staffId)
-                                    ->orWhere('spz.zone_manager_id', $staffId)
-                                    ->orWhere('spz.zone_supervisor_id', $staffId);
-                            });
-                    });
-                }
+            if ($staffId === 0) {
+                $query->whereRaw('1 = 0');
+            } elseif ($staffId !== null) {
+                $query->whereExists(function ($sub) use ($staffId) {
+                    $sub->selectRaw('1')
+                        ->from('sys_pm_lease_agreements')
+                        ->join('sys_pm_properties as spp', 'spp.id', '=', 'sys_pm_lease_agreements.property_id')
+                        ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
+                        ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id');
+                    self::addZoneAccessPredicate($sub, $staffId);
+                });
             }
 
             // Column filters (only apply when 3+ characters)
@@ -1501,38 +1487,21 @@ class ClientsController extends Controller
                         ->orWhere('reference_number', 'LIKE', "%{$searchTerm}%");
                 });
 
-            // Scope tenants to properties assigned to the logged-in user (unless role is_global)
-            $userId = Auth::id();
-            $isGlobal = DB::table('cb_role_user as ru')
-                ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                ->where('ru.user_id', $userId)
-                ->where('r.is_global', true)
-                ->exists();
+            // Scope tenants to properties assigned to the logged-in user (unless role is_global) —
+            // shared with Client::boot()'s global scope and LeasesController::getUrgentLeases().
+            $staffId = self::zoneAccessState();
 
-            if (!$isGlobal) {
-                $staffId = DB::table('sys_user_staff_links')
-                    ->where('user_id', $userId)
-                    ->value('staff_id');
-
-                if (!$staffId) {
-                    $query->whereRaw('1 = 0');
-                } else {
-                    // Mirrors Client::boot()'s scope: staff-based property/zone match, not sys_pm_zones_assignments (dead).
-                    $query->whereExists(function ($sub) use ($staffId) {
-                        $sub->selectRaw('1')
-                            ->from('sys_pm_lease_agreements')
-                            ->join('sys_pm_properties as spp', 'spp.id', '=', 'sys_pm_lease_agreements.property_id')
-                            ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
-                            ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id')
-                            ->where(function ($q) use ($staffId) {
-                                $q->where('spp.field_officer_id', $staffId)
-                                    ->orWhere('spp.zone_manager_id', $staffId)
-                                    ->orWhere('spp.zone_supervisor_id', $staffId)
-                                    ->orWhere('spz.zone_manager_id', $staffId)
-                                    ->orWhere('spz.zone_supervisor_id', $staffId);
-                            });
-                    });
-                }
+            if ($staffId === 0) {
+                $query->whereRaw('1 = 0');
+            } elseif ($staffId !== null) {
+                $query->whereExists(function ($sub) use ($staffId) {
+                    $sub->selectRaw('1')
+                        ->from('sys_pm_lease_agreements')
+                        ->join('sys_pm_properties as spp', 'spp.id', '=', 'sys_pm_lease_agreements.property_id')
+                        ->leftJoin('sys_set_zones as spz', 'spz.id', '=', 'spp.zone_id')
+                        ->whereColumn('sys_pm_lease_agreements.tenant_id', 'sys_pm_clients.id');
+                    self::addZoneAccessPredicate($sub, $staffId);
+                });
             }
 
             $tenants = $query->get()
