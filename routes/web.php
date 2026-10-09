@@ -136,6 +136,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees', [StaffController::class, 'index'])->name('staff.index');
     Route::get('/hr/employees/create', [StaffController::class, 'create'])->name('staff.create');
     Route::post('/hr/employees', [StaffController::class, 'store'])->name('staff.store');
+    Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
+    Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
