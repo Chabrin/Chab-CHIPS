@@ -136,6 +136,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees', [StaffController::class, 'index'])->name('staff.index');
     Route::get('/hr/employees/create', [StaffController::class, 'create'])->name('staff.create');
     Route::post('/hr/employees', [StaffController::class, 'store'])->name('staff.store');
+    Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
+    Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
@@ -599,6 +601,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employee/attendance', [StaffController::class, 'attendanceIndex'])->name('attendance.index');
     Route::get('/ajax/hr/employee/attendance/list', [StaffController::class, 'attendanceList'])->name('ajax.attendance.list');
     Route::post('/ajax/hr/employee/attendance/upload', [StaffController::class, 'attendanceUpload'])->name('ajax.attendance.upload');
+    Route::get('/ajax/hr/employee/attendance/upload/result', [StaffController::class, 'attendanceUploadResult'])->name('ajax.attendance.upload.result');
     Route::get('/ajax/hr/employee/attendance/sample/download', [StaffController::class, 'attendanceSampleDownload'])->name('attendance.sample.download');
 
     // Staff Hr Communication Routes

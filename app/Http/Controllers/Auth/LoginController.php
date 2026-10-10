@@ -255,7 +255,10 @@ class LoginController extends Controller
             }
 
 
-            if (!Auth::attempt(['email' => $email, 'password' => $password], false)) {
+            // "Remember me" keeps the user signed in for the configured number of days (converted to minutes)
+            Auth::guard()->setRememberDuration(60 * 24 * config('app.remember_me_days'));
+
+            if (!Auth::attempt(['email' => $email, 'password' => $password], $request->boolean('remember'))) {
                 $user->resetCount = ($user->resetCount ?? 0) + 1;
                 $user->save();
 

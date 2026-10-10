@@ -1,47 +1,115 @@
 @extends('layouts.main')
 
 @section('styles')
+
+
 <style>
+
+    :root {
+    /* Brand Identity */
+    --cb-primary: #1e5ba8;          /* Classic Chabrin corporate blue */
+    --cb-primary-light: #eef4fc;    /* Light tinted background */
+    --cb-primary-hover: #164684;
+    
+    /* Functional Accents */
+    --cb-navy: #0f253e;             /* Heavy contrast text / charts */
+    --cb-teal: #0d9488;             /* Positive / growth / units */
+    --cb-amber: #e67e22;            /* Returns Advance / warnings */
+    --cb-amber-light: #fef5ea;
+    --cb-purple: #6366f1;           /* People / staffing */
+    --cb-purple-light: #f3f4ff;
+
+    /* Neutrals & Surfaces */
+    --cb-surface: #ffffff;
+    --cb-bg: #f8fafc;               /* Modern cool slate instead of stark white */
+    --cb-border: #e2e8f0;           /* Clean, subtle gray borders */
+    --cb-border-subtle: #edf2f7;
+    --cb-text-main: #1e293b;        /* Slate 800 — softer and richer than #0a0a0a */
+    --cb-text-muted: #64748b;       /* Slate 500 */
+    
+    /* Elevation */
+    --cb-shadow-sm: 0 1px 2px rgba(15, 37, 62, 0.04);
+    --cb-shadow-md: 0 4px 12px -2px rgba(15, 37, 62, 0.08), 0 2px 4px -2px rgba(15, 37, 62, 0.04);
+    --cb-shadow-hover: 0 10px 20px -3px rgba(30, 91, 168, 0.12), 0 4px 6px -2px rgba(15, 37, 62, 0.05);
+}
 /* ── Shell ───────────────────────────────────────── */
 .dir-dashboard { padding: 20px 0; }
 
 /* ── Greeting ────────────────────────────────────── */
+/* Modern Header Bar */
+/* ── Hero Greeting Banner ────────────────────────── */
 .dir-greeting {
+    background: linear-gradient(135deg, #0d233a 0%, #174271 60%, #1e5ba8 100%);
+    padding: 24px 28px;
+    border-radius: 12px;
+    margin-bottom: 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap; /* Keeps date pill on the right */
+    gap: 16px;
+    box-shadow: 0 4px 16px rgba(13, 35, 58, 0.12);
 }
+
 .dir-greeting-left h4 {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 700;
-    color: #0a0a0a;
-    margin: 0 0 2px 0;
+    color: #ffffff !important;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
 }
-.dir-greeting-left p { font-size: 12px; color: #6b7280; margin: 0; }
+
+.dir-greeting-left p {
+    font-size: 13px;
+    color: #bfdbfe !important; /* Soft legible blue */
+    margin: 0;
+}
+
+/* Elegant floating date badge */
 .dir-date-badge {
-    background: #b7d7f0;
-    color: #0a0a0a;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(6px);
+    color: #ffffff;
     font-size: 12px;
     font-weight: 600;
-    padding: 6px 14px;
-    border-radius: 20px;
-    display: flex;
+    padding: 8px 16px;
+    border-radius: 50px;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
-.dir-date-badge .material-symbols-outlined { font-size: 16px !important; }
+
+.dir-date-badge .material-symbols-outlined {
+    font-size: 16px !important;
+    color: #93c5fd !important;
+}
+
+/* Hide the old harsh horizontal rule */
+.dir-divider {
+    display: none;
+}
 
 /* ── Section label ───────────────────────────────── */
 .dir-section-label {
-    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #6b7280;
-    margin-bottom: 12px;
+    letter-spacing: 0.06em;
+    color: var(--cb-navy);
+    margin: 28px 0 14px;
+}
+
+.dir-section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--cb-border);
 }
 
 /* ── 3-column stat grid ──────────────────────────── */
@@ -66,108 +134,164 @@
 }
 
 /* ── Stat card ───────────────────────────────────── */
-.dir-stat-card {
-    background: #fff;
-    border-radius: 8px;
-    border: 1px solid #d9ebf7;
-    padding: 12px 14px 10px;
-    position: relative;
-    overflow: hidden;
-    transition: box-shadow 0.15s ease;
+/* Stat Card Shell */
+/* ── Section Header Labels ───────────────────────── */
+.dir-section-label {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #1e293b;
+    margin: 24px 0 12px;
 }
-.dir-stat-card::before {
+.dir-section-label::after {
     content: '';
-    position: absolute;
-    top: 0; left: 0; bottom: 0;
-    width: 3px;
-    background: var(--card-accent, #b7d7f0);
-    border-radius: 8px 0 0 8px;
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
 }
-.dir-stat-card:hover { box-shadow: 0 2px 10px rgba(91,155,213,0.12); }
 
+/* ── Upgraded Stat Card Shell ─────────────────────── */
+.dir-stat-card {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(15, 37, 62, 0.04);
+}
+
+.dir-stat-card::before {
+    display: none; /* Removed the old harsh left-edge strip */
+}
+
+.dir-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px -3px rgba(15, 37, 62, 0.1), 0 3px 6px -2px rgba(15, 37, 62, 0.05);
+    border-color: #cbd5e1;
+}
+
+/* Modern Rounded Icon Badge */
 .dir-stat-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--card-icon-bg, #d9ebf7);
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--card-icon-bg, #f1f5f9);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    transition: transform 0.18s ease;
 }
+
+.dir-stat-card:hover .dir-stat-icon {
+    transform: scale(1.08);
+}
+
 .dir-stat-icon .material-symbols-outlined {
-    font-size: 16px !important;
-    color: #0a0a0a !important;
-    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 22px !important;
+    color: var(--card-accent, #1e5ba8) !important;
+    font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
-.dir-stat-body { flex: 1; min-width: 0; }
+
+.dir-stat-body {
+    flex: 1;
+    min-width: 0;
+}
+
 .dir-stat-number {
-    font-size: 20px;
-    font-weight: 400;
-    color: #0a0a0a;
-    line-height: 1.1;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f253e;
+    line-height: 1.15;
     margin-bottom: 2px;
-    min-height: 24px;
+    letter-spacing: -0.02em;
 }
+
 .dir-stat-label {
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 500;
-    color: #6b7280;
+    color: #64748b;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* ── Returns Advance card (finance highlight) ────── */
+/* ── Returns Advance Card (Finance Banner) ────────── */
 .dir-advance-card {
-    background: #fff;
-    border-radius: 8px;
-    border: 1px solid #fde8d0;
+    background: linear-gradient(135deg, #ffffff 0%, #fffbf5 100%);
+    border-radius: 12px;
+    border: 1px solid #fed7aa;
     padding: 14px 18px;
     position: relative;
     overflow: hidden;
-    transition: box-shadow 0.15s ease;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
     display: flex;
     align-items: center;
     gap: 16px;
+    box-shadow: 0 1px 3px rgba(230, 126, 34, 0.08);
 }
+
 .dir-advance-card::before {
     content: '';
     position: absolute;
-    top: 0; left: 0; bottom: 0;
-    width: 3px;
-    background: #e67e22;
-    border-radius: 8px 0 0 8px;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+    background: #ea580c;
+    border-radius: 12px 0 0 12px;
 }
-.dir-advance-card:hover { box-shadow: 0 2px 10px rgba(230,126,34,0.10); }
+
+.dir-advance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px -3px rgba(234, 88, 12, 0.15);
+}
+
 .dir-advance-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: #fdebd0;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: #ffedd5;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 }
+
 .dir-advance-icon .material-symbols-outlined {
-    font-size: 18px !important;
-    color: #e67e22 !important;
-    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 22px !important;
+    color: #ea580c !important;
+    font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
-.dir-advance-body { flex: 1; min-width: 0; }
+
+.dir-advance-body {
+    flex: 1;
+    min-width: 0;
+}
+
 .dir-advance-amount {
     font-size: 20px;
-    font-weight: 400;
-    color: #0a0a0a;
-    line-height: 1.1;
+    font-weight: 700;
+    color: #9a3412;
+    line-height: 1.15;
     margin-bottom: 2px;
-    min-height: 24px;
+    letter-spacing: -0.01em;
 }
-.dir-advance-label { font-size: 11px; font-weight: 500; color: #6b7280; }
+
+.dir-advance-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #c2410c;
+}
 
 /* ── Skeleton ────────────────────────────────────── */
 .dir-skeleton {
@@ -308,27 +432,27 @@
             <div class="row g-3 mb-3">
 
                 <div class="col-lg-3 col-sm-6">
-                    <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                   <div class="dir-stat-card" style="--card-accent:#6366f1; --card-icon-bg:#eef2ff;">
                         <div class="dir-stat-icon"><span class="material-symbols-outlined">groups</span></div>
                         <div class="dir-stat-body">
                             <div class="dir-stat-number" id="stat-employees"><span class="dir-skeleton dir-skeleton-sm"></span></div>
                             <div class="dir-stat-label">Total Employees</div>
                         </div>
-                    </div>
+                    </div>  
                 </div>
 
                 <div class="col-lg-3 col-sm-6">
-                    <div class="dir-stat-card" style="--card-accent:#b7d7f0; --card-icon-bg:#d9ebf7;">
+                    <div class="dir-stat-card" style="--card-accent:#4f46e5; --card-icon-bg:#e0e7ff;">
                         <div class="dir-stat-icon"><span class="material-symbols-outlined">person_pin</span></div>
                         <div class="dir-stat-body">
                             <div class="dir-stat-number" id="stat-field-officers"><span class="dir-skeleton dir-skeleton-sm"></span></div>
                             <div class="dir-stat-label">Field Officers</div>
                         </div>
                     </div>
-                </div>
+                 </div>
 
                 <div class="col-lg-3 col-sm-6">
-                    <div class="dir-stat-card" style="--card-accent:#8ab4cc; --card-icon-bg:#d9ebf7;">
+                    <div class="dir-stat-card" style="--card-accent:#8b5cf6; --card-icon-bg:#f5f3ff;">
                         <div class="dir-stat-icon"><span class="material-symbols-outlined">event_busy</span></div>
                         <div class="dir-stat-body">
                             <div class="dir-stat-number" id="stat-on-leave"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -338,12 +462,12 @@
                 </div>
 
                 <div class="col-lg-3 col-sm-6">
-                    <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                    <div class="dir-stat-card" style="--card-accent:#7c3aed; --card-icon-bg:#ede9fe;">
                         <div class="dir-stat-icon"><span class="material-symbols-outlined">manage_accounts</span></div>
                         <div class="dir-stat-body">
                             <div class="dir-stat-number" id="stat-zone-managers"><span class="dir-skeleton dir-skeleton-sm"></span></div>
                             <div class="dir-stat-label">
-                                <a id="zone-managers-link" href="#" style="text-decoration:underline;color:#6b7280;font-size:11px;font-weight:500;">Zone Managers</a>
+                                <a id="zone-managers-link" href="#" style="text-decoration:underline;color:#7c3aed;font-size:11.5px;font-weight:600;">Zone Managers</a>
                             </div>
                         </div>
                     </div>
@@ -355,7 +479,7 @@
             <div class="dir-section-label">Portfolio</div>
             <div class="dir-grid-4">
 
-                <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+               <div class="dir-stat-card" style="--card-accent:#0284c7; --card-icon-bg:#e0f2fe;">
                     <div class="dir-stat-icon"><span class="material-symbols-outlined">business</span></div>
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-clients"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -363,7 +487,7 @@
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#b7d7f0; --card-icon-bg:#d9ebf7;">
+                <div class="dir-stat-card" style="--card-accent:#0ea5e9; --card-icon-bg:#f0f9ff;">
                     <div class="dir-stat-icon"><span class="material-symbols-outlined">apartment</span></div>
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-properties"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -371,7 +495,7 @@
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                <div class="dir-stat-card" style="--card-accent:#1e5ba8; --card-icon-bg:#eef4fc;">
                     <div class="dir-stat-icon"><span class="material-symbols-outlined">domain</span></div>
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-units"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -379,7 +503,7 @@
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#8ab4cc; --card-icon-bg:#d9ebf7;">
+                <div class="dir-stat-card" style="--card-accent:#0d9488; --card-icon-bg:#ccfbf1;">
                     <div class="dir-stat-icon"><span class="material-symbols-outlined">people</span></div>
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-tenants"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -404,7 +528,7 @@
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#5b9bd5; --card-icon-bg:#b7d7f0;">
+                <div class="dir-stat-card" style="--card-accent:#059669; --card-icon-bg:#ecfdf5;">
                     <div class="dir-stat-icon"><span class="material-symbols-outlined">book_2</span></div>
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-leaves-open"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -412,7 +536,7 @@
                     </div>
                 </div>
 
-                <div class="dir-stat-card" style="--card-accent:#b7d7f0; --card-icon-bg:#d9ebf7;">
+               <div class="dir-stat-card" style="--card-accent:#64748b; --card-icon-bg:#f1f5f9;">
                     <div class="dir-stat-icon"><span class="material-symbols-outlined">menu_book</span></div>
                     <div class="dir-stat-body">
                         <div class="dir-stat-number" id="stat-leaves-closed"><span class="dir-skeleton dir-skeleton-sm"></span></div>
@@ -593,15 +717,15 @@ function renderOccupancyChart(occupied, vacant, total) {
 
     window.dirChartOcc = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels: ['Occupied','Vacant'], datasets: [{ data: [occupied, vacant], backgroundColor: ['#b7d7f0','#0a0a0a'], borderWidth: 0, hoverOffset: 4 }] },
+        data: { labels: ['Occupied','Vacant'], datasets: [{ data: [occupied, vacant], backgroundColor: ['#00008B', '#ADD8E6'], borderWidth: 0, hoverOffset: 4 }] },
         options: { cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return ' ' + c.label + ': ' + c.raw + ' units'; } } } } }
     });
 
     var pctO = ((occupied / total) * 100).toFixed(1);
     var pctV = ((vacant   / total) * 100).toFixed(1);
     $('#legendOccupancy').html(
-        legendRow('#b7d7f0', 'Occupied (' + pctO + '%)', occupied + ' units') +
-        legendRow('#0a0a0a', 'Vacant ('   + pctV + '%)', vacant   + ' units') +
+        legendRow('#00008B', 'Occupied (' + pctO + '%)', occupied + ' units') +
+        legendRow('#ADD8E6', 'Vacant ('   + pctV + '%)', vacant   + ' units') +
         '<div class="dir-legend-item" style="border-top:1px solid #d9ebf7;padding-top:8px;">' +
             '<div><div class="dir-legend-label">Total Units</div><div class="dir-legend-value">' + total + ' units</div></div>' +
         '</div>'
@@ -643,15 +767,15 @@ function renderCollectionChart(canvasId, loadingId, legendId, data, instanceKey)
 
     window[instanceKey] = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels: ['Collected','Arrears'], datasets: [{ data: [data.collected, data.arrears], backgroundColor: ['#b7d7f0','#0a0a0a'], borderWidth: 0, hoverOffset: 4 }] },
+        data: { labels: ['Collected','Arrears'], datasets: [{ data: [data.collected, data.arrears], backgroundColor: ['#00008B', '#ADD8E6'], borderWidth: 0, hoverOffset: 4 }] },
         options: { cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return ' ' + c.label + ': ' + formatMoney(c.raw); } } } } }
     });
 
     var pctC = ((data.collected / data.total) * 100).toFixed(1);
     var pctA = ((data.arrears   / data.total) * 100).toFixed(1);
     $('#' + legendId).html(
-        legendRow('#b7d7f0', 'Collected (' + pctC + '%)', formatMoney(data.collected)) +
-        legendRow('#0a0a0a', 'Arrears ('   + pctA + '%)', formatMoney(data.arrears))   +
+        legendRow('#00008B', 'Collected (' + pctC + '%)', formatMoney(data.collected)) +
+        legendRow('#ADD8E6', 'Arrears ('   + pctA + '%)', formatMoney(data.arrears))   +
         '<div class="dir-legend-item" style="border-top:1px solid #d9ebf7;padding-top:8px;">' +
             '<div><div class="dir-legend-label">Total Invoiced</div><div class="dir-legend-value">' + formatMoney(data.total) + '</div></div>' +
         '</div>'

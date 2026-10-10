@@ -18,6 +18,13 @@ class User extends Authenticatable implements LaratrustUser
     {
         parent::boot();
         static::observe(AuditLogsObserver::class);
+
+        // A password change or block revokes any "Remember me" cookie already issued
+        static::saving(function ($user) {
+            if ($user->isDirty('password') || ($user->isDirty('block') && $user->block)) {
+                $user->remember_token = null;
+            }
+        });
     }
 
     /**

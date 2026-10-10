@@ -6,109 +6,353 @@ $canReadStaff = auth()->user()->hasPermission('read_staff');
 $canUpdateStaff = auth()->user()->hasPermission('update_staff');
 $canCreateUsers = auth()->user()->hasPermission('create_users');
 @endphp
+
+<style>
+    /* Chabrin Modern Table Design System */
+    .table-modern {
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        width: 100% !important;
+    }
+    .table-modern thead tr {
+        background-color: #f8fafc !important;
+    }
+    .table-modern thead th {
+        background-color: #f8fafc !important;
+        color: #475569 !important;
+        font-size: 0.74rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-bottom: 2px solid #e2e8f0 !important;
+        border-top: none !important;
+        padding: 12px 14px !important;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .table-modern tbody td {
+        padding: 11px 14px !important;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+        border-top: none !important;
+        font-size: 0.84rem;
+        color: #334155;
+    }
+    .table-modern tbody tr:hover td {
+        background-color: #f8fafc !important;
+    }
+
+    /* Avatar Initial Circle */
+    .avatar-circle {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.78rem;
+        flex-shrink: 0;
+    }
+
+    /* Soft Action Tool Buttons */
+    .action-btn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        color: #64748b;
+        transition: all 0.15s ease;
+        padding: 0;
+        text-decoration: none;
+    }
+    .action-btn:hover { background-color: #f1f5f9; color: #0f172a; border-color: #cbd5e1; }
+    .action-btn.btn-view:hover { background-color: #e0f2fe; color: #0284c7; border-color: #bae6fd; }
+    .action-btn.btn-edit:hover { background-color: #fef9c3; color: #a16207; border-color: #fde047; }
+    .action-btn.btn-status:hover { background-color: #f3e8ff; color: #7e22ce; border-color: #e9d5ff; }
+    .action-btn.btn-user:hover { background-color: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+
+    /* Clean DataTables Form Controls */
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter {
+        margin-bottom: 0.85rem;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+    .dataTables_wrapper .dataTables_length select {
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 4px 8px;
+        margin: 0 4px;
+        outline: none;
+        color: #334155;
+    }
+    .dataTables_wrapper .dataTables_filter input {
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 5px 10px;
+        margin-left: 6px;
+        outline: none;
+        color: #334155;
+    }
+    .dataTables_wrapper .dataTables_filter input:focus,
+    .dataTables_wrapper .dataTables_length select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+    }
+</style>
+
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Staff Management</h5>
-                        <div class="ms-auto d-flex gap-2">
+                {{-- Standard Card with Blue Theme Top Accent --}}
+                <div class="card shadow-sm border-0 border-top border-3 border-primary">
+                    <div class="card-header bg-white card-no-border py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center text-primary" 
+                                 style="width: 36px; height: 36px; background-color: #e7f1ff;">
+                                <span class="material-symbols-outlined" style="font-size: 20px;">badge</span>
+                            </div>
+                            <div>
+                                <h5 class="mb-0 fw-bold text-dark">Staff Management</h5>
+                                <small class="text-muted">Manage employee records, roles, statuses, and user access</small>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2">
+                                @permission('read_staff')
+                                <a href="{{ route('staff.export') }}" class="btn btn-outline-success d-flex align-items-center gap-1">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">table_view</span> Export Excel
+                                </a>
+                                @endpermission
+                            </div>
+                        <div class="d-flex gap-2">
                             @permission('create_staff')
-                            <a href="{{ route('staff.create') }}" class="btn btn-primary btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Staff</span>
+                            <a href="{{ route('staff.create') }}" class="btn btn-primary rounded-pill px-3 py-1 d-flex align-items-center gap-1 shadow-sm">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">add_circle</span>
+                                <span class="fw-semibold">Add Staff</span>
                             </a>
                             @endpermission
                         </div>
                     </div>
-                    <div class="card-body">
+
+                    <div class="card-body pt-2">
+                        {{-- Notifications --}}
                         @if(session('success'))
-                        <div class="alert alert-light-success alert-dismissible fade show" role="alert">
-                            <strong>Success!</strong> {{ session('success') }}
+                        <div class="alert alert-light-success alert-dismissible fade show border-0 shadow-sm" role="alert">
+                            <strong><i class="fa fa-check-circle me-1"></i> Success!</strong> {{ session('success') }}
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
                         @if(session('error'))
-                        <div class="alert alert-light-danger alert-dismissible fade show" role="alert">
-                            <strong>Error!</strong> {{ session('error') }}
+                        <div class="alert alert-light-danger alert-dismissible fade show border-0 shadow-sm" role="alert">
+                            <strong><i class="fa fa-exclamation-circle me-1"></i> Error!</strong> {{ session('error') }}
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
 
+                        {{-- Preloader --}}
                         <div id="staff-preloader" class="text-center my-5">
-                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                            <div class="spinner-border text-primary" style="width: 2.5rem; height: 2.5rem;" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
-                            <p class="mt-3 text-muted">Loading employees...</p>
+                            <p class="mt-2 text-muted small">Loading employees...</p>
                         </div>
+
+                        {{-- Filter Toolbar --}}
+                        <div class="row g-2 align-items-center mb-3 p-2 bg-light rounded border">
+                            <div class="col-auto">
+                                <span class="text-muted small fw-bold text-uppercase d-flex align-items-center">
+                                    <span class="material-symbols-outlined me-1" style="font-size: 18px;">tune</span> Filter:
+                                </span>
+                            </div>
+
+                            {{-- Status Filter --}}
+                            <div class="col-sm-3 col-md-2">
+                                <select id="filter-status" class="form-select form-select-sm">
+                                    <option value="">All Statuses</option>
+                                    @foreach(\App\Models\Staff::STATUSES as $id => $label)
+                                        <option value="{{ $label }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            {{-- Position Filter --}}
+                            <div class="col-sm-3 col-md-2">
+                                <select id="filter-position" class="form-select form-select-sm">
+                                    <option value="">All Positions</option>
+                                    @foreach($staff->pluck('position.position_name')->filter()->unique() as $pos)
+                                        <option value="{{ ucwords(strtolower($pos)) }}">{{ ucwords(strtolower($pos)) }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            {{-- Reset Button --}}
+                            <div class="col-auto ms-auto">
+                                <button type="button" id="btn-reset-filters" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">refresh</span>
+                                    <span>Reset</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Standard Table Layout --}}
                         <div class="table-responsive custom-scrollbar">
-                            <table class="display" id="staff-table" style="visibility: hidden;">
+                            <table class="table-modern display" id="staff-table" style="visibility: hidden;">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
-                                        <th>Staff No</th>
-                                        <th>Full Names</th>
-                                        <th>Position</th>
-                                        <th>Gender</th>
-                                        <th>Mobile Number</th>
-                                        <th>National ID</th>
-                                        <th>Zone Roles</th>
-                                        <th>Status</th>
-                                        <th>Action</th>
+                                        <th class="ps-3 text-center no-sort" style="width: 45px;">#</th>
+                                        <th style="width: 90px;">Staff No</th>
+                                        <th style="min-width: 230px;">Employee</th>
+                                        <th style="min-width: 140px;">Position</th>
+                                        <th style="width: 85px;">Gender</th>
+                                        <th style="min-width: 155px;">Contact</th>
+                                        <th style="width: 110px;">National ID</th>
+                                        <th style="min-width: 130px;">Zone Roles</th>
+                                        <th style="width: 95px;">Status</th>
+                                        <th class="text-end pe-3 no-sort" style="width: 110px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach($staff as $index => $member)
+                                    @php
+                                        $nameParts = explode(' ', trim($member->full_names ?? 'S'));
+                                        $initials = strtoupper(substr($nameParts[0] ?? 'S', 0, 1) . substr($nameParts[1] ?? '', 0, 1));
+                                        
+                                        $statusLabel = \App\Models\Staff::STATUSES[$member->current_status_id] ?? 'Unknown';
+                                        $statusClass = match(strtolower($statusLabel)) {
+                                            'active'    => 'bg-success-subtle text-success border-success-subtle',
+                                            'inactive'  => 'bg-secondary-subtle text-secondary border-secondary-subtle',
+                                            'suspended' => 'bg-danger-subtle text-danger border-danger-subtle',
+                                            'on leave'  => 'bg-warning-subtle text-warning-emphasis border-warning-subtle',
+                                            default     => 'bg-light text-dark border'
+                                        };
+                                    @endphp
                                     <tr>
-                                        <td>{{ $index + 1 }}</td>
-                                        <td>{{ $member->staff_number ?? '-' }}</td>
+                                        {{-- # --}}
+                                        <td class="ps-3 text-center text-muted small">{{ $index + 1 }}</td>
+
+                                        {{-- Staff No --}}
                                         <td>
-                                            @if($canReadStaff)
-                                            <a class="staff-link" href="{{ route('staff.show', $member->encrypted_id) }}">
-                                                {{ $member->full_names }}
-                                            </a>
+                                            @if($member->staff_number)
+                                                <span class="badge bg-light text-secondary border font-monospace px-2 py-1">
+                                                    {{ $member->staff_number }}
+                                                </span>
                                             @else
-                                            {{ $member->full_names }}
+                                                <span class="text-muted">—</span>
                                             @endif
                                         </td>
-                                        <td>{{ $member->position->position_name ?? '-' }}</td>
-                                        <td>{{ $member->gender ?? '-' }}</td>
-                                        <td>{{ $member->mobile_number ?? '-' }}</td>
-                                        <td>{{ $member->national_id ?? '-' }}</td>
-                                        <td>@include('staff.partials.zone-role-badges', ['member' => $member])</td>
+
+                                        {{-- Full Names --}}
                                         <td>
-                                            <span class="status-badge" data-status-id="{{ $member->current_status_id }}">{{ \App\Models\Staff::STATUSES[$member->current_status_id] ?? 'Unknown' }}</span>
+                                            <div class="d-flex align-items-center">
+                                                <div class="avatar-circle me-2 bg-primary-subtle text-primary border border-primary-subtle flex-shrink-0">
+                                                    {{ $initials }}
+                                                </div>
+                                                <div class="text-truncate">
+                                                    @if($canReadStaff)
+                                                        <a class="fw-semibold text-dark text-decoration-none staff-link" 
+                                                           href="{{ route('staff.show', $member->encrypted_id) }}">
+                                                            {{ ucwords(strtolower($member->full_names)) }}
+                                                        </a>
+                                                    @else
+                                                        <span class="fw-semibold text-dark">
+                                                            {{ ucwords(strtolower($member->full_names)) }}
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                            </div>
                                         </td>
+
+                                        {{-- Position --}}
                                         <td>
-                                            <div class="d-flex flex-row gap-1">
+                                            @if($member->position?->position_name)
+                                                <span class="badge bg-light text-dark border px-2 py-1 fw-normal text-nowrap">
+                                                    {{ ucwords(strtolower($member->position->position_name)) }}
+                                                </span>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+
+                                        {{-- Gender --}}
+                                        <td>
+                                            <span class="text-secondary small">{{ $member->gender ?? '—' }}</span>
+                                        </td>
+
+                                        {{-- Contact --}}
+                                        <td class="text-nowrap">
+                                            @if($member->mobile_number)
+                                                <a href="tel:{{ $member->mobile_number }}" class="text-secondary text-decoration-none small d-inline-flex align-items-center">
+                                                    <span class="material-symbols-outlined text-muted me-1" style="font-size: 15px;">call</span>
+                                                    <span>{{ $member->mobile_number }}</span>
+                                                </a>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+
+                                        {{-- National ID --}}
+                                        <td class="text-nowrap">
+                                            <span class="font-monospace text-secondary small">{{ $member->national_id ?? '—' }}</span>
+                                        </td>
+
+                                        {{-- Zone Roles --}}
+                                        <td>
+                                            @include('staff.partials.zone-role-badges', ['member' => $member])
+                                        </td>
+
+                                        {{-- Status --}}
+                                        <td>
+                                            <span class="badge border rounded-pill px-2 py-1 text-nowrap status-badge {{ $statusClass }}" 
+                                                  data-status-id="{{ $member->current_status_id }}">
+                                                ● {{ $statusLabel }}
+                                            </span>
+                                        </td>
+
+                                        {{-- Action Toolbar --}}
+                                        <td class="pe-3 text-end">
+                                            <div class="d-inline-flex align-items-center gap-1">
                                                 @if($canReadStaff)
-                                                <a class="staff-link" href="{{ route('staff.show', $member->encrypted_id) }}" title="View">
-                                                    <span class="material-symbols-outlined view-icon" style="font-size:18px;">visibility</span>
+                                                <a class="action-btn btn-view staff-link" 
+                                                   href="{{ route('staff.show', $member->encrypted_id) }}" 
+                                                   title="View Profile">
+                                                    <span class="material-symbols-outlined view-icon" style="font-size: 16px;">visibility</span>
                                                 </a>
                                                 <div class="spinner-border spinner-border-sm text-primary row-spinner" role="status" style="display: none;">
                                                     <span class="visually-hidden">Loading...</span>
                                                 </div>
                                                 @endif
+
                                                 @if($canUpdateStaff)
-                                                <a href="{{ route('staff.edit', $member->encrypted_id) }}" title="Edit">
-                                                    <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                                                <a class="action-btn btn-edit" 
+                                                   href="{{ route('staff.edit', $member->encrypted_id) }}" 
+                                                   title="Edit Record">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px;">edit_document</span>
                                                 </a>
-                                                <button type="button" class="btn btn-link p-0 btn-update-status" title="Update Status"
-                                                    data-id="{{ $member->encrypted_id }}"
-                                                    data-name="{{ $member->full_names }}"
-                                                    data-status-id="{{ $member->current_status_id }}"
-                                                    style="line-height:1; color: inherit;">
-                                                    <span class="material-symbols-outlined" style="font-size:18px;">swap_horiz</span>
+                                                <button type="button" 
+                                                        class="action-btn btn-status btn-update-status" 
+                                                        title="Update Status"
+                                                        data-id="{{ $member->encrypted_id }}"
+                                                        data-name="{{ $member->full_names }}"
+                                                        data-status-id="{{ $member->current_status_id }}">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px;">swap_horiz</span>
                                                 </button>
                                                 @endif
+
                                                 @if($canCreateUsers)
-                                                <button type="button" class="btn btn-link p-0 btn-convert-user" title="Convert to User"
-                                                    data-id="{{ $member->encrypted_id }}"
-                                                    data-name="{{ $member->full_names }}"
-                                                    data-email="{{ $member->email_address }}"
-                                                    style="line-height:1; color: inherit;">
-                                                    <span class="material-symbols-outlined" style="font-size:18px;">person_add</span>
+                                                <button type="button" 
+                                                        class="action-btn btn-user btn-convert-user" 
+                                                        title="Convert to User"
+                                                        data-id="{{ $member->encrypted_id }}"
+                                                        data-name="{{ $member->full_names }}"
+                                                        data-email="{{ $member->email_address }}">
+                                                    <span class="material-symbols-outlined" style="font-size: 16px;">person_add</span>
                                                 </button>
                                                 @endif
                                             </div>
@@ -128,16 +372,16 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 @if($canUpdateStaff)
 <!-- Status Update Modal -->
 <div class="modal fade" id="statusUpdateModal" tabindex="-1" aria-labelledby="statusUpdateModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="statusUpdateModalLabel">Update Employee Status</h5>
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h6 class="modal-title fw-bold" id="statusUpdateModalLabel">Update Status</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <p class="text-muted mb-3" id="modal-staff-name" style="font-weight:600;"></p>
-                <div class="mb-3">
-                    <label for="modal-status-select" class="form-label">New Status</label>
+            <div class="modal-body py-3">
+                <p class="text-primary fw-medium small mb-2" id="modal-staff-name"></p>
+                <div>
+                    <label for="modal-status-select" class="form-label text-muted small">New Status</label>
                     <select class="form-select" id="modal-status-select">
                         @foreach(\App\Models\Staff::STATUSES as $id => $label)
                         <option value="{{ $id }}">{{ $label }}</option>
@@ -145,9 +389,9 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                     </select>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="btn-save-status">
+            <div class="modal-footer border-top-0 pt-0">
+                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary px-3" id="btn-save-status">
                     <span id="save-status-spinner" class="spinner-border spinner-border-sm me-1" style="display:none;" role="status"></span>
                     Save
                 </button>
@@ -160,35 +404,31 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 @if($canCreateUsers)
 <!-- Convert Staff To User Modal -->
 <div class="modal fade" id="convertUserModal" tabindex="-1" aria-labelledby="convertUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
             <form id="convert-user-form">
                 @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title" id="convertUserModalLabel">Convert Staff To User</h5>
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h6 class="modal-title fw-bold" id="convertUserModalLabel">Convert Staff to System User</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <p class="text-muted mb-3" id="convert-user-staff-name" style="font-weight:600;"></p>
+                <div class="modal-body py-3">
+                    <p class="text-primary fw-medium small mb-3" id="convert-user-staff-name"></p>
                     <div class="mb-3">
-                        <label for="convert-user-email" class="form-label">Company Email <span class="text-danger">*</span></label>
+                        <label for="convert-user-email" class="form-label text-muted small">Company Email <span class="text-danger">*</span></label>
                         <input type="email" class="form-control" id="convert-user-email" name="email" required autocomplete="off">
                         <div class="invalid-feedback" id="convert-email-feedback"></div>
                     </div>
                     <div class="mb-3">
-                        <label for="convert-user-password" class="form-label">Password <span class="text-danger">*</span></label>
+                        <label for="convert-user-password" class="form-label text-muted small">Password <span class="text-danger">*</span></label>
                         <input type="password" class="form-control" id="convert-user-password" name="password" required minlength="6">
                         <div class="invalid-feedback" id="convert-password-feedback"></div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
-                        <span class="material-symbols-outlined" style="font-size:18px;">close</span>
-                        <span class="ms-1">Cancel</span>
-                    </button>
-                    <button type="submit" class="btn btn-primary btn-sm d-flex align-items-center" id="convertUserBtn">
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-3" id="convertUserBtn">
                         <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
-                        <span class="material-symbols-outlined me-1" style="font-size:18px;">manage_accounts</span>
                         <span>Save User</span>
                     </button>
                 </div>
@@ -207,15 +447,16 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
     var statusLabels = @json(\App\Models\Staff::STATUSES);
 
     $(document).ready(function() {
-        // Init staff table
-        $('#staff-table').DataTable({
+        // 1. Single DataTable Initialization
+        var table = $('#staff-table').DataTable({
             paging: true,
             info: true,
             lengthChange: true,
             searching: true,
             ordering: true,
-            order: [
-                [2, 'asc']
+            order: [[0, 'asc']],
+            columnDefs: [
+                { orderable: false, targets: 'no-sort' }
             ],
             initComplete: function() {
                 $('#staff-preloader').hide();
@@ -223,7 +464,32 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             }
         });
 
-        // Row spinner on staff link
+        // 2. Status Filter (Column 8: Status)
+        $('#filter-status').on('change', function() {
+            var val = $(this).val();
+            // Regex match so 'Active' does not match 'Inactive'
+            var regex = val ? '^.*\\b' + $.fn.dataTable.util.escapeRegex(val) + '\\b.*$' : '';
+            table.column(8).search(regex, true, false).draw();
+        });
+            // 3. Position Filter (Column 3: Position)
+            $('#filter-position').on('change', function() {
+                var val = $.trim($(this).val());
+                if (val) {
+                    // Case-insensitive containment match with escaped characters
+                    table.column(3).search($.fn.dataTable.util.escapeRegex(val), false, false, true).draw();
+                } else {
+                    table.column(3).search('').draw();
+                }
+            });
+
+        // 4. Reset Filters
+        $('#btn-reset-filters').on('click', function() {
+            $('#filter-status').val('');
+            $('#filter-position').val('');
+            table.search('').columns().search('').draw();
+        });
+
+        // 5. Row spinner on staff link
         $(document).on('click', '.staff-link', function(e) {
             e.preventDefault();
             var row = $(this).closest('tr');
@@ -234,6 +500,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             window.location.href = url;
         });
 
+        // 6. Convert Staff to User
         if (canCreateUsers) {
             var convertEncryptedId = null;
 
@@ -244,7 +511,6 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                 $('#convert-password-feedback').text('');
             }
 
-            // Open convert staff to user modal
             $(document).on('click', '.btn-convert-user', function() {
                 convertEncryptedId = $(this).data('id');
                 var name = $(this).data('name');
@@ -258,13 +524,11 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                 modal.show();
             });
 
-            // Reset on modal hide
             $('#convertUserModal').on('hidden.bs.modal', function() {
                 resetConvertForm();
                 convertEncryptedId = null;
             });
 
-            // Email uniqueness check on blur
             $('#convert-user-email').on('blur', function() {
                 var email = $.trim($(this).val());
                 if (!email) return;
@@ -279,11 +543,9 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                 });
             });
 
-            // AJAX form submit
             $('#convert-user-form').on('submit', function(e) {
                 e.preventDefault();
 
-                // Block if email already taken
                 if ($('#convert-user-email').hasClass('is-invalid')) return;
                 if (!convertEncryptedId) return;
 
@@ -328,11 +590,11 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             });
         }
 
+        // 7. Update Staff Status
         if (canUpdateStaff) {
             var currentEncryptedId = null;
             var currentRow = null;
 
-            // Open status update modal
             $(document).on('click', '.btn-update-status', function() {
                 currentEncryptedId = $(this).data('id');
                 var name = $(this).data('name');
@@ -345,7 +607,6 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                 modal.show();
             });
 
-            // Save status
             $('#btn-save-status').on('click', function() {
                 var newStatusId = parseInt($('#modal-status-select').val());
                 var url = updateStatusRoute.replace(':id', currentEncryptedId);
@@ -362,18 +623,15 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                     },
                     success: function(response) {
                         if (response.success) {
-                            // Update status text in the row
                             var badge = currentRow.find('.status-badge');
-                            badge.text(statusLabels[newStatusId] || 'Unknown');
+                            badge.text('● ' + (statusLabels[newStatusId] || 'Unknown'));
                             badge.data('status-id', newStatusId);
 
-                            // Update the button's data-status-id for next open
                             currentRow.find('.btn-update-status').data('status-id', newStatusId);
-
                             bootstrap.Modal.getInstance(document.getElementById('statusUpdateModal')).hide();
                         }
                     },
-                    error: function(xhr) {
+                    error: function() {
                         alert('Failed to update status. Please try again.');
                     },
                     complete: function() {

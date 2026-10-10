@@ -6,6 +6,8 @@ use App\Models\Bank;
 use App\Models\Role;
 use App\Models\Zone;
 use App\Models\Staff;
+use App\Exports\StaffExport;
+use Maatwebsite\Excel\Facades\Excel;
 use App\Models\User;
 use App\Models\Contract;
 use App\Models\Incident;
@@ -19,9 +21,12 @@ use App\Models\Communication;
 use App\Models\StaffDiscipline;
 use App\Services\ErrorDispatcher;
 use App\Models\EmployeeAttendance;
+use App\Exports\AttendanceExport;
 use App\Models\EmployeeTermination;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use App\Jobs\ProcessAttendanceUpload;
 use Illuminate\Support\Facades\Crypt;
@@ -48,6 +53,14 @@ class StaffController extends Controller
             });
 
         return view('staff.index', compact('staff'));
+    }
+
+    /**
+     * Export all staff records to an Excel file.
+     */
+    public function export() {
+        $fileName = 'staff_records_' . now()->format('Y_m_d_His') . '.xlsx';
+        return Excel::download(new StaffExport, $fileName);
     }
 
     /**
@@ -1332,10 +1345,17 @@ class StaffController extends Controller
         return view('staff.employee_attendance.index');
     }
 
-    public function attendanceList()
-    {
+    /**
+     * Return attendance records as JSON, optionally filtered by date and status.
+     */
+    public function attendanceList(Request $request) {
         try {
             $records = EmployeeAttendance::with(['staff', 'employee_attendance_timed', 'createdBy'])
+                ->when($request->status, fn($q, $s) => $q->where('current_status_id', $s))
+                ->when($request->date, fn($q, $d) => $q->whereHas(
+                    'employee_attendance_timed',
+                    fn($t) => $t->whereDate('date', $d)
+                ))
                 ->orderBy('date_time', 'desc')
                 ->get()
                 ->map(function ($att) {
@@ -1351,17 +1371,15 @@ class StaffController extends Controller
                         ] : null,
                         'date_time' => $att->date_time ? $att->date_time->format('Y-m-d H:i') : '-',
                         'month_year' => $att->month_year ?? '-',
-                        'employee_attendance_timed' => $att->employee_attendance_timed ? $att->employee_attendance_timed->map(function ($timed) {
-                            return [
-                                'id' => $timed->id,
-                                'date' => $timed->date,
-                                'time_in' => $timed->time_in,
-                                'time_out' => $timed->time_out,
-                                'hours' => $timed->hours,
-                                'current_status_id' => $timed->current_status_id,
-                            ];
-                        }) : [],
-                        'current_status_id' => $att->current_status_id ?? '-',
+                        'employee_attendance_timed' => $att->employee_attendance_timed->map(fn($timed) => [
+                            'id' => $timed->id,
+                            'date' => $timed->date,
+                            'time_in' => $timed->time_in,
+                            'time_out' => $timed->time_out,
+                            'hours' => $timed->hours,
+                            'current_status_id' => $timed->current_status_id,
+                        ]),
+                        'current_status_id' => $att->current_status_id,
                         'created_by' => $att->createdBy ? [
                             'id' => $att->createdBy->id,
                             'name' => $att->createdBy->name,
@@ -1369,42 +1387,55 @@ class StaffController extends Controller
                         'can_read' => Auth::user()->isAbleTo('read_contracts'),
                     ];
                 });
+
             return response()->json(['records' => $records]);
-        } catch (ValidationException $e) {
-            return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return redirect()->back()->with('error', 'Failed to create staff member')->withInput();
+            Log::error('Error loading attendance: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load attendance records'], 500);
         }
     }
 
-    public function attendanceUpload(Request $request)
-    {
+    /**
+     * Validate an attendance CSV/XLSX upload and queue it for background processing.
+     */
+    public function attendanceUpload(Request $request) {
         try {
-            $request->validate([
-                'attendance_file' => 'required|file|mimes:csv,txt'
+            $validator = Validator::make($request->all(), [
+                'attendance_file' => 'required|file|mimes:csv,txt,xlsx|max:10240',
             ]);
 
-            $file = $request->file('attendance_file');
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first(),
+                ], 422);
+            }
 
-            // Dispatch job for background processing
-            $path = $file->store('attendance_uploads'); // returns relative path
+            $path = $request->file('attendance_file')->store('attendance_uploads');
+            Cache::forget(ProcessAttendanceUpload::resultKey(Auth::id()));
+
             ProcessAttendanceUpload::dispatch($path, Auth::id());
 
-            return response()->json(['success' => true, 'message' => 'Upload started. Data will appear once processed.']);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return back()->withErrors($e->errors())->withInput();
+            return response()->json([
+                'success' => true,
+                'message' => 'Upload started. Data will appear once processed.',
+            ]);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return back()->with('error', 'Failed to upload attendance')->withInput();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload attendance. Please try again.',
+            ], 500);
         }
     }
 
@@ -1442,6 +1473,22 @@ class StaffController extends Controller
             }
             return back()->with('error', 'Failed to update employee termination')->withInput();
         }
+    }
+
+    /**
+     * Return the summary of the current user's latest attendance upload, or pending if it hasn't finished.
+     */
+    public function attendanceUploadResult() {
+        $result = Cache::get(ProcessAttendanceUpload::resultKey(Auth::id()));
+        return response()->json($result ? ['done' => true] + $result : ['done' => false]);
+    }
+
+    /**
+     * Download attendance records as an Excel file, optionally filtered by date and status.
+     */
+    public function attendanceExport(Request $request) {
+        $fileName = 'employee_attendance_' . now()->format('Y_m_d_His') . '.xlsx';
+        return Excel::download(new AttendanceExport($request->date, $request->status), $fileName);
     }
 
     // Contracts Bulk Edit

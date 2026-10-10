@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Jobs\UserAccessLogJob;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,6 +25,24 @@ class OneLogin
 
             $user = Auth::user();
             $currentSessionId = $request->session()->getId();
+
+            // Signed back in by a "Remember me" cookie: re-check the account, record the login and make this the active session
+            if (Auth::viaRemember()) {
+                if ($user->block == 1 || $user->activation == 0) {
+                    Auth::logout();
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+                    return redirect()->route('login')->with('error', 'Account is not active, contact admin.');
+                }
+
+                UserAccessLogJob::dispatch($user->id, 'login', $currentSessionId, $request->ip(), $request->userAgent(), [
+                    'login_method' => 'remember_cookie',
+                    'two_factor_required' => false,
+                ]);
+                Cache::put("onelogin_user_{$user->id}", $currentSessionId, now()->addMinutes(config('session.lifetime')));
+
+                return $next($request);
+            }
             $stored = Cache::get("onelogin_user_{$user->id}");
 
             if ($stored && $stored !== $currentSessionId) {
