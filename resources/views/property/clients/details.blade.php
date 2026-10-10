@@ -568,6 +568,11 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- SLA Tab -->
                             <div class="tab-pane fade" id="sla" role="tabpanel" aria-labelledby="sla-tab">
+                                <div class="d-flex justify-content-end mb-3">
+                                    <a href="{{ route('service.agreements.create', ['client' => Crypt::encrypt($client->id)]) }}" class="btn btn-primary btn-sm d-flex align-items-center">
+                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">approval_delegation</span> Add SLA
+                                    </a>
+                                </div>
                                 <div class="table-responsive custom-scrollbar">
                                     <table id="slaTable" class="display" style="width:100%;">
                                         <thead>
