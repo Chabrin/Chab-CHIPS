@@ -765,45 +765,116 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Invoicing Tab -->
                             <div class="tab-pane fade" id="invoicing" role="tabpanel" aria-labelledby="invoicing-tab">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <ul class="nav nav-tabs mb-0" id="invoicingSubTabs" role="tablist">
-                                        <li class="nav-item" role="presentation">
-                                            <button class="nav-link active" id="rent-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#rent-invoicing-pane" type="button" role="tab">
-                                                Rent Invoicing
-                                            </button>
-                                        </li>
-                                        <li class="nav-item" role="presentation">
-                                            <button class="nav-link" id="utility-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#utility-invoicing-pane" type="button" role="tab">
-                                                Utilities Invoicing
-                                            </button>
-                                        </li>
-                                    </ul>
-                                    <span id="rentInvGenerateBtnWrap">
-                                        <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="rentInvGenerateBtn" disabled>
-                                            <span class="spinner-border spinner-border-sm me-2 d-none" id="rentInvGenerateSpinner"></span>
-                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">calculate</span>
-                                            Generate to Staging
+                                <ul class="nav nav-tabs mb-3" id="invoicingSubTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="one-off-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#one-off-invoicing-pane" type="button" role="tab">
+                                            One Off
                                         </button>
-                                    </span>
-                                </div>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="recurring-invoicing-subtab" data-bs-toggle="tab" data-bs-target="#recurring-invoicing-pane" type="button" role="tab">
+                                            Recurring
+                                        </button>
+                                    </li>
+                                </ul>
 
                                 <div class="tab-content" id="invoicingSubTabsContent">
-                                    <!-- Rent Invoicing sub-tab -->
-                                    <div class="tab-pane fade show active" id="rent-invoicing-pane" role="tabpanel">
+                                    <!-- One Off sub-tab: items from the SLA's One-Time cycle, posts directly (no staging/proration) -->
+                                    <div class="tab-pane fade show active" id="one-off-invoicing-pane" role="tabpanel">
                                         <div class="card mb-3">
                                             <div class="card-body">
                                                 <div class="row g-3 align-items-end">
                                                     <div class="col-md-4">
                                                         <label class="form-label">Select Property</label>
+                                                        <select id="oneOffPropertySelect" class="form-select">
+                                                            <option value="">-- Select Property --</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Item</label>
+                                                        <select id="oneOffItemSelect" class="form-select" disabled>
+                                                            <option value="">-- Select Property First --</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Due Date</label>
+                                                        <input type="date" id="oneOffDueDate" class="form-control">
+                                                    </div>
+                                                    <div class="col-md-1">
+                                                        <div id="oneOffSpinnerInline" class="spinner-border spinner-border-sm text-primary d-none" role="status"></div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="row g-3 mt-1">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label d-block">Tenants</label>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="oneOffScope" id="oneOffScopeAll" value="all" checked>
+                                                            <label class="form-check-label" for="oneOffScopeAll">All Tenants</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="oneOffScope" id="oneOffScopeSelected" value="selected">
+                                                            <label class="form-check-label" for="oneOffScopeSelected">Selected Tenants</label>
+                                                        </div>
+                                                        <div id="oneOffTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Amount <span class="text-muted small">(optional override)</span></label>
+                                                        <input type="number" step="0.01" min="0" id="oneOffAmount" class="form-control" placeholder="Leave blank to use the SLA's configured amount">
+                                                        <p class="text-muted small fst-italic mb-0 mt-1" id="oneOffAmountHint"></p>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-3">
+                                                    <button type="button" class="btn btn-primary d-flex align-items-center" id="oneOffCreateBtn" disabled>
+                                                        <span class="spinner-border spinner-border-sm me-2 d-none" id="oneOffCreateSpinner"></span>
+                                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">receipt</span>
+                                                        Create Invoice(s)
+                                                    </button>
+                                                </div>
+
+                                                <div id="oneOffResults" class="mt-3" style="display:none;"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Recurring sub-tab: Rent (staged+prorated) and Other Items (direct post) -->
+                                    <div class="tab-pane fade" id="recurring-invoicing-pane" role="tabpanel">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <ul class="nav nav-tabs mb-0" id="recurringSubTabs" role="tablist">
+                                                <li class="nav-item" role="presentation">
+                                                    <button class="nav-link active" id="recurring-rent-subtab" data-bs-toggle="tab" data-bs-target="#recurring-rent-pane" type="button" role="tab">
+                                                        Rent
+                                                    </button>
+                                                </li>
+                                                <li class="nav-item" role="presentation">
+                                                    <button class="nav-link" id="recurring-other-subtab" data-bs-toggle="tab" data-bs-target="#recurring-other-pane" type="button" role="tab">
+                                                        Other Items
+                                                    </button>
+                                                </li>
+                                            </ul>
+                                            <span id="rentInvGenerateBtnWrap">
+                                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="rentInvGenerateBtn" disabled>
+                                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="rentInvGenerateSpinner"></span>
+                                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">calculate</span>
+                                                    Generate to Staging
+                                                </button>
+                                            </span>
+                                        </div>
+
+                                    <div class="tab-content" id="recurringSubTabsContent">
+                                    <!-- Rent (staged) -->
+                                    <div class="tab-pane fade show active" id="recurring-rent-pane" role="tabpanel">
+                                        <div class="card mb-3">
+                                            <div class="card-body">
+                                                <div class="row g-3 align-items-end">
+                                                    <div class="col-md-5">
+                                                        <label class="form-label">Select Property</label>
                                                         <select id="rentInvPropertySelect" class="form-select">
                                                             <option value="">-- Select Property --</option>
                                                         </select>
                                                     </div>
-                                                    <div class="col-md-3">
-                                                        <label class="form-label">Billing Month</label>
-                                                        <input type="month" id="rentInvBillingMonth" class="form-control">
-                                                    </div>
-                                                    <div class="col-md-3">
+                                                    <div class="col-md-5">
                                                         <label class="form-label">Due Date</label>
                                                         <input type="date" id="rentInvDueDate" class="form-control">
                                                     </div>
@@ -843,7 +914,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         </div>
 
                                         <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <p class="text-muted small mb-0">Staged rent invoices. Review or delete a row, then complete the upload to push them into real invoices.</p>
+                                            <p class="text-muted small mb-0">Staged rent invoices. Review or delete a row, then push them into real invoices.</p>
                                             <div class="d-flex flex-shrink-0 ms-2 gap-2">
                                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="deleteSelectedRentInvBtn" disabled>
                                                     <span class="spinner-border spinner-border-sm me-2 d-none" id="deleteSelectedRentInvSpinner"></span>
@@ -853,7 +924,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="pushRentInvBtn" disabled>
                                                     <span class="spinner-border spinner-border-sm me-2 d-none" id="pushRentInvSpinner"></span>
                                                     <span class="material-symbols-outlined me-1" style="font-size:18px;">publish</span>
-                                                    Complete Upload
+                                                    Push to Invoices
                                                 </button>
                                             </div>
                                         </div>
@@ -878,106 +949,65 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         </div>
                                     </div>
 
-                                    <!-- Utilities Invoicing sub-tab -->
-                                    <div class="tab-pane fade" id="utility-invoicing-pane" role="tabpanel">
+                                    <!-- Other Items (direct post, no staging — same rationale as One Off) -->
+                                    <div class="tab-pane fade" id="recurring-other-pane" role="tabpanel">
                                         <div class="card mb-3">
                                             <div class="card-body">
                                                 <div class="row g-3 align-items-end">
                                                     <div class="col-md-4">
                                                         <label class="form-label">Select Property</label>
-                                                        <select id="utilInvPropertySelect" class="form-select">
+                                                        <select id="recurringOtherPropertySelect" class="form-select">
                                                             <option value="">-- Select Property --</option>
                                                         </select>
                                                     </div>
-                                                    <div class="col-md-3">
-                                                        <label class="form-label">Billing Month</label>
-                                                        <input type="month" id="utilInvBillingMonth" class="form-control">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label">Item</label>
+                                                        <select id="recurringOtherItemSelect" class="form-select" disabled>
+                                                            <option value="">-- Select Property First --</option>
+                                                        </select>
                                                     </div>
                                                     <div class="col-md-3">
                                                         <label class="form-label">Due Date</label>
-                                                        <input type="date" id="utilInvDueDate" class="form-control">
+                                                        <input type="date" id="recurringOtherDueDate" class="form-control">
                                                     </div>
-                                                    <div class="col-md-2">
-                                                        <div id="utilInvSpinnerInline" class="spinner-border spinner-border-sm text-primary d-none" role="status"></div>
+                                                    <div class="col-md-1">
+                                                        <div id="recurringOtherSpinnerInline" class="spinner-border spinner-border-sm text-primary d-none" role="status"></div>
                                                     </div>
                                                 </div>
 
                                                 <div class="row g-3 mt-1">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label d-block">Utility</label>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label d-block">Tenants</label>
                                                         <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="radio" name="utilInvType" id="utilInvTypeWater" value="water" checked>
-                                                            <label class="form-check-label" for="utilInvTypeWater">Water Bill</label>
+                                                            <input class="form-check-input" type="radio" name="recurringOtherScope" id="recurringOtherScopeAll" value="all" checked>
+                                                            <label class="form-check-label" for="recurringOtherScopeAll">All Tenants</label>
                                                         </div>
                                                         <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="radio" name="utilInvType" id="utilInvTypeElectricity" value="electricity">
-                                                            <label class="form-check-label" for="utilInvTypeElectricity">Electricity Bill</label>
+                                                            <input class="form-check-input" type="radio" name="recurringOtherScope" id="recurringOtherScopeSelected" value="selected">
+                                                            <label class="form-check-label" for="recurringOtherScopeSelected">Selected Tenants</label>
                                                         </div>
+                                                        <div id="recurringOtherTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
                                                     </div>
-                                                    <div class="col-md-8">
-                                                        <label class="form-label d-block">Mode</label>
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="radio" name="utilInvMode" id="utilInvModeFixed" value="fixed" checked>
-                                                            <label class="form-check-label" for="utilInvModeFixed">Fixed Rate (from SLA)</label>
-                                                        </div>
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="radio" name="utilInvMode" id="utilInvModeOneOff" value="one_off">
-                                                            <label class="form-check-label" for="utilInvModeOneOff">One-by-One (not fixed, e.g. metered water)</label>
-                                                        </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Amount <span class="text-muted small">(optional override)</span></label>
+                                                        <input type="number" step="0.01" min="0" id="recurringOtherAmount" class="form-control" placeholder="Leave blank to use the SLA's configured amount">
+                                                        <p class="text-muted small fst-italic mb-0 mt-1" id="recurringOtherAmountHint"></p>
                                                     </div>
                                                 </div>
 
-                                                <!-- Fixed-rate batch controls -->
-                                                <div id="utilInvFixedControls">
-                                                    <div class="row g-3 mt-1">
-                                                        <div class="col-md-12">
-                                                            <label class="form-label d-block">Tenants</label>
-                                                            <div class="form-check form-check-inline">
-                                                                <input class="form-check-input" type="radio" name="utilInvScope" id="utilInvScopeAll" value="all" checked>
-                                                                <label class="form-check-label" for="utilInvScopeAll">All Tenants</label>
-                                                            </div>
-                                                            <div class="form-check form-check-inline">
-                                                                <input class="form-check-input" type="radio" name="utilInvScope" id="utilInvScopeSelected" value="selected">
-                                                                <label class="form-check-label" for="utilInvScopeSelected">Selected Tenants</label>
-                                                            </div>
-                                                            <div id="utilInvTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="mt-3">
-                                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="utilInvGenerateFixedBtn" disabled>
-                                                            <span class="spinner-border spinner-border-sm me-2 d-none" id="utilInvGenerateFixedSpinner"></span>
-                                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">bolt</span>
-                                                            Generate Invoices
-                                                        </button>
-                                                    </div>
+                                                <div class="mt-3">
+                                                    <button type="button" class="btn btn-primary d-flex align-items-center" id="recurringOtherCreateBtn" disabled>
+                                                        <span class="spinner-border spinner-border-sm me-2 d-none" id="recurringOtherCreateSpinner"></span>
+                                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">receipt</span>
+                                                        Create Invoice(s)
+                                                    </button>
                                                 </div>
 
-                                                <!-- One-by-one controls -->
-                                                <div id="utilInvOneOffControls" style="display:none;">
-                                                    <div class="row g-3 mt-1">
-                                                        <div class="col-md-6">
-                                                            <label class="form-label">Tenant</label>
-                                                            <select id="utilInvOneOffTenant" class="form-select">
-                                                                <option value="">-- Select Tenant --</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="col-md-4">
-                                                            <label class="form-label">Amount</label>
-                                                            <input type="number" step="0.01" min="0" id="utilInvOneOffAmount" class="form-control">
-                                                        </div>
-                                                    </div>
-                                                    <div class="mt-3">
-                                                        <button type="button" class="btn btn-primary d-flex align-items-center" id="utilInvOneOffBtn" disabled>
-                                                            <span class="spinner-border spinner-border-sm me-2 d-none" id="utilInvOneOffSpinner"></span>
-                                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">receipt</span>
-                                                            Create Invoice
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <div id="utilInvResults" class="mt-3" style="display:none;"></div>
+                                                <div id="recurringOtherResults" class="mt-3" style="display:none;"></div>
                                             </div>
                                         </div>
+                                    </div>
+                                    </div>
                                     </div>
                                 </div>
                             </div>
@@ -1009,8 +1039,6 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <th>Due Date</th>
                                                 <th>Amount</th>
                                                 <th>Balance</th>
-                                                <th>Status</th>
-                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody></tbody>
@@ -3220,45 +3248,25 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         }
 
-        // Fills a <select> with a property's tenants (used by the utility one-off tenant picker)
-        function loadTenantSelectOptions(propertyId, selectId) {
-            var $select = $('#' + selectId);
-            $select.empty().append('<option value="">-- Select Tenant --</option>');
-            $.ajax({
-                url: "{{ route('ajax.property.tenants.get') }}",
-                type: 'GET',
-                data: { property_id: propertyId },
-                dataType: 'json',
-                success: function(response) {
-                    (response.data || []).forEach(function(t) {
-                        $select.append('<option value="' + t.id + '">' + t.names + '</option>');
-                    });
-                },
-                error: function() {
-                    toastr.error('Failed to load tenants for this property.');
-                }
-            });
-        }
-
         var invoicingPropertiesLoaded = false;
         $('#invoicing-tab').on('click', function() {
             if (!invoicingPropertiesLoaded) {
                 loadPropertiesIntoSelect('rentInvPropertySelect');
-                loadPropertiesIntoSelect('utilInvPropertySelect');
+                loadPropertiesIntoSelect('oneOffPropertySelect');
+                loadPropertiesIntoSelect('recurringOtherPropertySelect');
                 invoicingPropertiesLoaded = true;
             }
         });
 
-        // "Generate to Staging" lives in the sub-tab row now (moved up next to the
-        // tabs, since Utilities Invoicing has its own separate generate flow) — only
-        // show it while the Rent Invoicing sub-tab is active. Note: this app's global
-        // CSS forces `.btn { display: inline-flex !important; }`, which beats jQuery's
-        // show()/hide()/toggle() on the button itself, so the WRAPPER span is what
-        // gets toggled instead.
+        // "Generate to Staging" lives in the Recurring sub-tab row (next to its
+        // own Rent/Other Items nav) — only show it while the nested Rent tab is
+        // active. Note: this app's global CSS forces `.btn { display: inline-flex
+        // !important; }`, which beats jQuery's show()/hide()/toggle() on the
+        // button itself, so the WRAPPER span is what gets toggled instead.
         function syncRentInvGenerateBtnVisibility() {
-            $('#rentInvGenerateBtnWrap').toggle($('#rent-invoicing-subtab').hasClass('active'));
+            $('#rentInvGenerateBtnWrap').toggle($('#recurring-rent-subtab').hasClass('active'));
         }
-        $('#invoicingSubTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', syncRentInvGenerateBtnVisibility);
+        $('#invoicingSubTabs button[data-bs-toggle="tab"], #recurringSubTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', syncRentInvGenerateBtnVisibility);
         syncRentInvGenerateBtnVisibility();
 
         // ---------- Rent Invoicing ----------
@@ -3351,19 +3359,25 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         }
 
-        function rentInvReady() {
-            var propertyId = $('#rentInvPropertySelect').val();
-            var month = $('#rentInvBillingMonth').val();
-            var ready = !!propertyId && !!month && !!$('#rentInvDueDate').val();
-            $('#rentInvGenerateBtn').prop('disabled', !ready);
+        // No separate Billing Month field — it's derived from the Due Date's
+        // own month (they're always the same billing period in practice).
+        function rentInvBillingMonth() {
+            var dueDate = $('#rentInvDueDate').val();
+            return dueDate ? dueDate.substring(0, 7) : '';
         }
 
-        $('#rentInvPropertySelect, #rentInvBillingMonth, #rentInvDueDate').on('change', function() {
+        function rentInvReady() {
+            var propertyId = $('#rentInvPropertySelect').val();
+            var ready = !!propertyId && !!$('#rentInvDueDate').val();
+            $('#rentInvGenerateBtn').prop('disabled', !ready);
+            $('#pushRentInvBtn').prop('disabled', !propertyId);
+        }
+
+        $('#rentInvPropertySelect, #rentInvDueDate').on('change', function() {
             rentInvReady();
             var propertyId = $('#rentInvPropertySelect').val();
-            var month = $('#rentInvBillingMonth').val();
             if (propertyId) {
-                loadRentInvStaged(propertyId, month);
+                loadRentInvStaged(propertyId, rentInvBillingMonth());
                 if ($('#rentInvScopeSelected').is(':checked')) {
                     loadTenantCheckboxList(propertyId, 'rentInvTenantList');
                 }
@@ -3392,7 +3406,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
             var payload = {
                 _token: '{{ csrf_token() }}',
                 property_id: propertyId,
-                billing_month: $('#rentInvBillingMonth').val(),
+                billing_month: rentInvBillingMonth(),
                 due_date: $('#rentInvDueDate').val(),
                 scope: scope,
                 date_mode: dateMode,
@@ -3427,7 +3441,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 dataType: 'json',
                 success: function(response) {
                     toastr.success(response.message);
-                    loadRentInvStaged(propertyId, $('#rentInvBillingMonth').val());
+                    loadRentInvStaged(propertyId, rentInvBillingMonth());
                 },
                 error: function(xhr) {
                     var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to generate invoices.';
@@ -3452,7 +3466,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
             $.ajax({
                 url: "{{ route('property.rent-invoicing.push') }}",
                 type: 'POST',
-                data: { property_id: propertyId, billing_month: $('#rentInvBillingMonth').val(), _token: '{{ csrf_token() }}' },
+                data: { property_id: propertyId, billing_month: rentInvBillingMonth(), _token: '{{ csrf_token() }}' },
                 dataType: 'json',
                 success: function(response) {
                     if (response.failed > 0) {
@@ -3460,7 +3474,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     } else {
                         toastr.success(response.message);
                     }
-                    loadRentInvStaged(propertyId, $('#rentInvBillingMonth').val());
+                    loadRentInvStaged(propertyId, rentInvBillingMonth());
                 },
                 error: function(xhr) {
                     var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to push invoices.';
@@ -3515,7 +3529,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     dataType: 'json',
                     success: function(response) {
                         toastr.success(response.message);
-                        loadRentInvStaged($('#rentInvPropertySelect').val(), $('#rentInvBillingMonth').val());
+                        loadRentInvStaged($('#rentInvPropertySelect').val(), rentInvBillingMonth());
                     },
                     error: function(xhr) {
                         var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete row.';
@@ -3553,7 +3567,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     dataType: 'json',
                     success: function(response) {
                         toastr.success(response.message);
-                        loadRentInvStaged($('#rentInvPropertySelect').val(), $('#rentInvBillingMonth').val());
+                        loadRentInvStaged($('#rentInvPropertySelect').val(), rentInvBillingMonth());
                     },
                     error: function(xhr) {
                         var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to delete selected rows.';
@@ -3566,55 +3580,115 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         });
 
-        // ---------- Utilities Invoicing ----------
+        // ---------- One Off & Recurring "Other Items" ----------
+        // Both tabs share the same shape: items come from the property's SLA
+        // (cb_sla_invoiceable_items), split server-side by billing cycle —
+        // One Off gets the One-Time cycle, Other Items gets everything else.
+        // Neither has a staging step: there's no proration math to review,
+        // so both post straight to the real tables (same rationale the old
+        // Utility Invoicing tab used for its own direct-post paths).
 
-        $('#utilInvPropertySelect').on('change', function() {
-            var propertyId = $(this).val();
-            $('#utilInvGenerateFixedBtn').prop('disabled', !propertyId);
-            $('#utilInvOneOffBtn').prop('disabled', !propertyId);
-            if (propertyId) {
-                if ($('#utilInvScopeSelected').is(':checked')) {
-                    loadTenantCheckboxList(propertyId, 'utilInvTenantList');
+        var oneOffItemsById = {};
+        var recurringOtherItemsById = {};
+
+        function loadItemSelect(url, propertyId, selectId, itemsMapSetter) {
+            var $select = $('#' + selectId);
+            $select.empty().append('<option value="">Loading items...</option>').prop('disabled', true);
+
+            $.ajax({
+                url: url,
+                type: 'GET',
+                data: { property_id: propertyId },
+                dataType: 'json',
+                success: function(response) {
+                    var items = response.items || [];
+                    var map = {};
+                    items.forEach(function(item) { map[item.item_id] = item; });
+                    itemsMapSetter(map);
+
+                    if (!response.has_sla) {
+                        $select.html('<option value="">This property has no service agreement</option>');
+                        return;
+                    }
+                    if (!items.length) {
+                        $select.html('<option value="">No items configured for this cycle</option>');
+                        return;
+                    }
+
+                    $select.empty().append('<option value="">-- Select Item --</option>').prop('disabled', false);
+                    items.forEach(function(item) {
+                        var label = $('<div>').text(item.item_name).html() + (item.billing_code ? ' (' + item.billing_code + ')' : '');
+                        $select.append('<option value="' + item.item_id + '">' + label + '</option>');
+                    });
+                },
+                error: function() {
+                    $select.html('<option value="">Failed to load items</option>');
                 }
-                loadTenantSelectOptions(propertyId, 'utilInvOneOffTenant');
+            });
+        }
+
+        function itemAmountHint(item) {
+            if (!item) return '';
+            if (item.amount !== null && item.amount !== undefined) {
+                return 'SLA default: ' + Number(item.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
             }
-        });
-
-        $('input[name="utilInvScope"]').on('change', function() {
-            var isSelected = $('#utilInvScopeSelected').is(':checked');
-            $('#utilInvTenantList').toggle(isSelected);
-            if (isSelected && $('#utilInvPropertySelect').val()) {
-                loadTenantCheckboxList($('#utilInvPropertySelect').val(), 'utilInvTenantList');
+            if (item.percentage_of_rent !== null && item.percentage_of_rent !== undefined) {
+                return 'SLA default: ' + Number(item.percentage_of_rent) + "% of the unit's rent amount";
             }
-        });
+            return 'No amount configured on the SLA — enter one below.';
+        }
 
-        $('input[name="utilInvMode"]').on('change', function() {
-            var isFixed = $('#utilInvModeFixed').is(':checked');
-            $('#utilInvFixedControls').toggle(isFixed);
-            $('#utilInvOneOffControls').toggle(!isFixed);
-            $('#utilInvResults').hide().empty();
-        });
+        // ---------- One Off ----------
 
-        $('#utilInvGenerateFixedBtn').on('click', function() {
-            var propertyId = $('#utilInvPropertySelect').val();
-            var scope = $('input[name="utilInvScope"]:checked').val();
+        function oneOffReady() {
+            var ready = !!$('#oneOffPropertySelect').val() && !!$('#oneOffItemSelect').val() && !!$('#oneOffDueDate').val();
+            $('#oneOffCreateBtn').prop('disabled', !ready);
+        }
 
-            if (!$('#utilInvBillingMonth').val() || !$('#utilInvDueDate').val()) {
-                toastr.error('Choose a billing month and due date.');
+        $('#oneOffPropertySelect').on('change', function() {
+            var propertyId = $(this).val();
+            $('#oneOffAmountHint').text('');
+            oneOffReady();
+
+            if (!propertyId) {
+                $('#oneOffItemSelect').html('<option value="">-- Select Property First --</option>').prop('disabled', true);
                 return;
             }
 
+            loadItemSelect("{{ route('invoicing.one-off-items') }}", propertyId, 'oneOffItemSelect', function(map) { oneOffItemsById = map; });
+
+            if ($('#oneOffScopeSelected').is(':checked')) {
+                loadTenantCheckboxList(propertyId, 'oneOffTenantList');
+            }
+        });
+
+        $('#oneOffItemSelect').on('change', function() {
+            $('#oneOffAmountHint').text(itemAmountHint(oneOffItemsById[$(this).val()]));
+            oneOffReady();
+        });
+
+        $('#oneOffDueDate').on('change', oneOffReady);
+
+        $('input[name="oneOffScope"]').on('change', function() {
+            var isSelected = $('#oneOffScopeSelected').is(':checked');
+            $('#oneOffTenantList').toggle(isSelected);
+            if (isSelected && $('#oneOffPropertySelect').val()) {
+                loadTenantCheckboxList($('#oneOffPropertySelect').val(), 'oneOffTenantList');
+            }
+        });
+
+        $('#oneOffCreateBtn').on('click', function() {
+            var scope = $('input[name="oneOffScope"]:checked').val();
             var payload = {
                 _token: '{{ csrf_token() }}',
-                property_id: propertyId,
-                utility_type: $('input[name="utilInvType"]:checked').val(),
-                billing_month: $('#utilInvBillingMonth').val(),
-                due_date: $('#utilInvDueDate').val(),
+                property_id: $('#oneOffPropertySelect').val(),
+                item_id: $('#oneOffItemSelect').val(),
+                due_date: $('#oneOffDueDate').val(),
                 scope: scope,
             };
 
             if (scope === 'selected') {
-                var ids = $('#utilInvTenantList .tenant-checkbox:checked').map(function() { return $(this).val(); }).get();
+                var ids = $('#oneOffTenantList .tenant-checkbox:checked').map(function() { return $(this).val(); }).get();
                 if (!ids.length) {
                     toastr.error('Select at least one tenant.');
                     return;
@@ -3622,15 +3696,20 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 payload.tenant_ids = ids;
             }
 
-            var btn = $('#utilInvGenerateFixedBtn');
-            var spinner = $('#utilInvGenerateFixedSpinner');
-            var resultsBox = $('#utilInvResults');
+            var amountOverride = $('#oneOffAmount').val();
+            if (amountOverride !== '') {
+                payload.amount_override = amountOverride;
+            }
+
+            var btn = $('#oneOffCreateBtn');
+            var spinner = $('#oneOffCreateSpinner');
+            var resultsBox = $('#oneOffResults');
             btn.prop('disabled', true);
             spinner.removeClass('d-none');
             resultsBox.hide().empty();
 
             $.ajax({
-                url: "{{ route('property.utility-invoicing.generate-fixed') }}",
+                url: "{{ route('invoicing.one-off.create') }}",
                 type: 'POST',
                 data: payload,
                 dataType: 'json',
@@ -3649,7 +3728,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     }
                 },
                 error: function(xhr) {
-                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to generate invoices.';
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to create invoices.';
                     resultsBox.html('<div class="alert alert-danger mb-0">' + $('<div>').text(message).html() + '</div>').show();
                     toastr.error(message);
                 },
@@ -3660,45 +3739,106 @@ COPY PERMISSIONS (paste when re-enabling checks):
             });
         });
 
-        $('#utilInvOneOffBtn').on('click', function() {
-            var tenantId = $('#utilInvOneOffTenant').val();
-            var amount = $('#utilInvOneOffAmount').val();
+        // ---------- Recurring: Other Items ----------
 
-            if (!tenantId || !amount) {
-                toastr.error('Select a tenant and enter an amount.');
+        // No separate Billing Month field — it's derived from the Due Date's
+        // own month (they're always the same billing period in practice).
+        function recurringOtherBillingMonth() {
+            var dueDate = $('#recurringOtherDueDate').val();
+            return dueDate ? dueDate.substring(0, 7) : '';
+        }
+
+        function recurringOtherReady() {
+            var ready = !!$('#recurringOtherPropertySelect').val() && !!$('#recurringOtherItemSelect').val() &&
+                !!$('#recurringOtherDueDate').val();
+            $('#recurringOtherCreateBtn').prop('disabled', !ready);
+        }
+
+        $('#recurringOtherPropertySelect').on('change', function() {
+            var propertyId = $(this).val();
+            $('#recurringOtherAmountHint').text('');
+            recurringOtherReady();
+
+            if (!propertyId) {
+                $('#recurringOtherItemSelect').html('<option value="">-- Select Property First --</option>').prop('disabled', true);
                 return;
             }
-            if (!$('#utilInvBillingMonth').val() || !$('#utilInvDueDate').val()) {
-                toastr.error('Choose a billing month and due date.');
-                return;
+
+            loadItemSelect("{{ route('invoicing.recurring-items') }}", propertyId, 'recurringOtherItemSelect', function(map) { recurringOtherItemsById = map; });
+
+            if ($('#recurringOtherScopeSelected').is(':checked')) {
+                loadTenantCheckboxList(propertyId, 'recurringOtherTenantList');
+            }
+        });
+
+        $('#recurringOtherItemSelect').on('change', function() {
+            $('#recurringOtherAmountHint').text(itemAmountHint(recurringOtherItemsById[$(this).val()]));
+            recurringOtherReady();
+        });
+
+        $('#recurringOtherDueDate').on('change', recurringOtherReady);
+
+        $('input[name="recurringOtherScope"]').on('change', function() {
+            var isSelected = $('#recurringOtherScopeSelected').is(':checked');
+            $('#recurringOtherTenantList').toggle(isSelected);
+            if (isSelected && $('#recurringOtherPropertySelect').val()) {
+                loadTenantCheckboxList($('#recurringOtherPropertySelect').val(), 'recurringOtherTenantList');
+            }
+        });
+
+        $('#recurringOtherCreateBtn').on('click', function() {
+            var scope = $('input[name="recurringOtherScope"]:checked').val();
+            var payload = {
+                _token: '{{ csrf_token() }}',
+                property_id: $('#recurringOtherPropertySelect').val(),
+                item_id: $('#recurringOtherItemSelect').val(),
+                billing_month: recurringOtherBillingMonth(),
+                due_date: $('#recurringOtherDueDate').val(),
+                scope: scope,
+            };
+
+            if (scope === 'selected') {
+                var ids = $('#recurringOtherTenantList .tenant-checkbox:checked').map(function() { return $(this).val(); }).get();
+                if (!ids.length) {
+                    toastr.error('Select at least one tenant.');
+                    return;
+                }
+                payload.tenant_ids = ids;
             }
 
-            var btn = $('#utilInvOneOffBtn');
-            var spinner = $('#utilInvOneOffSpinner');
-            var resultsBox = $('#utilInvResults');
+            var amountOverride = $('#recurringOtherAmount').val();
+            if (amountOverride !== '') {
+                payload.amount_override = amountOverride;
+            }
+
+            var btn = $('#recurringOtherCreateBtn');
+            var spinner = $('#recurringOtherCreateSpinner');
+            var resultsBox = $('#recurringOtherResults');
             btn.prop('disabled', true);
             spinner.removeClass('d-none');
             resultsBox.hide().empty();
 
             $.ajax({
-                url: "{{ route('property.utility-invoicing.one-off') }}",
+                url: "{{ route('invoicing.recurring-item.create') }}",
                 type: 'POST',
-                data: {
-                    _token: '{{ csrf_token() }}',
-                    tenant_id: tenantId,
-                    utility_type: $('input[name="utilInvType"]:checked').val(),
-                    amount: amount,
-                    billing_month: $('#utilInvBillingMonth').val(),
-                    due_date: $('#utilInvDueDate').val(),
-                },
+                data: payload,
                 dataType: 'json',
                 success: function(response) {
-                    resultsBox.html('<div class="alert alert-success mb-0">' + response.message + '</div>').show();
-                    toastr.success(response.message);
-                    $('#utilInvOneOffAmount').val('');
+                    var html = '<div class="alert ' + (response.failed > 0 ? 'alert-warning' : 'alert-success') + ' mb-2">' + response.message + '</div>';
+                    if (response.errors && response.errors.length) {
+                        html += '<ul class="mb-0 small text-danger">';
+                        response.errors.forEach(function(err) {
+                            html += '<li>' + $('<div>').text(err).html() + '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    resultsBox.html(html).show();
+                    if (response.created > 0) {
+                        toastr.success(response.created + ' invoice(s) created.');
+                    }
                 },
                 error: function(xhr) {
-                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to create invoice.';
+                    var message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to create invoices.';
                     resultsBox.html('<div class="alert alert-danger mb-0">' + $('<div>').text(message).html() + '</div>').show();
                     toastr.error(message);
                 },
@@ -3725,26 +3865,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 { data: 'returns_period', defaultContent: '-' },
                 { data: 'date_due', defaultContent: '-' },
                 { data: 'total_amount', defaultContent: '-' },
-                { data: 'current_balance', defaultContent: '-' },
-                {
-                    data: 'status_name',
-                    render: function(status) {
-                        return '<span class="badge bg-secondary">' + (status || 'Pending') + '</span>';
-                    }
-                },
-                {
-                    data: 'encrypted_id',
-                    orderable: false,
-                    searchable: false,
-                    render: function(encId) {
-                        return '<div class="d-flex flex-row gap-2">' +
-                            '<a href="#" class="text-primary view-invoice-btn" data-id="' + encId + '" title="View Details">' +
-                            '<span class="material-symbols-outlined" style="font-size:18px;">visibility</span></a>' +
-                            '<a href="{{ url('property/client-invoices') }}/' + encId + '/pdf" class="text-primary" title="Download PDF">' +
-                            '<span class="material-symbols-outlined" style="font-size:18px;">download</span></a>' +
-                            '</div>';
-                    }
-                }
+                { data: 'current_balance', defaultContent: '-' }
             ],
             pageLength: 10,
             responsive: true,

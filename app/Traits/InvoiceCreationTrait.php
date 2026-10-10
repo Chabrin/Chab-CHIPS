@@ -24,12 +24,15 @@ trait InvoiceCreationTrait
 {
     /**
      * $data keys: tenant_id, property_id, unit_id, lease_id, item_type_id,
-     * date_due, returns_period, total_amount.
+     * date_due, returns_period, total_amount, and optionally cycle_id (a
+     * sys_set_invoiceable_items_cycles id — defaults to the invoiceable
+     * item's own default_cycle_id when omitted, so every invoice records
+     * which billing cycle it belongs to, e.g. to tell one-off from recurring).
      *
      * Throws \RuntimeException on any business failure (duplicate invoice
      * for this tenant/item/month — same rule storeInvoiceItem() already
      * enforced). Callers doing a batch run should catch \Throwable per row
-     * (see RentInvoicingController::pushToMain()/UtilityInvoicingController)
+     * (see RentInvoicingController::pushToMain()/createOneOff()/createRecurringItem())
      * rather than letting one bad row abort the whole run.
      */
     protected function createSingleDebtorInvoice(array $data): DebtorInvoice
@@ -89,7 +92,8 @@ trait InvoiceCreationTrait
         return DB::transaction(function () use (
             $data, $property, $lease, $unit, $itemName, $landlordId, $totalAmount,
             $commAmount, $commissionPercentage, $isCommissionable, $vatAmount,
-            $commissionableAmount, $payableAmount, $vatOnCommission, $referenceNumber, $batchNumber
+            $commissionableAmount, $payableAmount, $vatOnCommission, $referenceNumber, $batchNumber,
+            $invoiceableItem
         ) {
             $invoice = DebtorInvoice::create([
                 'date_time' => now(),
@@ -118,7 +122,7 @@ trait InvoiceCreationTrait
                 'payable_amount' => $payableAmount,
                 'item_type_id' => $data['item_type_id'],
                 'return_type_id' => $itemName,
-                'cycle_id' => 2,
+                'cycle_id' => $data['cycle_id'] ?? ($invoiceableItem->default_cycle_id ?? null),
                 'current_balance' => $totalAmount,
                 'occupancy_status_id' => $unit ? $unit->occupancy_status_id : null,
                 'field_officer_id' => $property ? $property->field_officer_id : null,

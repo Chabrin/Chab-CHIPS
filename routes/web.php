@@ -670,16 +670,19 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/property/unit-tenant-upload/tenants/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'updateTenant'])->name('property.unit-tenant-upload.tenants.update')->whereNumber('id');
     Route::delete('/property/unit-tenant-upload/tenants/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyTenant'])->name('property.unit-tenant-upload.tenants.destroy')->whereNumber('id');
 
-    // Rent Invoicing (staged, client page Invoicing tab)
+    // Rent Invoicing (staged, client page Invoicing tab > Recurring > Rent)
     Route::post('/property/rent-invoicing/generate', [App\Http\Controllers\RentInvoicingController::class, 'generate'])->name('property.rent-invoicing.generate');
     Route::get('/property/rent-invoicing/staged', [App\Http\Controllers\RentInvoicingController::class, 'stagedData'])->name('property.rent-invoicing.staged');
     Route::delete('/property/rent-invoicing/staged/{id}', [App\Http\Controllers\RentInvoicingController::class, 'destroyStaged'])->name('property.rent-invoicing.staged.delete');
     Route::post('/property/rent-invoicing/staged/bulk-delete', [App\Http\Controllers\RentInvoicingController::class, 'destroySelectedStaged'])->name('property.rent-invoicing.staged.bulk-delete');
     Route::post('/property/rent-invoicing/push', [App\Http\Controllers\RentInvoicingController::class, 'pushToMain'])->name('property.rent-invoicing.push');
 
-    // Utility Invoicing (posts directly, client page Invoicing tab)
-    Route::post('/property/utility-invoicing/generate-fixed', [App\Http\Controllers\UtilityInvoicingController::class, 'generateFixed'])->name('property.utility-invoicing.generate-fixed');
-    Route::post('/property/utility-invoicing/one-off', [App\Http\Controllers\UtilityInvoicingController::class, 'oneOff'])->name('property.utility-invoicing.one-off');
+    // One Off / Recurring "Other Items" invoicing (posts directly, client page Invoicing tab) —
+    // driven by cb_sla_invoiceable_items, split by the item's billing cycle.
+    Route::get('/ajax/invoicing/one-off-items', [App\Http\Controllers\RentInvoicingController::class, 'getOneOffItems'])->name('invoicing.one-off-items');
+    Route::get('/ajax/invoicing/recurring-items', [App\Http\Controllers\RentInvoicingController::class, 'getRecurringItems'])->name('invoicing.recurring-items');
+    Route::post('/ajax/invoicing/one-off', [App\Http\Controllers\RentInvoicingController::class, 'createOneOff'])->name('invoicing.one-off.create');
+    Route::post('/ajax/invoicing/recurring-item', [App\Http\Controllers\RentInvoicingController::class, 'createRecurringItem'])->name('invoicing.recurring-item.create');
 
     // Generated Invoices tab (client page)
     Route::get('/property/client-invoices/data', [App\Http\Controllers\ClientInvoicesController::class, 'data'])->name('property.client-invoices.data');

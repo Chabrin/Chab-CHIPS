@@ -18,6 +18,16 @@ use Illuminate\Support\Facades\Log;
 class ClientInvoicesController extends Controller
 {
     /**
+     * Client/tenant `names` on this app stores the salutation baked into the
+     * string itself (e.g. "Mr John Kamau Mwangi"), not just in the separate
+     * `title` column — strip it so the UI shows just the name.
+     */
+    private function stripSalutation(?string $name): string
+    {
+        return $name ? preg_replace('/^(Mr|Mrs|Ms|Dr|Prof)\.?\s+/i', '', trim($name)) : '-';
+    }
+
+    /**
      * Invoices for a property (AJAX, for the Generated Invoices DataTable).
      */
     public function data(Request $request)
@@ -35,7 +45,7 @@ class ClientInvoicesController extends Controller
                     return [
                         'id' => $invoice->id,
                         'encrypted_id' => Crypt::encrypt($invoice->id),
-                        'tenant_name' => $invoice->tenant->names ?? '-',
+                        'tenant_name' => $this->stripSalutation($invoice->tenant->names ?? null),
                         'unit_code' => $invoice->unit->unit_code ?? '-',
                         'return_type_id' => $invoice->return_type_id,
                         'reference_number' => $invoice->reference_number,
@@ -70,7 +80,7 @@ class ClientInvoicesController extends Controller
                 'invoice' => [
                     'reference_number' => $invoice->reference_number,
                     'narration' => $invoice->narration,
-                    'tenant_name' => $invoice->tenant->names ?? '-',
+                    'tenant_name' => $this->stripSalutation($invoice->tenant->names ?? null),
                     'tenant_mobile' => $invoice->tenant->mobile_number ?? '-',
                     'property_name' => $invoice->property->property_name ?? '-',
                     'unit_code' => $invoice->unit->unit_code ?? '-',
