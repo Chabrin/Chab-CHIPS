@@ -238,6 +238,10 @@
                                         <option value="9" {{ old('years') == '9' ? 'selected' : '' }}>9</option>
                                         <option value="10" {{ old('years') == '10' ? 'selected' : '' }}>10</option>
                                     </select>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="open_ended" name="open_ended" value="1" {{ old('open_ended', false) ? 'checked' : '' }}>
+                                        <label class="form-check-label" for="open_ended">Open-ended (no end date)</label>
+                                    </div>
                                     @error('years')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -904,6 +908,11 @@
                 alert('Selected files:\n' + fileNames.join('\n'));
             }
         });
+
+        // Open-ended leases have no term, so the years field is switched off
+        $('#open_ended').on('change', function() {
+            $('#years').prop('disabled', this.checked).prop('required', !this.checked);
+        }).trigger('change');
 
         // Calculate lease end date
         $('#date_start, #years').on('change', function() {

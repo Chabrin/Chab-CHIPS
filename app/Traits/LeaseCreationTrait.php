@@ -26,18 +26,20 @@ trait LeaseCreationTrait
      * LeasesController::store().
      *
      * $data keys: client_id, property_id, unit_id, tenant_id, sla_id,
-     * date_start, years, auto_renewal (default 'No'), escalation_rate
+     * date_start, years, date_end (optional), open_ended (optional), auto_renewal (default 'No'), escalation_rate
      * (default 0), escalation_frequency (default 'Annually'),
      * service_charges_amount (nullable), linked_lease_id (nullable).
+     *
+     * End date: open_ended true gives a lease with no date_end and no years; an explicit
+     * date_end wins over years (years is then derived from the dates); otherwise
+     * date_end = date_start + years.
      *
      * $invoiceableItems: array of ['item' => id, 'amount' => x, 'cycle' => id, 'prepay_client' => 'Yes'|null],
      * matching the shape LeasesController::store() already validates and stores.
      */
     private function createLeaseAgreementRecord(array $data, array $invoiceableItems = []): LeaseAgreement
     {
-        $startDate = new \DateTime($data['date_start']);
-        $endDate = clone $startDate;
-        $endDate->modify('+' . $data['years'] . ' years');
+        [$dateEnd, $years, $openEnded] = $this->resolveLeaseTerm($data);
 
         $property = Property::findOrFail($data['property_id']);
         $unit = Unit::findOrFail($data['unit_id']);
@@ -51,8 +53,9 @@ trait LeaseCreationTrait
             'sla_id' => $data['sla_id'],
             'zone_id' => $property->zone_id ?? null,
             'date_start' => $data['date_start'],
-            'date_end' => $endDate->format('Y-m-d'),
-            'years' => $data['years'],
+            'date_end' => $dateEnd,
+            'years' => $years,
+            'open_ended' => $openEnded,
             'auto_renewal' => $data['auto_renewal'] ?? 'No',
             'escalation_rate' => $data['escalation_rate'] ?? 0,
             'escalation_frequency' => $data['escalation_frequency'] ?? 'Annually',
@@ -81,6 +84,30 @@ trait LeaseCreationTrait
         $unit->save();
 
         return $leaseAgreement;
+    }
+
+    /**
+     * Work out [date_end, years, open_ended] for a new lease from the creation data.
+     */
+    private function resolveLeaseTerm(array $data): array
+    {
+        if (!empty($data['open_ended'])) {
+            return [null, null, true];
+        }
+
+        $startDate = new \DateTime($data['date_start']);
+
+        if (!empty($data['date_end'])) {
+            $endDate = new \DateTime($data['date_end']);
+            $years = $data['years'] ?? rtrim(rtrim(number_format($startDate->diff($endDate)->days / 365.25, 2, '.', ''), '0'), '.');
+
+            return [$endDate->format('Y-m-d'), $years, false];
+        }
+
+        $endDate = clone $startDate;
+        $endDate->modify('+' . $data['years'] . ' years');
+
+        return [$endDate->format('Y-m-d'), $data['years'], false];
     }
 
     protected function storeInvoiceableItems($leaseAgreementId, $invoiceableItems)

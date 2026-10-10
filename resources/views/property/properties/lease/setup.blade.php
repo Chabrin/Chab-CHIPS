@@ -290,6 +290,9 @@
             if (row.date_end) {
                 return row.date_end;
             }
+            if (row.open_ended) {
+                return '<span class="text-muted">Open-ended</span>';
+            }
             var suggested = row.suggested_end_date || '';
             return '<div class="d-flex align-items-center gap-1">' +
                 '<input type="date" class="form-control form-control-sm end-date-input" value="' + suggested + '">' +
@@ -298,7 +301,7 @@
         }
 
         function fmtActionsCell(row) {
-            var eligible = row.sla_id && row.date_end;
+            var eligible = row.sla_id && (row.date_end || row.open_ended);
             if (eligible) {
                 return '<button type="button" class="btn btn-success btn-sm activate-btn" data-id="' + row.id + '">Activate</button>';
             }

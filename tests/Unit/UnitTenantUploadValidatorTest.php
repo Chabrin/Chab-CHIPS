@@ -130,6 +130,21 @@ class UnitTenantUploadValidatorTest extends TestCase
         $this->assertStringContainsString("Title 'Sir' must be one of: Mr, Mrs", $bad['tenants'][10]);
     }
 
+    public function test_lease_end_date_is_optional_but_must_be_a_real_date_after_the_start(): void
+    {
+        $open = $this->check([1 => $this->unit()], [10 => $this->individual(['lease_end_date' => null])]);
+        $this->assertNull($open['tenants'][10]);
+
+        $fixed = $this->check([1 => $this->unit()], [10 => $this->individual(['lease_end_date' => '2027-10-31'])]);
+        $this->assertNull($fixed['tenants'][10]);
+
+        $junk = $this->check([1 => $this->unit()], [10 => $this->individual(['lease_end_date' => 'next year'])]);
+        $this->assertStringContainsString("Lease End Date 'next year' must be a real date", $junk['tenants'][10]);
+
+        $before = $this->check([1 => $this->unit()], [10 => $this->individual(['lease_end_date' => '2026-10-01'])]);
+        $this->assertStringContainsString('Lease End Date must be after the Lease Start Date', $before['tenants'][10]);
+    }
+
     public function test_existing_identifiers_are_reported(): void
     {
         $result = $this->check([1 => $this->unit()], [10 => $this->individual()], ['national_ids' => ['123' => true]]);

@@ -1202,6 +1202,7 @@ class TenantExitController extends Controller
                 ->update([
                     'lease_status' => 'Vacating',
                     'date_end'     => $validated['actual_exit_date'],
+                    'open_ended'   => false,
                 ]);
 
             // 3. Mark unit physically vacant — do NOT clear tenant/lease link yet

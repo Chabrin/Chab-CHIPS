@@ -75,8 +75,12 @@
                                 <div class="col-md-4 mb-3">
                                     <label for="years" class="form-label">Duration (Years) <span class="text-danger">*</span></label>
                                     <input type="number" step="1" min="1" max="10" class="form-control @error('years') is-invalid @enderror"
-                                           id="years" name="years" value="{{ old('years', $lease->years) }}" required>
-                                    <small class="text-muted">End date recalculates from start date + years on save. Current end date: {{ optional($lease->date_end)->format('d-m-Y') ?? '-' }}</small>
+                                           id="years" name="years" value="{{ old('years', $lease->years) }}" {{ old('open_ended', $lease->open_ended) ? '' : 'required' }}>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" id="open_ended" name="open_ended" value="1" {{ old('open_ended', $lease->open_ended) ? 'checked' : '' }}>
+                                        <label class="form-check-label" for="open_ended">Open-ended (no end date)</label>
+                                    </div>
+                                    <small class="text-muted">End date recalculates from start date + years on save. Current end date: {{ $lease->open_ended ? 'Open-ended' : (optional($lease->date_end)->format('d-m-Y') ?? '-') }}</small>
                                     @error('years')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -146,6 +150,11 @@
 @section('scripts')
 <script>
     $(document).ready(function () {
+        // Open-ended leases have no term, so the years field is switched off
+        $('#open_ended').on('change', function () {
+            $('#years').prop('disabled', this.checked).prop('required', !this.checked);
+        }).trigger('change');
+
         var invoiceableCycles = [];
         var propertyId = {{ $lease->property_id ?? 'null' }};
 

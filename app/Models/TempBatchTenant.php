@@ -18,6 +18,7 @@ class TempBatchTenant extends Model
         'unit_number',
         'tenant_type',
         'lease_start_date',
+        'lease_end_date',
         'mobile_no',
         'names',
         'company_name',

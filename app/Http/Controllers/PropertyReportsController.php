@@ -138,7 +138,7 @@ class PropertyReportsController extends Controller
                     $j->on('la.unit_id', '=', 'sys_pm_units.id')
                       ->where('la.current_status_id', 1)
                       ->whereRaw('la.date_start <= NOW()')
-                      ->whereRaw('la.date_end >= NOW()');
+                      ->whereRaw('(la.date_end >= NOW() OR la.open_ended = true)');
                 })
                 ->leftJoin('sys_pm_clients as tc', 'tc.id', '=', 'la.tenant_id')
                 ->leftJoin('sys_pm_unit_types as ut', 'ut.id', '=', 'sys_pm_units.unit_type_id')
@@ -152,6 +152,7 @@ class PropertyReportsController extends Controller
                     'tc.reference_number as tenant_ref',
                     'la.ref_number as lease_ref',
                     'la.date_end as lease_end',
+                    'la.open_ended',
                     'sys_pm_units.occupancy_status_id',
                 ])
                 ->where('p.active', 1)
@@ -173,7 +174,7 @@ class PropertyReportsController extends Controller
                     'tenant_name' => $r->tenant_name ?? '-',
                     'tenant_ref'  => $r->tenant_ref ?? '-',
                     'lease_ref'   => $r->lease_ref ?? '-',
-                    'lease_end'   => $r->lease_end ? \Carbon\Carbon::parse($r->lease_end)->format('d/m/Y') : '-',
+                    'lease_end'   => $r->lease_end ? \Carbon\Carbon::parse($r->lease_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     'status'      => $r->occupancy_status_id == 31 ? 'Vacant' : 'Occupied',
                 ];
             });
@@ -199,7 +200,7 @@ class PropertyReportsController extends Controller
                     $j->on('la.unit_id', '=', 'sys_pm_units.id')
                       ->where('la.current_status_id', 1)
                       ->whereRaw('la.date_start <= NOW()')
-                      ->whereRaw('la.date_end >= NOW()');
+                      ->whereRaw('(la.date_end >= NOW() OR la.open_ended = true)');
                 })
                 ->leftJoin('sys_pm_clients as tc', 'tc.id', '=', 'la.tenant_id')
                 ->leftJoin('sys_pm_unit_types as ut', 'ut.id', '=', 'sys_pm_units.unit_type_id')
@@ -213,6 +214,7 @@ class PropertyReportsController extends Controller
                     'tc.reference_number as tenant_ref',
                     'la.ref_number as lease_ref',
                     'la.date_end as lease_end',
+                    'la.open_ended',
                     'sys_pm_units.occupancy_status_id',
                 ])
                 ->where('p.active', 1)
@@ -233,7 +235,7 @@ class PropertyReportsController extends Controller
                     $r->tenant_name ?? '-',
                     $r->tenant_ref ?? '-',
                     $r->lease_ref ?? '-',
-                    $r->lease_end ? \Carbon\Carbon::parse($r->lease_end)->format('d/m/Y') : '-',
+                    $r->lease_end ? \Carbon\Carbon::parse($r->lease_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     $r->occupancy_status_id == 31 ? 'Vacant' : 'Occupied',
                 ];
             })->toArray();
@@ -430,7 +432,7 @@ class PropertyReportsController extends Controller
                 ->where('sys_pm_lease_agreements.property_id', $request->property_id)
                 ->where('sys_pm_lease_agreements.current_status_id', 1)
                 ->whereDate('sys_pm_lease_agreements.date_start', '<=', $monthEnd)
-                ->whereDate('sys_pm_lease_agreements.date_end', '>=', $monthStart)
+                ->where(fn($q) => $q->where('sys_pm_lease_agreements.open_ended', true)->orWhereDate('sys_pm_lease_agreements.date_end', '>=', $monthStart))
                 ->orderBy('p.property_name')
                 ->orderBy('u.unit_code')
                 ->get();
@@ -490,7 +492,7 @@ class PropertyReportsController extends Controller
                 ->where('sys_pm_lease_agreements.property_id', $request->property_id)
                 ->where('sys_pm_lease_agreements.current_status_id', 1)
                 ->whereDate('sys_pm_lease_agreements.date_start', '<=', $monthEnd)
-                ->whereDate('sys_pm_lease_agreements.date_end', '>=', $monthStart)
+                ->where(fn($q) => $q->where('sys_pm_lease_agreements.open_ended', true)->orWhereDate('sys_pm_lease_agreements.date_end', '>=', $monthStart))
                 ->orderBy('p.property_name')
                 ->orderBy('u.unit_code')
                 ->get();
@@ -551,6 +553,7 @@ class PropertyReportsController extends Controller
                     'tc.names as tenant_name',
                     'sys_pm_lease_agreements.date_start',
                     'sys_pm_lease_agreements.date_end',
+                    'sys_pm_lease_agreements.open_ended',
                     'u.rent_amount',
                     'sys_pm_lease_agreements.escalation_rate',
                     'sys_pm_lease_agreements.lease_status',
@@ -571,7 +574,7 @@ class PropertyReportsController extends Controller
                     'unit'            => $r->unit_code . ' - ' . $r->unit_name,
                     'tenant'          => $r->tenant_name,
                     'date_start'      => $r->date_start ? \Carbon\Carbon::parse($r->date_start)->format('d/m/Y') : '-',
-                    'date_end'        => $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : '-',
+                    'date_end'        => $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     'rent'            => number_format($r->rent_amount ?? 0, 2),
                     'escalation_rate' => $r->escalation_rate ? number_format($r->escalation_rate, 2) . '%' : '-',
                     'status'          => $r->lease_status ?? '-',
@@ -605,6 +608,7 @@ class PropertyReportsController extends Controller
                     'tc.names as tenant_name',
                     'sys_pm_lease_agreements.date_start',
                     'sys_pm_lease_agreements.date_end',
+                    'sys_pm_lease_agreements.open_ended',
                     'u.rent_amount',
                     'sys_pm_lease_agreements.escalation_rate',
                     'sys_pm_lease_agreements.lease_status',
@@ -625,7 +629,7 @@ class PropertyReportsController extends Controller
                     $r->unit_code . ' - ' . $r->unit_name,
                     $r->tenant_name,
                     $r->date_start ? \Carbon\Carbon::parse($r->date_start)->format('d/m/Y') : '-',
-                    $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : '-',
+                    $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     number_format($r->rent_amount ?? 0, 2),
                     $r->escalation_rate ? number_format($r->escalation_rate, 2) . '%' : '-',
                     $r->lease_status ?? '-',
@@ -791,7 +795,7 @@ class PropertyReportsController extends Controller
                     $j->on('la.tenant_id', '=', 'sys_pm_clients.id')
                       ->where('la.current_status_id', 1)
                       ->whereRaw('la.date_start <= NOW()')
-                      ->whereRaw('la.date_end >= NOW()');
+                      ->whereRaw('(la.date_end >= NOW() OR la.open_ended = true)');
                 })
                 ->join('sys_pm_properties as p', 'p.id', '=', 'la.property_id')
                 ->join('sys_pm_units as u', 'u.id', '=', 'la.unit_id')
@@ -805,6 +809,7 @@ class PropertyReportsController extends Controller
                     'u.unit_name',
                     'la.date_start',
                     'la.date_end',
+                    'la.open_ended',
                     'u.rent_amount',
                 ])
                 ->when($request->filled('property_id'), fn($q) => $q->where('la.property_id', $request->property_id))
@@ -830,7 +835,7 @@ class PropertyReportsController extends Controller
                     'property'     => $r->property_name,
                     'unit'         => $r->unit_code . ' - ' . $r->unit_name,
                     'lease_start'  => $r->date_start ? \Carbon\Carbon::parse($r->date_start)->format('d/m/Y') : '-',
-                    'lease_end'    => $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : '-',
+                    'lease_end'    => $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     'rent'         => number_format($r->rent_amount ?? 0, 2),
                 ];
             });
@@ -855,7 +860,7 @@ class PropertyReportsController extends Controller
                     $j->on('la.tenant_id', '=', 'sys_pm_clients.id')
                       ->where('la.current_status_id', 1)
                       ->whereRaw('la.date_start <= NOW()')
-                      ->whereRaw('la.date_end >= NOW()');
+                      ->whereRaw('(la.date_end >= NOW() OR la.open_ended = true)');
                 })
                 ->join('sys_pm_properties as p', 'p.id', '=', 'la.property_id')
                 ->join('sys_pm_units as u', 'u.id', '=', 'la.unit_id')
@@ -869,6 +874,7 @@ class PropertyReportsController extends Controller
                     'u.unit_name',
                     'la.date_start',
                     'la.date_end',
+                    'la.open_ended',
                     'u.rent_amount',
                 ])
                 ->when($request->filled('property_id'), fn($q) => $q->where('la.property_id', $request->property_id))
@@ -893,7 +899,7 @@ class PropertyReportsController extends Controller
                     $r->property_name,
                     $r->unit_code . ' - ' . $r->unit_name,
                     $r->date_start ? \Carbon\Carbon::parse($r->date_start)->format('d/m/Y') : '-',
-                    $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : '-',
+                    $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     number_format($r->rent_amount ?? 0, 2),
                 ];
             })->toArray();
@@ -1850,6 +1856,7 @@ class PropertyReportsController extends Controller
                     'u.unit_name',
                     'la.date_start',
                     'la.date_end',
+                    'la.open_ended',
                     'la.rent_amount',
                     'la.contract_sent_at',
                     'la.contract_signed_at',
@@ -1875,7 +1882,7 @@ class PropertyReportsController extends Controller
                     'property'        => $r->property_name ?? '-',
                     'unit'            => ($r->unit_code ? $r->unit_code . ' - ' : '') . ($r->unit_name ?? '-'),
                     'lease_start'     => $r->date_start ? \Carbon\Carbon::parse($r->date_start)->format('d/m/Y') : '-',
-                    'lease_end'       => $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : '-',
+                    'lease_end'       => $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     'rent'            => number_format($r->rent_amount ?? 0, 2),
                     'contract_sent'   => $r->contract_sent_at ? \Carbon\Carbon::parse($r->contract_sent_at)->format('d/m/Y') : 'Not Sent',
                     'contract_signed' => $r->contract_signed_at ? \Carbon\Carbon::parse($r->contract_signed_at)->format('d/m/Y') : 'Not Signed',
@@ -1904,7 +1911,7 @@ class PropertyReportsController extends Controller
                 ->leftJoin('sys_pm_units as u', 'u.id', '=', 'la.unit_id')
                 ->select([
                     'la.id', 'la.ref_number', 'tc.names as tenant_name', 'p.property_name',
-                    'u.unit_code', 'u.unit_name', 'la.date_start', 'la.date_end',
+                    'u.unit_code', 'u.unit_name', 'la.date_start', 'la.date_end', 'la.open_ended',
                     'la.rent_amount', 'la.contract_sent_at', 'la.contract_signed_at',
                 ])
                 ->where(function ($q) {
@@ -1928,7 +1935,7 @@ class PropertyReportsController extends Controller
                     $r->property_name ?? '-',
                     ($r->unit_code ? $r->unit_code . ' - ' : '') . ($r->unit_name ?? '-'),
                     $r->date_start ? \Carbon\Carbon::parse($r->date_start)->format('d/m/Y') : '-',
-                    $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : '-',
+                    $r->date_end ? \Carbon\Carbon::parse($r->date_end)->format('d/m/Y') : (($r->open_ended ?? false) ? 'Open-ended' : '-'),
                     number_format($r->rent_amount ?? 0, 2),
                     $r->contract_sent_at ? \Carbon\Carbon::parse($r->contract_sent_at)->format('d/m/Y') : 'Not Sent',
                     $r->contract_signed_at ? \Carbon\Carbon::parse($r->contract_signed_at)->format('d/m/Y') : 'Not Signed',

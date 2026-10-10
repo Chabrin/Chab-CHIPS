@@ -154,6 +154,7 @@ class LeasesController extends Controller
                 $query->where('occupancy_status_id', 38) // Only occupied units
                       ->with(['leaseAgreements' => function($q) {
                           $q->where('current_status_id', 5) // Only active leases
+                            ->whereNotNull('date_end') // Open-ended leases have nothing to renew
                             ->orderBy('date_end', 'desc')
                             ->limit(1);
                       }]);
@@ -342,6 +343,10 @@ class LeasesController extends Controller
      */
     private function renewSingleLeaseRecord(LeaseAgreement $oldLease, int $years, float $escalationRate): LeaseAgreement
     {
+        if (!$oldLease->date_end) {
+            throw new \DomainException('A lease with no end date cannot be renewed.');
+        }
+
         // Create new lease with updated dates and terms
         $startDate = new \DateTime($oldLease->date_end);
         $startDate->modify('+1 day'); // Start the day after old lease ends
@@ -447,7 +452,8 @@ class LeasesController extends Controller
                 'tenant_id' => 'required|exists:sys_pm_clients,id',
                 'linked_lease' => 'nullable|exists:sys_pm_lease_agreements,id',
                 'date_start' => 'required|date',
-                'years' => 'required|integer|min:1|max:10',
+                'open_ended' => 'nullable|boolean',
+                'years' => 'required_unless:open_ended,1|nullable|integer|min:1|max:10',
                 'auto_renewal' => 'required|in:Yes,No',
                 'escalation_rate' => 'required|numeric|min:0|max:100',
                 'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
@@ -500,7 +506,8 @@ class LeasesController extends Controller
                 'tenant_id' => $validated['tenant_id'],
                 'sla_id' => $slaId,
                 'date_start' => $validated['date_start'],
-                'years' => $validated['years'],
+                'years' => $validated['years'] ?? null,
+                'open_ended' => $request->boolean('open_ended'),
                 'auto_renewal' => $validated['auto_renewal'],
                 'escalation_rate' => $validated['escalation_rate'],
                 'escalation_frequency' => $validated['escalation_frequency'],
@@ -589,7 +596,7 @@ class LeasesController extends Controller
                 'ref_number' => $lease->ref_number ?? '-',
                 'lease_status' => $lease->lease_status ?? '-',
                 'date_start' => $lease->date_start ? $lease->date_start->format('Y-m-d') : '-',
-                'date_end' => $lease->date_end ? $lease->date_end->format('Y-m-d') : '-',
+                'date_end' => $lease->open_ended ? 'Open-ended' : ($lease->date_end ? $lease->date_end->format('Y-m-d') : '-'),
                 'years' => $lease->years ?? '-',
                 'auto_renewal' => $lease->auto_renewal ?? 'No',
                 'escalation_rate' => $lease->escalation_rate,
@@ -679,7 +686,8 @@ class LeasesController extends Controller
 
             $validated = $request->validate([
                 'date_start' => 'required|date',
-                'years' => 'required|integer|min:1|max:10',
+                'open_ended' => 'nullable|boolean',
+                'years' => 'required_unless:open_ended,1|nullable|integer|min:1|max:10',
                 'auto_renewal' => 'required|in:Yes,No',
                 'escalation_rate' => 'required|numeric|min:0|max:100',
                 'escalation_frequency' => 'required|in:Annually,Semi-Annually,Quarterly,Monthly',
@@ -693,14 +701,19 @@ class LeasesController extends Controller
                 'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
             ]);
 
-            $startDate = new \DateTime($validated['date_start']);
-            $endDate = clone $startDate;
-            $endDate->modify('+' . $validated['years'] . ' years');
+            $openEnded = $request->boolean('open_ended');
+            $dateEnd = null;
+            if (!$openEnded) {
+                $endDate = new \DateTime($validated['date_start']);
+                $endDate->modify('+' . $validated['years'] . ' years');
+                $dateEnd = $endDate->format('Y-m-d');
+            }
 
             $lease->update([
                 'date_start' => $validated['date_start'],
-                'date_end' => $endDate->format('Y-m-d'),
-                'years' => $validated['years'],
+                'date_end' => $dateEnd,
+                'years' => $openEnded ? null : $validated['years'],
+                'open_ended' => $openEnded,
                 'auto_renewal' => $validated['auto_renewal'],
                 'escalation_rate' => $validated['escalation_rate'],
                 'escalation_frequency' => $validated['escalation_frequency'],
@@ -839,10 +852,10 @@ class LeasesController extends Controller
             $base = fn () => DB::table('sys_pm_lease_agreements as l')->where('l.current_status_id', 1);
 
             $missingSla = $base()->whereNull('l.sla_id')->count();
-            $missingEndDate = $base()->whereNull('l.date_end')->count();
+            $missingEndDate = $base()->whereNull('l.date_end')->where('l.open_ended', false)->count();
             $tenantMismatch = $this->scopeUnresolvedMismatch($base(), true)->count();
             $ready = $this->scopeUnresolvedMismatch(
-                $base()->whereNotNull('l.sla_id')->whereNotNull('l.date_end'),
+                $base()->whereNotNull('l.sla_id')->where(fn ($q) => $q->whereNotNull('l.date_end')->orWhere('l.open_ended', true)),
                 false
             )->count();
 
@@ -877,7 +890,7 @@ class LeasesController extends Controller
                 })
                 ->select([
                     'l.id', 'l.ref_number', 'l.tenant_id', 'l.property_id', 'l.unit_id',
-                    'l.sla_id', 'l.date_start', 'l.date_end', 'l.years', 'l.tenant_verified_at',
+                    'l.sla_id', 'l.date_start', 'l.date_end', 'l.years', 'l.open_ended', 'l.tenant_verified_at',
                     'p.property_name',
                     'u.unit_code',
                     DB::raw('ut.id as unit_tenant_id'),
@@ -888,13 +901,13 @@ class LeasesController extends Controller
                     $query->whereNull('l.sla_id');
                     break;
                 case 'missing_end_date':
-                    $query->whereNull('l.date_end');
+                    $query->whereNull('l.date_end')->where('l.open_ended', false);
                     break;
                 case 'tenant_mismatch':
                     $this->scopeUnresolvedMismatch($query, true);
                     break;
                 case 'ready':
-                    $query->whereNotNull('l.sla_id')->whereNotNull('l.date_end');
+                    $query->whereNotNull('l.sla_id')->where(fn ($q) => $q->whereNotNull('l.date_end')->orWhere('l.open_ended', true));
                     $this->scopeUnresolvedMismatch($query, false);
                     break;
                 // 'all': no extra filter
@@ -918,7 +931,7 @@ class LeasesController extends Controller
             $data = $leases->map(function ($l) use ($tenantNames) {
                 $hasMismatch = $l->unit_tenant_id && $l->unit_tenant_id != $l->tenant_id;
                 $suggestedEndDate = null;
-                if (!$l->date_end && $l->date_start && (float) $l->years > 0) {
+                if (!$l->date_end && !$l->open_ended && $l->date_start && (float) $l->years > 0) {
                     $suggestedEndDate = \Carbon\Carbon::parse($l->date_start)->addYears((int) $l->years)->toDateString();
                 }
 
@@ -936,6 +949,7 @@ class LeasesController extends Controller
                     'sla_id' => $l->sla_id,
                     'date_start' => $l->date_start ? \Carbon\Carbon::parse($l->date_start)->format('d M Y') : '-',
                     'date_end' => $l->date_end ? \Carbon\Carbon::parse($l->date_end)->format('d M Y') : null,
+                    'open_ended' => (bool) $l->open_ended,
                     'suggested_end_date' => $suggestedEndDate,
                     'years' => $l->years,
                 ];
@@ -998,6 +1012,7 @@ class LeasesController extends Controller
             $query = DB::table('sys_pm_lease_agreements as l')
                 ->where('l.current_status_id', 1)
                 ->whereNull('l.date_end')
+                ->where('l.open_ended', false)
                 ->whereNotNull('l.date_start');
 
             $leaseIds = $request->input('lease_ids');
@@ -1057,6 +1072,7 @@ class LeasesController extends Controller
             }
             if (!empty($validated['date_end'])) {
                 $update['date_end'] = $validated['date_end'];
+                $update['open_ended'] = false;
             }
 
             if (empty($update)) {
@@ -1087,7 +1103,7 @@ class LeasesController extends Controller
         try {
             $lease = LeaseAgreement::findOrFail($id);
 
-            if (!$lease->sla_id || !$lease->date_end) {
+            if (!$lease->sla_id || (!$lease->date_end && !$lease->open_ended)) {
                 return response()->json(['success' => false, 'message' => 'This lease needs an SLA and an end date before it can be activated.'], 422);
             }
 
@@ -1113,7 +1129,7 @@ class LeasesController extends Controller
             $query = DB::table('sys_pm_lease_agreements as l')
                 ->where('l.current_status_id', 1)
                 ->whereNotNull('l.sla_id')
-                ->whereNotNull('l.date_end');
+                ->where(fn ($q) => $q->whereNotNull('l.date_end')->orWhere('l.open_ended', true));
             $this->scopeUnresolvedMismatch($query, false);
 
             $leaseIds = $request->input('lease_ids');

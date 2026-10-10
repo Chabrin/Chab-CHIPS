@@ -120,7 +120,7 @@ class TenantsController extends Controller
                 ->where('unit_id', $unitId)
                 ->where('current_status_id', 5) // Active lease
                 ->whereDate('date_start', '<=', now())
-                ->whereDate('date_end', '>=', now())
+                ->where(fn ($q) => $q->where('open_ended', true)->orWhereDate('date_end', '>=', now()))
                 ->with('tenant:id,names,reference_number,mobile_number,email_address')
                 ->first();
 
@@ -915,6 +915,7 @@ class TenantsController extends Controller
                 'lease_status' => 'Terminated',
                 'current_status_id' => 2,
                 'date_end' => now(),
+                'open_ended' => false,
             ]);
 
         if ($tenant->unit_id) {

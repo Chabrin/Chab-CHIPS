@@ -117,9 +117,11 @@ class UnitTenantUploadTemplateService
             $sheet->setCellValue('A' . $row, '=IF(units!A' . $row . '="","",units!A' . $row . ')');
         }
 
-        $this->formatColumns($sheet, $headers, ['unit_number', 'lease_start_date']);
-        $dateCol = Coordinate::stringFromColumnIndex(array_search('lease_start_date', $headers) + 1);
-        $sheet->getStyle($dateCol . '2:' . $dateCol . $this->lastRow())->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        $this->formatColumns($sheet, $headers, ['unit_number', 'lease_start_date', 'lease_end_date']);
+        foreach (['lease_start_date', 'lease_end_date'] as $dateHeader) {
+            $dateCol = Coordinate::stringFromColumnIndex(array_search($dateHeader, $headers) + 1);
+            $sheet->getStyle($dateCol . '2:' . $dateCol . $this->lastRow())->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        }
 
         // Everything except column A stays editable once the sheet is protected.
         $sheet->getStyle('B2:' . $lastCol . $this->lastRow())->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
@@ -165,7 +167,7 @@ class UnitTenantUploadTemplateService
             'unit_number, National ID, passport and registration number: letters A-Z, digits, spaces and - / . only (no accents or other symbols).',
             'Pick dropdown values from the list; leave blank where optional. unit_type blank = Normal.',
             'vat_able: 0 = no VAT, 1 = VAT (blank = 0).',
-            'lease_start_date format: YYYY-MM-DD. Each lease is created for 1 year from the start date.',
+            'lease_start_date and lease_end_date format: YYYY-MM-DD. Leave lease_end_date blank for an open-ended lease (no end date); fill it for a fixed-term lease.',
             'Do not rename sheets, add or delete rows. Maximum ' . UnitTenantUploadColumns::MAX_ROWS . ' units per file.',
         ];
 

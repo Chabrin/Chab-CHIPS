@@ -25,7 +25,6 @@ class UnitTenantSubmitService
     use TenantRecordHelperTrait;
     use LeaseCreationTrait;
 
-    private const LEASE_YEARS = 1;
     private const LOCK_KEY = 7240041;
 
     private UnitTenantUploadBatchService $batches;
@@ -214,13 +213,31 @@ class UnitTenantSubmitService
             'tenant_id' => $tenant->id,
             'sla_id' => $slaId,
             'date_start' => (new \DateTime($tenantRow->lease_start_date))->format('Y-m-d'),
-            'years' => self::LEASE_YEARS,
+            'date_end' => $tenantRow->lease_end_date ? (new \DateTime($tenantRow->lease_end_date))->format('Y-m-d') : null,
+            'open_ended' => !$tenantRow->lease_end_date,
             'auto_renewal' => 'No',
             'escalation_rate' => 0,
             'escalation_frequency' => 'Annually',
         ]);
 
         $tenantRow->update(['submitted_at' => now(), 'tenant_id' => $tenant->id, 'lease_id' => $lease->id, 'error' => null]);
+    }
+
+    /**
+     * Whole lease years for the tenant record: null for an open-ended lease, otherwise the start-to-end span rounded (minimum 1).
+     *
+     * @param TempBatchTenant $row
+     * @return int|null
+     */
+    private function leaseYears(TempBatchTenant $row): ?int
+    {
+        if (!$row->lease_end_date) {
+            return null;
+        }
+
+        $days = (new \DateTime($row->lease_start_date))->diff(new \DateTime($row->lease_end_date))->days;
+
+        return max(1, (int) round($days / 365.25));
     }
 
     /**
@@ -323,7 +340,7 @@ class UnitTenantSubmitService
             'nationality_id' => $this->lookups->id('countries', $row->nationality),
             'registered_date' => now()->toDateString(),
             'lease_start_date' => (new \DateTime($row->lease_start_date))->format('Y-m-d'),
-            'lease_years' => self::LEASE_YEARS,
+            'lease_years' => $this->leaseYears($row),
             'escalation_rate' => 0,
             'frequency' => 'Annually',
             'prefered_messages_language_id' => 'English',

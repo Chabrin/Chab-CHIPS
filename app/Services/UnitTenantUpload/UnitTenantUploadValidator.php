@@ -255,6 +255,14 @@ class UnitTenantUploadValidator
             $errors[] = "Lease Start Date '{$row['lease_start_date']}' must be a real date written YYYY-MM-DD";
         }
 
+        if ($this->filled($row['lease_end_date'] ?? null)) {
+            if (!$this->isDate($row['lease_end_date'])) {
+                $errors[] = "Lease End Date '{$row['lease_end_date']}' must be a real date written YYYY-MM-DD, or left blank for an open-ended lease";
+            } elseif ($this->isDate($row['lease_start_date'] ?? '') && trim($row['lease_end_date']) <= trim($row['lease_start_date'])) {
+                $errors[] = 'Lease End Date must be after the Lease Start Date';
+            }
+        }
+
         if (!$this->filled($row['nok_name'] ?? null) && ($this->filled($row['nok_phone'] ?? null) || $this->filled($row['nok_email'] ?? null) || $this->filled($row['nok_id'] ?? null) || $this->filled($row['nok_relationship'] ?? null))) {
             $errors[] = 'nok_name required when other next of kin details are given';
         }

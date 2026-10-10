@@ -211,11 +211,11 @@
                                     $threeMonthsLater  = now()->addMonths(3)->endOfDay();
                                     $activeLeases      = $property->leaseAgreements
                                         ->where('current_status_id', 5)
-                                        ->filter(fn($l) => $l->date_end && \Carbon\Carbon::parse($l->date_end)->endOfDay()->isFuture())
+                                        ->filter(fn($l) => $l->open_ended || ($l->date_end && \Carbon\Carbon::parse($l->date_end)->endOfDay()->isFuture()))
                                         ->count();
                                     $totalTenants      = $property->leaseAgreements
                                         ->where('current_status_id', 5)
-                                        ->filter(fn($l) => $l->date_end && \Carbon\Carbon::parse($l->date_end)->endOfDay()->isFuture())
+                                        ->filter(fn($l) => $l->open_ended || ($l->date_end && \Carbon\Carbon::parse($l->date_end)->endOfDay()->isFuture()))
                                         ->unique('tenant_id')
                                         ->count();
                                     $expiringLeases    = $property->leaseAgreements

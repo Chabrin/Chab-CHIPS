@@ -74,7 +74,7 @@ class UnitTenantUploadParserService
             $hasData = false;
 
             foreach ($columns as $header) {
-                $row[$header] = $this->cellValue($sheet, $positions[$header], $r, $header === 'lease_start_date');
+                $row[$header] = $this->cellValue($sheet, $positions[$header], $r, in_array($header, ['lease_start_date', 'lease_end_date'], true));
 
                 if ($row[$header] !== null && !($isTenantSheet && $header === 'unit_number')) {
                     $hasData = true;
