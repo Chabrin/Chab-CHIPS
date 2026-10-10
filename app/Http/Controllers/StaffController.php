@@ -23,8 +23,10 @@ use App\Services\ErrorDispatcher;
 use App\Models\EmployeeAttendance;
 use App\Exports\AttendanceExport;
 use App\Models\EmployeeTermination;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use App\Jobs\ProcessAttendanceUpload;
 use Illuminate\Support\Facades\Crypt;
@@ -56,8 +58,7 @@ class StaffController extends Controller
     /**
      * Export all staff records to an Excel file.
      */
-    public function export()
-    {
+    public function export() {
         $fileName = 'staff_records_' . now()->format('Y_m_d_His') . '.xlsx';
         return Excel::download(new StaffExport, $fileName);
     }
@@ -1344,96 +1345,99 @@ class StaffController extends Controller
         return view('staff.employee_attendance.index');
     }
 
-   public function attendanceList(Request $request)
-{
-    try {
-        $records = EmployeeAttendance::with(['staff', 'employee_attendance_timed', 'createdBy'])
-            ->when($request->status, fn($q, $s) => $q->where('current_status_id', $s))
-            ->when($request->date, fn($q, $d) => $q->whereHas(
-                'employee_attendance_timed',
-                fn($t) => $t->whereDate('date', $d)
-            ))
-            ->orderBy('date_time', 'desc')
-            ->get()
-            ->map(function ($att) {
-                $encrypted_id = $att->staff ? Crypt::encrypt($att->staff->id) : null;
-                return [
-                    'id' => $att->id,
-                    'employee_id' => $att->employee_id,
-                    'staff' => $att->staff ? [
-                        'id' => $att->staff->id,
-                        'name' => $att->staff->full_names,
-                        'staff_number' => $att->staff->staff_number,
-                        'encrypted_id' => $encrypted_id,
-                    ] : null,
-                    'date_time' => $att->date_time ? $att->date_time->format('Y-m-d H:i') : '-',
-                    'month_year' => $att->month_year ?? '-',
-                    'employee_attendance_timed' => $att->employee_attendance_timed->map(fn($timed) => [
-                        'id' => $timed->id,
-                        'date' => $timed->date,
-                        'time_in' => $timed->time_in,
-                        'time_out' => $timed->time_out,
-                        'hours' => $timed->hours,
-                        'current_status_id' => $timed->current_status_id,
-                    ]),
-                    'current_status_id' => $att->current_status_id,
-                    'created_by' => $att->createdBy ? [
-                        'id' => $att->createdBy->id,
-                        'name' => $att->createdBy->name,
-                    ] : null,
-                    'can_read' => Auth::user()->isAbleTo('read_contracts'),
-                ];
-            });
-
-        return response()->json(['records' => $records]);
-    } catch (\Exception $e) {
+    /**
+     * Return attendance records as JSON, optionally filtered by date and status.
+     */
+    public function attendanceList(Request $request) {
         try {
-            ErrorDispatcher::dispatch($e);
-        } catch (\Exception $ex) {
-            Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            $records = EmployeeAttendance::with(['staff', 'employee_attendance_timed', 'createdBy'])
+                ->when($request->status, fn($q, $s) => $q->where('current_status_id', $s))
+                ->when($request->date, fn($q, $d) => $q->whereHas(
+                    'employee_attendance_timed',
+                    fn($t) => $t->whereDate('date', $d)
+                ))
+                ->orderBy('date_time', 'desc')
+                ->get()
+                ->map(function ($att) {
+                    $encrypted_id = $att->staff ? Crypt::encrypt($att->staff->id) : null;
+                    return [
+                        'id' => $att->id,
+                        'employee_id' => $att->employee_id,
+                        'staff' => $att->staff ? [
+                            'id' => $att->staff->id,
+                            'name' => $att->staff->full_names,
+                            'staff_number' => $att->staff->staff_number,
+                            'encrypted_id' => $encrypted_id,
+                        ] : null,
+                        'date_time' => $att->date_time ? $att->date_time->format('Y-m-d H:i') : '-',
+                        'month_year' => $att->month_year ?? '-',
+                        'employee_attendance_timed' => $att->employee_attendance_timed->map(fn($timed) => [
+                            'id' => $timed->id,
+                            'date' => $timed->date,
+                            'time_in' => $timed->time_in,
+                            'time_out' => $timed->time_out,
+                            'hours' => $timed->hours,
+                            'current_status_id' => $timed->current_status_id,
+                        ]),
+                        'current_status_id' => $att->current_status_id,
+                        'created_by' => $att->createdBy ? [
+                            'id' => $att->createdBy->id,
+                            'name' => $att->createdBy->name,
+                        ] : null,
+                        'can_read' => Auth::user()->isAbleTo('read_contracts'),
+                    ];
+                });
+
+            return response()->json(['records' => $records]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            Log::error('Error loading attendance: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load attendance records'], 500);
         }
-        Log::error('Error loading attendance: ' . $e->getMessage());
-        return response()->json(['error' => 'Failed to load attendance records'], 500);
     }
-}
 
-    public function attendanceUpload(Request $request)
-{
-    try {
-        $validator = \Validator::make($request->all(), [
-           'attendance_file' => 'required|file|mimes:csv,txt,xlsx|max:10240'
-        ]);
+    /**
+     * Validate an attendance CSV/XLSX upload and queue it for background processing.
+     */
+    public function attendanceUpload(Request $request) {
+        try {
+            $validator = Validator::make($request->all(), [
+                'attendance_file' => 'required|file|mimes:csv,txt,xlsx|max:10240',
+            ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first(),
+                ], 422);
+            }
+
+            $path = $request->file('attendance_file')->store('attendance_uploads');
+            Cache::forget(ProcessAttendanceUpload::resultKey(Auth::id()));
+
+            ProcessAttendanceUpload::dispatch($path, Auth::id());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Upload started. Data will appear once processed.',
+            ]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => $validator->errors()->first()
-            ], 422);
+                'message' => 'Failed to upload attendance. Please try again.',
+            ], 500);
         }
-
-        $file = $request->file('attendance_file');
-        $path = $file->store('attendance_uploads');
-
-        ProcessAttendanceUpload::dispatch($path, Auth::id());
-
-        return response()->json([
-            'success' => true, 
-            'message' => 'Upload started. Data will appear once processed.'
-        ]);
-
-    } catch (\Exception $e) {
-        try {
-            ErrorDispatcher::dispatch($e);
-        } catch (\Exception $ex) {
-            Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-        }
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to upload attendance: ' . $e->getMessage()
-        ], 500);
     }
-}
 
     public function attendanceSampleDownload()
     {
@@ -1471,11 +1475,21 @@ class StaffController extends Controller
         }
     }
 
-    public function attendanceExport(Request $request)
-        {
-              $fileName = 'employee_attendance_' . now()->format('Y_m_d_His') . '.xlsx';
-             return Excel::download(new AttendanceExport($request->date, $request->status), $fileName);
-        }
+    /**
+     * Return the summary of the current user's latest attendance upload, or pending if it hasn't finished.
+     */
+    public function attendanceUploadResult() {
+        $result = Cache::get(ProcessAttendanceUpload::resultKey(Auth::id()));
+        return response()->json($result ? ['done' => true] + $result : ['done' => false]);
+    }
+
+    /**
+     * Download attendance records as an Excel file, optionally filtered by date and status.
+     */
+    public function attendanceExport(Request $request) {
+        $fileName = 'employee_attendance_' . now()->format('Y_m_d_His') . '.xlsx';
+        return Excel::download(new AttendanceExport($request->date, $request->status), $fileName);
+    }
 
     // Contracts Bulk Edit
     public function bulkEditContractsIndex()

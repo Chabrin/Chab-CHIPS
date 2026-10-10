@@ -601,6 +601,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employee/attendance', [StaffController::class, 'attendanceIndex'])->name('attendance.index');
     Route::get('/ajax/hr/employee/attendance/list', [StaffController::class, 'attendanceList'])->name('ajax.attendance.list');
     Route::post('/ajax/hr/employee/attendance/upload', [StaffController::class, 'attendanceUpload'])->name('ajax.attendance.upload');
+    Route::get('/ajax/hr/employee/attendance/upload/result', [StaffController::class, 'attendanceUploadResult'])->name('ajax.attendance.upload.result');
     Route::get('/ajax/hr/employee/attendance/sample/download', [StaffController::class, 'attendanceSampleDownload'])->name('attendance.sample.download');
 
     // Staff Hr Communication Routes

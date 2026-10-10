@@ -48,10 +48,12 @@
                         <span>Sample Excel</span>
                     </a>
                     @endpermission
+                    @permission('read_staff')
                     <button id="btn-export-attendance" class="btn btn-outline-success btn-sm d-flex align-items-center gap-1">
                         <span class="material-symbols-outlined" style="font-size:18px;">table_view</span>
                         <span>Export</span>
                     </button>
+                    @endpermission
                 </div>
             </div>
         </div>
@@ -261,12 +263,24 @@ $('#btn-export-attendance').on('click', function() {
             success: function(res) {
                 if (res.success) {
                     $('#attendance_file').val('');
-                    alert(res.message);
-                    // the job runs in the background, so reload a few times
+                    // the job runs in the background, so poll for its summary
                     let tries = 0;
                     let poll = setInterval(() => {
-                        table.ajax.reload(null, false);
-                        if (++tries >= 5) clearInterval(poll);
+                        $.get("{{ route('ajax.attendance.upload.result') }}", function(r) {
+                            if (!r.done && ++tries < 40) return;
+                            clearInterval(poll);
+                            table.ajax.reload(null, false);
+                            if (!r.done) {
+                                alert('Upload is still processing. Refresh the page in a moment to see the records.');
+                                return;
+                            }
+                            let msg = 'Imported ' + r.imported + ' record(s), skipped ' + r.skipped + '.';
+                            if (r.reasons && r.reasons.length) {
+                                msg += '\n\n' + r.reasons.join('\n');
+                                if (r.more > 0) msg += '\n...and ' + r.more + ' more (see the log).';
+                            }
+                            alert(msg);
+                        });
                     }, 3000);
                 } else {
                     alert(res.message || 'Upload failed.');

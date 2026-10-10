@@ -10,15 +10,22 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 
 class AttendanceExport implements FromCollection, WithHeadings, ShouldAutoSize
 {
+    /**
+     * Optionally restrict the export to one date and/or approval status.
+     */
     public function __construct(private ?string $date = null, private ?string $status = null) {}
 
-    public function headings(): array
-    {
+    /**
+     * Excel column headers.
+     */
+    public function headings(): array {
         return ['Staff Number', 'Employee Name', 'Date', 'Time In', 'Time Out', 'Hours', 'Status', 'Created By', 'Uploaded At'];
     }
 
-    public function collection(): Collection
-    {
+    /**
+     * Flatten attendance records into one row per timed entry.
+     */
+    public function collection(): Collection {
         $records = EmployeeAttendance::with(['staff', 'employee_attendance_timed', 'createdBy'])
             ->when($this->status, fn($q, $s) => $q->where('current_status_id', $s))
             ->when($this->date, fn($q, $d) => $q->whereHas(

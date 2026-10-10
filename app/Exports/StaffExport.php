@@ -10,25 +10,23 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 class StaffExport implements FromCollection, WithHeadings, WithMapping
 {
     /**
-     * Eager-load relationships to avoid N+1 queries.
+     * Fetch all staff with relationships eager-loaded to avoid N+1 queries.
      */
-    public function collection()
-    {
+    public function collection() {
         return Staff::with([
             'position',
             'zone:id,zone_name',
             'zonesManaged:id,zone_name,zone_manager_id',
-            'zonesSupervised:id,zone_name,zone_supervisor_id'
+            'zonesSupervised:id,zone_name,zone_supervisor_id',
         ])
-        ->orderBy('full_names', 'asc')
-        ->get();
+            ->orderBy('full_names', 'asc')
+            ->get();
     }
 
     /**
-     * Excel Column Headers
+     * Excel column headers.
      */
-    public function headings(): array
-    {
+    public function headings(): array {
         return [
             'Staff No',
             'Employee Name',
@@ -42,10 +40,9 @@ class StaffExport implements FromCollection, WithHeadings, WithMapping
     }
 
     /**
-     * Map each staff row to the matching column
+     * Map each staff row to the matching column.
      */
-    public function map($member): array
-    {
+    public function map($member): array {
         // Consolidate any managed or supervised zone roles into a comma-separated string
         $zoneRoles = collect();
 
@@ -69,7 +66,7 @@ class StaffExport implements FromCollection, WithHeadings, WithMapping
             $member->mobile_number ?? '—',
             $member->national_id ?? '—',
             $zoneRoles->isNotEmpty() ? $zoneRoles->implode(' | ') : '—',
-            $member->current_status_id == 1 ? 'Active' : 'Inactive', // Adjust status mapping logic if using a relation/enum
+            Staff::STATUSES[$member->current_status_id] ?? 'Unknown',
         ];
     }
 }

@@ -3,11 +3,13 @@
 namespace App\Jobs;
 
 use App\Models\EmployeeAttendance;
+use App\Models\Staff;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -24,18 +26,23 @@ class ProcessAttendanceUpload implements ShouldQueue
     protected $filePath;
     protected $userId;
 
-    public function __construct($filePath, $userId)
-    {
+    /**
+     * Create a job that imports the uploaded attendance file for the given user.
+     */
+    public function __construct($filePath, $userId) {
         $this->filePath = $filePath;
         $this->userId   = $userId;
     }
 
-    public function handle()
-    {
+    /**
+     * Parse the uploaded CSV/XLSX and create attendance records, skipping invalid and duplicate rows.
+     */
+    public function handle() {
         $disk = config('filesystems.default');
 
         if (!Storage::disk($disk)->exists($this->filePath)) {
             Log::error('ProcessAttendanceUpload: file not found: ' . $this->filePath);
+            self::storeResult($this->userId, 0, 0, ['The uploaded file could not be found.']);
             return;
         }
 
@@ -46,6 +53,7 @@ class ProcessAttendanceUpload implements ShouldQueue
         if (count($rows) < 2) {
             Log::warning('ProcessAttendanceUpload: file has no data rows.');
             Storage::disk($disk)->delete($this->filePath);
+            self::storeResult($this->userId, 0, 0, ['The file has no data rows.']);
             return;
         }
 
@@ -55,8 +63,12 @@ class ProcessAttendanceUpload implements ShouldQueue
             array_shift($rows)
         );
 
+        // staff_number is zero-padded text ("004") but Excel/the integer employee_id column drop the padding, so compare normalised
+        $knownStaff = Staff::pluck('staff_number')->map(fn($n) => $this->normaliseStaffNumber($n))->flip();
+
         $imported = 0;
         $skipped  = 0;
+        $reasons  = [];
 
         foreach ($rows as $i => $data) {
             $line = $i + 2; // human line number (header = line 1)
@@ -78,12 +90,37 @@ class ProcessAttendanceUpload implements ShouldQueue
 
             if ($employeeId === '' || !$date) {
                 Log::warning("ProcessAttendanceUpload: skipped line {$line} (missing staff id or date).");
+                $reasons[] = "Line {$line}: missing staff ID or date";
+                $skipped++;
+                continue;
+            }
+
+            $employeeId = $this->normaliseStaffNumber($employeeId);
+
+            if (!$knownStaff->has($employeeId)) {
+                Log::warning("ProcessAttendanceUpload: skipped line {$line} (unknown staff number {$employeeId}).");
+                $reasons[] = "Line {$line}: unknown staff number {$employeeId}";
+                $skipped++;
+                continue;
+            }
+
+            $alreadyImported = EmployeeAttendance::where('employee_id', $employeeId)
+                ->whereHas('employee_attendance_timed', fn($t) => $t->whereDate('date', $date))
+                ->exists();
+            if ($alreadyImported) {
+                Log::warning("ProcessAttendanceUpload: skipped line {$line} (attendance for {$employeeId} on {$date} already exists).");
+                $reasons[] = "Line {$line}: attendance for staff {$employeeId} on {$date} already exists";
                 $skipped++;
                 continue;
             }
 
             $timeIn  = $this->toDateTime($row['time in'] ?? null, $date);
             $timeOut = $this->toDateTime($row['time out'] ?? null, $date);
+
+            // Overnight shift: time out falls on the next day
+            if ($timeIn && $timeOut && strtotime($timeOut) < strtotime($timeIn)) {
+                $timeOut = date('Y-m-d H:i:s', strtotime($timeOut . ' +1 day'));
+            }
 
             $hours = $row['hours'] ?? null;
             if (($hours === null || $hours === '') && $timeIn && $timeOut) {
@@ -111,21 +148,55 @@ class ProcessAttendanceUpload implements ShouldQueue
                 $imported++;
             } catch (\Throwable $e) {
                 $skipped++;
+                $reasons[] = "Line {$line}: could not be saved";
                 Log::error("ProcessAttendanceUpload: line {$line} failed: " . $e->getMessage());
             }
         }
 
         Log::info("ProcessAttendanceUpload: done. Imported {$imported}, skipped {$skipped}.");
         Storage::disk($disk)->delete($this->filePath);
+        self::storeResult($this->userId, $imported, $skipped, $reasons);
     }
 
-    public function failed(\Throwable $e)
-    {
+    /**
+     * Strip leading zeros from all-digit staff numbers so "004" and "4" compare equal.
+     */
+    private function normaliseStaffNumber($value): string {
+        $value = trim((string) $value);
+        return ctype_digit($value) ? (ltrim($value, '0') ?: '0') : $value;
+    }
+
+    /**
+     * Log the failure when the queued job exhausts its attempts.
+     */
+    public function failed(\Throwable $e) {
         Log::error('ProcessAttendanceUpload failed: ' . $e->getMessage());
+        self::storeResult($this->userId, 0, 0, ['The upload failed unexpectedly. Please try again or contact support.']);
     }
 
-    private function toDate($value): ?string
-    {
+    /**
+     * Cache key holding the latest upload summary for the given user.
+     */
+    public static function resultKey($userId): string {
+        return 'attendance_upload_result:' . $userId;
+    }
+
+    /**
+     * Save the upload summary so the attendance page can show what was imported and skipped.
+     */
+    private static function storeResult($userId, int $imported, int $skipped, array $reasons): void {
+        Cache::put(self::resultKey($userId), [
+            'imported' => $imported,
+            'skipped' => $skipped,
+            'reasons' => array_slice($reasons, 0, 20),
+            'more' => max(0, count($reasons) - 20),
+        ], now()->addHour());
+    }
+
+    /**
+     * Convert an Excel serial or date string to Y-m-d, or null if unparseable.
+     */
+    private function toDate($value): ?string {
         if ($value === null || $value === '') return null;
         if (is_numeric($value)) {
             return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d');
@@ -134,8 +205,10 @@ class ProcessAttendanceUpload implements ShouldQueue
         return $ts ? date('Y-m-d', $ts) : null;
     }
 
-    private function toDateTime($value, string $fallbackDate): ?string
-    {
+    /**
+     * Convert an Excel serial, time-only or datetime string to Y-m-d H:i:s, attaching the row's date to time-only values.
+     */
+    private function toDateTime($value, string $fallbackDate): ?string {
         if ($value === null || $value === '') return null;
 
         if (is_numeric($value)) {

@@ -125,9 +125,11 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                         </div>
 
                         <div class="d-flex align-items-center gap-2">
-                                <a href="{{ route('staff.export') }}" class="btn btn-outline-success">
-                                    <i class="bi bi-file-earmark-excel"></i> Export Excel
+                                @permission('read_staff')
+                                <a href="{{ route('staff.export') }}" class="btn btn-outline-success d-flex align-items-center gap-1">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">table_view</span> Export Excel
                                 </a>
+                                @endpermission
                             </div>
                         <div class="d-flex gap-2">
                             @permission('create_staff')
