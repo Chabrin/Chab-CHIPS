@@ -184,57 +184,36 @@
                                 </div>
                             </div>
 
-                            <!-- Billable Items & Returns Combination -->
+                            <!-- Tenant Invoiceable Items & Returns Combination -->
                             <div class="row mb-4">
                                 <div class="col-md-6">
-                                    <h6 class="text-muted border-bottom pb-2">Billable Items</h6>
-                                    <table class="table table-sm mb-0">
-                                        <tbody>
-                                            <tr>
-                                                <td style="width:32px;">
-                                                    <input class="form-check-input" type="checkbox" id="rent_selected" name="rent_selected" value="1" checked>
-                                                </td>
-                                                <td>Rent</td>
-                                                <td></td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <input class="form-check-input billable-item-toggle" type="checkbox"
-                                                           id="electricity_bill_selected" name="electricity_bill_selected" value="1"
-                                                           data-target="electricity_bill_cost">
-                                                </td>
-                                                <td>Electricity Bill</td>
-                                                <td>
-                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm"
-                                                           id="electricity_bill_cost" name="electricity_bill_cost" placeholder="Cost per unit" disabled>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <input class="form-check-input billable-item-toggle" type="checkbox"
-                                                           id="water_bill_selected" name="water_bill_selected" value="1"
-                                                           data-target="water_bill_cost">
-                                                </td>
-                                                <td>Water Bill</td>
-                                                <td>
-                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm"
-                                                           id="water_bill_cost" name="water_bill_cost" placeholder="Cost per unit" disabled>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td>
-                                                    <input class="form-check-input billable-item-toggle" type="checkbox"
-                                                           id="service_charges_selected" name="service_charges_selected" value="1"
-                                                           data-target="service_charges_cost">
-                                                </td>
-                                                <td>Service Charges</td>
-                                                <td>
-                                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm"
-                                                           id="service_charges_cost" name="service_charges_cost" placeholder="Cost per unit" disabled>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
+                                    <h6 class="text-muted border-bottom pb-2 d-flex align-items-center">
+                                        <span>Tenant Invoiceable Items</span>
+                                        <button type="button" class="btn btn-primary btn-sm ms-auto d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addInvoiceableItemModal">
+                                            <span class="material-symbols-outlined" style="font-size:18px;">add_circle</span>
+                                            <span class="ms-1">Add Item</span>
+                                        </button>
+                                    </h6>
+                                    <div id="invoiceableItemsHiddenInputs"></div>
+                                    <div class="table-responsive custom-scrollbar">
+                                        <table class="table table-sm mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Item</th>
+                                                    <th>Billing Code</th>
+                                                    <th>Default Cycle</th>
+                                                    <th>Amount</th>
+                                                    <th>% of Rent</th>
+                                                    <th style="width:40px;"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="selectedInvoiceableItemsBody">
+                                                <tr id="noInvoiceableItemsRow">
+                                                    <td colspan="6" class="text-muted text-center py-3">No items added yet.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
 
                                 <div class="col-md-6">
@@ -270,6 +249,64 @@
                         </form>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Tenant Invoiceable Item Modal -->
+<div class="modal fade" id="addInvoiceableItemModal" tabindex="-1" aria-labelledby="addInvoiceableItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addInvoiceableItemModalLabel">Add Tenant Invoiceable Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="modal_item_select" class="form-label">Item <span class="text-danger">*</span></label>
+                    <select class="form-select" id="modal_item_select">
+                        <option value="">Loading items...</option>
+                    </select>
+                    <div class="invalid-feedback d-block d-none" id="modal_item_select_error"></div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small text-muted">Billing Code</label>
+                        <input type="text" class="form-control form-control-sm" id="modal_item_billing_code" readonly>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted">Default Cycle</label>
+                        <input type="text" class="form-control form-control-sm" id="modal_item_cycle" readonly>
+                    </div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label">Value <span class="text-muted small">(optional — choose one)</span></label>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div class="form-check form-check-inline mb-0" style="width:110px;">
+                            <input class="form-check-input" type="radio" name="modal_item_choice" id="modal_choice_amount" value="amount">
+                            <label class="form-check-label" for="modal_choice_amount">Amount</label>
+                        </div>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:160px;" id="modal_item_amount" placeholder="Amount" disabled>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="form-check form-check-inline mb-0" style="width:110px;">
+                            <input class="form-check-input" type="radio" name="modal_item_choice" id="modal_choice_pct" value="percentage">
+                            <label class="form-check-label" for="modal_choice_pct">% of Rent</label>
+                        </div>
+                        <input type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:160px;" id="modal_item_pct" placeholder="e.g. 300" disabled>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm d-flex align-items-center" data-bs-dismiss="modal">
+                    <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                    <span class="ms-1">Cancel</span>
+                </button>
+                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addInvoiceableItemBtn">
+                    <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
+                    <span>Add</span>
+                </button>
             </div>
         </div>
     </div>
@@ -430,11 +467,140 @@
             }
         });
 
-        // Billable Items: enable/disable Cost per Unit alongside its checkbox
-        $('.billable-item-toggle').on('change', function() {
-            const targetId = $(this).data('target');
-            if (!targetId) return; // Rent row has no cost field
-            $('#' + targetId).prop('disabled', !this.checked).val(this.checked ? $('#' + targetId).val() : '');
+        // Tenant Invoiceable Items: add-one-at-a-time via modal, staged in a
+        // table, submitted as hidden inputs matching the server's items[] shape.
+        function escapeHtml(str) {
+            return $('<div>').text(str ?? '').html();
+        }
+
+        let invoiceableItemOptions = []; // [{id, item_name, billing_code, default_cycle_name}]
+        let selectedInvoiceableItems = []; // [{item_id, item_name, billing_code, default_cycle_name, choice, amount, percentage_of_rent}]
+
+        function loadInvoiceableItemOptions() {
+            $.ajax({
+                url: '{{ route("ajax.sla.tenant-invoiceable-items") }}',
+                method: 'GET',
+                success: function(response) {
+                    invoiceableItemOptions = response.items || [];
+                    const $select = $('#modal_item_select');
+                    $select.html('<option value="">Select an item...</option>');
+                    invoiceableItemOptions.forEach(function(item) {
+                        $select.append(`<option value="${item.id}">${escapeHtml(item.item_name)}</option>`);
+                    });
+                },
+                error: function(xhr) {
+                    console.error('Error loading tenant invoiceable items:', xhr.responseText);
+                    $('#modal_item_select').html('<option value="">Failed to load items</option>');
+                }
+            });
+        }
+
+        loadInvoiceableItemOptions();
+
+        // Populate the Billing Code / Default Cycle readonly fields when an item is picked
+        $('#modal_item_select').on('change', function() {
+            const itemId = $(this).val();
+            const item = invoiceableItemOptions.find(i => String(i.id) === String(itemId));
+            $('#modal_item_billing_code').val(item ? (item.billing_code || '-') : '');
+            $('#modal_item_cycle').val(item ? (item.default_cycle_name || '-') : '');
+        });
+
+        // Amount / % of Rent are mutually exclusive in the modal too
+        $('input[name="modal_item_choice"]').on('change', function() {
+            const choice = $(this).val();
+            $('#modal_item_amount').prop('disabled', choice !== 'amount').val('');
+            $('#modal_item_pct').prop('disabled', choice !== 'percentage').val('');
+        });
+
+        function resetAddInvoiceableItemModal() {
+            $('#modal_item_select').val('');
+            $('#modal_item_billing_code, #modal_item_cycle').val('');
+            $('input[name="modal_item_choice"]').prop('checked', false);
+            $('#modal_item_amount, #modal_item_pct').val('').prop('disabled', true);
+            $('#modal_item_select_error').addClass('d-none').text('');
+        }
+
+        $('#addInvoiceableItemModal').on('hidden.bs.modal', resetAddInvoiceableItemModal);
+
+        function renderSelectedInvoiceableItems() {
+            const $body = $('#selectedInvoiceableItemsBody');
+            const $hidden = $('#invoiceableItemsHiddenInputs');
+
+            if (selectedInvoiceableItems.length === 0) {
+                $body.html('<tr id="noInvoiceableItemsRow"><td colspan="6" class="text-muted text-center py-3">No items added yet.</td></tr>');
+                $hidden.empty();
+                return;
+            }
+
+            const rows = selectedInvoiceableItems.map(function(entry, index) {
+                return `<tr>
+                    <td>${escapeHtml(entry.item_name)}</td>
+                    <td>${escapeHtml(entry.billing_code || '-')}</td>
+                    <td>${escapeHtml(entry.default_cycle_name || '-')}</td>
+                    <td>${entry.choice === 'amount' ? escapeHtml(entry.amount) : '-'}</td>
+                    <td>${entry.choice === 'percentage' ? escapeHtml(entry.percentage_of_rent) + '%' : '-'}</td>
+                    <td>
+                        <a href="#" class="remove-invoiceable-item text-decoration-none" data-index="${index}" title="Remove">
+                            <span class="material-symbols-outlined" style="font-size:18px;color:#dc3545;">delete</span>
+                        </a>
+                    </td>
+                </tr>`;
+            });
+            $body.html(rows.join(''));
+
+            const hiddenInputs = selectedInvoiceableItems.map(function(entry) {
+                let html = `<input type="hidden" name="items[${entry.item_id}][selected]" value="1">`;
+                if (entry.choice === 'amount') {
+                    html += `<input type="hidden" name="items[${entry.item_id}][choice]" value="amount">`;
+                    html += `<input type="hidden" name="items[${entry.item_id}][amount]" value="${escapeHtml(entry.amount)}">`;
+                } else if (entry.choice === 'percentage') {
+                    html += `<input type="hidden" name="items[${entry.item_id}][choice]" value="percentage">`;
+                    html += `<input type="hidden" name="items[${entry.item_id}][percentage_of_rent]" value="${escapeHtml(entry.percentage_of_rent)}">`;
+                }
+                return html;
+            });
+            $hidden.html(hiddenInputs.join(''));
+        }
+
+        $('#addInvoiceableItemBtn').on('click', function() {
+            const itemId = $('#modal_item_select').val();
+            const $error = $('#modal_item_select_error');
+            $error.addClass('d-none').text('');
+
+            if (!itemId) {
+                $error.removeClass('d-none').text('Please select an item.');
+                return;
+            }
+
+            if (selectedInvoiceableItems.some(e => String(e.item_id) === String(itemId))) {
+                $error.removeClass('d-none').text('This item has already been added.');
+                return;
+            }
+
+            const item = invoiceableItemOptions.find(i => String(i.id) === String(itemId));
+            const choice = $('input[name="modal_item_choice"]:checked').val() || null;
+            const amount = choice === 'amount' ? $('#modal_item_amount').val() : null;
+            const percentageOfRent = choice === 'percentage' ? $('#modal_item_pct').val() : null;
+
+            selectedInvoiceableItems.push({
+                item_id: itemId,
+                item_name: item ? item.item_name : '',
+                billing_code: item ? item.billing_code : '',
+                default_cycle_name: item ? item.default_cycle_name : '',
+                choice: choice,
+                amount: amount,
+                percentage_of_rent: percentageOfRent,
+            });
+
+            renderSelectedInvoiceableItems();
+            $('#addInvoiceableItemModal').modal('hide');
+        });
+
+        $(document).on('click', '.remove-invoiceable-item', function(e) {
+            e.preventDefault();
+            const index = $(this).data('index');
+            selectedInvoiceableItems.splice(index, 1);
+            renderSelectedInvoiceableItems();
         });
 
     });

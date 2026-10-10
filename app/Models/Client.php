@@ -125,19 +125,11 @@ class Client extends Model
     {
         return $this->email_address;
     }
-
-    // Shared-PK link to the normalized tenant table (cb_tenant_records.id === sys_pm_clients.id).
-    // Null for landlord rows (type_id=1) and any tenant not yet migrated.
     public function tenantRecord()
     {
         return $this->hasOne(TenantRecord::class, 'id', 'id');
     }
 
-    // Read-only overrides: once a tenant row has a cb_tenant_records counterpart, these
-    // attributes resolve from there instead of the (no-longer-written-to) sys_pm_clients
-    // columns. Falls back to the raw column for landlords / unmigrated rows. Writes are
-    // untouched — mutators aren't defined, so `$client->names = 'x'` still targets the
-    // sys_pm_clients column directly.
     public function getNamesAttribute($value)
     {
         return $this->tenantRecord?->names ?? $value;
@@ -199,14 +191,10 @@ class Client extends Model
     {
         return $this->belongsTo(Property::class, 'property_id');
     }
-
-    // Landlord-side: properties this client owns (inverse of Property::client()).
-    // Distinct from property() above, which is a tenant's single assigned property.
     public function properties()
     {
         return $this->hasMany(Property::class, 'client_id');
     }
-
     public function unit()
     {
         return $this->belongsTo(Unit::class, 'unit_id');
@@ -231,9 +219,6 @@ class Client extends Model
     {
         return $this->hasMany(ClientOtherContact::class, 'parent_id', 'id');
     }
-
-    // Tenant-only normalized tables (cb_tenant_records shares this row's id) —
-    // additive alongside the above, which stay in place for landlord records.
     public function tenantBankDetails()
     {
         return $this->hasMany(TenantBankDetail::class, 'tenant_id', 'id');

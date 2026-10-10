@@ -7,6 +7,7 @@ use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Models\InvoiceableItem;
 use App\Models\ServiceAgreement;
+use App\Models\SlaInvoiceableItem;
 use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -164,17 +165,34 @@ class SLAController extends Controller
 
                     foreach ($candidates as $flag => $c) {
                         if ($mostRecent->{$flag} && $itemIds->has($c['name'])) {
-                            $billableItems[] = [
+                            $billableItems[$itemIds->get($c['name'])] = [
                                 'item_id' => $itemIds->get($c['name']),
                                 'name' => $c['name'],
                                 'cost' => $c['cost'],
+                                'percentage_of_rent' => null,
                             ];
                         }
                     }
                 }
+
+                // Items picked via the "Tenant Invoiceable Items" section
+                // (cb_sla_invoiceable_items) — keyed by item_id so these take
+                // precedence over a same-item legacy flag above, if both exist.
+                $pickedItems = SlaInvoiceableItem::where('sla_id', $mostRecent->id)
+                    ->with('item:id,item_name')
+                    ->get();
+
+                foreach ($pickedItems as $picked) {
+                    $billableItems[$picked->item_id] = [
+                        'item_id' => $picked->item_id,
+                        'name' => $picked->item->item_name ?? null,
+                        'cost' => $picked->amount,
+                        'percentage_of_rent' => $picked->percentage_of_rent,
+                    ];
+                }
             }
 
-            return response()->json(['sla' => $sla, 'billable_items' => $billableItems]);
+            return response()->json(['sla' => $sla, 'billable_items' => array_values($billableItems)]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA for property: ' . $e->getMessage());
@@ -190,11 +208,37 @@ class SLAController extends Controller
         try {
             $items = InvoiceableItem::orderBy('item_name', 'asc')
             ->get();
-    
+
             return response()->json(['items' => $items]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading invoiceable items: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load items'], 500);
+        }
+    }
+
+    /**
+     * Tenant-facing invoiceable items (applies_to BOTH or TENANT) for the SLA
+     * create/edit form's "Tenant Invoiceable Items" picker — item name,
+     * billing code, and the item's default billing cycle name.
+     */
+    public function getTenantInvoiceableItems()
+    {
+        try {
+            $items = InvoiceableItem::leftJoin('sys_set_invoiceable_items_cycles as c', 'c.id', '=', 'sys_set_invoiceable_items.default_cycle_id')
+                ->whereIn('applies_to', ['BOTH', 'TENANT'])
+                ->orderBy('item_name')
+                ->get([
+                    'sys_set_invoiceable_items.id',
+                    'sys_set_invoiceable_items.item_name',
+                    'sys_set_invoiceable_items.billing_code',
+                    'c.cycle_name as default_cycle_name',
+                ]);
+
+            return response()->json(['items' => $items]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading tenant invoiceable items: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load items'], 500);
         }
     }
@@ -286,6 +330,11 @@ class SLAController extends Controller
                 'water_bill_cost'              => 'nullable|numeric|min:0',
                 'service_charges_selected'     => 'nullable|boolean',
                 'service_charges_cost'         => 'nullable|numeric|min:0',
+                'items'                        => 'nullable|array',
+                'items.*.selected'             => 'nullable|boolean',
+                'items.*.choice'               => 'nullable|in:amount,percentage',
+                'items.*.amount'               => 'nullable|numeric|min:0',
+                'items.*.percentage_of_rent'   => 'nullable|numeric|min:0',
             ]);
 
             $currentSla = $this->findCurrentSlaForProperty((int) $validated['property_id']);
@@ -379,6 +428,26 @@ class SLAController extends Controller
             }
 
             Log::info('SLA Documents stored for SLA ID: ' . $serviceAgreement->id);
+
+            // Store selected Tenant Invoiceable Items — amount and
+            // percentage_of_rent are both optional and mutually exclusive
+            // (driven by the row's "Amount" / "% of Rent" radio on the form).
+            foreach ($validated['items'] ?? [] as $itemId => $itemData) {
+                if (empty($itemData['selected'])) {
+                    continue;
+                }
+
+                $choice = $itemData['choice'] ?? null;
+
+                SlaInvoiceableItem::create([
+                    'sla_id' => $serviceAgreement->id,
+                    'item_id' => (int) $itemId,
+                    'amount' => $choice === 'amount' ? ($itemData['amount'] ?? null) : null,
+                    'percentage_of_rent' => $choice === 'percentage' ? ($itemData['percentage_of_rent'] ?? null) : null,
+                ]);
+            }
+
+            Log::info('Tenant Invoiceable Items stored for SLA ID: ' . $serviceAgreement->id);
 
             Log::info('Service Agreement created successfully', ['sla_id' => $serviceAgreement->id]);
 
@@ -493,6 +562,27 @@ class SLAController extends Controller
                 ];
             })->values();
 
+            // Tenant Invoiceable Items for the view modal — the legacy fixed
+            // flags (if any are still set on older SLAs) plus everything
+            // picked via the dynamic items table (cb_sla_invoiceable_items).
+            $tenantInvoiceableItems = [];
+            if ($sla->electricity_bill_selected) {
+                $tenantInvoiceableItems[] = ['name' => 'Electricity Bill', 'amount' => $sla->electricity_bill_cost, 'percentage_of_rent' => null];
+            }
+            if ($sla->water_bill_selected) {
+                $tenantInvoiceableItems[] = ['name' => 'Water Bill', 'amount' => $sla->water_bill_cost, 'percentage_of_rent' => null];
+            }
+            if ($sla->service_charges_selected) {
+                $tenantInvoiceableItems[] = ['name' => 'Service Charges', 'amount' => $sla->service_charges_cost, 'percentage_of_rent' => null];
+            }
+            foreach (SlaInvoiceableItem::where('sla_id', $sla->id)->with('item:id,item_name')->get() as $picked) {
+                $tenantInvoiceableItems[] = [
+                    'name' => $picked->item->item_name ?? '-',
+                    'amount' => $picked->amount,
+                    'percentage_of_rent' => $picked->percentage_of_rent,
+                ];
+            }
+
             return response()->json([
                 'reference_number' => $sla->reference_number ?? '-',
                 'date_start' => $sla->date_start ? \Carbon\Carbon::parse($sla->date_start)->format('Y-m-d') : '-',
@@ -518,6 +608,7 @@ class SLAController extends Controller
                     ['name' => 'Water Bill', 'selected' => (bool) $sla->water_bill_selected, 'cost' => $sla->water_bill_cost],
                     ['name' => 'Service Charges', 'selected' => (bool) $sla->service_charges_selected, 'cost' => $sla->service_charges_cost],
                 ],
+                'tenant_invoiceable_items' => $tenantInvoiceableItems,
                 'documents' => $documents,
                 'created_by' => $sla->createdBy->name ?? '-',
                 'date_time' => $sla->date_time ? $sla->date_time->format('Y-m-d H:i') : '-',
@@ -545,7 +636,23 @@ class SLAController extends Controller
             $client = $sla->client;
             $properties = Property::where('client_id', $client->id)->get();
 
-            return view('property.properties.sla.edit', compact('sla', 'properties', 'client'));
+            $existingInvoiceableItems = SlaInvoiceableItem::where('sla_id', $sla->id)
+                ->with('item.cycle')
+                ->get()
+                ->map(function ($row) {
+                    return [
+                        'item_id' => $row->item_id,
+                        'item_name' => $row->item->item_name ?? '',
+                        'billing_code' => $row->item->billing_code ?? '',
+                        'default_cycle_name' => $row->item->cycle->cycle_name ?? null,
+                        'choice' => $row->amount !== null ? 'amount' : ($row->percentage_of_rent !== null ? 'percentage' : null),
+                        'amount' => $row->amount,
+                        'percentage_of_rent' => $row->percentage_of_rent,
+                    ];
+                })
+                ->values();
+
+            return view('property.properties.sla.edit', compact('sla', 'properties', 'client', 'existingInvoiceableItems'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA edit form: ' . $e->getMessage());
@@ -585,6 +692,11 @@ class SLAController extends Controller
                 'water_bill_cost'             => 'nullable|numeric|min:0',
                 'service_charges_selected'    => 'nullable|boolean',
                 'service_charges_cost'        => 'nullable|numeric|min:0',
+                'items'                       => 'nullable|array',
+                'items.*.selected'            => 'nullable|boolean',
+                'items.*.choice'              => 'nullable|in:amount,percentage',
+                'items.*.amount'              => 'nullable|numeric|min:0',
+                'items.*.percentage_of_rent'  => 'nullable|numeric|min:0',
             ]);
 
             $currentSla = $this->findCurrentSlaForProperty((int) $validated['property_id'], $serviceAgreement->id);
@@ -652,6 +764,25 @@ class SLAController extends Controller
                 'service_charges_selected'    => !empty($validated['service_charges_selected']),
                 'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
             ]);
+
+            // Replace the Tenant Invoiceable Items selection with whatever the
+            // form submitted — the staged table on the edit page is the full,
+            // authoritative list each time (same shape store() writes).
+            SlaInvoiceableItem::where('sla_id', $serviceAgreement->id)->delete();
+            foreach ($validated['items'] ?? [] as $itemId => $itemData) {
+                if (empty($itemData['selected'])) {
+                    continue;
+                }
+
+                $choice = $itemData['choice'] ?? null;
+
+                SlaInvoiceableItem::create([
+                    'sla_id' => $serviceAgreement->id,
+                    'item_id' => (int) $itemId,
+                    'amount' => $choice === 'amount' ? ($itemData['amount'] ?? null) : null,
+                    'percentage_of_rent' => $choice === 'percentage' ? ($itemData['percentage_of_rent'] ?? null) : null,
+                ]);
+            }
 
             Log::info('Service Agreement updated successfully', [
                 'sla_id' => $serviceAgreement->id,

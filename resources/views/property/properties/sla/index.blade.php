@@ -233,12 +233,14 @@
             statusBadge = '<span class="badge bg-secondary">Inactive</span>';
         }
 
-        function field(label, value) {
+        function infoRow(label1, value1, label2, value2) {
             return `
-                <div class="col-6 col-md-3">
-                    <div class="text-muted" style="font-size:10px; line-height:1.2;">${label}</div>
-                    <div class="fw-semibold" style="font-size:12px; line-height:1.3;">${value}</div>
-                </div>
+                <tr>
+                    <td class="text-muted" style="width:20%;font-size:12px;">${label1}</td>
+                    <td class="fw-semibold" style="width:30%;font-size:12px;">${value1}</td>
+                    <td class="text-muted" style="width:20%;font-size:12px;">${label2}</td>
+                    <td class="fw-semibold" style="width:30%;font-size:12px;">${value2}</td>
+                </tr>
             `;
         }
 
@@ -246,11 +248,18 @@
             return `<div class="text-muted text-uppercase" style="font-size:10px; letter-spacing:.5px;">${title}</div>`;
         }
 
-        var billableItemsBadges = sla.billable_items.map(function(item) {
-            if (!item.selected) return '';
-            var cost = (item.cost !== null && item.cost !== undefined) ? ' &mdash; ' + Number(item.cost).toFixed(2) : '';
-            return `<span class="badge bg-light text-dark border me-1">${item.name}${cost}</span>`;
-        }).join('') || '<span class="text-muted" style="font-size:12px;">None selected</span>';
+        var itemsRows = (sla.tenant_invoiceable_items || []).map(function(item) {
+            var value = (item.amount !== null && item.amount !== undefined)
+                ? Number(item.amount).toFixed(2)
+                : ((item.percentage_of_rent !== null && item.percentage_of_rent !== undefined)
+                    ? Number(item.percentage_of_rent).toFixed(2) + '% of Rent'
+                    : '-');
+            return `<tr><td style="font-size:12px;">${item.name}</td><td style="font-size:12px;" class="fw-semibold">${value}</td></tr>`;
+        }).join('');
+
+        var itemsTable = itemsRows
+            ? `<table class="table table-sm mb-0"><tbody>${itemsRows}</tbody></table>`
+            : '<span class="text-muted" style="font-size:12px;">No items added</span>';
 
         var documentsList = sla.documents.length ? sla.documents.map(function(doc) {
             return `
@@ -264,33 +273,28 @@
         return `
             <div class="card">
                 <div class="card-body p-3">
-                    <div class="row g-2">
-                        ${field('Reference Number', sla.reference_number)}
-                        ${field('Status', statusBadge)}
-                        ${field('Start Date', sla.date_start)}
-                        ${field('End Date', sla.date_end)}
-                        ${field('Duration (Years)', sla.years)}
-                        ${field('Auto Renewal', sla.auto_renewal)}
-                        ${field('Client Name', sla.client_name)}
-                        ${field('Client Reference', sla.client_reference)}
-                        ${field('Property', sla.property_name)}
-                        ${field('Property Reference', sla.property_reference)}
-                        ${field('Zone', sla.zone_name)}
-                        ${field('Commission', sla.commission_percentage + '%')}
-                        ${field('VAT', sla.vat)}
-                        ${field('VAT Percentage', sla.vat_per + '%')}
-                        ${field('Flat Rate VAT', sla.flat_rate_vat)}
-                        ${field('Registration Fee', sla.charge_registration_fee ? 'Yes' : 'No')}
-                        ${field('Created On', sla.date_time)}
-                        ${field('Created By', sla.created_by)}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-borderless mb-0">
+                            <tbody>
+                                ${infoRow('Reference Number', sla.reference_number, 'Status', statusBadge)}
+                                ${infoRow('Start Date', sla.date_start, 'End Date', sla.date_end)}
+                                ${infoRow('Duration (Years)', sla.years, 'Auto Renewal', sla.auto_renewal)}
+                                ${infoRow('Client Name', sla.client_name, 'Client Reference', sla.client_reference)}
+                                ${infoRow('Property', sla.property_name, 'Property Reference', sla.property_reference)}
+                                ${infoRow('Zone', sla.zone_name, 'Commission', sla.commission_percentage + '%')}
+                                ${infoRow('VAT', sla.vat, 'VAT Percentage', sla.vat_per + '%')}
+                                ${infoRow('Flat Rate VAT', sla.flat_rate_vat, 'Registration Fee', sla.charge_registration_fee ? 'Yes' : 'No')}
+                                ${infoRow('Created On', sla.date_time, 'Created By', sla.created_by)}
+                            </tbody>
+                        </table>
                     </div>
 
                     <hr class="my-2">
 
                     <div class="row g-2">
                         <div class="col-md-6">
-                            ${sectionLabel('Billable Items')}
-                            <div class="mt-1">${billableItemsBadges}</div>
+                            ${sectionLabel('Tenant Invoiceable Items')}
+                            <div class="mt-1">${itemsTable}</div>
                         </div>
                         <div class="col-md-6">
                             ${sectionLabel('Returns Combination')}

@@ -1151,6 +1151,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::put('/property/service-agreements/{id}', [SLAController::class, 'update'])->name('service.agreements.update');
     Route::delete('/property/service-agreements/{id}', [SLAController::class, 'destroy'])->name('service.agreements.destroy');
     Route::get('/invoiceable-items', [App\Http\Controllers\SLAController::class, 'getInvoiceableItems'])->name('invoiceable.items');
+    Route::get('/ajax/sla/tenant-invoiceable-items', [App\Http\Controllers\SLAController::class, 'getTenantInvoiceableItems'])->name('ajax.sla.tenant-invoiceable-items');
 
     // SLA routes
     Route::get('/property/sla/{encryptedId}/show', [App\Http\Controllers\SLAController::class, 'show'])->name('property.sla.show');
