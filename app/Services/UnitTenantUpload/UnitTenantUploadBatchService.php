@@ -216,7 +216,7 @@ class UnitTenantUploadBatchService
     }
 
     /**
-     * Soft delete a staged unit row and its tenant row.
+     * Permanently delete a staged unit row and its tenant row.
      *
      * @param TempBatchUnit $row
      */
@@ -228,15 +228,15 @@ class UnitTenantUploadBatchService
             $this->lockStaged($batch, $row);
 
             if ($row->unit_number !== null) {
-                $batch->tenants()->whereNull('submitted_at')->whereRaw('LOWER(unit_number) = ?', [strtolower($row->unit_number)])->delete();
+                $batch->tenants()->whereNull('submitted_at')->whereRaw('LOWER(unit_number) = ?', [strtolower($row->unit_number)])->forceDelete();
             }
-            $row->delete();
+            $row->forceDelete();
             $this->revalidate($batch);
         });
     }
 
     /**
-     * Soft delete a staged tenant row (its unit stays and is created vacant).
+     * Permanently delete a staged tenant row (its unit stays and is created vacant).
      *
      * @param TempBatchTenant $row
      */
@@ -246,34 +246,13 @@ class UnitTenantUploadBatchService
 
         DB::transaction(function () use ($row, $batch) {
             $this->lockStaged($batch, $row);
-            $row->delete();
+            $row->forceDelete();
             $this->revalidate($batch);
         });
     }
 
     /**
-     * Cancel a batch that has not been fully submitted; its rows are kept.
-     *
-     * @param TempUploadBatch $batch
-     * @param int|null $userId
-     */
-    public function cancel(TempUploadBatch $batch, ?int $userId): void
-    {
-        DB::transaction(function () use ($batch, $userId) {
-            $locked = TempUploadBatch::whereKey($batch->id)->lockForUpdate()->firstOrFail();
-
-            if ($locked->status !== TempUploadBatch::STATUS_STAGED) {
-                throw new DomainException('Only a staged batch can be cancelled.');
-            }
-
-            $locked->update(['status' => TempUploadBatch::STATUS_CANCELLED, 'cancelled_at' => now(), 'cancelled_by' => $userId]);
-        });
-
-        $batch->refresh();
-    }
-
-    /**
-     * Soft delete a batch and its rows; refused once any row was submitted.
+     * Permanently delete a batch and its rows; refused once any row was submitted.
      *
      * @param TempUploadBatch $batch
      */
@@ -285,13 +264,13 @@ class UnitTenantUploadBatchService
             if ($locked->status === TempUploadBatch::STATUS_SUBMITTING) {
                 throw new DomainException('This batch is being submitted.');
             }
-            if ($batch->units()->whereNotNull('submitted_at')->exists()) {
+            if ($locked->status === TempUploadBatch::STATUS_SUBMITTED || $batch->units()->whereNotNull('submitted_at')->exists() || $batch->tenants()->whereNotNull('submitted_at')->exists()) {
                 throw new DomainException('This batch has submitted rows and is kept as a record.');
             }
 
-            $batch->units()->delete();
-            $batch->tenants()->delete();
-            $batch->delete();
+            $batch->units()->withTrashed()->forceDelete();
+            $batch->tenants()->withTrashed()->forceDelete();
+            $locked->forceDelete();
         });
     }
 

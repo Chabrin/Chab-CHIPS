@@ -664,7 +664,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/unit-tenant-upload/batches', [App\Http\Controllers\UnitTenantUploadController::class, 'batches'])->name('property.unit-tenant-upload.batches');
     Route::get('/property/unit-tenant-upload/batches/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'show'])->name('property.unit-tenant-upload.show')->whereNumber('id');
     Route::post('/property/unit-tenant-upload/batches/{id}/submit', [App\Http\Controllers\UnitTenantUploadController::class, 'submit'])->name('property.unit-tenant-upload.submit')->whereNumber('id');
-    Route::post('/property/unit-tenant-upload/batches/{id}/cancel', [App\Http\Controllers\UnitTenantUploadController::class, 'cancel'])->name('property.unit-tenant-upload.cancel')->whereNumber('id');
     Route::delete('/property/unit-tenant-upload/batches/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyBatch'])->name('property.unit-tenant-upload.destroy')->whereNumber('id');
     Route::put('/property/unit-tenant-upload/units/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'updateUnit'])->name('property.unit-tenant-upload.units.update')->whereNumber('id');
     Route::delete('/property/unit-tenant-upload/units/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyUnit'])->name('property.unit-tenant-upload.units.destroy')->whereNumber('id');

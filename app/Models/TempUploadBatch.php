@@ -28,7 +28,6 @@ class TempUploadBatch extends Model
     public const STATUS_STAGED = 'staged';
     public const STATUS_SUBMITTING = 'submitting';
     public const STATUS_SUBMITTED = 'submitted';
-    public const STATUS_CANCELLED = 'cancelled';
 
     protected $casts = [
         'submitted_at' => 'datetime',
