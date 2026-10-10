@@ -33,7 +33,6 @@
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h6 class="mb-0">Batch details: <span id="utuReviewTitle"></span> <span id="utuReviewStatus" class="badge ms-2"></span> <span class="text-muted small ms-2" id="utuCounts"></span></h6>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-danger btn-sm" id="utuCancelBatchBtn">Cancel Batch</button>
             <button type="button" class="btn btn-outline-danger btn-sm" id="utuDeleteBatchBtn">Delete Batch</button>
             <button type="button" class="btn btn-primary btn-sm" id="utuSubmitBatchBtn">
                 <span class="spinner-border spinner-border-sm me-2 d-none" id="utuSubmitSpinner"></span>Submit Batch
@@ -111,7 +110,7 @@
         var utuCurrent = null;
         var utuProperty = null;
         var utuEdit = null;
-        var utuBadge = {staged: 'bg-warning text-dark', submitting: 'bg-info', submitted: 'bg-success', cancelled: 'bg-secondary'};
+        var utuBadge = {staged: 'bg-warning text-dark', submitting: 'bg-info', submitted: 'bg-success'};
 
         function esc(v) {
             return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -226,7 +225,6 @@
         }
 
         function utuState(row) {
-            if (row.state === 'cancelled') { return '<span class="badge bg-secondary">Cancelled</span>'; }
             if (row.state === 'submitted') { return '<span class="badge bg-success">Submitted</span>'; }
             if (row.state === 'error') { return '<span class="badge bg-danger">Error</span><div class="small text-danger">' + esc(row.error) + '</div>'; }
             return '<span class="badge bg-primary">Ready</span>';
@@ -253,7 +251,6 @@
 
         function utuPairState(pair) {
             var parts = [pair.unit, pair.tenant].filter(Boolean);
-            if (utuCurrent.batch.status === 'cancelled') { return {state: 'cancelled'}; }
             var errors = parts.filter(function(r) { return r.state === 'error'; }).map(function(r) { return r.error; });
             errors = errors.filter(function(e, i) { return errors.indexOf(e) === i; });
             if (errors.length) { return {state: 'error', error: errors.join('; ')}; }
@@ -277,8 +274,8 @@
             });
             $('#utuRowsTable').html(h + '</tbody>');
 
-            $('#utuSubmitBatchBtn, #utuCancelBatchBtn').prop('disabled', b.status !== 'staged');
-            $('#utuDeleteBatchBtn').prop('disabled', b.status === 'submitted' || b.status === 'submitting');
+            $('#utuSubmitBatchBtn').prop('disabled', b.status !== 'staged');
+            $('#utuDeleteBatchBtn').prop('disabled', b.status === 'submitted' || b.status === 'submitting' || utuCurrent.units.concat(utuCurrent.tenants).some(function(r) { return r.state === 'submitted'; }));
         }
 
         $('#utuBatchesTable').on('click', 'tbody tr', function(e) {
@@ -385,7 +382,7 @@
 
         function utuDeleteRow(kind, id) {
             var bid = utuCurrent.batch.id;
-            utuConfirm('Delete this row?', kind === 'units' ? 'Its tenant row is deleted too. Nothing is created.' : 'The unit stays and is created vacant.', 'Yes, Delete',
+            utuConfirm('Delete this row?', kind === 'units' ? 'It is permanently deleted along with its tenant row. Nothing is created.' : 'It is permanently deleted. The unit stays and is created vacant.', 'Yes, Delete',
                 utuBase + '/' + (kind === 'units' ? 'units' : 'tenants') + '/' + id, 'DELETE', function() { $('#utuRowModal').modal('hide'); utuRefresh(bid); });
         }
 
@@ -404,13 +401,8 @@
             });
         });
 
-        $('#utuCancelBatchBtn').on('click', function() {
-            var bid = utuCurrent.batch.id;
-            utuConfirm('Cancel this batch?', 'The rows are kept but can no longer be submitted.', 'Yes, Cancel', utuBase + '/batches/' + bid + '/cancel', 'POST', function() { utuRefresh(bid); });
-        });
-
         $('#utuDeleteBatchBtn').on('click', function() {
-            utuConfirm('Delete this batch?', 'A batch with submitted rows cannot be deleted.', 'Yes, Delete', utuBase + '/batches/' + utuCurrent.batch.id, 'DELETE', function() { utuClose(); utuLoadBatches(); });
+            utuConfirm('Delete this batch?', 'The batch and all its rows are permanently deleted. A batch with submitted rows cannot be deleted.', 'Yes, Delete', utuBase + '/batches/' + utuCurrent.batch.id, 'DELETE', function() { utuClose(); utuLoadBatches(); });
         });
     });
 </script>

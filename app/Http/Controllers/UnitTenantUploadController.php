@@ -144,7 +144,7 @@ class UnitTenantUploadController extends Controller
     }
 
     /**
-     * Delete a staged tenant row.
+     * Permanently delete a staged tenant row.
      */
     public function destroyTenant($id)
     {
@@ -168,18 +168,7 @@ class UnitTenantUploadController extends Controller
     }
 
     /**
-     * Cancel a staged batch.
-     */
-    public function cancel($id)
-    {
-        return $this->run(function () use ($id) {
-            $this->batches->cancel($this->batches->find((int) $id), Auth::id());
-            return ['message' => 'Batch cancelled.'];
-        }, 'Failed to cancel the batch');
-    }
-
-    /**
-     * Soft delete a batch.
+     * Permanently delete a batch that has no submitted rows.
      */
     public function destroyBatch($id)
     {

@@ -18,17 +18,16 @@
         box-shadow: none !important;
     }
     .repeater-table td {
-        padding: 90px 160px 90px 0 !important;
+        padding: 12px 22px 12px 0 !important;
         vertical-align: middle;
         white-space: nowrap;
-        font-size: 44px;
-        line-height: 1.8;
+        font-size: 16px;
     }
     .repeater-table td:last-child {
         padding-right: 0 !important;
     }
     .repeater-table th {
-        padding: 0 60px 20px 0 !important;
+        padding: 0 22px 12px 0 !important;
         font-size: 16px;
         font-weight: 600;
         text-transform: uppercase;

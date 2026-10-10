@@ -136,6 +136,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees', [StaffController::class, 'index'])->name('staff.index');
     Route::get('/hr/employees/create', [StaffController::class, 'create'])->name('staff.create');
     Route::post('/hr/employees', [StaffController::class, 'store'])->name('staff.store');
+    Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
+    Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
@@ -599,6 +601,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employee/attendance', [StaffController::class, 'attendanceIndex'])->name('attendance.index');
     Route::get('/ajax/hr/employee/attendance/list', [StaffController::class, 'attendanceList'])->name('ajax.attendance.list');
     Route::post('/ajax/hr/employee/attendance/upload', [StaffController::class, 'attendanceUpload'])->name('ajax.attendance.upload');
+    Route::get('/ajax/hr/employee/attendance/upload/result', [StaffController::class, 'attendanceUploadResult'])->name('ajax.attendance.upload.result');
     Route::get('/ajax/hr/employee/attendance/sample/download', [StaffController::class, 'attendanceSampleDownload'])->name('attendance.sample.download');
 
     // Staff Hr Communication Routes
@@ -661,7 +664,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/unit-tenant-upload/batches', [App\Http\Controllers\UnitTenantUploadController::class, 'batches'])->name('property.unit-tenant-upload.batches');
     Route::get('/property/unit-tenant-upload/batches/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'show'])->name('property.unit-tenant-upload.show')->whereNumber('id');
     Route::post('/property/unit-tenant-upload/batches/{id}/submit', [App\Http\Controllers\UnitTenantUploadController::class, 'submit'])->name('property.unit-tenant-upload.submit')->whereNumber('id');
-    Route::post('/property/unit-tenant-upload/batches/{id}/cancel', [App\Http\Controllers\UnitTenantUploadController::class, 'cancel'])->name('property.unit-tenant-upload.cancel')->whereNumber('id');
     Route::delete('/property/unit-tenant-upload/batches/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyBatch'])->name('property.unit-tenant-upload.destroy')->whereNumber('id');
     Route::put('/property/unit-tenant-upload/units/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'updateUnit'])->name('property.unit-tenant-upload.units.update')->whereNumber('id');
     Route::delete('/property/unit-tenant-upload/units/{id}', [App\Http\Controllers\UnitTenantUploadController::class, 'destroyUnit'])->name('property.unit-tenant-upload.units.destroy')->whereNumber('id');

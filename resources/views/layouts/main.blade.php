@@ -10,9 +10,9 @@
     <meta name="description" content="Property Management.">
     <meta name="keywords" content="Property administration, Property management system, Chabrin Agencies Ltd Property Manager, retirement fund software, Property fund administration, Property solution, member management, contributions, benefits">
 
-    <meta name="author" content="pixelstrap">
-    <link rel="icon" href="{{ asset('assets/images/favicon.png') }}" type="image/x-icon">
-    <link rel="shortcut icon" href="{{ asset('assets/images/favicon.png') }}" type="image/x-icon">
+    <link rel="icon" type="image/x-icon" href="{{ asset('assets/images/favicon.ico') }}?v=2">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('assets/images/favicon-32x32.png') }}?v=2">
+   <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('assets/images/favicon-16x16.png') }}?v=2">
     <title>Property Manager</title>
 
     <!-- Google fonts -->
@@ -61,47 +61,100 @@
     <!-- page-wrapper Start-->
     <div class="page-wrapper compact-wrapper" id="pageWrapper">
         <!-- Page Header Start-->
+       <div class="page-wrapper compact-wrapper" id="pageWrapper">
+
+        <!-- Page Header Start-->
+
         <div class="page-header">
+
             <div class="header-wrapper row m-0">
+
                 <div class="header-logo-wrapper col-auto p-0">
+
                     <div class="logo-wrapper"><a href="{{ url('/') }}"> <img class="img-fluid for-light" src="{{ asset('assets/images/logo/logo_light.png') }}" alt=""><img class="img-fluid for-dark" src="{{ asset('assets/images/logo/logo_dark.png') }}" alt=""></a></div>
+
                 </div>
+
                 <div class="nav-right col-xl-8 col-lg-12 col-auto pull-right right-header p-0">
+
                     <ul class="nav-menus">
+
                         <li class="mobile-hamburger">
+
                             <div class="toggle-sidebar">
+
                                 <span class="material-symbols-outlined">
+
                                     menu
+
                                 </span>
+
                             </div>
+
                         </li>
-                        <li class="serchinput">
-                            <div class="serchbox" id="global_search_submit" style="cursor:pointer;">
-                                <svg>
-                                    <use href="../assets/svg/icon-sprite.svg#search"></use>
-                                </svg>
-                            </div>
-                            <div class="form-group search-form">
-                                <input type="text" id="global_search_input" placeholder="Search here...">
+                        
+                       <li class="header-search-item">
+                            <div class="header-search-wrapper" id="header_search_box">
+                                <span class="material-symbols-outlined search-icon" id="global_search_submit">search</span>
+                                <input 
+                                    type="text" 
+                                    id="global_search_input" 
+                                    class="header-search-control" 
+                                    placeholder="Search properties, tenants, units..." 
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                                
                             </div>
                         </li>
 
 
                         <li class="profile-nav onhover-dropdown pe-0 py-0">
-                            <div class="d-flex align-items-center profile-media">
-                                <span class="material-symbols-outlined profile-menu-icon">arrow_drop_down</span>
+                            <div class="d-flex align-items-center profile-trigger-btn">
+                                {{-- Circular Avatar with Initials --}}
+                                <div class="header-avatar-circle">
+                                    {{ strtoupper(substr(Auth::user()->name ?? 'U', 0, 1)) }}
+                                </div>
+                                <div class="profile-meta d-none d-md-block text-start">
+                                    <span class="profile-name">{{ Auth::user()->name }}</span>
+                                    <span class="profile-role">Director</span>
+                                </div>
+                                <span class="material-symbols-outlined profile-caret">expand_more</span>
                             </div>
-                            <ul class="profile-dropdown onhover-show-div">
-                                <li><a href="{{ route('user.profile') }}"><span class="material-symbols-outlined">person</span><span>Profile</span></a></li>
-                                <li>
-                                    <form method="POST" action="{{ route('logout') }}" style="display: inline;">
-                                        @csrf
-                                        <a href="#" onclick="event.preventDefault(); this.closest('form').submit();" style="display: flex; align-items: center; text-decoration: none; color: inherit;">
-                                            <span class="material-symbols-outlined">logout</span><span>Log Out</span>
+
+                            {{-- Upgraded Dropdown Card --}}
+                            <div class="profile-dropdown onhover-show-div modern-profile-menu">
+                                {{-- Header inside menu with full details --}}
+                                <div class="profile-menu-header">
+                                    <div class="header-avatar-circle lg">
+                                        {{ strtoupper(substr(Auth::user()->name ?? 'U', 0, 1)) }}
+                                    </div>
+                                    <div class="profile-menu-info">
+                                        <h6>{{ Auth::user()->name }}</h6>
+                                        <p>{{ Auth::user()->email ?? 'Active Session' }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="profile-menu-divider"></div>
+
+                                <ul class="profile-menu-links">
+                                    <li>
+                                        <a href="{{ route('user.profile') }}" class="menu-item">
+                                            <span class="material-symbols-outlined">account_circle</span>
+                                            <span>My Account</span>
                                         </a>
-                                    </form>
-                                </li>
-                            </ul>
+                                    </li>
+                                    <li>
+                                        <form method="POST" action="{{ route('logout') }}" id="logout-form" class="m-0">
+                                            @csrf
+                                            <button type="submit" class="menu-item logout-btn">
+                                                <span class="material-symbols-outlined">logout</span>
+                                                <span>Log Out</span>
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
                         </li>
                     </ul>
                 </div>
@@ -128,13 +181,13 @@
 
                     <div class="logo-wrapper">
                         <p><b><a href="{{ route('dashboard') }}" style="text-decoration: none; color: inherit;">CHABRIN LTD.</a></b></p>
-
                         <div class="toggle-sidebar">
                             <span class="material-symbols-outlined">
-                                menu
-                            </span>
-                        </div>
+                                 menu
+                             </span>
+                         </div>
                     </div>
+
                     <div class="logo-icon-wrapper">
                     </div>
                     <nav class="sidebar-main">
@@ -346,27 +399,44 @@
 
     <script>
         // Global search box: Enter key navigates to the search results page
-        (function() {
-            var searchInput = document.getElementById('global_search_input');
-            var searchButton = document.getElementById('global_search_submit');
-            if (!searchInput) return;
+        (function () {
+        var searchInput = document.getElementById('global_search_input');
+        var searchButton = document.getElementById('global_search_submit');
+        if (!searchInput) return;
 
-            function submitSearch() {
-                var term = searchInput.value.trim();
-                if (term.length < 2) return;
-
-                window.location.href = '{{ route('search') }}?q=' + encodeURIComponent(term);
+        function submitSearch() {
+            var term = searchInput.value.trim();
+            if (term.length < 2) {
+                searchInput.focus();
+                return;
             }
+            window.location.href = '{{ route('search') }}?q=' + encodeURIComponent(term);
+        }
 
-            searchInput.addEventListener('keydown', function(e) {
-                if (e.key !== 'Enter') return;
-                e.preventDefault();
-                submitSearch();
+            // Submit on Enter
+            searchInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitSearch();
+                }
             });
 
+            // Click icon to search
             if (searchButton) {
-                searchButton.addEventListener('click', submitSearch);
+                searchButton.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    submitSearch();
+                });
             }
+
+            // Global 'Ctrl + K' or 'Cmd + K' to quick-focus the search bar
+            document.addEventListener('keydown', function (e) {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                    e.preventDefault();
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            });
         })();
     </script>
 
