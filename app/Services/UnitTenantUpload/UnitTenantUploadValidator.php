@@ -293,7 +293,11 @@ class UnitTenantUploadValidator
         }
 
         if ($this->filled($row['gender'] ?? null) && !$this->lookups->has('genders', $row['gender'])) {
-            $errors[] = "Gender '{$row['gender']}' must be Male, Female or Other";
+            $errors[] = "Gender '{$row['gender']}' must be one of: " . implode(', ', $this->lookups->names('genders'));
+        }
+
+        if ($this->filled($row['title'] ?? null) && !$this->lookups->has('titles', $row['title'])) {
+            $errors[] = "Title '{$row['title']}' must be one of: " . implode(', ', $this->lookups->names('titles'));
         }
 
         foreach ([['national_id', 'national_ids', 'National ID'], ['passport_no', 'passports', 'Passport No']] as [$field, $key, $label]) {

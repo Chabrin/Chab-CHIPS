@@ -18,6 +18,7 @@ class UnitTenantUploadValidatorTest extends TestCase
             'categories' => [],
             'countries' => ['Kenya' => ['id' => 1, 'name' => 'Kenya']],
             'genders' => ['MALE' => ['id' => 1, 'name' => 'MALE'], 'FEMALE' => ['id' => 2, 'name' => 'FEMALE']],
+            'titles' => ['Mr' => ['id' => 1, 'name' => 'Mr'], 'Mrs' => ['id' => 2, 'name' => 'Mrs']],
         ]));
     }
 
@@ -114,6 +115,19 @@ class UnitTenantUploadValidatorTest extends TestCase
         $this->assertStringContainsString('not a valid email', $result['tenants'][10]);
         $this->assertStringContainsString("Nationality 'Atlantis' not recognised", $result['tenants'][10]);
         $this->assertStringContainsString("Gender 'Robot'", $result['tenants'][10]);
+    }
+
+    public function test_gender_and_title_match_the_lookup_ignoring_case(): void
+    {
+        $ok = $this->check([1 => $this->unit()], [10 => $this->individual(['gender' => 'Female', 'title' => 'mrs', 'nationality' => 'kenya'])]);
+        $this->assertNull($ok['tenants'][10]);
+
+        $hidden = $this->check([1 => $this->unit()], [10 => $this->individual(['gender' => "Female\u{00A0}", 'title' => "\u{200B}Mr", 'nationality' => "Kenya\u{00A0}"])]);
+        $this->assertNull($hidden['tenants'][10]);
+
+        $bad = $this->check([1 => $this->unit()], [10 => $this->individual(['gender' => 'Fem', 'title' => 'Sir'])]);
+        $this->assertStringContainsString('must be one of: MALE, FEMALE', $bad['tenants'][10]);
+        $this->assertStringContainsString("Title 'Sir' must be one of: Mr, Mrs", $bad['tenants'][10]);
     }
 
     public function test_existing_identifiers_are_reported(): void

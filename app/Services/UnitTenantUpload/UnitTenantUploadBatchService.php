@@ -343,6 +343,7 @@ class UnitTenantUploadBatchService
                 'topology' => $this->lookups->names('topologies'),
                 'unit_category' => $this->lookups->names('categories'),
                 'gender' => $this->lookups->names('genders'),
+                'title' => $this->lookups->names('titles'),
                 'nationality' => $this->lookups->names('countries'),
                 'vat_able' => ['0', '1'],
             ],
@@ -408,7 +409,7 @@ class UnitTenantUploadBatchService
      */
     private function canonical(array $row): array
     {
-        $lists = ['unit_type' => 'unit_types', 'usage_type' => 'usage_types', 'topology' => 'topologies', 'unit_category' => 'categories', 'tenant_type' => 'tenant_types', 'gender' => 'genders', 'nationality' => 'countries'];
+        $lists = ['unit_type' => 'unit_types', 'usage_type' => 'usage_types', 'topology' => 'topologies', 'unit_category' => 'categories', 'tenant_type' => 'tenant_types', 'gender' => 'genders', 'title' => 'titles', 'nationality' => 'countries'];
 
         foreach ($lists as $field => $list) {
             if (!empty($row[$field]) && ($name = $this->lookups->name($list, $row[$field]))) {

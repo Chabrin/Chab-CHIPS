@@ -78,6 +78,10 @@ final class UnitTenantUploadColumns
         'usage_type' => 'usage_types',
         'topology' => 'topologies',
         'vat_able' => 'vat',
+        'unit_category' => 'categories',
+        'gender' => 'genders',
+        'title' => 'titles',
+        'nationality' => 'countries',
     ];
 
     /**

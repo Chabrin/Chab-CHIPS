@@ -2,8 +2,12 @@
 
 namespace App\Services\UnitTenantUpload;
 
+use App\Models\Gender;
 use App\Models\Property;
+use App\Models\Salutation;
+use App\Models\SystemCountry;
 use App\Models\TenantType;
+use App\Models\UnitCategory;
 use App\Models\UnitTopology;
 use App\Models\UnitType;
 use App\Models\UsageType;
@@ -68,6 +72,10 @@ class UnitTenantUploadTemplateService
             'unit_types' => UnitType::orderBy('id')->pluck('type_name')->all(),
             'usage_types' => UsageType::orderBy('id')->pluck('type_name')->all(),
             'topologies' => UnitTopology::orderBy('topology_name')->pluck('topology_name')->all(),
+            'categories' => UnitCategory::orderBy('category_name')->pluck('category_name')->all(),
+            'genders' => Gender::orderBy('id')->pluck('name')->all(),
+            'titles' => Salutation::orderBy('id')->pluck('name')->all(),
+            'countries' => SystemCountry::orderBy('country_name')->pluck('country_name')->all(),
             'vat' => ['0', '1'],
         ];
     }

@@ -3,6 +3,7 @@
 namespace App\Services\UnitTenantUpload;
 
 use App\Models\Gender;
+use App\Models\Salutation;
 use App\Models\SystemCountry;
 use App\Models\TenantType;
 use App\Models\UnitCategory;
@@ -102,14 +103,14 @@ class UnitTenantUploadLookups
     }
 
     /**
-     * Lowercase with all whitespace removed.
+     * Lowercase with all whitespace removed, including non-breaking and zero-width spaces pasted in from Excel/Word/web.
      *
      * @param string $value
      * @return string
      */
     public static function key(string $value): string
     {
-        return strtolower(preg_replace('/\s+/', '', $value));
+        return mb_strtolower(preg_replace('/[\s\p{Z}\p{Cf}]+/u', '', $value) ?? $value);
     }
 
     /**
@@ -123,7 +124,7 @@ class UnitTenantUploadLookups
             return $this->maps;
         }
 
-        $maps = ['unit_types' => [], 'usage_types' => [], 'topologies' => [], 'tenant_types' => [], 'categories' => [], 'countries' => [], 'genders' => []];
+        $maps = ['unit_types' => [], 'usage_types' => [], 'topologies' => [], 'tenant_types' => [], 'categories' => [], 'countries' => [], 'genders' => [], 'titles' => []];
 
         foreach (UnitType::orderBy('id')->get(['id', 'type_name']) as $r) {
             $maps['unit_types'][self::key($r->type_name)] = ['id' => $r->id, 'name' => $r->type_name];
@@ -149,6 +150,9 @@ class UnitTenantUploadLookups
         }
         foreach (Gender::all(['id', 'name']) as $r) {
             $maps['genders'][self::key($r->name)] = ['id' => $r->id, 'name' => $r->name];
+        }
+        foreach (Salutation::all(['id', 'name']) as $r) {
+            $maps['titles'][self::key($r->name)] = ['id' => $r->id, 'name' => $r->name];
         }
 
         return $this->maps = $maps;
