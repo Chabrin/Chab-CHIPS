@@ -550,7 +550,7 @@ class PropertyConfirmationController extends Controller
                             'property' => $lease->property->property_name ?? '-',
                             'unit' => $lease->unit->unit_number ?? '-',
                             'date_start' => $lease->date_start ? \Carbon\Carbon::parse($lease->date_start)->format('d-m-Y') : '-',
-                            'date_end' => $lease->date_end ? \Carbon\Carbon::parse($lease->date_end)->format('d-m-Y') : '-',
+                            'date_end' => $lease->date_end ? \Carbon\Carbon::parse($lease->date_end)->format('d-m-Y') : ($lease->open_ended ? 'Open-ended' : '-'),
                             'rent_amount' => '-',
                             'created_at' => $lease->date_time ? $lease->date_time->format('d-m-Y H:i') : '-',
                             'created_by_name' => '-',

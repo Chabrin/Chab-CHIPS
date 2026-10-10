@@ -328,6 +328,9 @@ class LeasesController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\DomainException $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
@@ -468,7 +471,7 @@ class LeasesController extends Controller
                 'invoicable_items.*.amount' => 'required|numeric|min:0',
                 'invoicable_items.*.cycle' => 'required|exists:sys_set_invoiceable_items_cycles,id',
                 'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
-            ]);
+            ], ['years.required_unless' => 'Enter the lease duration in years, or tick Open-ended.']);
 
             // Confirm the property exists up front (createLeaseAgreementRecord()
             // re-fetches it internally for zone_id, but failing fast here keeps
@@ -699,7 +702,7 @@ class LeasesController extends Controller
                 'invoicable_items.*.amount' => 'required|numeric|min:0',
                 'invoicable_items.*.cycle' => 'required|exists:sys_set_invoiceable_items_cycles,id',
                 'invoicable_items.*.prepay_client' => 'nullable|in:Yes',
-            ]);
+            ], ['years.required_unless' => 'Enter the lease duration in years, or tick Open-ended.']);
 
             $openEnded = $request->boolean('open_ended');
             $dateEnd = null;
@@ -913,7 +916,7 @@ class LeasesController extends Controller
                 // 'all': no extra filter
             }
 
-            $leases = $query->orderBy('l.date_start', 'desc')->limit(500)->get();
+            $leases = $query->orderByRaw('l.date_start DESC NULLS LAST')->limit(500)->get();
 
             // withAll(): plain Client lookups get silently filtered by
             // user_clients_properties, hiding real tenants outside the current

@@ -75,9 +75,9 @@
                                 <div class="col-md-4 mb-3">
                                     <label for="years" class="form-label">Duration (Years) <span class="text-danger">*</span></label>
                                     <input type="number" step="1" min="1" max="10" class="form-control @error('years') is-invalid @enderror"
-                                           id="years" name="years" value="{{ old('years', $lease->years) }}" {{ old('open_ended', $lease->open_ended) ? '' : 'required' }}>
+                                           id="years" name="years" value="{{ old('years', $lease->years) }}" {{ (session()->hasOldInput() ? old('open_ended') : $lease->open_ended) ? '' : 'required' }}>
                                     <div class="form-check mt-2">
-                                        <input class="form-check-input" type="checkbox" id="open_ended" name="open_ended" value="1" {{ old('open_ended', $lease->open_ended) ? 'checked' : '' }}>
+                                        <input class="form-check-input" type="checkbox" id="open_ended" name="open_ended" value="1" {{ (session()->hasOldInput() ? old('open_ended') : $lease->open_ended) ? 'checked' : '' }}>
                                         <label class="form-check-label" for="open_ended">Open-ended (no end date)</label>
                                     </div>
                                     <small class="text-muted">End date recalculates from start date + years on save. Current end date: {{ $lease->open_ended ? 'Open-ended' : (optional($lease->date_end)->format('d-m-Y') ?? '-') }}</small>

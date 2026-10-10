@@ -141,7 +141,7 @@ class PropertyReportsController extends Controller
                       ->whereRaw('(la.date_end >= NOW() OR la.open_ended = true)');
                 })
                 ->leftJoin('sys_pm_clients as tc', 'tc.id', '=', 'la.tenant_id')
-                ->leftJoin('sys_pm_unit_types as ut', 'ut.id', '=', 'sys_pm_units.unit_type_id')
+                ->leftJoin('sys_pm_unit_types as ut', fn($j) => $j->whereRaw('CAST(ut.id AS TEXT) = sys_pm_units.unit_type_id'))
                 ->select([
                     'p.property_name',
                     'sys_pm_units.unit_code',
@@ -203,7 +203,7 @@ class PropertyReportsController extends Controller
                       ->whereRaw('(la.date_end >= NOW() OR la.open_ended = true)');
                 })
                 ->leftJoin('sys_pm_clients as tc', 'tc.id', '=', 'la.tenant_id')
-                ->leftJoin('sys_pm_unit_types as ut', 'ut.id', '=', 'sys_pm_units.unit_type_id')
+                ->leftJoin('sys_pm_unit_types as ut', fn($j) => $j->whereRaw('CAST(ut.id AS TEXT) = sys_pm_units.unit_type_id'))
                 ->select([
                     'p.property_name',
                     'sys_pm_units.unit_code',
@@ -273,7 +273,7 @@ class PropertyReportsController extends Controller
         try {
             $records = Unit::query()
                 ->join('sys_pm_properties as p', 'p.id', '=', 'sys_pm_units.property_id')
-                ->leftJoin('sys_pm_unit_types as ut', 'ut.id', '=', 'sys_pm_units.unit_type_id')
+                ->leftJoin('sys_pm_unit_types as ut', fn($j) => $j->whereRaw('CAST(ut.id AS TEXT) = sys_pm_units.unit_type_id'))
                 ->leftJoin('sys_pm_lease_agreements as la', function ($j) {
                     $j->on('la.unit_id', '=', 'sys_pm_units.id');
                 })
@@ -331,7 +331,7 @@ class PropertyReportsController extends Controller
         try {
             $records = Unit::query()
                 ->join('sys_pm_properties as p', 'p.id', '=', 'sys_pm_units.property_id')
-                ->leftJoin('sys_pm_unit_types as ut', 'ut.id', '=', 'sys_pm_units.unit_type_id')
+                ->leftJoin('sys_pm_unit_types as ut', fn($j) => $j->whereRaw('CAST(ut.id AS TEXT) = sys_pm_units.unit_type_id'))
                 ->leftJoin('sys_pm_lease_agreements as la', function ($j) {
                     $j->on('la.unit_id', '=', 'sys_pm_units.id');
                 })
@@ -1857,7 +1857,7 @@ class PropertyReportsController extends Controller
                     'la.date_start',
                     'la.date_end',
                     'la.open_ended',
-                    'la.rent_amount',
+                    'u.rent_amount',
                     'la.contract_sent_at',
                     'la.contract_signed_at',
                 ])
@@ -1912,7 +1912,7 @@ class PropertyReportsController extends Controller
                 ->select([
                     'la.id', 'la.ref_number', 'tc.names as tenant_name', 'p.property_name',
                     'u.unit_code', 'u.unit_name', 'la.date_start', 'la.date_end', 'la.open_ended',
-                    'la.rent_amount', 'la.contract_sent_at', 'la.contract_signed_at',
+                    'u.rent_amount', 'la.contract_sent_at', 'la.contract_signed_at',
                 ])
                 ->where(function ($q) {
                     $q->whereNull('la.contract_signed_at')
