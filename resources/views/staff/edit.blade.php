@@ -60,27 +60,158 @@
         flex-wrap: wrap;
         align-items: center;
     }
+    /* Chabrin staff editor refresh — visual styling only; Bootstrap and existing routes remain in use. */
+    .staff-edit-page { --chabrin-green: #287653; --chabrin-green-dark: #1e5d40; --chabrin-green-soft: #eaf4ee; --chabrin-ink: #24352d; --chabrin-muted: #718078; background: #f5f7f6; padding: 24px 0 42px; }
+    .staff-edit-page .container-fluid { max-width: 1500px; padding-left: clamp(14px, 2vw, 28px); padding-right: clamp(14px, 2vw, 28px); }
+    .staff-edit-heading { display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:22px; }
+    .staff-edit-eyebrow { color:var(--chabrin-green); text-transform:uppercase; letter-spacing:.12em; font-size:.7rem; font-weight:800; margin-bottom:6px; }
+    .staff-edit-title { color:var(--chabrin-ink); font-size:clamp(1.35rem,2vw,1.8rem); font-weight:750; letter-spacing:-.035em; margin:0; }
+    .staff-edit-subtitle { color:var(--chabrin-muted); margin:6px 0 0; font-size:.91rem; }
+    .staff-edit-page .staff-main-card { border:1px solid #e5ebe7; border-radius:16px; overflow:visible; box-shadow:0 8px 30px rgba(31,60,44,.055); background:#fff; }
+    .staff-edit-page .staff-card-header { padding:18px 22px; border-bottom:1px solid #edf1ee; border-radius:16px 16px 0 0; background:#fff; }
+    .staff-edit-page .staff-card-body { padding:22px; }
+    .staff-edit-page .btn-primary { --bs-btn-bg:var(--chabrin-green); --bs-btn-border-color:var(--chabrin-green); --bs-btn-hover-bg:var(--chabrin-green-dark); --bs-btn-hover-border-color:var(--chabrin-green-dark); --bs-btn-active-bg:var(--chabrin-green-dark); --bs-btn-active-border-color:var(--chabrin-green-dark); }
+    .staff-edit-page .btn { border-radius:9px; font-weight:650; padding:.58rem .9rem; }
+    .staff-edit-page .btn-light { background:#f6f8f7; border:1px solid #e3e9e5; color:#42534a; }
+    .staff-edit-page .nav-tabs { display:flex; flex-wrap:nowrap; gap:5px; overflow-x:auto; overflow-y:hidden; border-bottom:1px solid #e5ebe7; padding:0 0 10px; scrollbar-width:thin; }
+    .staff-edit-page .nav-tabs .nav-item { flex:0 0 auto; }
+    .staff-edit-page .nav-tabs .nav-link { display:flex; align-items:center; white-space:nowrap; border:1px solid transparent; border-radius:9px; color:#69786f; padding:11px 14px; font-size:.86rem; font-weight:650; transition:all .18s ease; }
+    .staff-edit-page .nav-tabs .nav-link:hover { background:#f5f8f6; color:var(--chabrin-green); }
+    .staff-edit-page .nav-tabs .nav-link.active { color:var(--chabrin-green-dark); background:var(--chabrin-green-soft); border-color:#d5e8dc; }
+    .staff-edit-page .nav-tabs .nav-link .material-symbols-outlined { font-size:19px !important; }
+    .staff-edit-page .tab-content { padding-top:22px !important; }
+    .staff-edit-page .tab-pane > .row { --bs-gutter-x:1.2rem; }
+    .staff-edit-page .form-label { color:#34473c; font-size:.83rem; font-weight:700; margin-bottom:7px; }
+    .staff-edit-page .form-control, .staff-edit-page .form-select { min-height:43px; border-color:#dce5df; border-radius:9px; color:#2b3b32; background-color:#fff; font-size:.9rem; box-shadow:none; transition:border-color .15s ease,box-shadow .15s ease; }
+    .staff-edit-page textarea.form-control { min-height:84px; }
+    .staff-edit-page .form-control:focus, .staff-edit-page .form-select:focus { border-color:#75a88b; box-shadow:0 0 0 .22rem rgba(40,118,83,.12); }
+    .staff-edit-page .form-control[readonly] { background:#f4f7f5; color:#68786e; }
+    .staff-edit-page .text-muted, .staff-edit-page small { color:#7b8981 !important; }
+    .staff-edit-page .alert { border-radius:11px; border-width:1px; }
+    .staff-edit-page #photo-preview { width:88px; height:88px; border:3px solid #fff !important; box-shadow:0 0 0 1px #dce7df,0 5px 16px rgba(31,60,44,.1); }
+    .staff-edit-page .staff-photo-panel { display:flex; align-items:center; gap:18px; padding:16px; border:1px dashed #cbdcd0; border-radius:12px; background:#f8fbf9; }
+    .staff-edit-page .staff-document-card { border:1px solid #e2eae5 !important; border-radius:12px; background:#fbfcfb !important; padding:18px !important; transition:border-color .18s ease,transform .18s ease; }
+    .staff-edit-page .staff-document-card:hover { border-color:#b9d4c2 !important; transform:translateY(-1px); }
+    .staff-edit-page .staff-document-card .form-control { background:#fff; }
+    .staff-edit-page .staff-document-card .bg-white { border-color:#e5ebe7 !important; border-radius:9px !important; }
+
+    /* Prevent document names, upload hints and remove controls from colliding. */
+    .staff-edit-page #documents .staff-document-card {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        height: 100%;
+        box-sizing: border-box;
+        overflow-wrap: anywhere;
+    }
+    .staff-edit-page #documents .staff-document-card > .d-flex {
+        flex-wrap: wrap;
+        align-items: flex-start !important;
+        gap: 10px;
+        min-width: 0;
+    }
+    .staff-edit-page #documents .staff-document-card .text-truncate {
+        flex: 1 1 180px;
+        min-width: 0;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+    }
+    .staff-edit-page #documents .staff-document-card .d-flex.gap-1 {
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+    .staff-edit-page #documents .staff-document-card input[type="file"] {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        margin-top: 8px;
+        box-sizing: border-box;
+    }
+    .staff-edit-page #documents .staff-document-card > small,
+    .staff-edit-page #documents .staff-document-card .invalid-feedback {
+        display: block;
+        position: static;
+        height: auto;
+        margin-top: 7px;
+        line-height: 1.5;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    .staff-edit-page #documents .staff-document-card .form-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-top: 14px !important;
+        min-height: 24px;
+    }
+    .staff-edit-page #documents .staff-document-card .form-check-input {
+        flex: 0 0 auto;
+        margin: 3px 0 0;
+    }
+    .staff-edit-page #documents .staff-document-card .form-check-label {
+        line-height: 1.5;
+        white-space: normal;
+    }
+    .staff-edit-page #documents .row.g-3 > [class*="col-"] {
+        min-width: 0;
+    }
+    .staff-edit-page .staff-form-footer {
+        position: relative;
+        clear: both;
+        background: #fff;
+    }
+    @media (max-width: 575.98px) {
+        .staff-edit-page #documents .staff-document-card { padding: 14px !important; }
+        .staff-edit-page #documents .staff-document-card .d-flex.gap-1 { margin-left: 0; }
+    }
+    .staff-edit-page .badge.bg-warning { background:#fff2ce !important; color:#876117 !important; border:1px solid #f3df9e; padding:6px 9px; border-radius:20px; font-weight:700; }
+    .staff-edit-page .tab-error-badge { flex:0 0 auto; }
+    .staff-edit-page .select2-container--default .select2-selection--multiple,
+    .staff-edit-page .select2-container--default .select2-selection--single { border-color:#dce5df; border-radius:9px; min-height:43px; }
+    .staff-edit-page .select2-container--default .select2-selection--single .select2-selection__rendered { line-height:32px; }
+    .staff-edit-page .select2-container--default .select2-selection--single .select2-selection__arrow { height:41px; }
+    .staff-edit-page .select2-container--default.select2-container--focus .select2-selection--multiple,
+    .staff-edit-page .select2-container--default.select2-container--open .select2-selection--single { border-color:#75a88b; box-shadow:0 0 0 .22rem rgba(40,118,83,.12); }
+    .staff-edit-page .select2-container--default .select2-selection--multiple .select2-selection__choice { background:#eaf4ee; border-color:#d0e5d7; color:#245d3f; border-radius:6px; }
+    .staff-edit-page .staff-form-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; border-top:1px solid #edf1ee; margin-top:24px; padding-top:18px; }
+    .staff-edit-page .staff-footer-note { display:flex; align-items:center; gap:7px; color:#7b8981; font-size:.82rem; }
+    .staff-edit-page .staff-footer-note .material-symbols-outlined { font-size:18px; }
+    @media (max-width: 767.98px) { .staff-edit-page { padding-top:14px; } .staff-edit-page .staff-card-body { padding:15px; } .staff-edit-page .staff-card-header { padding:15px; } .staff-edit-page .nav-tabs .nav-link { padding:9px 11px; } .staff-edit-page .staff-photo-panel { align-items:flex-start; flex-direction:column; } .staff-edit-page .staff-form-footer { align-items:stretch; } .staff-edit-page .staff-form-footer .btn { width:100%; justify-content:center; } }
 </style>
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body staff-edit-page">
     <div class="container-fluid">
+        <div class="staff-edit-heading">
+            <div>
+                <div class="staff-edit-eyebrow">Staff Management</div>
+                <h1 class="staff-edit-title">Edit Staff Profile</h1>
+                <p class="staff-edit-subtitle">Update employee information, employment details and records.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ route('staff.show', \Illuminate\Support\Facades\Crypt::encrypt($staff->id)) }}" class="btn btn-light d-inline-flex align-items-center">
+                    <span class="material-symbols-outlined me-1" style="font-size:19px;">arrow_back</span>
+                    Back to Details
+                </a>
+                <button type="submit" form="staffEditForm" class="btn btn-primary d-inline-flex align-items-center" id="updateButton">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
+                    <span class="material-symbols-outlined me-1" style="font-size:19px;">save</span>
+                    <span>Save Changes</span>
+                </button>
+            </div>
+        </div>
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h4 class="mb-0">Edit Staff - {{ $staff->full_names }}</h4>
-                        <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="staffEditForm" class="btn btn-primary btn-sm d-flex align-items-center" id="updateButton">
-                                <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Update Staff</span>
-                            </button>
-                            <a href="{{ route('staff.show', $staff->id) }}" class="btn btn-light btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">arrow_back</span>
-                                <span class="ms-1">Back to Details</span>
-                            </a>
+                <div class="card staff-main-card">
+                    <div class="card-header staff-card-header d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:46px;height:46px;background:#eaf4ee;color:#287653;">
+                            <span class="material-symbols-outlined" style="font-size:25px;">badge</span>
+                        </div>
+                        <div class="min-w-0">
+                            <h5 class="mb-1 fw-bold" style="color:#24352d;">{{ $staff->full_names }}</h5>
+                            <div class="small text-muted">Staff No. {{ $staff->staff_number }} <span class="mx-1">•</span> Review and maintain this employee's records</div>
                         </div>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body staff-card-body">
                         @if($errors->any())
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <strong>Error!</strong> Please correct the following errors:
@@ -100,7 +231,7 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" novalidate>
+                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" enctype="multipart/form-data" novalidate>
                             @csrf
                             @method('PUT')
 
@@ -132,6 +263,12 @@
                                     <button class="nav-link" id="contact-tab" data-bs-toggle="tab" data-bs-target="#contact" type="button" role="tab" aria-controls="contact" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">contact_phone</span>
                                         Contact Information
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab" aria-controls="documents" aria-selected="false">
+                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
+                                        Documents
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
@@ -234,6 +371,34 @@
                                             @error('disability')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="email_address" class="form-label">Official Email <span class="text-danger">*</span></label>
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" @if($staff->email_address) readonly @endif data-required="true">
+                                            @error('email_address')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-12 mb-3">
+                                            @php
+                                                $currentPhoto = ($staff->photo && \Illuminate\Support\Facades\Storage::disk('public')->exists($staff->photo))
+                                                    ? asset('storage/' . $staff->photo)
+                                                    : asset('images/default-avatar.png');
+                                            @endphp
+                                            <div class="staff-photo-panel">
+                                                <div class="col-auto p-0">
+                                                    <img id="photo-preview" src="{{ $currentPhoto }}" class="rounded-circle border" width="90" height="90" style="object-fit: cover;">
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <label for="photo-input" class="form-label fw-semibold small mb-1">Staff Profile Photo</label>
+                                                    <input type="file" name="photo" id="photo-input" class="form-control form-control-sm @error('photo') is-invalid @enderror" accept="image/png,image/jpeg">
+                                                    <small class="text-muted">Square ratio (JPG, PNG), max 2MB. Choose a file only to replace the current photo.</small>
+                                                    @error('photo')
+                                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                    @enderror
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -341,13 +506,6 @@
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="email_address" class="form-label">Email Address <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" @if( $staff->email_address) readonly @endif data-required="true">
-                                            @error('email_address')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                        <div class="col-md-4 mb-3">
                                             <label for="personal_email" class="form-label">Personal Email</label>
                                             <input type="email" class="form-control @error('personal_email') is-invalid @enderror" id="personal_email" name="personal_email" value="{{ old('personal_email', $staff->personal_email) }}">
                                             @error('personal_email')
@@ -389,6 +547,56 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+                                    </div>
+                                </div>
+
+                                <!-- Documents Tab -->
+                                <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
+                                    @php $accept = ['contract' => '.pdf', 'cv' => '.pdf,.doc,.docx']; @endphp
+                                    <div class="pt-3 pb-2 mb-3 border-bottom">
+                                        <h6 class="fw-bold mb-1">Staff Documentation & Verification</h6>
+                                        <p class="text-muted small mb-0">Upload missing documents, replace existing ones, or remove them. Changes are saved when you click <strong>Update Staff</strong> (max 5MB per file).</p>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        @foreach($documentSlots as $slot)
+                                        @php $doc = $slot['doc']; $key = $slot['key']; @endphp
+                                        <div class="col-md-6">
+                                            <div class="staff-document-card h-100">
+                                                <label class="form-label fw-semibold small mb-1">{{ $slot['label'] }}</label>
+
+                                                @if($doc)
+                                                <div class="d-flex align-items-center justify-content-between mb-2 p-2 bg-white border rounded">
+                                                    <div class="text-truncate me-2" style="font-size:0.85rem;" title="{{ $doc->file_name }}">
+                                                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">description</span>
+                                                        {{ $doc->file_name }}
+                                                    </div>
+                                                    <div class="d-flex gap-1 flex-shrink-0">
+                                                        <a href="{{ route('documents.view', $doc->id) }}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                                                        <a href="{{ route('documents.download', $doc->id) }}" class="btn btn-sm btn-outline-success">Download</a>
+                                                    </div>
+                                                </div>
+                                                @else
+                                                <div class="mb-2"><span class="badge bg-warning text-dark">Not uploaded</span></div>
+                                                @endif
+
+                                                <input type="file" name="documents[{{ $key }}]"
+                                                    class="form-control form-control-sm @error('documents.'.$key) is-invalid @enderror"
+                                                    accept="{{ $accept[$key] ?? '.pdf,.png,.jpg,.jpeg' }}">
+                                                <small class="text-muted">{{ $doc ? 'Choose a file only if you want to replace the current one.' : 'Choose a file to upload.' }}</small>
+                                                @error('documents.'.$key)
+                                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                                                @enderror
+
+                                                @if($doc)
+                                                <div class="form-check mt-2">
+                                                    <input class="form-check-input" type="checkbox" name="remove_documents[]" value="{{ $key }}" id="remove_{{ $key }}">
+                                                    <label class="form-check-label small text-danger" for="remove_{{ $key }}">Remove this document</label>
+                                                </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        @endforeach
                                     </div>
                                 </div>
 
@@ -447,6 +655,15 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="staff-form-footer">
+                                <div class="staff-footer-note"><span class="material-symbols-outlined">info</span> Changes are saved when you select Save Changes.</div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <a href="{{ route('staff.show', \Illuminate\Support\Facades\Crypt::encrypt($staff->id)) }}" class="btn btn-light">Cancel</a>
+                                    <button type="submit" class="btn btn-primary d-inline-flex align-items-center" id="updateButtonFooter">
+                                        <span class="material-symbols-outlined me-1" style="font-size:19px;">save</span> Save Changes
+                                    </button>
+                                </div>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -487,6 +704,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { pane: 'personal',   btn: 'personal-tab',   label: 'Personal Information' },
         { pane: 'employment', btn: 'employment-tab',  label: 'Employment Details'   },
         { pane: 'contact',    btn: 'contact-tab',     label: 'Contact Information'  },
+        { pane: 'documents',  btn: 'documents-tab',   label: 'Documents'            },
         { pane: 'banking',    btn: 'banking-tab',     label: 'Banking & Statutory'  },
     ];
 
@@ -555,11 +773,12 @@ document.addEventListener('DOMContentLoaded', function () {
             if (btn && window.bootstrap) { new bootstrap.Tab(btn).show(); }
         }
 
-        var updateBtn = document.getElementById('updateButton');
-        updateBtn.classList.add('btn-shake');
-        updateBtn.addEventListener('animationend', function () {
-            updateBtn.classList.remove('btn-shake');
-        }, { once: true });
+        ['updateButton', 'updateButtonFooter'].forEach(function (id) {
+            var updateBtn = document.getElementById(id);
+            if (!updateBtn) return;
+            updateBtn.classList.add('btn-shake');
+            updateBtn.addEventListener('animationend', function () { updateBtn.classList.remove('btn-shake'); }, { once: true });
+        });
     }
 
     document.getElementById('staffEditForm').addEventListener('input',  function (e) { handleFieldFix(e.target); });
@@ -594,15 +813,20 @@ document.addEventListener('DOMContentLoaded', function () {
             showValidationUI(result.errors, result.firstErrorTab);
             return;
         }
-        var btn = document.getElementById('updateButton');
-        document.getElementById('submitSpinner').classList.remove('d-none');
-        btn.disabled = true;
-        btn.style.opacity = '0.6';
+        ['updateButton', 'updateButtonFooter'].forEach(function (id) {
+            var btn = document.getElementById(id);
+            if (btn) { btn.disabled = true; btn.style.opacity = '0.65'; }
+        });
+        var spinner = document.getElementById('submitSpinner');
+        if (spinner) spinner.classList.remove('d-none');
     });
 
-    document.getElementById('zone_id').addEventListener('change', function () {
+    var zoneSelect = document.getElementById('zone_id');
+    if (zoneSelect) zoneSelect.addEventListener('change', function () {
         var zoneId = this.value;
         var zoneArea = document.getElementById('zone_area_id');
+        // Some staff forms do not render a zone-area selector. Avoid stopping the rest of this script.
+        if (!zoneArea) return;
         zoneArea.innerHTML = '<option value="">Select Zone Area</option>';
         if (!zoneId) return;
         fetch('/ajax/zone-areas/' + zoneId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -661,6 +885,16 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    // Live preview of the selected staff photo
+    var photoInput = document.getElementById('photo-input');
+    if (photoInput) photoInput.addEventListener('change', function (e) {
+        if (e.target.files && e.target.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function (evt) { document.getElementById('photo-preview').src = evt.target.result; };
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
 
     var successAlert = document.querySelector('.alert-success');
     if (successAlert) {

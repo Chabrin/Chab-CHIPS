@@ -173,4 +173,19 @@ class Staff extends Model
     {
         return $this->hasOne(UserStaffLink::class);
     }
+
+    public function employeeDocuments()
+{
+    return $this->hasMany(\App\Models\EmployeeDocument::class, 'employee_id');
+}
+public static function nextStaffNumber(): int
+{
+    // Strip any non-digits, ignore blanks, then take the highest number.
+    // Works for "3", "007" and "STF-012" alike, and won't crash on odd values.
+    $max = static::query()
+        ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\D', '', 'g'), '')::bigint) as max_no")
+        ->value('max_no');
+
+    return ((int) $max) + 1;
+}
 }

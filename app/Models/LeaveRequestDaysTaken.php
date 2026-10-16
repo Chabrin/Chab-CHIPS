@@ -22,6 +22,8 @@ class LeaveRequestDaysTaken extends Model
         'current_status_id',
         'leave_date',
         'day_type_id',
+        'pay_rate',
+        'tier_order',
     ];
 
     protected $casts = [

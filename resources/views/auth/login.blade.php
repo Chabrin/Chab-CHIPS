@@ -295,7 +295,7 @@
                             {{-- Submit Button --}}
                             <div class="d-grid mb-2">
                                 <button class="btn btn-template-primary" id="loginBtn" type="submit">
-                                    <span id="loginBtnText">Login In</span>
+                                    <span id="loginBtnText">Login</span>
                                     <span id="loginSpinner" class="spinner-border spinner-border-sm d-none ms-2" role="status" aria-hidden="true"></span>
                                 </button>
                             </div>

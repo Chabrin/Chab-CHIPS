@@ -24,10 +24,13 @@ class LeaveType extends Model
         'entitled_days',
         'salary_rate',
         'leave_type_id',
+        'counts_weekends',
+        'counts_public_holidays',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
+        'counts_weekends' => 'boolean',
+        'counts_public_holidays' => 'boolean',
     ];
-
 }

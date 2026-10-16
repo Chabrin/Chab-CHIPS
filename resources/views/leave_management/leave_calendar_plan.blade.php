@@ -6,27 +6,31 @@
             <div class="col-sm-12">
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Leave Calendar Plan</h5>
+                        <h5 class="mb-0">Annual Leave Calendar Planning (Mandatory 21 Days)</h5>
                         <div class="ms-auto d-flex gap-2">
                             @permission('create_leave_calendar_plans')
                                 <button class="btn btn-success btn-sm d-flex align-items-center" id="generateAnnualPlansBtn">
                                     <span class="material-symbols-outlined">autorenew</span>
-                                    <span class="ms-1">Generate Annual Plans</span>
+                                    <span class="ms-1">Initialize Year Plans</span>
                                 </button>
                             @endpermission
                         </div>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
-                            <table class="display" id="leave-calendar-plan-table">
+                            <table class="display" id="leave-calendar-plan-table" style="width:100%;">
                                 <thead>
                                     <tr>
                                         <th>Employee</th>
                                         <th>Leave Type</th>
+                                        <th>Entitled</th>
+                                        <th>Balance</th>
+                                        <th>Scheduled Slots</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <!-- Data loaded via DataTables AJAX -->
+                                    <!-- Loaded via DataTables AJAX -->
                                 </tbody>
                             </table>
                         </div>
@@ -37,251 +41,458 @@
     </div>
 </div>
 
-
-<!-- Generate Annual Plans Modal -->
-<div class="modal fade" id="generateAnnualPlansModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+<!-- Schedule Slots Modal (With Pro-rata and Dynamic Target Support) -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Generate Annual Leave Plans</h5>
+                <h5 class="modal-title">Schedule Annual Leave (<span id="modalEmployeeName"></span>)</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-info">
-                    <span class="material-symbols-outlined" style="vertical-align:middle;">info</span>
-                    This will generate leave calendar plans for all active staff members for the selected year and leave types.
+                <!-- Counter Tracker -->
+                <div class="d-flex justify-content-between align-items-center p-3 mb-3 bg-light rounded border">
+                    <div><strong>Target:</strong> <span id="modalTargetDaysBadge" class="fw-bold">21 Days</span></div>
+                    <div><strong>Allocated:</strong> <span id="allocatedDaysBadge" class="badge bg-secondary">0 Days</span></div>
+                    <div><strong>Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">21 Days</span></div>
                 </div>
-                <div class="mb-3">
-                    <label for="plan_year" class="form-label">Year <span style="color:red">*</span></label>
-                    <select class="form-select" id="plan_year" required>
-                        <option value="{{ date('Y') }}">{{ date('Y') }} (Current Year)</option>
-                        <option value="{{ date('Y') + 1 }}">{{ date('Y') + 1 }} (Next Year)</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="plan_leave_types" class="form-label">Leave Types <span style="color:red">*</span></label>
-                    <select class="form-select select2" id="plan_leave_types" multiple required>
-                        <!-- Will be populated via AJAX -->
-                    </select>
-                    <div class="form-text">
-                        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">info</span>
-                        Select specific leave types or leave empty to generate for all types
+
+                <form id="scheduleSlotsForm">
+                    <input type="hidden" id="modalPlanId" name="plan_id">
+                    <input type="hidden" id="modalLeaveTypeId" name="leave_type_id">
+
+                    <div id="slotsContainer">
+                        <!-- Dynamic Slot Rows inserted here -->
                     </div>
-                </div>
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="select_all_leave_types">
-                    <label class="form-check-label" for="select_all_leave_types">
-                        <strong>Select All Leave Types</strong>
-                    </label>
-                </div>
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="override_existing" value="1">
-                    <label class="form-check-label" for="override_existing">
-                        Override existing plans for this year
-                    </label>
-                </div>
+
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="addSlotRowBtn">
+                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">add</span>
+                        Add Leave Block
+                    </button>
+                </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="confirmGeneratePlans">
-                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">autorenew</span>
-                    Generate Plans
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveScheduleBtn" disabled>
+                    Save & Submit Schedule
                 </button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Generate Annual Plans Modal (With Integrated Holiday Setup) -->
+<div class="modal fade" id="generateAnnualPlansModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Initialize Annual Leave Quotas & Holidays</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    Initializes statutory annual quotas for active staff (including pro-rata calculation for mid-year hires). Confirm or adjust public holidays for this year below so calculations exclude them accurately.
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label for="plan_year" class="form-label fw-bold">Target Year <span class="text-danger">*</span></label>
+                        <select class="form-select" id="plan_year" required>
+                            <option value="{{ date('Y') }}" selected>{{ date('Y') }} (Current Year)</option>
+                            <option value="{{ date('Y') + 1 }}">{{ date('Y') + 1 }} (Next Year)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="override_existing" value="1">
+                            <label class="form-check-label" for="override_existing">
+                                Override existing plans for this year
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Configured Holidays Section -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold mb-0">
+                        Public Holidays for <span id="initHolidaysYearLabel">{{ date('Y') }}</span>
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddNewHolidayRow">
+                        <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle;">add</span> Add Holiday
+                    </button>
+                </div>
+
+                <div class="table-responsive border rounded" style="max-height: 220px; overflow-y: auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Holiday Name</th>
+                                <th style="width: 180px;">Holiday Date</th>
+                                <th style="width: 50px;" class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="initHolidaysList">
+                            <!-- Populated dynamically via AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmGeneratePlans">Initialize Quotas & Apply Holidays</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
-    $(document).ready(function() {
-        let table = $('#leave-calendar-plan-table').DataTable({
-            processing: true,
-            serverSide: false,
-            ajax: {
-                url: "{{ url('/ajax/leave-management/leave-calendar-plan/list') }}",
-                type: 'GET',
-                headers: {
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                dataType: 'json',
-                dataSrc: 'leave_calendar_plans'
-            },
-            columns: [
-                { 
-                    data: 'employee', 
-                    title: 'Employee', 
-                    render: data => data && data.name ? data.name : '-' 
-                },
-                {
-                    data: 'leave_types', 
-                    title: 'Leave Types & Balances',
-                    orderable: false,
-                    render: function(data) {
-                        if (!data || data.length === 0) return '<span class="text-muted">No leave plans</span>';
-                        
-                        let html = '<div class="leave-types-container" style="max-height: 300px; overflow-y: auto;">';
-                        html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.875rem;">';
-                        html += '<thead class="table-light"><tr>';
-                        html += '<th style="width: 30%;">Leave Type</th>';
-                        html += '<th style="width: 25%;">Period</th>';
-                        html += '<th style="width: 15%;">Entitled</th>';
-                        html += '<th style="width: 15%;">Balance</th>';
-                        html += '<th style="width: 15%;">Status</th>';
-                        html += '</tr></thead><tbody>';
-                        
-                        data.forEach(function(lt) {
-                            let leaveName = lt.leave_type && lt.leave_type.type_name ? lt.leave_type.type_name : 'Unknown';
-                            let statusBadge = lt.current_status_id == 5 
-                                ? '<span class="badge bg-success">Approved</span>' 
-                                : '<span class="badge bg-warning">Pending</span>';
-                            
-                            html += `<tr>
-                                <td><strong>${leaveName}</strong></td>
-                                <td><small>${new Date(lt.start_date).getFullYear()}<br>${new Date(lt.start_date).toLocaleDateString('en-GB', {day: '2-digit', month: 'short'})} - ${new Date(lt.end_date).toLocaleDateString('en-GB', {day: '2-digit', month: 'short'})}</small></td>
-                                <td class="text-center">${lt.entitled_days}</td>
-                                <td class="text-center"><span class="badge bg-${lt.balance > 0 ? 'info' : 'secondary'}">${lt.balance}</span></td>
-                                <td class="text-center">${statusBadge}</td>
-                            </tr>`;
+$(document).ready(function() {
+    let currentTotalDays = 0;
+    let requiredPlanDays = 21;
+
+    let table = $('#leave-calendar-plan-table').DataTable({
+        processing: true,
+        serverSide: false,
+        ajax: {
+            url: "{{ url('/ajax/leave-management/leave-calendar-plan/list') }}",
+            type: 'GET',
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            dataSrc: function(json) {
+                let flat = [];
+                (json.leave_calendar_plans || []).forEach(emp => {
+                    (emp.leave_types || []).forEach(lt => {
+                        flat.push({
+                            employee_name: emp.employee ? (emp.employee.full_names || emp.employee.name) : '-',
+                            plan_id: lt.id,
+                            leave_type_id: lt.leave_type_id,
+                            leave_type_name: lt.leave_type ? lt.leave_type.type_name : 'Annual Leave',
+                            entitled_days: lt.entitled_days,
+                            balance: lt.balance,
+                            status: lt.current_status_id
                         });
-                        
-                        html += '</tbody></table></div>';
-                        return html;
-                    },
-                    width: '55%'
+                    });
+                });
+                return flat;
+            }
+        },
+        columns: [
+            { data: 'employee_name' },
+            { data: 'leave_type_name' },
+            { data: 'entitled_days', className: 'text-center' },
+            { 
+                data: 'balance', 
+                className: 'text-center',
+                render: data => `<span class="badge bg-${data > 0 ? 'info' : 'secondary'}">${data}</span>`
+            },
+            {
+                data: null,
+                render: () => '<span class="text-muted small">Managed in blocks</span>'
+            },
+            {
+                data: null,
+                orderable: false,
+                render: function(data, type, row) {
+                    return `
+                        <button class="btn btn-sm btn-outline-primary open-schedule-modal" 
+                            data-plan-id="${row.plan_id}" 
+                            data-leave-type-id="${row.leave_type_id}"
+                            data-entitled-days="${row.entitled_days}"
+                            data-employee-name="${row.employee_name}">
+                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span>
+                            Schedule ${row.entitled_days} Days
+                        </button>
+                    `;
                 }
-            ],
-            paging: true,
-            info: true,
-            lengthChange: true,
-            order: [[1, 'asc']] // Sort by employee name
+            }
+        ]
+    });
+
+    // -------------------------------------------------------------
+    // Staff Scheduling / Rescheduling Modal
+    // -------------------------------------------------------------
+    $(document).on('click', '.open-schedule-modal', function() {
+        let planId = $(this).data('plan-id');
+        let leaveTypeId = $(this).data('leave-type-id');
+        let empName = $(this).data('employee-name');
+
+        requiredPlanDays = parseInt($(this).data('entitled-days')) || 21;
+
+        $('#modalPlanId').val(planId);
+        $('#modalLeaveTypeId').val(leaveTypeId);
+        $('#modalEmployeeName').text(empName);
+        $('#modalTargetDaysBadge').text(requiredPlanDays + ' Days');
+        $('#saveScheduleBtn').text(`Save & Submit Schedule (${requiredPlanDays} Days Required)`);
+        $('#slotsContainer').empty();
+
+        // Load existing slots if any, or append first empty slot
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/plan-slots') }}/" + planId,
+            type: 'GET',
+            success: function(res) {
+                if (res.success && res.slots && res.slots.length > 0) {
+                    res.slots.forEach(slot => {
+                        addSlotRow(slot.start_date, slot.end_date, slot.days_count);
+                    });
+                } else {
+                    addSlotRow();
+                }
+                updateRunningTotal();
+            },
+            error: function() {
+                addSlotRow();
+                updateRunningTotal();
+            }
         });
 
-        // Generate Annual Plans
-        $('#generateAnnualPlansBtn').on('click', function() {
-            // Load leave types when modal opens
-            $.ajax({
-                url: "{{ url('/ajax/hr/leave_types/list') }}",
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    let $planLeaveTypes = $('#plan_leave_types');
-                    $planLeaveTypes.empty();
-                    
-                    if (response.success && response.leave_types) {
-                        response.leave_types.forEach(function(leaveType) {
-                            $planLeaveTypes.append(new Option(leaveType.type_name, leaveType.id, false, false));
-                        });
-                        
-                        // Initialize or refresh Select2
-                        if ($planLeaveTypes.hasClass('select2-hidden-accessible')) {
-                            $planLeaveTypes.select2('destroy');
-                        }
-                        $planLeaveTypes.select2({
-                            dropdownParent: $('#generateAnnualPlansModal'),
-                            placeholder: 'Select leave types (leave empty for all)',
-                            allowClear: true,
-                            width: '100%'
-                        });
-                    }
-                },
-                error: function() {
-                    toastr.error('Failed to load leave types');
-                }
-            });
-            
-            $('#generateAnnualPlansModal').modal('show');
-        });
-        
-        // Select/Deselect all leave types
-        $('#select_all_leave_types').on('change', function() {
-            let $planLeaveTypes = $('#plan_leave_types');
-            if ($(this).is(':checked')) {
-                $planLeaveTypes.find('option').prop('selected', true);
-                $planLeaveTypes.trigger('change');
-            } else {
-                $planLeaveTypes.val(null).trigger('change');
-            }
-        });
-        
-        // Uncheck "select all" when manually changing selection
-        $('#plan_leave_types').on('change', function() {
-            let totalOptions = $(this).find('option').length;
-            let selectedOptions = $(this).val() ? $(this).val().length : 0;
-            $('#select_all_leave_types').prop('checked', totalOptions > 0 && selectedOptions === totalOptions);
-        });
-        
-        $('#confirmGeneratePlans').on('click', function() {
-            let $btn = $(this);
-            let year = $('#plan_year').val();
-            let leaveTypeIds = $('#plan_leave_types').val(); // Array or null
-            let override = $('#override_existing').is(':checked') ? 1 : 0;
-            
-            if (!year) {
-                toastr.error('Please select a year');
+        $('#scheduleModal').modal('show');
+    });
+
+    function addSlotRow(start = '', end = '', days = 0) {
+        let index = $('#slotsContainer .slot-row').length;
+        let html = `
+            <div class="slot-row border rounded p-2 mb-2 bg-white position-relative">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Start Date</label>
+                        <input type="date" class="form-control form-control-sm slot-start" name="slots[${index}][start_date]" value="${start}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">End Date</label>
+                        <input type="date" class="form-control form-control-sm slot-end" name="slots[${index}][end_date]" value="${end}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Working Days</label>
+                        <input type="text" class="form-control form-control-sm slot-days bg-light" readonly value="${days}">
+                    </div>
+                    <div class="col-md-1 text-end pt-3">
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-slot-btn" style="padding: 2px 6px;">
+                            &times;
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#slotsContainer').append(html);
+    }
+
+    $('#addSlotRowBtn').on('click', function() {
+        addSlotRow();
+    });
+
+    $(document).on('click', '.remove-slot-btn', function() {
+        if ($('#slotsContainer .slot-row').length > 1) {
+            $(this).closest('.slot-row').remove();
+            updateRunningTotal();
+        } else {
+            toastr.warning('At least one leave block is required.');
+        }
+    });
+
+    $(document).on('change', '.slot-start, .slot-end', function() {
+        let row = $(this).closest('.slot-row');
+        let start = row.find('.slot-start').val();
+        let end = row.find('.slot-end').val();
+        let leaveTypeId = $('#modalLeaveTypeId').val();
+
+        if (start && end) {
+            if (end < start) {
+                toastr.error('End date cannot be earlier than start date');
+                row.find('.slot-days').val(0);
+                updateRunningTotal();
                 return;
             }
-            
-            // If no leave types selected, it means generate for all
-            let confirmMessage = `Are you sure you want to generate leave plans for all staff for ${year}?\n\n`;
-            if (leaveTypeIds && leaveTypeIds.length > 0) {
-                confirmMessage += `This will generate plans for ${leaveTypeIds.length} selected leave type(s).\n\n`;
-            } else {
-                confirmMessage += `This will generate plans for ALL leave types.\n\n`;
-            }
-            confirmMessage += `This will run in the background and may take several minutes.`;
-            
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-            
-            $btn.prop('disabled', true);
-            $btn.html('<span class="material-symbols-outlined spin" style="font-size:16px; vertical-align:middle;">sync</span> Starting...');
-            
+
             $.ajax({
-                url: "{{ url('/ajax/hr/leave-management/leave-calendar-plan/generate-annual') }}",
+                url: "{{ url('/ajax/leave-management/calculate-slot-days') }}",
                 type: 'POST',
                 data: {
-                    year: year,
-                    leave_type_ids: leaveTypeIds, // Send array or null
-                    override: override,
+                    start_date: start,
+                    end_date: end,
+                    leave_type_id: leaveTypeId,
                     _token: '{{ csrf_token() }}'
                 },
-                success: function(response) {
-                    $btn.prop('disabled', false);
-                    $btn.html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">autorenew</span> Generate Plans');
-                    
-                    if (response.success) {
-                        $('#generateAnnualPlansModal').modal('hide');
-                        toastr.success(response.message, 'Job Started', {timeOut: 8000});
-                        
-                        // Optionally reload table after a delay
-                        setTimeout(function() {
-                            table.ajax.reload(null, false);
-                        }, 5000);
-                    } else {
-                        toastr.error(response.error || 'Failed to start generation');
-                    }
-                },
-                error: function(xhr) {
-                    $btn.prop('disabled', false);
-                    $btn.html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">autorenew</span> Generate Plans');
-                    
-                    let msg = 'Failed to start generation';
-                    if (xhr.responseJSON && xhr.responseJSON.error) {
-                        msg = xhr.responseJSON.error;
-                    }
-                    toastr.error(msg);
+                success: function(res) {
+                    row.find('.slot-days').val(res.days);
+                    updateRunningTotal();
                 }
             });
+        }
+    });
+
+    function updateRunningTotal() {
+        let total = 0;
+        $('.slot-days').each(function() {
+            total += parseInt($(this).val()) || 0;
         });
+
+        currentTotalDays = total;
+        let remaining = requiredPlanDays - total;
+
+        $('#allocatedDaysBadge').text(total + ' Days');
         
-        // Reset modal when closed
-        $('#generateAnnualPlansModal').on('hidden.bs.modal', function() {
-            $('#plan_leave_types').val(null).trigger('change');
-            $('#select_all_leave_types').prop('checked', false);
-            $('#override_existing').prop('checked', false);
+        if (remaining === 0) {
+            $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Requirement Met!)');
+            $('#saveScheduleBtn').prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
+        } else if (remaining < 0) {
+            $('#remainingDaysBadge').removeClass('bg-warning bg-success').addClass('bg-danger text-white').text(Math.abs(remaining) + ' Days Exceeded');
+            $('#saveScheduleBtn').prop('disabled', true);
+        } else {
+            $('#remainingDaysBadge').removeClass('bg-success bg-danger text-white').addClass('bg-warning text-dark').text(remaining + ' Days Remaining');
+            $('#saveScheduleBtn').prop('disabled', true);
+        }
+    }
+
+    $('#saveScheduleBtn').on('click', function() {
+        if (currentTotalDays !== requiredPlanDays) {
+            toastr.error(`You must allocate exactly ${requiredPlanDays} working days.`);
+            return;
+        }
+
+        let formData = $('#scheduleSlotsForm').serialize();
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/save-annual-schedule') }}",
+            type: 'POST',
+            data: formData + '&_token={{ csrf_token() }}',
+            success: function(res) {
+                if (res.success) {
+                    toastr.success(res.message);
+                    $('#scheduleModal').modal('hide');
+                    table.ajax.reload(null, false);
+                } else {
+                    toastr.error(res.error || 'Failed to save schedule');
+                }
+            },
+            error: function(xhr) {
+                let msg = 'Failed to save schedule';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    msg = xhr.responseJSON.error;
+                }
+                toastr.error(msg);
+            }
         });
     });
+
+    // -------------------------------------------------------------
+    // Annual Initialization & Holiday Management
+    // -------------------------------------------------------------
+    function fetchHolidaysForInit(year) {
+        $('#initHolidaysYearLabel').text(year);
+        $('#initHolidaysList').html('<tr><td colspan="3" class="text-center text-muted py-2">Loading holidays...</td></tr>');
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/get-year-holidays') }}",
+            type: 'GET',
+            data: { year: year },
+            success: function(res) {
+                $('#initHolidaysList').empty();
+                if (res.success && res.holidays && res.holidays.length > 0) {
+                    res.holidays.forEach(function(h) {
+                        appendInitHolidayRow(h.holiday_name, h.holiday_date);
+                    });
+                } else {
+                    let defaultHolidays = [
+                        { name: "New Year's Day", date: `${year}-01-01` },
+                        { name: "Eid al-Fitr (Estimated)", date: `${year}-03-20` },
+                        { name: "Good Friday", date: `${year}-04-03` },
+                        { name: "Easter Monday", date: `${year}-04-06` },
+                        { name: "Labour Day", date: `${year}-05-01` },
+                        { name: "Eid al-Adha (Estimated)", date: `${year}-05-27` },
+                        { name: "Madaraka Day", date: `${year}-06-01` },
+                        { name: "Mazingira Day", date: `${year}-10-10` },
+                        { name: "Mashujaa Day", date: `${year}-10-20` },
+                        { name: "Jamhuri Day", date: `${year}-12-12` },
+                        { name: "Christmas Day", date: `${year}-12-25` },
+                        { name: "Boxing Day", date: `${year}-12-26` }
+                    ];
+                    defaultHolidays.forEach(h => appendInitHolidayRow(h.name, h.date));
+                }
+            },
+            error: function() {
+                $('#initHolidaysList').html('<tr><td colspan="3" class="text-center text-danger py-2">Error loading holidays.</td></tr>');
+            }
+        });
+    }
+
+    function appendInitHolidayRow(name = '', date = '') {
+        let row = `
+            <tr class="holiday-row">
+                <td>
+                    <input type="text" class="form-control form-control-sm h-name" value="${name}" placeholder="Holiday name" required>
+                </td>
+                <td>
+                    <input type="date" class="form-control form-control-sm h-date" value="${date}" required>
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove-holiday" style="padding: 2px 7px;">
+                        &times;
+                    </button>
+                </td>
+            </tr>
+        `;
+        $('#initHolidaysList').append(row);
+    }
+
+    $('#generateAnnualPlansBtn').on('click', function() {
+        let year = $('#plan_year').val() || new Date().getFullYear();
+        fetchHolidaysForInit(year);
+        $('#generateAnnualPlansModal').modal('show');
+    });
+
+    $('#plan_year').on('change', function() {
+        fetchHolidaysForInit($(this).val());
+    });
+
+    $('#btnAddNewHolidayRow').on('click', function() {
+        let yr = $('#plan_year').val() || new Date().getFullYear();
+        appendInitHolidayRow('', `${yr}-01-01`);
+    });
+
+    $(document).on('click', '.btn-remove-holiday', function() {$(this).closest('tr').remove();
+    });
+
+    $('#confirmGeneratePlans').on('click', function() {
+        let btn = $(this);
+        let year = $('#plan_year').val();
+        let override = $('#override_existing').is(':checked') ? 1 : 0;
+
+        let holidays = [];
+        $('#initHolidaysList .holiday-row').each(function() {
+            let hName = $(this).find('.h-name').val().trim();
+            let hDate = $(this).find('.h-date').val();
+            if (hName && hDate) {
+                holidays.push({ name: hName, date: hDate });
+            }
+        });
+
+        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Initializing...');
+
+        $.ajax({
+            url: "{{ url('/ajax/hr/leave-management/leave-calendar-plan/generate-annual') }}",
+            type: 'POST',
+            data: {
+                year: year,
+                override: override,
+                holidays: holidays,
+                _token: '{{ csrf_token() }}'
+            },
+            success: function(res) {
+                btn.prop('disabled', false).text('Initialize Quotas & Apply Holidays');
+                if (res.success) {
+                    toastr.success(res.message);
+                    $('#generateAnnualPlansModal').modal('hide');
+                    table.ajax.reload(null, false);
+                } else {
+                    toastr.error(res.error || 'Failed to initialize plans');
+                }
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).text('Initialize Quotas & Apply Holidays');
+                toastr.error(xhr.responseJSON?.error || 'Error during plan initialization');
+            }
+        });
+    });
+});
 </script>
 @endsection

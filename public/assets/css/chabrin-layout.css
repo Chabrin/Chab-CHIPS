@@ -1033,6 +1033,392 @@ p, span, label, a, td, th, li, input, select, textarea, button {
     display: block;
 }
 
+
+/* ==========================================
+   CHABRIN HR — STAFF ONBOARDING UI
+   ========================================== */
+
+:root {
+    --chabrin-primary: #39765b;
+    --chabrin-primary-dark: #285940;
+    --chabrin-primary-light: #eaf4ee;
+    --chabrin-text: #24352c;
+    --chabrin-muted: #748178;
+    --chabrin-border: #e2e9e4;
+    --chabrin-surface: #ffffff;
+    --chabrin-background: #f5f8f6;
+}
+
+/* Page background and spacing */
+.page-body {
+    background: var(--chabrin-background);
+    min-height: 100vh;
+    padding: 24px 0 40px !important;
+}
+
+.page-body > .container-fluid {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+/* Main form card */
+.page-body .card {
+    border: 1px solid var(--chabrin-border);
+    border-radius: 16px;
+    background: var(--chabrin-surface);
+    box-shadow: 0 4px 24px rgba(35, 66, 47, 0.045);
+    overflow: hidden;
+}
+
+.page-body .card-header {
+    background: #fff;
+    border-bottom: 1px solid var(--chabrin-border);
+    padding: 22px 28px;
+    min-height: 86px;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.page-body .card-header h4 {
+    color: var(--chabrin-text);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.page-body .card-header h4::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 24px;
+    margin-right: 12px;
+    vertical-align: -5px;
+    border-radius: 4px;
+    background: var(--chabrin-primary);
+}
+
+.page-body .card-body {
+    padding: 28px;
+}
+
+/* Buttons */
+.page-body .btn {
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-weight: 600;
+    font-size: 13px;
+    transition: background-color .2s ease,
+                border-color .2s ease,
+                box-shadow .2s ease,
+                transform .2s ease;
+}
+
+.page-body .btn-primary {
+    background: var(--chabrin-primary);
+    border-color: var(--chabrin-primary);
+    color: #fff;
+}
+
+.page-body .btn-primary:hover,
+.page-body .btn-primary:focus-visible {
+    background: var(--chabrin-primary-dark);
+    border-color: var(--chabrin-primary-dark);
+    box-shadow: 0 4px 12px rgba(57, 118, 91, .2);
+}
+
+.page-body .btn-light {
+    background: #fff;
+    border: 1px solid var(--chabrin-border);
+    color: var(--chabrin-text);
+}
+
+.page-body .btn-light:hover {
+    background: var(--chabrin-primary-light);
+    border-color: #b9d5c2;
+}
+
+.page-body .btn:active {
+    transform: translateY(1px);
+}
+
+.page-body .btn .material-symbols-outlined {
+    font-size: 18px;
+    vertical-align: middle;
+}
+
+/* Form section navigation */
+#staffCreateTabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px;
+    border: 1px solid var(--chabrin-border);
+    border-radius: 12px;
+    background: #f7f9f7;
+    scrollbar-width: thin;
+    scrollbar-color: #b7c9bc transparent;
+}
+
+#staffCreateTabs .nav-item {
+    flex: 0 0 auto;
+}
+
+#staffCreateTabs .nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 44px;
+    padding: 10px 15px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #66736a;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all .2s ease;
+}
+
+#staffCreateTabs .nav-link:hover {
+    color: var(--chabrin-primary);
+    background: #fff;
+}
+
+#staffCreateTabs .nav-link.active {
+    background: #fff;
+    color: var(--chabrin-primary);
+    border-color: #dce9df;
+    box-shadow: 0 2px 7px rgba(35, 66, 47, .07);
+}
+
+#staffCreateTabs .nav-link .material-symbols-outlined {
+    font-size: 19px !important;
+}
+
+/* Form spacing and labels */
+#staffCreateTabsContent {
+    padding-top: 8px;
+}
+
+#staffCreateTabsContent .form-label {
+    display: block;
+    margin-bottom: 8px;
+    color: #34473a;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#staffCreateTabsContent .form-control,
+#staffCreateTabsContent .form-select {
+    min-height: 43px;
+    padding: 10px 12px;
+    border: 1px solid #dce5de;
+    border-radius: 8px;
+    background-color: #fff;
+    color: var(--chabrin-text);
+    font-size: 13px;
+    box-shadow: none;
+    transition: border-color .2s ease,
+                box-shadow .2s ease;
+}
+
+#staffCreateTabsContent textarea.form-control {
+    min-height: 88px;
+    resize: vertical;
+}
+
+#staffCreateTabsContent .form-control::placeholder {
+    color: #a0aaa3;
+}
+
+#staffCreateTabsContent .form-control:focus,
+#staffCreateTabsContent .form-select:focus {
+    border-color: #78a98a;
+    box-shadow: 0 0 0 3px rgba(57, 118, 91, .11);
+}
+
+#staffCreateTabsContent .form-control:disabled,
+#staffCreateTabsContent .form-control[readonly] {
+    background-color: #f4f7f5;
+    color: #6e7b72;
+}
+
+#staffCreateTabsContent .form-control.is-invalid,
+#staffCreateTabsContent .form-select.is-invalid {
+    border-color: #dc6868;
+}
+
+#staffCreateTabsContent .invalid-feedback {
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+#staffCreateTabsContent .text-muted {
+    color: var(--chabrin-muted) !important;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* Profile photo */
+#photo-preview {
+    width: 96px;
+    height: 96px;
+    padding: 3px;
+    border: 2px solid #dce9df !important;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(35, 66, 47, .07);
+}
+
+#photo-input {
+    padding: 8px;
+    background: #f8faf8;
+}
+
+/* Document upload cards */
+#documents .border.rounded {
+    height: 100%;
+    min-height: 142px;
+    padding: 18px !important;
+    border: 1px solid var(--chabrin-border) !important;
+    border-radius: 12px !important;
+    background: #fbfcfb !important;
+    transition: border-color .2s ease,
+                background-color .2s ease,
+                transform .2s ease;
+}
+
+#documents .border.rounded:hover {
+    border-color: #b9d5c2 !important;
+    background: #f5faf6 !important;
+    transform: translateY(-2px);
+}
+
+#documents .form-label {
+    line-height: 1.5;
+}
+
+#documents .form-control {
+    background: #fff;
+}
+
+#documents .text-muted {
+    display: block;
+    margin-top: 7px;
+}
+
+/* Select2 — match the Chabrin form controls */
+.select2-container--default .select2-selection--multiple,
+.select2-container--default .select2-selection--single {
+    min-height: 43px;
+    border: 1px solid #dce5de;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.select2-container--default .select2-selection--single {
+    padding: 6px 10px;
+}
+
+.select2-container--default .select2-selection--single
+.select2-selection__rendered {
+    line-height: 28px;
+    padding-left: 0;
+    color: var(--chabrin-text);
+    font-size: 13px;
+}
+
+.select2-container--default .select2-selection--single
+.select2-selection__arrow {
+    height: 41px;
+}
+
+.select2-container--default .select2-selection--multiple {
+    padding: 5px;
+}
+
+.select2-container--default .select2-selection--multiple
+.select2-selection__choice {
+    margin-top: 3px;
+    padding: 3px 8px;
+    border: 1px solid #cce0d1;
+    border-radius: 6px;
+    background: var(--chabrin-primary-light);
+    color: var(--chabrin-primary-dark);
+    font-size: 12px;
+}
+
+.select2-container--default.select2-container--focus
+.select2-selection--multiple,
+.select2-container--default.select2-container--open
+.select2-selection--single {
+    border-color: #78a98a;
+    box-shadow: 0 0 0 3px rgba(57, 118, 91, .11);
+}
+
+/* Validation messages */
+.page-body .alert-danger {
+    border: 1px solid #f0cccc;
+    border-radius: 10px;
+}
+
+/* Keyboard accessibility */
+.page-body button:focus-visible,
+.page-body a:focus-visible,
+#staffCreateTabs .nav-link:focus-visible {
+    outline: 3px solid rgba(57, 118, 91, .3);
+    outline-offset: 2px;
+}
+
+/* Responsive layout */
+@media (max-width: 767.98px) {
+    .page-body > .container-fluid {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .page-body .card-header {
+        padding: 18px;
+    }
+
+    .page-body .card-body {
+        padding: 18px 14px;
+    }
+
+    .page-body .card-header h4 {
+        font-size: 19px;
+    }
+
+    .page-body .card-header .ms-auto {
+        width: 100%;
+    }
+
+    .page-body .card-header .ms-auto .btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    #staffCreateTabs .nav-link {
+        padding: 9px 12px;
+    }
+
+    #photo-preview {
+        width: 78px;
+        height: 78px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page-body *,
+    #staffCreateTabs .nav-link {
+        transition: none !important;
+    }
+}
+
 /* ============================================ */
 /* RESPONSIVE DESKTOP & MOBILE                  */
 /* ============================================ */

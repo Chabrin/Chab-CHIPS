@@ -36,28 +36,29 @@ class SelfServiceController extends Controller
     }
 
     public function myLeave()
-    {
-        try {
-            $link = auth()->user()->staffLink;
+{
+    $user = auth()->user();
+    
+    // Resolve the linked staff record
+    $staff = $user->staff ?? \App\Models\Staff::where('id', $user->staff_id)->first();
+    $staffLinked = !is_null($staff);
+    $currentYear = date('Y');
 
-            if (!$link) {
-                return view('self-service.my-leave', [
-                    'staffLinked' => false,
-                    'staffId'     => null,
-                    'staffName'   => null,
-                ]);
-            }
-
-            return view('self-service.my-leave', [
-                'staffLinked' => true,
-                'staffId'     => $link->staff_id,
-                'staffName'   => $link->staff->full_names ?? auth()->user()->name,
-            ]);
-        } catch (Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            return redirect()->back()->with('error', 'Failed to load leave page.');
-        }
+    // Get the annual leave plan if staff is linked
+    $annualPlan = null;
+    if ($staffLinked) {
+        $annualPlan = \App\Models\LeaveCalendarPlan::with(['leaveType', 'slots'])
+            ->where('employee_id', $staff->id)
+            ->whereYear('start_date', $currentYear)
+            ->whereHas('leaveType', function ($q) {
+                $q->where('type_name', 'ILIKE', '%annual%')
+                  ->orWhere('type_name', 'ILIKE', '%normal%');
+            })
+            ->first();
     }
+
+    return view('self-service.my-leave', compact('staff', 'staffLinked', 'annualPlan', 'currentYear'));
+}
 
      public function showSelf()
     {

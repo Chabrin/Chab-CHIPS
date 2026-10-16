@@ -77,7 +77,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
                                 <span>Save Staff</span>
                             </button>
-                            <a href="{{ route('contract.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                            <a href="{{ route('staff.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
                             </a>
@@ -96,7 +96,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                         </div>
                         @endif
 
-                        <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm">
+                       <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" enctype="multipart/form-data">
                             @csrf
 
                             <!-- Nav Tabs -->
@@ -125,26 +125,34 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         Banking & Statutory
                                     </button>
                                 </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab" aria-controls="documents" aria-selected="false">
+                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
+                                        Documents
+                                    </button>
+                                </li>
                                 @if($canCreateUsers)
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="user-tab" data-bs-toggle="tab" data-bs-target="#user" type="button" role="tab" aria-controls="user" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">person_add</span>
-                                        System User (Optional)
+                                        System User
                                     </button>
                                 </li>
                                 @endif
                             </ul>
-
                             <!-- Tab Content -->
                             <div class="tab-content mt-3" id="staffCreateTabsContent">
                                 <!-- Personal Information Tab -->
                                 <div class="tab-pane fade show active" id="personal" role="tabpanel" aria-labelledby="personal-tab">
                                     <div class="row">
-                                        <div class="col-md-4 mb-3">
+                                       <div class="col-md-4 mb-3">
                                             <label for="staff_number" class="form-label">Staff Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('staff_number') is-invalid @enderror" id="staff_number" name="staff_number" value="{{ old('staff_number') }}" required>
+                                            <input type="text" class="form-control @error('staff_number') is-invalid @enderror"
+                                                id="staff_number" name="staff_number"
+                                                value="{{ old('staff_number', $nextStaffNumber) }}" readonly required>
+                                            
                                             @error('staff_number')
-                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
@@ -234,6 +242,29 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             @error('disability')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                        </div>
+                                         <div class="col-md-4 mb-3">
+                                            <label for="personal_email_address" class="form-label">Official Email <span class="text-danger">*</span></label>
+                                            <input type="email" 
+                                                class="form-control @error('email_address') is-invalid @enderror" 
+                                                id="personal_email_address" 
+                                                name="email_address" 
+                                                value="{{ old('email_address') }}" 
+                                                required>
+                                            @error('email_address')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="row mb-4 align-items-center">
+                                            <div class="col-auto">
+                                                <img id="photo-preview" src="{{ asset('images/default-avatar.png') }}" 
+                                                    class="rounded-circle border" width="90" height="90" style="object-fit: cover;">
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label class="form-label fw-semibold small mb-1">Staff Profile Photo</label>
+                                                <input type="file" name="photo" id="photo-input" class="form-control form-control-sm" accept="image/*">
+                                                <small class="text-muted">Square ratio (JPG, PNG), max 2MB.</small>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -341,10 +372,15 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="email_address" class="form-label">Email Address <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address') }}" required>
+                                            <label for="contact_email_address" class="form-label">Official Email <span class="text-danger">*</span></label>
+                                            {{-- No name attribute: the submitted value comes from the Personal Information tab input.
+                                                 The two are kept in sync by JS and both are editable. --}}
+                                            <input type="email" 
+                                                class="form-control @error('email_address') is-invalid @enderror" 
+                                                id="contact_email_address" 
+                                                value="{{ old('email_address') }}">
                                             @error('email_address')
-                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
@@ -409,18 +445,18 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="account_name" class="form-label">Account Name</label>
-                                            <input type="text" class="form-control @error('account_name') is-invalid @enderror" id="account_name" name="account_name" value="{{ old('account_name') }}">
+                                       <div class="col-md-4 mb-3">
+                                            <label for="account_name" class="form-label">
+                                                Account Name <span class="text-danger">*</span>
+                                            </label>
+                                            <input type="text" 
+                                                class="form-control @error('account_name') is-invalid @enderror" 
+                                                id="account_name" 
+                                                name="account_name" 
+                                                value="{{ old('account_name') }}" 
+                                                required>
                                             @error('account_name')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="account_number" class="form-label">Account Number</label>
-                                            <input type="text" class="form-control @error('account_number') is-invalid @enderror" id="account_number" name="account_number" value="{{ old('account_number') }}">
-                                            @error('account_number')
-                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
@@ -431,7 +467,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="nhif_number" class="form-label">NHIF Number</label>
+                                            <label for="nhif_number" class="form-label"> SHA Number</label>
                                             <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ old('nhif_number') }}">
                                             @error('nhif_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -446,19 +482,87 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Documentation section  -->
+                                <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
+                                    <div class="pt-3 pb-2 mb-3 border-bottom">
+                                        <h6 class="fw-bold mb-1">Staff Documentation & Verification</h6>
+                                        <p class="text-muted small mb-0">Upload statutory documents, contracts, and certifications (PDF, JPG, PNG &mdash; Max 5MB per file).</p>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <!-- National ID / Passport -->
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-3 bg-light">
+                                                <label class="form-label fw-semibold small mb-1">
+                                                    National ID / Passport Copy <span class="text-danger">*</span>
+                                                </label>
+                                                <input type="file" name="documents[national_id]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+                                                <small class="text-muted">Scanned front/back copy or passport bio-page</small>
+                                            </div>
+                                        </div>
+
+                                        <!-- KRA PIN Certificate -->
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-3 bg-light">
+                                                <label class="form-label fw-semibold small mb-1">
+                                                    KRA PIN Certificate <span class="text-danger">*</span>
+                                                </label>
+                                                <input type="file" name="documents[kra_pin]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+                                                <small class="text-muted">KRA PIN registration certificate</small>
+                                            </div>
+                                        </div>
+
+                                        <!-- Signed Employment Contract (REQ-14) -->
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-3 bg-light">
+                                                <label class="form-label fw-semibold small mb-1">
+                                                    Signed Employment Contract
+                                                </label>
+                                                <input type="file" name="documents[contract]" class="form-control" accept=".pdf">
+                                                <small class="text-muted">Physical/counter-signed contract in PDF format</small>
+                                            </div>
+                                        </div>
+                                        <!-- Curriculum Vitae (CV / Resume) -->
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-3 bg-light">
+                                                <label class="form-label fw-semibold small mb-1">
+                                                    Curriculum Vitae (CV / Resume)
+                                                </label>
+                                                <input type="file" name="documents[cv]" class="form-control" accept=".pdf,.doc,.docx">
+                                                <small class="text-muted">Updated staff resume or CV (PDF or Word, Max 5MB)</small>
+                                            </div>
+                                        </div>
+                                        <!-- Academic / Professional Certificates -->
+                                        <div class="col-md-6">
+                                            <div class="border rounded p-3 bg-light">
+                                                <label class="form-label fw-semibold small mb-1">
+                                                    Academic & Professional Certificates
+                                                </label>
+                                                <input type="file" name="documents[academic]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+                                                <small class="text-muted">Degrees, diplomas, transcripts, or certifications</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 @if($canCreateUsers)
-                                <!-- System User Tab -->
+                                <!-- System User Tab (mandatory) -->
                                 <div class="tab-pane fade" id="user" role="tabpanel" aria-labelledby="user-tab">
-                                    <p class="text-muted small">Optional — select a role to also create a system login for this staff member.</p>
+                                    <p class="text-muted small">Required — a system login will be created for this staff member.</p>
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
-                                            <label class="form-label">Login Email</label>
-                                            <input type="email" class="form-control" id="login_email_preview" value="{{ old('email_address') }}" disabled>
+                                            <label for="login_email" class="form-label">Login Email <span class="text-danger">*</span></label>
+                                            <input type="email" class="form-control @error('login_email') is-invalid @enderror"
+                                                id="login_email" name="login_email"
+                                                value="{{ old('login_email', old('email_address')) }}" required>
+                                            <small class="text-muted">Defaults to the Official Email, but you can change it.</small>
+                                            @error('login_email')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
                                         </div>
                                         <div class="col-md-6 mb-3">
-                                            <label for="role_id" class="form-label">Role</label>
-                                            <select class="form-select @error('role_id') is-invalid @enderror" id="role_id" name="role_id">
+                                            <label for="role_id" class="form-label">Role <span class="text-danger">*</span></label>
+                                            <select class="form-select @error('role_id') is-invalid @enderror" id="role_id" name="role_id" required>
                                                 <option value="">Select Role</option>
                                                 @foreach($roles as $role)
                                                 <option value="{{ $role->id }}" {{ old('role_id') == $role->id ? 'selected' : '' }}>{{ $role->display_name }}</option>
@@ -516,9 +620,28 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
         $('#position_id').on('change', toggleZoneFields);
         toggleZoneFields();
 
-        // Mirror the Personal Information email into the read-only login email preview
-        $('#email_address').on('input', function() {
-            $('#login_email_preview').val($(this).val());
+        // Email sync: Official Email (Personal tab) <-> Official Email (Contact tab) -> Login Email (System User tab).
+        // All three are editable. The login email follows the official email until the user
+        // types their own login email, after which it is left alone.
+        var loginEmailEdited = false;
+        var $officialEmails = $('#personal_email_address, #contact_email_address');
+
+        // If the form re-rendered after a validation error with a different login email, don't overwrite it
+        if ($('#login_email').length && $('#login_email').val() !== '' &&
+            $('#login_email').val() !== $('#personal_email_address').val()) {
+            loginEmailEdited = true;
+        }
+
+        $('#login_email').on('input', function() {
+            loginEmailEdited = true;
+        });
+
+        $officialEmails.on('input', function() {
+            var val = $(this).val();
+            $officialEmails.not(this).val(val);
+            if (!loginEmailEdited) {
+                $('#login_email').val(val);
+            }
         });
 
         // Handle form submission
@@ -531,6 +654,21 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             submitButton.prop('disabled', true);
             submitButton.css('opacity', '0.6');
         });
+
+        // A required field inside a hidden tab blocks submit silently, so jump to the tab that has it.
+        // 'invalid' doesn't bubble, so listen in the capture phase on the form.
+        document.getElementById('staffCreateForm').addEventListener('invalid', function(e) {
+            var pane = $(e.target).closest('.tab-pane');
+            if (pane.length && !pane.hasClass('active')) {
+                var tabBtn = document.getElementById(pane.attr('id') + '-tab');
+                if (tabBtn) {
+                    new bootstrap.Tab(tabBtn).show();
+                }
+            }
+            // Re-enable the submit button, since the browser blocked the submission
+            $('#submitSpinner').addClass('d-none');
+            $('#createButton').prop('disabled', false).css('opacity', '1');
+        }, true);
 
         // Handle zone change to filter zone areas
         $('#zone_id').on('change', function() {
@@ -573,6 +711,28 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                     tab.show();
                 }
             }
+        }
+    });
+
+    // Live preview of the selected staff photo
+    document.getElementById('photo-input').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                document.getElementById('photo-preview').src = evt.target.result;
+            }
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+        // Name sync (Full Names -> Account Name)
+        const fullNameInput = document.getElementById('full_names');
+        const accountNameInput = document.getElementById('account_name');
+
+        if (fullNameInput && accountNameInput) {
+            fullNameInput.addEventListener('input', function () {
+                accountNameInput.value = this.value;
+            });
         }
     });
 </script>

@@ -10,6 +10,11 @@ use App\Jobs\SendApprovalNotification;
 
 class WorkflowApprovalController extends Controller
 {
+    public function __construct(private \App\Services\Leave\LeaveCalendarService $calendar,
+        private \App\Services\Leave\LeaveTierService $tiers)
+    {
+    }
+
     private $workflowStatuses = [
         1 => 'Pending',
         2 => 'Paid',
@@ -599,42 +604,46 @@ class WorkflowApprovalController extends Controller
     }
     
     // Helper method to check if a date is a public holiday (year-agnostic)
-    private function checkIfPublicHoliday($month, $day, $publicHolidays)
+        private function checkIfPublicHoliday($month, $day, $publicHolidays)
     {
-        return $publicHolidays->first(function($holiday) use ($month, $day) {
-            $holidayStartMonth = (int) date('m', strtotime($holiday->start_date));
-            $holidayStartDay = (int) date('d', strtotime($holiday->start_date));
-            $holidayEndMonth = (int) date('m', strtotime($holiday->end_date));
-            $holidayEndDay = (int) date('d', strtotime($holiday->end_date));
-            
-            // Same month holiday (e.g., Dec 25 to Dec 25, or Dec 25 to Dec 26)
-            if ($holidayStartMonth == $holidayEndMonth) {
-                return $month == $holidayStartMonth && 
-                       $day >= $holidayStartDay && 
-                       $day <= $holidayEndDay;
-            }
-            
-            // Multi-month holiday (e.g., Dec 31 to Jan 2)
-            // Check if date falls in start month from start day onwards
-            if ($month == $holidayStartMonth && $day >= $holidayStartDay) {
-                return true;
-            }
-            
-            // Check if date falls in end month up to end day
-            if ($month == $holidayEndMonth && $day <= $holidayEndDay) {
-                return true;
-            }
-            
-            // Check if month is between start and end months
-            if ($holidayStartMonth < $holidayEndMonth) {
-                // Normal case: e.g., Nov to Dec
-                return $month > $holidayStartMonth && $month < $holidayEndMonth;
-            } else {
-                // Year-spanning case: e.g., Dec to Jan
-                return $month > $holidayStartMonth || $month < $holidayEndMonth;
-            }
-        });
+        return $this->calendar->matchHoliday((int) $month, (int) $day, $publicHolidays);
     }
+    // private function checkIfPublicHoliday($month, $day, $publicHolidays)
+    // {
+    //     return $publicHolidays->first(function($holiday) use ($month, $day) {
+    //         $holidayStartMonth = (int) date('m', strtotime($holiday->start_date));
+    //         $holidayStartDay = (int) date('d', strtotime($holiday->start_date));
+    //         $holidayEndMonth = (int) date('m', strtotime($holiday->end_date));
+    //         $holidayEndDay = (int) date('d', strtotime($holiday->end_date));
+            
+    //         // Same month holiday (e.g., Dec 25 to Dec 25, or Dec 25 to Dec 26)
+    //         if ($holidayStartMonth == $holidayEndMonth) {
+    //             return $month == $holidayStartMonth && 
+    //                    $day >= $holidayStartDay && 
+    //                    $day <= $holidayEndDay;
+    //         }
+            
+    //         // Multi-month holiday (e.g., Dec 31 to Jan 2)
+    //         // Check if date falls in start month from start day onwards
+    //         if ($month == $holidayStartMonth && $day >= $holidayStartDay) {
+    //             return true;
+    //         }
+            
+    //         // Check if date falls in end month up to end day
+    //         if ($month == $holidayEndMonth && $day <= $holidayEndDay) {
+    //             return true;
+    //         }
+            
+    //         // Check if month is between start and end months
+    //         if ($holidayStartMonth < $holidayEndMonth) {
+    //             // Normal case: e.g., Nov to Dec
+    //             return $month > $holidayStartMonth && $month < $holidayEndMonth;
+    //         } else {
+    //             // Year-spanning case: e.g., Dec to Jan
+    //             return $month > $holidayStartMonth || $month < $holidayEndMonth;
+    //         }
+    //     });
+    // }
 
     /**
      * Check that a record is still in a status eligible for approval/rejection, so an
@@ -875,6 +884,7 @@ class WorkflowApprovalController extends Controller
                     $item->used_days = $used_days;
                     $item->current_status_id = 5; // Approved
                     $item->save();
+
                     
                     // Update the leave calendar plan balance
                     $start_date_only = date('Y-m-d', strtotime($item->start_date)) . ' 00:00:00';
@@ -995,6 +1005,7 @@ class WorkflowApprovalController extends Controller
                     // Mark days as refunded
                     \App\Models\LeaveRequestDaysTaken::whereIn('id', $adjustment->day_ids)
                         ->update(['current_status_id' => 41]); // Refunded
+                        $this->tiers->retagForRequest($leaveRequest);
                     
                     // Update leave request used_days
                     $leaveRequest = $adjustment->leaveRequest;
@@ -1204,6 +1215,7 @@ class WorkflowApprovalController extends Controller
                         $item->used_days = $used_days;
                         $item->current_status_id = 5;
                         $item->save();
+                        $this->tiers->retagForRequest($item);
                         
                         // Update leave calendar plan
                         $plan = \App\Models\LeaveCalendarPlan::where('employee_id', $item->staff_id)

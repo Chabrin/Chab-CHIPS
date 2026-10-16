@@ -8,6 +8,12 @@ use App\Models\Zone;
 use App\Models\Staff;
 use App\Exports\StaffExport;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Models\DocumentType;
+use App\Models\EmployeeDocument;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
+use App\Models\PayrollElement;
+use App\Services\NssfCalculator;
 use App\Models\User;
 use App\Models\Contract;
 use App\Models\Incident;
@@ -38,6 +44,13 @@ use App\Models\EmployeeTerminationDocumentTracker;
 
 class StaffController extends Controller
 {
+      private const DOCUMENT_MAP = [
+        'national_id' => 'National ID / Passport',
+        'kra_pin'     => 'KRA PIN Certificate',
+        'contract'    => 'Signed Employment Contract',
+        'cv'          => 'Curriculum Vitae (CV)',
+        'academic'    => 'Academic Certificates & Transcripts',
+    ];
     /**
      * Display staff list page
      */
@@ -181,6 +194,55 @@ class StaffController extends Controller
         return $username;
     }
 
+    public function elementBreakdown(Request $request, $id)
+{
+    $element = PayrollElement::findOrFail($id);
+
+    if ((int) $element->formula_id !== (int) config('nssf.formula_id')) {
+        return response()->json(['tiers' => [], 'total' => 0]);
+    }
+
+    return response()->json(
+        app(NssfCalculator::class)->calculate((float) $request->query('gross', 0))
+    );
+}
+
+/**
+ * Recalculate NSSF rows on the server so the saved amount can't be edited in the browser.
+ */
+private function applyNssfAmounts(array $validated): array
+{
+    if (empty($validated['elements'])) {
+        return $validated;
+    }
+
+    $nssfIds = PayrollElement::whereIn('id', array_column($validated['elements'], 'element'))
+        ->where('formula_id', config('nssf.formula_id'))
+        ->pluck('id')->map(fn ($v) => (int) $v)->all();
+
+    if (empty($nssfIds)) {
+        return $validated;
+    }
+
+    $gross = (float) $validated['basic_salary'];
+    foreach ($validated['elements'] as $e) {
+        if (!in_array((int) $e['element'], $nssfIds, true) && (int) $e['entry_type'] === 2) {
+            $gross += (float) $e['amount'];
+        }
+    }
+
+    $total = app(NssfCalculator::class)->calculate($gross)['total'];
+
+    foreach ($validated['elements'] as $i => $e) {
+        if (in_array((int) $e['element'], $nssfIds, true)) {
+            $validated['elements'][$i]['amount'] = $total;
+            $validated['elements'][$i]['entry_type'] = 1; // always a deduction
+        }
+    }
+
+    return $validated;
+}
+
     /**
      * Display staff details page
      */
@@ -238,19 +300,23 @@ class StaffController extends Controller
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
         $roles = Role::orderBy('display_name')->get();
+        $nextStaffNumber = Staff::nextStaffNumber();
 
-        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles'));
+        
+
+        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles', 'nextStaffNumber'));
     }
+    
 
     /**
      * Store a newly created staff member, optionally creating a linked system-user login
      * when the requester has the create_users permission and fills in the password field.
      */
-    public function store(Request $request)
+     public function store(Request $request)
     {
         try {
             $validated = $request->validate([
-                'staff_number' => 'required|string|max:255|unique:sys_staff,staff_number',
+               'staff_number' => 'nullable',
                 'full_names' => 'required|string|max:255',
                 'mobile_number' => 'nullable|string|max:255',
                 'email_address' => 'required|email|max:255|unique:sys_staff,email_address',
@@ -283,12 +349,22 @@ class StaffController extends Controller
                 'citizenship' => 'required|string',
                 'personal_email' => 'nullable|email|max:255',
                 'disability' => 'required|string',
+                'photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
+                'documents' => 'nullable|array',
+                'documents.national_id' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'documents.kra_pin'     => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
+                'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+                'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
             ]);
 
             $managedZoneIds = $validated['managed_zone_ids'] ?? [];
             $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
             unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
             $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
+
+            // CHANGED: keep uploaded files out of fill(); they are handled separately below
+            unset($validated['photo'], $validated['documents']);
 
             // Uppercase names
             if (isset($validated['full_names'])) {
@@ -321,13 +397,23 @@ class StaffController extends Controller
                 }
             }
 
-            $staff = DB::transaction(function () use ($validated, $managedZoneIds, $supervisedZoneIds, $createUser, $userValidated, $generatedPassword) {
+            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $createUser, $userValidated, $generatedPassword) {
                 $staff = new Staff();
                 $staff->fill($validated);
                 $staff->date_time = now();
+                $staff->staff_number = Staff::nextStaffNumber();
                 $staff->uid = uniqid('staff_', true);
                 $staff->current_status_id = 1;
                 $staff->save();
+
+                // CHANGED: save the profile photo
+                if ($request->hasFile('photo')) {
+                    $staff->photo = $request->file('photo')->store('staff_photos', 'public');
+                    $staff->save();
+                }
+
+                // CHANGED: save the uploaded documents (REQ-01)
+                $this->storeStaffDocuments($request, $staff);
 
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
@@ -373,6 +459,10 @@ class StaffController extends Controller
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
+            // CHANGED: log the real error so it can be diagnosed
+            Log::error('Staff create failed: ' . $e->getMessage(), [
+                'file' => $e->getFile() . ':' . $e->getLine(),
+            ]);
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
@@ -381,6 +471,95 @@ class StaffController extends Controller
             return redirect()->back()->with('error', 'Failed to create staff member')->withInput();
         }
     }
+    private function storeStaffDocuments(Request $request, Staff $staff): void
+{
+    $map = [
+        'national_id' => 'National ID / Passport',
+        'kra_pin'     => 'KRA PIN Certificate',
+        'contract'    => 'Signed Employment Contract',
+        'cv'          => 'Curriculum Vitae (CV)',
+        'academic'    => 'Academic Certificates & Transcripts',
+    ];
+    $types = DocumentType::pluck('id', 'name');
+
+    foreach ($map as $key => $typeName) {
+        $file = $request->file("documents.$key");
+        if (!$file || !$file->isValid()) {
+            continue;
+        }
+        if (!isset($types[$typeName])) {
+            throw new \RuntimeException("Document type missing: $typeName");
+        }
+
+        EmployeeDocument::create([
+            'employee_id'      => $staff->id,
+            'document_type_id' => $types[$typeName],
+            'title'            => $typeName,
+            'file_path'        => $file->store("employee_documents/{$staff->id}", 'local'),
+            'file_name'        => $file->getClientOriginalName(),
+            'file_size'        => (int) round($file->getSize() / 1024),
+            'mime_type'        => $file->getClientMimeType(),
+            'uploaded_by'      => auth()->id(),
+        ]);
+    }
+}
+private function saveEmployeeDocument(Staff $staff, int $typeId, string $title, UploadedFile $file): EmployeeDocument
+{
+    return EmployeeDocument::create([
+        'employee_id'      => $staff->id,
+        'document_type_id' => $typeId,
+        'title'            => $title,
+        'file_path'        => $file->store("employee_documents/{$staff->id}", 'local'),
+        'file_name'        => $file->getClientOriginalName(),
+        'file_size'        => (int) round($file->getSize() / 1024),
+        'mime_type'        => $file->getClientMimeType(),
+        'uploaded_by'      => auth()->id(),
+    ]);
+}
+
+/**
+ * Apply photo/document changes from the edit form.
+ * Returns the old files to delete once the DB transaction has committed.
+ */
+private function syncStaffFiles(Request $request, Staff $staff): array
+{
+    $obsolete = [];
+
+    if ($request->hasFile('photo')) {
+        if ($staff->photo) {
+            $obsolete[] = ['public', $staff->photo];
+        }
+        $staff->photo = $request->file('photo')->store('staff_photos', 'public');
+        $staff->save();
+    }
+
+    $types    = DocumentType::pluck('id', 'name');
+    $existing = EmployeeDocument::where('employee_id', $staff->id)->get()->groupBy('document_type_id');
+    $remove   = $request->input('remove_documents', []);
+
+    foreach (self::DOCUMENT_MAP as $key => $typeName) {
+        $typeId     = $types[$typeName] ?? null;
+        $file       = $request->file("documents.$key");
+        $hasNewFile = $file && $file->isValid();
+
+        if ($hasNewFile && !$typeId) {
+            throw new \RuntimeException("Document type missing: $typeName");
+        }
+
+        if ($typeId && ($hasNewFile || in_array($key, $remove, true))) {
+            foreach ($existing->get($typeId, collect()) as $current) {
+                $obsolete[] = ['local', $current->file_path];
+                $current->delete();
+            }
+        }
+
+        if ($hasNewFile) {
+            $this->saveEmployeeDocument($staff, $typeId, $typeName, $file);
+        }
+    }
+
+    return $obsolete;
+}
 
     /**
      * A zone can't have the same staff member as both manager and supervisor.
@@ -418,105 +597,142 @@ class StaffController extends Controller
     /**
      * Show the form for editing staff
      */
-    public function edit($encryptedId)
-    {
+   public function edit($encryptedId)
+{
+    try {
+        $id = Crypt::decrypt($encryptedId);
+        $staff = Staff::with(['zonesManaged', 'zonesSupervised', 'employeeDocuments'])->findOrFail($id);
+        $departments = Department::orderBy('department_name')->get();
+        $banks = Bank::orderBy('bank_name')->get();
+        $positions = Position::orderBy('position_name')->get();
+        $zones = Zone::orderBy('zone_name')->get();
+        $zoneAreas = ZoneArea::orderBy('area_name')->get();
+
+        $types = DocumentType::pluck('id', 'name');
+        $documentSlots = collect(self::DOCUMENT_MAP)->map(function ($typeName, $key) use ($types, $staff) {
+            $typeId = $types[$typeName] ?? null;
+            return [
+                'key'   => $key,
+                'label' => $typeName,
+                'doc'   => $typeId ? $staff->employeeDocuments->firstWhere('document_type_id', $typeId) : null,
+            ];
+        })->values();
+
+        return view('staff.edit', compact('staff', 'departments', 'banks', 'positions', 'zones', 'zoneAreas', 'documentSlots'));
+    } catch (\Exception $e) {
         try {
-            $id = Crypt::decrypt($encryptedId);
-            $staff = Staff::with(['zonesManaged', 'zonesSupervised'])->findOrFail($id);
-            $departments = Department::orderBy('department_name')->get();
-            $banks = Bank::orderBy('bank_name')->get();
-            $positions = Position::orderBy('position_name')->get();
-            $zones = Zone::orderBy('zone_name')->get();
-            $zoneAreas = ZoneArea::orderBy('area_name')->get();
-            return view('staff.edit', compact('staff', 'departments', 'banks', 'positions', 'zones', 'zoneAreas'));
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return redirect()->route('staff.index')->with('error', 'Staff member not found');
+            ErrorDispatcher::dispatch($e);
+        } catch (\Exception $ex) {
+            Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
         }
+        return redirect()->route('staff.index')->with('error', 'Staff member not found');
     }
+}
 
     /**
      * Update the specified staff member
      */
     public function update(Request $request, $id)
-    {
-        Log::info("Updating staff member with encrypted ID: " . $id);
-        try {
+{
+    Log::info("Updating staff member with ID: " . $id);
+    try {
 
-            $validated = $request->validate([
-                'staff_number' => 'required|string|max:255|unique:sys_staff,staff_number,' . $id,
-                'full_names' => 'required|string|max:255',
-                'mobile_number' => 'nullable|string|max:255',
-                'email_address' => 'required|email|max:255|unique:sys_staff,email_address,' . $id,
-                'national_id' => 'required|string|max:255|unique:sys_staff,national_id,' . $id,
-                'gender' => 'required|string',
-                'birth_date' => 'required|date',
-                'address' => 'nullable|string',
-                'passport' => 'nullable|string|max:255',
-                'department_id' => 'nullable|integer',
-                'position_id' => 'nullable|integer',
-                'zone_id' => 'nullable|integer',
-                'managed_zone_ids' => 'nullable|array',
-                'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
-                'supervised_zone_ids' => 'nullable|array',
-                'supervised_zone_ids.*' => 'integer|exists:sys_set_zones,id',
-                'hire_date' => 'nullable|date',
-                'bank_name' => 'nullable|integer',
-                'account_name' => 'nullable|string|max:255',
-                'account_number' => 'nullable|string|max:255',
-                'pin_number' => 'nullable|string|max:255',
-                'nhif_number' => 'nullable|string|max:255',
-                'nssf_number' => 'nullable|string|max:255',
-                'marital' => 'required|string',
-                'spouse_name' => 'nullable|string|max:255',
-                'kins_names' => 'nullable|string|max:255',
-                'district' => 'nullable|string|max:255',
-                'location' => 'nullable|string|max:255',
-                'sub_location' => 'nullable|string|max:255',
-                'birth_place' => 'nullable|string|max:255',
-                'citizenship' => 'required|string',
-                'personal_email' => 'nullable|email|max:255',
-                'disability' => 'required|string',
-            ]);
+        $validated = $request->validate([
+            'staff_number' => 'required|string|max:255|unique:sys_staff,staff_number,' . $id,
+            'full_names' => 'required|string|max:255',
+            'mobile_number' => 'nullable|string|max:255',
+            'email_address' => 'required|email|max:255|unique:sys_staff,email_address,' . $id,
+            'national_id' => 'required|string|max:255|unique:sys_staff,national_id,' . $id,
+            'gender' => 'required|string',
+            'birth_date' => 'required|date',
+            'address' => 'nullable|string',
+            'passport' => 'nullable|string|max:255',
+            'department_id' => 'nullable|integer',
+            'position_id' => 'nullable|integer',
+            'zone_id' => 'nullable|integer',
+            'managed_zone_ids' => 'nullable|array',
+            'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
+            'supervised_zone_ids' => 'nullable|array',
+            'supervised_zone_ids.*' => 'integer|exists:sys_set_zones,id',
+            'hire_date' => 'nullable|date',
+            'bank_name' => 'nullable|integer',
+            'account_name' => 'nullable|string|max:255',
+            'account_number' => 'nullable|string|max:255',
+            'pin_number' => 'nullable|string|max:255',
+            'nhif_number' => 'nullable|string|max:255',
+            'nssf_number' => 'nullable|string|max:255',
+            'marital' => 'required|string',
+            'spouse_name' => 'nullable|string|max:255',
+            'kins_names' => 'nullable|string|max:255',
+            'district' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'sub_location' => 'nullable|string|max:255',
+            'birth_place' => 'nullable|string|max:255',
+            'citizenship' => 'required|string',
+            'personal_email' => 'nullable|email|max:255',
+            'disability' => 'required|string',
+            'photo'                 => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
+            'documents'             => 'nullable|array',
+            'documents.national_id' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'documents.kra_pin'     => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
+            'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+            'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'remove_documents'      => 'nullable|array',
+            'remove_documents.*'    => 'in:' . implode(',', array_keys(self::DOCUMENT_MAP)),
+        ]);
 
-            $managedZoneIds = $validated['managed_zone_ids'] ?? [];
-            $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
-            unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
-            $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
+        // TEMPORARY: confirms the files actually reach the server (remove once working)
+        Log::info('Staff update files', [
+            'photo' => $request->hasFile('photo'),
+            'documents' => array_keys($request->allFiles()['documents'] ?? []),
+        ]);
 
-            $staff = Staff::findOrFail($id);
+        $managedZoneIds = $validated['managed_zone_ids'] ?? [];
+        $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
+        unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
+        $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
 
-            // Convert names to uppercase
-            if (isset($validated['full_names'])) {
-                $validated['full_names'] = strtoupper($validated['full_names']);
-            }
-            if (isset($validated['spouse_name'])) {
-                $validated['spouse_name'] = strtoupper($validated['spouse_name']);
-            }
+        // keep uploaded files and flags out of the mass-assigned columns
+        unset($validated['photo'], $validated['documents'], $validated['remove_documents']);
 
-            DB::transaction(function () use ($staff, $validated, $managedZoneIds, $supervisedZoneIds) {
-                $staff->update($validated);
-                $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
-            });
+        $staff = Staff::findOrFail($id);
 
-            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member updated successfully');
-        } catch (ValidationException $e) {
-            Log::error('Validation error updating staff member: ' . json_encode($e->errors()));
-            return redirect()->back()->withErrors($e->errors())->withInput();
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-
-            return redirect()->back()->with('error', 'Failed to update staff member')->withInput();
+        // Convert names to uppercase
+        if (isset($validated['full_names'])) {
+            $validated['full_names'] = strtoupper($validated['full_names']);
         }
+        if (isset($validated['spouse_name'])) {
+            $validated['spouse_name'] = strtoupper($validated['spouse_name']);
+        }
+
+        $obsoleteFiles = [];
+        DB::transaction(function () use ($request, $staff, $validated, $managedZoneIds, $supervisedZoneIds, &$obsoleteFiles) {
+            $staff->update($validated);
+            $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
+            $obsoleteFiles = $this->syncStaffFiles($request, $staff);
+        });
+
+        // Only delete replaced/removed files after the DB changes have committed
+        foreach ($obsoleteFiles as [$disk, $path]) {
+            Storage::disk($disk)->delete($path);
+        }
+
+        return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member updated successfully');
+    } catch (ValidationException $e) {
+        Log::error('Validation error updating staff member: ' . json_encode($e->errors()));
+        return redirect()->back()->withErrors($e->errors())->withInput();
+    } catch (\Exception $e) {
+        Log::error('Staff update failed: ' . $e->getMessage(), ['file' => $e->getFile() . ':' . $e->getLine()]);
+        try {
+            ErrorDispatcher::dispatch($e);
+        } catch (\Exception $ex) {
+            Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+        }
+
+        return redirect()->back()->with('error', 'Failed to update staff member')->withInput();
     }
+}
 
     /**
      * Get zone areas by zone ID
@@ -573,66 +789,70 @@ class StaffController extends Controller
         return view('staff.contracts.contracts_edit', compact('contract'));
     }
 
-    public function contractList()
-    {
+   public function contractList()
+{
+    try {
+        $canRead   = Auth::user()->isAbleTo('read_contracts');
+        $canUpdate = Auth::user()->isAbleTo('update_contracts');
+
+        $contracts = Contract::with('employee', 'position', 'createdBy', 'elements.payrollElement')
+            ->whereHas('employee', function ($query) {
+                $query->where('current_status_id', 1);
+            })
+            ->orderBy('date_time', 'desc')
+            ->get()
+            ->map(function ($contract) use ($canRead, $canUpdate) {
+                $encrypted_id = $contract->employee ? Crypt::encrypt($contract->employee->id) : null;
+
+                return [
+                    'id' => $contract->id,
+                    'staff_id' => $contract->staff_id,
+                    'staff_number' => $contract->staff_number,
+                    'position_id' => $contract->position_id,
+                    'date_start' => $contract->date_start ? date('Y-m-d', strtotime($contract->date_start)) : null,
+                    'date_end' => $contract->date_end ? date('Y-m-d', strtotime($contract->date_end)) : null,
+                    'basic_salary' => $contract->basic_salary,
+                    'current_status_id' => $contract->current_status_id,
+                    'created_by' => $contract->createdBy ? [
+                        'id' => $contract->createdBy->id,
+                        'name' => $contract->createdBy->name,
+                    ] : null,
+                    'employee' => $contract->employee ? [
+                        'id' => $contract->employee->id,
+                        'name' => $contract->employee->full_names,
+                        'encrypted_id' => $encrypted_id,
+                    ] : null,
+                    'position' => $contract->position ? [
+                        'id' => $contract->position->id,
+                        'position_name' => $contract->position->position_name,
+                    ] : null,
+                    'elements' => $contract->elements->map(function ($element) {
+                        return [
+                            'id' => $element->id,
+                            'element_name' => $element->payrollElement ? $element->payrollElement->element_name : null,
+                            'entry_type' => $element->entry_type_id,
+                            'amount' => $element->amount,
+                        ];
+                    }),
+                    'date_time' => $contract->date_time,
+                    'can_read' => $canRead,
+                    'can_update' => $canUpdate,
+                ];
+            });
+
+        return response()->json(['contracts' => $contracts]);
+    } catch (\Throwable $e) {
         try {
-            $contracts = Contract::with('employee', 'position', 'createdBy', 'elements.payrollElement')
-                ->whereHas('employee', function ($query) {
-                    $query->where('current_status_id', 1);
-                })
-                ->orderBy('date_time', 'desc')
-                ->get()
-                ->map(function ($contract) {
-                    // Encrypt employee ID if employee exists
-                    $encrypted_id = $contract->employee ? Crypt::encrypt($contract->employee->id) : null;
-
-                    return [
-                        'id' => $contract->id,
-                        'staff_id' => $contract->staff_id,
-                        'staff_number' => $contract->staff_number,
-                        'position_id' => $contract->position_id,
-                        'date_start' => $contract->date_start ? date('Y-m-d', strtotime($contract->date_start)) : null,
-                        'date_end' => $contract->date_end ? date('Y-m-d', strtotime($contract->date_end)) : null,
-                        'basic_salary' => $contract->basic_salary,
-                        'current_status_id' => $contract->current_status_id,
-                        'created_by' => $contract->createdBy ? [
-                            'id' => $contract->createdBy->id,
-                            'name' => $contract->createdBy->name,
-                        ] : null,
-                        'employee' => $contract->employee ? [
-                            'id' => $contract->employee->id,
-                            'name' => $contract->employee->full_names,
-                            'encrypted_id' => $encrypted_id,
-                        ] : null,
-                        'position' => $contract->position ? [
-                            'id' => $contract->position->id,
-                            'position_name' => $contract->position->position_name,
-                        ] : null,
-                        'elements' => $contract->elements->map(function ($element) {
-                            return [
-                                'id' => $element->id,
-                                'element_name' => $element->payrollElement ? $element->payrollElement->element_name : null,
-                                'entry_type' => $element->entry_type_id,
-                                'amount' => $element->amount,
-                            ];
-                        }),
-                        'date_time' => $contract->date_time,
-                        'can_read' => Auth::user()->isAbleTo('read_contracts'),
-                        'can_update' => Auth::user()->isAbleTo('update_contracts'),
-                    ];
-                });
-
-            return response()->json(['contracts' => $contracts]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            Log::error('Error loading payroll elements: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to load payroll elements'], 500);
+            ErrorDispatcher::dispatch($e);
+        } catch (\Exception $ex) {
+            Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
         }
+        Log::error('Error loading contracts list: ' . $e->getMessage(), [
+            'file' => $e->getFile() . ':' . $e->getLine(),
+        ]);
+        return response()->json(['error' => 'Failed to load contracts'], 500);
     }
+}
 
     public function contractStore(Request $request)
     {
@@ -649,7 +869,7 @@ class StaffController extends Controller
                 'elements.*.amount' => 'required|numeric|min:0',
             ]);
 
-
+            $validated = $this->applyNssfAmounts($validated);
             $staff = Staff::find($validated['staff_id']);
 
             // Create contract
@@ -704,7 +924,7 @@ class StaffController extends Controller
                 'elements.*.amount' => 'required|numeric|min:0',
             ]);
 
-
+            $validated = $this->applyNssfAmounts($validated);
             $contract = Contract::findOrFail($id);
             $staff = Staff::find($validated['staff_id']);
 
