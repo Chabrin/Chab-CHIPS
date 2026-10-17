@@ -141,8 +141,9 @@
 <!-- Annual Leave Schedule Card -->
 @if($annualPlan)
     @php
-        $scheduledDays =$annualPlan->slots->sum('days_count');
-        $isFullyScheduled = ($scheduledDays === 21);
+        $requiredDays = (int) $annualPlan->entitled_days;
+        $scheduledDays = (int) $annualPlan->slots->sum('days_count');
+        $isFullyScheduled = ($scheduledDays === $requiredDays);
     @endphp
 
     <div class="card border-primary shadow-sm mb-4">
@@ -153,11 +154,11 @@
                     Annual Leave Schedule ({{ $currentYear }})
                 </h5>
                 <p class="text-muted small mb-0">
-                    Mandatory 21 Working Days Requirement: 
+                    Mandatory {{ $requiredDays }} Working Days Requirement: 
                     @if($isFullyScheduled)
-                        <span class="badge bg-success">Scheduled (21/21 Days)</span>
+                        <span class="badge bg-success">Scheduled ({{ $requiredDays }}/{{ $requiredDays }} Days)</span>
                     @else
-                        <span class="badge bg-warning text-dark">Action Required ({{ $scheduledDays }}/21 Days Scheduled)</span>
+                        <span class="badge bg-warning text-dark">Action Required ({{ $scheduledDays }}/{{ $requiredDays }} Days Scheduled)</span>
                     @endif
                 </p>
             </div>
@@ -165,9 +166,10 @@
                 <button type="button" class="btn btn-primary d-flex align-items-center open-schedule-modal"
                     data-plan-id="{{ $annualPlan->id }}"
                     data-leave-type-id="{{ $annualPlan->leave_type_id }}"
+                    data-entitled-days="{{ $requiredDays }}"
                     data-employee-name="{{ $staff->full_names ?? auth()->user()->name }}">
                     <span class="material-symbols-outlined me-1">edit_calendar</span>
-                    {{ $isFullyScheduled ? 'Reschedule / View Plan' : 'Schedule My 21 Days' }}
+                    {{ $isFullyScheduled ? 'Reschedule / View Plan' : 'Schedule My ' . $requiredDays . ' Days' }}
                 </button>
             </div>
         </div>
@@ -184,9 +186,9 @@
             </div>
             <div class="modal-body">
                 <div class="d-flex justify-content-between align-items-center p-3 mb-3 bg-light rounded border">
-                    <div><strong>Target:</strong> 21 Days</div>
+                    <div><strong>Target:</strong> <span id="modalTargetDays">0 Days</span></div>
                     <div><strong>Allocated:</strong> <span id="allocatedDaysBadge" class="badge bg-secondary">0 Days</span></div>
-                    <div><strong>Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">21 Days</span></div>
+                    <div><strong>Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">0 Days</span></div>
                 </div>
 
                 <form id="scheduleSlotsForm">
@@ -204,7 +206,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-primary" id="saveScheduleBtn" disabled>
-                    Save & Submit Schedule (21 Days Required)
+                    Save & Submit Schedule (<span id="saveRequiredDays">0</span> Days Required)
                 </button>
             </div>
         </div>
@@ -214,12 +216,16 @@
 <script>
 $(document).ready(function() {
     let currentTotalDays = 0;
+    let requiredDays = 0;
 
     $(document).on('click', '.open-schedule-modal', function() {
         let planId = $(this).data('plan-id');
         let leaveTypeId = $(this).data('leave-type-id');
         let empName = $(this).data('employee-name');
+        requiredDays = parseInt($(this).data('entitled-days')) || 0;
 
+        $('#modalTargetDays').text(requiredDays + ' Days');
+        $('#saveRequiredDays').text(requiredDays);
         $('#modalPlanId').val(planId);
         $('#modalLeaveTypeId').val(leaveTypeId);
         $('#modalEmployeeName').text(empName);
@@ -321,7 +327,7 @@ $(document).ready(function() {
         });
 
         currentTotalDays = total;
-        let remaining = 21 - total;
+        let remaining = requiredDays - total;
 
         $('#allocatedDaysBadge').text(total + ' Days');
 
@@ -338,8 +344,8 @@ $(document).ready(function() {
     }
 
     $('#saveScheduleBtn').on('click', function() {
-        if (currentTotalDays !== 21) {
-            toastr.error('You must allocate exactly 21 working days.');
+        if (currentTotalDays !== requiredDays) {
+            toastr.error('You must allocate exactly ' + requiredDays + ' working days.');
             return;
         }
 

@@ -12,17 +12,24 @@ use Illuminate\Support\Facades\Log;
 
 class LeaveTierService
 {
-    public function hasTiers(int $leaveTypeId): bool
-    {
+    /**
+     * Whether a leave type has pay tiers configured.
+     *
+     * @param int $leaveTypeId
+     * @return bool
+     */
+    public function hasTiers(int $leaveTypeId): bool {
         return LeaveTypeTier::where('leave_type_id', $leaveTypeId)->exists();
     }
 
     /**
      * Re-tag the days for a request's staff member and leave type.
      * Never throws: a tagging problem must not block an approval.
+     *
+     * @param LeaveRequest $request
+     * @return void
      */
-    public function retagForRequest(LeaveRequest $request): void
-    {
+    public function retagForRequest(LeaveRequest $request): void {
         try {
             $years = array_unique([
                 Carbon::parse($request->start_date)->year,
@@ -37,9 +44,15 @@ class LeaveTierService
         }
     }
 
-    /** Re-tag all confirmed (status 5) days for this staff/type/year in date order. */
-    public function retag(int $staffId, int $leaveTypeId, int $year): void
-    {
+    /**
+     * Re-tag all confirmed (status 5) days for this staff/type/year in date order.
+     *
+     * @param int $staffId
+     * @param int $leaveTypeId
+     * @param int $year
+     * @return void
+     */
+    public function retag(int $staffId, int $leaveTypeId, int $year): void {
         $tiers = LeaveTypeTier::where('leave_type_id', $leaveTypeId)->orderBy('tier_order')->get();
         if ($tiers->isEmpty()) {
             return;
@@ -67,8 +80,60 @@ class LeaveTierService
         });
     }
 
-    private function tierForPosition(Collection $tiers, int $position): LeaveTypeTier
-    {
+    /**
+     * Preview how a number of new days would fall across the leave type's tiers, given the days already used this year.
+     * Returns null when the leave type has no tiers.
+     *
+     * @param int $staffId
+     * @param int $leaveTypeId
+     * @param int $year
+     * @param int $requestedDays
+     * @return array{used_this_year: int, summary_text: string, tiers: array}|null
+     */
+    public function breakdown(int $staffId, int $leaveTypeId, int $year, int $requestedDays): ?array {
+        $tiers = LeaveTypeTier::where('leave_type_id', $leaveTypeId)->orderBy('tier_order')->get();
+        if ($tiers->isEmpty()) {
+            return null;
+        }
+
+        $used = LeaveRequestDaysTaken::query()
+            ->join('sys_hr_leave_requests as r', 'r.id', '=', 'sys_hr_leave_requests_234_repeat.parent_id')
+            ->where('r.staff_id', $staffId)
+            ->where('r.leave_type_id', $leaveTypeId)
+            ->whereYear('sys_hr_leave_requests_234_repeat.leave_date', $year)
+            ->where('sys_hr_leave_requests_234_repeat.current_status_id', 5)
+            ->count();
+
+        $counts = [];
+        for ($i = 1; $i <= $requestedDays; $i++) {
+            $tier = $this->tierForPosition($tiers, $used + $i);
+            $counts[$tier->tier_order] = ($counts[$tier->tier_order] ?? 0) + 1;
+        }
+
+        $parts = [];
+        $rows = [];
+        foreach ($tiers as $tier) {
+            if (!empty($counts[$tier->tier_order])) {
+                $parts[] = $counts[$tier->tier_order] . ' day(s) at ' . $tier->label . ' (' . rtrim(rtrim((string) $tier->pay_rate, '0'), '.') . '%)';
+                $rows[] = ['label' => $tier->label, 'pay_rate' => $tier->pay_rate, 'days' => $counts[$tier->tier_order]];
+            }
+        }
+
+        return [
+            'used_this_year' => $used,
+            'summary_text' => $parts ? implode(', ', $parts) : 'No chargeable days in this range',
+            'tiers' => $rows,
+        ];
+    }
+
+    /**
+     * The tier a given day position (1 = first day of the year) falls in.
+     *
+     * @param Collection $tiers
+     * @param int $position
+     * @return LeaveTypeTier
+     */
+    private function tierForPosition(Collection $tiers, int $position): LeaveTypeTier {
         $upTo = 0;
         foreach ($tiers as $tier) {
             if ($tier->days === null) {

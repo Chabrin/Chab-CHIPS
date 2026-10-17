@@ -725,8 +725,8 @@
                                 </a>`;
                         }
 
-                        // Show quick Approve & Reject buttons if the application is still Pending
-                        if (row.current_status_id == 1) {
+                        // Show quick Approve & Reject buttons for Pending / Partially Approved applications
+                        if (row.can_update && (row.current_status_id == 1 || row.current_status_id == 24)) {
                             buttons += `
                                 <button class="btn btn-xs btn-outline-success btn-quick-approve" data-id="${row.id}" title="Approve Leave" style="padding:1px 4px;">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">check_circle</span>

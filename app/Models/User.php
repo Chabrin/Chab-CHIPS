@@ -124,6 +124,13 @@ class User extends Authenticatable implements LaratrustUser
     }
 
     /**
+     * The staff record linked to this system user: the link table first, then the legacy staff_id column.
+     */
+    public function linkedStaff(): ?Staff {
+        return $this->staffLink?->staff ?? ($this->staff_id ? Staff::find($this->staff_id) : null);
+    }
+
+    /**
      * Mutator to hash passwords automatically
      */
     public function setPasswordAttribute($value)

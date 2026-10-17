@@ -480,10 +480,7 @@ class WorkflowApprovalController extends Controller
     {
         try {
             $item = \App\Models\LeaveRequest::findOrFail($id);
-            
-            // Get all active public holidays once
-            $publicHolidays = \App\Models\PublicHoliday::where('current_status_id', 5)->get();
-            
+
             if ($item->current_status_id == 1) {
                 // Stage 1: Generate suggested days based on start and end date
                 
@@ -511,10 +508,8 @@ class WorkflowApprovalController extends Controller
                     if ($dayOfWeek == 7) $dayTypeId = 3; // Sunday
                     
                     // Check if it's a public holiday
-                    $currentMonth = (int) date('m', $startTime);
-                    $currentDay = (int) date('d', $startTime);
-                    $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                    
+                    $isPublicHoliday = $this->checkIfPublicHoliday(date('Y-m-d', $startTime));
+
                     $days = [[
                         'date' => date('Y-m-d', $startTime),
                         'type' => $dayTypeId,
@@ -532,11 +527,8 @@ class WorkflowApprovalController extends Controller
                     
                     // Mark public holidays in the days array
                     foreach ($days as &$day) {
-                        $dayTime = strtotime($day['date']);
-                        $currentMonth = (int) date('m', $dayTime);
-                        $currentDay = (int) date('d', $dayTime);
-                        $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                        
+                        $isPublicHoliday = $this->checkIfPublicHoliday($day['date']);
+
                         $day['is_public_holiday'] = $isPublicHoliday ? true : false;
                         $day['holiday_title'] = $isPublicHoliday ? $isPublicHoliday->title : null;
                     }
@@ -573,12 +565,9 @@ class WorkflowApprovalController extends Controller
                 $days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                     ->orderBy('leave_date')
                     ->get()
-                    ->map(function($day) use ($publicHolidays) {
-                        $dayTime = strtotime($day->leave_date);
-                        $currentMonth = (int) date('m', $dayTime);
-                        $currentDay = (int) date('d', $dayTime);
-                        $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                        
+                    ->map(function($day) {
+                        $isPublicHoliday = $this->checkIfPublicHoliday(date('Y-m-d', strtotime($day->leave_date)));
+
                         return [
                             'date' => date('Y-m-d', strtotime($day->leave_date)),
                             'type' => $day->day_type_id,
@@ -603,47 +592,12 @@ class WorkflowApprovalController extends Controller
         }
     }
     
-    // Helper method to check if a date is a public holiday (year-agnostic)
-        private function checkIfPublicHoliday($month, $day, $publicHolidays)
-    {
-        return $this->calendar->matchHoliday((int) $month, (int) $day, $publicHolidays);
+    /**
+     * Find the public holiday (if any) falling on the given date, honouring each holiday's recurrent flag.
+     */
+    private function checkIfPublicHoliday($date) {
+        return $this->calendar->holidayOn(\Carbon\Carbon::parse($date));
     }
-    // private function checkIfPublicHoliday($month, $day, $publicHolidays)
-    // {
-    //     return $publicHolidays->first(function($holiday) use ($month, $day) {
-    //         $holidayStartMonth = (int) date('m', strtotime($holiday->start_date));
-    //         $holidayStartDay = (int) date('d', strtotime($holiday->start_date));
-    //         $holidayEndMonth = (int) date('m', strtotime($holiday->end_date));
-    //         $holidayEndDay = (int) date('d', strtotime($holiday->end_date));
-            
-    //         // Same month holiday (e.g., Dec 25 to Dec 25, or Dec 25 to Dec 26)
-    //         if ($holidayStartMonth == $holidayEndMonth) {
-    //             return $month == $holidayStartMonth && 
-    //                    $day >= $holidayStartDay && 
-    //                    $day <= $holidayEndDay;
-    //         }
-            
-    //         // Multi-month holiday (e.g., Dec 31 to Jan 2)
-    //         // Check if date falls in start month from start day onwards
-    //         if ($month == $holidayStartMonth && $day >= $holidayStartDay) {
-    //             return true;
-    //         }
-            
-    //         // Check if date falls in end month up to end day
-    //         if ($month == $holidayEndMonth && $day <= $holidayEndDay) {
-    //             return true;
-    //         }
-            
-    //         // Check if month is between start and end months
-    //         if ($holidayStartMonth < $holidayEndMonth) {
-    //             // Normal case: e.g., Nov to Dec
-    //             return $month > $holidayStartMonth && $month < $holidayEndMonth;
-    //         } else {
-    //             // Year-spanning case: e.g., Dec to Jan
-    //             return $month > $holidayStartMonth || $month < $holidayEndMonth;
-    //         }
-    //     });
-    // }
 
     /**
      * Check that a record is still in a status eligible for approval/rejection, so an

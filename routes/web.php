@@ -98,7 +98,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // HR Leave Types AJAX CRUD
     Route::get('/ajax/hr/leave-type/list', [HrSettingsController::class, 'leaveTypeList'])->name('ajax.hr.leave_type.list');
-    Route::delete('/ajax/hr/leave-type/{id}', [HrSettingsController::class, 'leaveTypeDelete'])->name('ajax.hr.leave_type.delete');
 
     // HR Settings - Staff Positions
     Route::get('/hr/staff/positions', [HrSettingsController::class, 'positionsIndex'])->name('settings.hr.positions');
@@ -582,6 +581,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/leave-management/calculate-slot-days', [LeaveManagementController::class, 'calculateSlotDays']);
     Route::post('/ajax/leave-management/save-annual-schedule', [LeaveManagementController::class, 'saveAnnualSchedule']);
     Route::get('/ajax/leave-management/get-year-holidays', [\App\Http\Controllers\LeaveManagementController::class, 'getYearHolidays']);
+    Route::get('/ajax/leave-management/plan-slots/{planId}', [LeaveManagementController::class, 'getPlanSlots']);
+    Route::post('/ajax/leave-management/evaluate-application', [LeaveManagementController::class, 'evaluateApplication']);
 
     Route::get('/ajax/hr/leave-management/leave-calendar-plan/available-days/{staffId}/{leaveTypeId}', [\App\Http\Controllers\LeaveManagementController::class, 'calenderPlanAvailableLeaveDays'])->name('ajax.leave.available-days');
     Route::post('/ajax/hr/leave-management/leave-calendar-plan/validate-date', [\App\Http\Controllers\LeaveManagementController::class, 'validateStartDate'])->name('ajax.leaveCalendarPlan.validateDate');

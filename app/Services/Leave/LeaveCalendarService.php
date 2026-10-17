@@ -11,11 +11,16 @@ use Illuminate\Support\Facades\DB;
 
 class LeaveCalendarService
 {
+    /** Weekdays treated as non-working when none are configured in HR settings (ISO: 6=Sat, 7=Sun). */
+    private const DEFAULT_NON_WORKING_WEEKDAYS = [6, 7];
+
     private ?Collection $holidays = null;
     private ?array $nonWorkingWeekdays = null;
 
     /**
      * Active public holidays.
+     *
+     * @return Collection
      */
     public function holidays(): Collection
     {
@@ -24,34 +29,43 @@ class LeaveCalendarService
 
     /**
      * ISO weekday numbers (1=Mon..7=Sun) configured as non-working (work_type_id 3).
+     * Falls back to Saturday and Sunday when HR settings define no non-working days.
+     *
+     * @return array
      */
     public function nonWorkingWeekdays(): array
     {
-        return $this->nonWorkingWeekdays ??= WorkDay::where('work_type_id', 3)
+        if ($this->nonWorkingWeekdays !== null) {
+            return $this->nonWorkingWeekdays;
+        }
+
+        $configured = WorkDay::where('work_type_id', 3)
             ->pluck('week_day')
             ->map(fn($d) => (int) $d)
             ->all();
+
+        return $this->nonWorkingWeekdays = $configured ?: self::DEFAULT_NON_WORKING_WEEKDAYS;
     }
 
     /**
-     * Check if a specific date falls on a public holiday.
-     * Handles both recurring (annual) holidays and one-off/impromptu gazetted holidays.
+     * Find the public holiday falling on a date. Holidays marked recurrent (1) match on month and day
+     * in any year; one-off holidays (2) only match inside their own start/end dates.
+     *
+     * @param Carbon $date
+     * @return PublicHoliday|null
      */
     public function holidayOn(Carbon $date): ?PublicHoliday
     {
         $targetMonthDay = $date->month * 100 + $date->day;
-        $targetYmd = $date->toDateString();
 
-        return $this->holidays()->first(function ($h) use ($date, $targetMonthDay, $targetYmd) {
+        return $this->holidays()->first(function ($h) use ($date, $targetMonthDay) {
             $startDate = Carbon::parse($h->start_date)->startOfDay();
-            $endDate = Carbon::parse($h->end_date)->endOfDay();
+            $endDate = Carbon::parse($h->end_date ?? $h->start_date)->endOfDay();
 
-            // 1. One-off / impromptu holidays (check exact date match)
-            if (empty($h->recurrent) || $h->recurrent == 0) {
+            if (!in_array(strtolower((string) $h->recurrent), ['1', 'yes'], true)) {
                 return $date->betweenIncluded($startDate, $endDate);
             }
 
-            // 2. Recurring holidays (check month and day window)
             $sMonthDay = $startDate->month * 100 + $startDate->day;
             $eMonthDay = $endDate->month * 100 + $endDate->day;
 
@@ -62,6 +76,9 @@ class LeaveCalendarService
     }
 
     /**
+     * Day-counting rules for a leave type: whether weekends and public holidays are charged.
+     *
+     * @param int $leaveTypeId
      * @return array{weekends: bool, holidays: bool}
      */
     public function rulesFor(int $leaveTypeId): array
@@ -76,15 +93,17 @@ class LeaveCalendarService
 
     /**
      * Determines whether a given day is chargeable against the leave balance.
+     *
+     * @param Carbon $date
+     * @param array $rules
+     * @return bool
      */
     public function isCountableDay(Carbon $date, array $rules): bool
     {
-        // If the leave type does not count weekends, skip non-working days
         if (!$rules['weekends'] && in_array($date->dayOfWeekIso, $this->nonWorkingWeekdays(), true)) {
             return false;
         }
 
-        // If the leave type does not count holidays, skip public holidays
         if (!$rules['holidays'] && $this->holidayOn($date)) {
             return false;
         }
@@ -93,55 +112,50 @@ class LeaveCalendarService
     }
 
     /**
-     * Given a Start Date and End Date, calculate the number of billable/chargeable leave days.
-     * Use this when users pick date ranges (e.g., Annual Leave blocks or Maternity Leave).
+     * Every chargeable date between two dates (inclusive) for a leave type.
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param int $leaveTypeId
+     * @return Collection
      */
-   public function countDeductibleDays(string $startDate, string $endDate, int $leaveTypeId = 0): int
+    public function countableDates(string $startDate, string $endDate, int $leaveTypeId = 0): Collection
     {
-        $start = \Carbon\Carbon::parse($startDate)->startOfDay();
-        $end   = \Carbon\Carbon::parse($endDate)->startOfDay();
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end = Carbon::parse($endDate)->startOfDay();
 
         if ($end->lt($start)) {
-            return 0;
+            return collect();
         }
 
-        // Fetch all active holiday date strings within this window
-        $holidays = \App\Models\PublicHoliday::where('current_status_id', 5)
-            ->where(function ($query) use ($start, $end) {
-                $query->whereDate('start_date', '<=', $end->format('Y-m-d'))
-                      ->whereDate('end_date', '>=', $start->format('Y-m-d'));
-            })
-            ->get();
+        $rules = $this->rulesFor($leaveTypeId);
 
-        $count = 0;
-        $period = \Carbon\CarbonPeriod::create($start, $end);
-
-        foreach ($period as $date) {
-            // 1. Skip weekends
-            if ($date->isSaturday() || $date->isSunday()) {
-                continue;
-            }
-
-            // 2. Skip public holidays
-            $currentDateStr = $date->format('Y-m-d');
-            $isHoliday = $holidays->contains(function ($h) use ($currentDateStr) {
-                $hStart = \Carbon\Carbon::parse($h->start_date)->format('Y-m-d');
-                $hEnd   = \Carbon\Carbon::parse($h->end_date ?? $h->start_date)->format('Y-m-d');
-                return $currentDateStr >= $hStart && $currentDateStr <= $hEnd;
-            });
-
-            if ($isHoliday) {
-                continue;
-            }
-
-            $count++;
-        }
-
-        return $count;
+        return collect(CarbonPeriod::create($start, $end))
+            ->filter(fn($date) => $this->isCountableDay($date, $rules))
+            ->values();
     }
 
-   /**
+    /**
+     * Given a Start Date and End Date, calculate the number of billable/chargeable leave days.
+     * Use this when users pick date ranges (e.g., Annual Leave blocks or Maternity Leave).
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param int $leaveTypeId
+     * @return int
+     */
+    public function countDeductibleDays(string $startDate, string $endDate, int $leaveTypeId = 0): int
+    {
+        return $this->countableDates($startDate, $endDate, $leaveTypeId)->count();
+    }
+
+    /**
      * Given a Start Date and a number of requested days, determine the exact End Date.
+     *
+     * @param string $start
+     * @param float|int $days
+     * @param int $leaveTypeId
+     * @return string
      */
     public function calculateEndDate(string $start, float|int $days, int $leaveTypeId): string
     {
@@ -151,7 +165,7 @@ class LeaveCalendarService
         $counted = 0;
 
         // Failsafe counter to prevent execution timeouts
-        $safetyLimit = 365 * 2; 
+        $safetyLimit = 365 * 2;
         $iterations = 0;
 
         while ($counted < $target && $iterations < $safetyLimit) {
@@ -173,11 +187,23 @@ class LeaveCalendarService
     }
 
     /**
+     * Whether a leave type name denotes annual leave (Annual / Normal), which is pro-rated for mid-year hires.
+     *
+     * @param string|null $typeName
+     * @return bool
+     */
+    public function isAnnualLeaveType(?string $typeName): bool {
+        $name = strtolower((string) $typeName);
+
+        return str_contains($name, 'annual') || str_contains($name, 'normal');
+    }
+
+    /**
      * Calculate entitled annual leave days, applying statutory pro-rata rules
      * (1.75 days per month of service) for staff hired mid-year.
      *
-     * @param  \Carbon\Carbon|string|null  $hireDate
-     * @param  int  $year
+     * @param Carbon|string|null $hireDate
+     * @param int $year
      * @return int
      */
     public function calculateAnnualEntitlement($hireDate, int $year): int
@@ -189,9 +215,9 @@ class LeaveCalendarService
         try {
             // Handle date formats like '25/02/2025' or '2025-02-25'
             if (is_string($hireDate) && str_contains($hireDate, '/')) {
-                $hireCarbon = \Carbon\Carbon::createFromFormat('d/m/Y', trim($hireDate));
+                $hireCarbon = Carbon::createFromFormat('d/m/Y', trim($hireDate));
             } else {
-                $hireCarbon = \Carbon\Carbon::parse($hireDate);
+                $hireCarbon = Carbon::parse($hireDate);
             }
         } catch (\Throwable $e) {
             // Fallback in case of an unexpected date string

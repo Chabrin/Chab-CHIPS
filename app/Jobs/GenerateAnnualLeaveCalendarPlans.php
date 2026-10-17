@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Staff;
 use App\Models\LeaveType;
 use App\Models\LeaveRequest;
+use App\Services\Leave\LeaveCalendarService;
 use Illuminate\Bus\Queueable;
 use App\Models\LeaveCalendarPlan;
 use Illuminate\Support\Facades\Log;
@@ -36,7 +37,7 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(LeaveCalendarService $calendar): void
     {
         Log::info("Starting annual leave calendar generation for year {$this->year}");
         
@@ -77,11 +78,12 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
                         if ($this->override) {
                             // Update existing plan
                             $usedDays = $this->getLeaveUsedDays($this->year, $leaveType->id, $staff->id);
+                            $entitled = $this->entitlementFor($calendar, $staff, $leaveType);
                             $existingPlan->update([
                                 'start_date' => $startDate,
                                 'end_date' => $endDate,
-                                'entitled_days' => $leaveType->entitled_days,
-                                'balance' => $leaveType->entitled_days - $usedDays,
+                                'entitled_days' => $entitled,
+                                'balance' => $entitled - $usedDays,
                                 'current_status_id' => 5, // Approved
                             ]);
                             $updated++;
@@ -93,14 +95,15 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
                     
                     // Create new plan
                     $usedDays = $this->getLeaveUsedDays($this->year, $leaveType->id, $staff->id);
-                    
+                    $entitled = $this->entitlementFor($calendar, $staff, $leaveType);
+
                     LeaveCalendarPlan::create([
                         'employee_id' => $staff->id,
                         'leave_type_id' => $leaveType->id,
                         'start_date' => $startDate,
                         'end_date' => $endDate,
-                        'entitled_days' => $leaveType->entitled_days,
-                        'balance' => $leaveType->entitled_days - $usedDays,
+                        'entitled_days' => $entitled,
+                        'balance' => $entitled - $usedDays,
                         'current_status_id' => 5, // Approved
                         'created_by' => $this->userId,
                         'date_time' => now(),
@@ -116,6 +119,18 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
         }
         
         Log::info("Annual leave calendar generation completed: Created={$created}, Updated={$updated}, Skipped={$skipped}");
+    }
+
+    /**
+     * Entitled days for a staff member and leave type: annual leave is pro-rated for mid-year hires,
+     * every other type uses its configured entitlement.
+     */
+    private function entitlementFor(LeaveCalendarService $calendar, Staff $staff, LeaveType $leaveType) {
+        if ($calendar->isAnnualLeaveType($leaveType->type_name)) {
+            return $calendar->calculateAnnualEntitlement($staff->getRawOriginal('hire_date'), (int) $this->year);
+        }
+
+        return $leaveType->entitled_days;
     }
 
     /**

@@ -35,30 +35,38 @@ class SelfServiceController extends Controller
         }
     }
 
-    public function myLeave()
-{
-    $user = auth()->user();
-    
-    // Resolve the linked staff record
-    $staff = $user->staff ?? \App\Models\Staff::where('id', $user->staff_id)->first();
-    $staffLinked = !is_null($staff);
-    $currentYear = date('Y');
+    /**
+     * Show the logged-in user's leave page, with their annual leave schedule for the year.
+     */
+    public function myLeave() {
+        try {
+            $staff = auth()->user()->linkedStaff();
+            $currentYear = date('Y');
 
-    // Get the annual leave plan if staff is linked
-    $annualPlan = null;
-    if ($staffLinked) {
-        $annualPlan = \App\Models\LeaveCalendarPlan::with(['leaveType', 'slots'])
-            ->where('employee_id', $staff->id)
-            ->whereYear('start_date', $currentYear)
-            ->whereHas('leaveType', function ($q) {
-                $q->where('type_name', 'ILIKE', '%annual%')
-                  ->orWhere('type_name', 'ILIKE', '%normal%');
-            })
-            ->first();
+            $annualPlan = $staff
+                ? \App\Models\LeaveCalendarPlan::with(['leaveType', 'slots'])
+                    ->where('employee_id', $staff->id)
+                    ->whereYear('start_date', $currentYear)
+                    ->whereHas('leaveType', function ($q) {
+                        $q->where('type_name', 'ILIKE', '%annual%')
+                            ->orWhere('type_name', 'ILIKE', '%normal%');
+                    })
+                    ->first()
+                : null;
+
+            return view('self-service.my-leave', [
+                'staff' => $staff,
+                'staffLinked' => (bool) $staff,
+                'staffId' => $staff?->id,
+                'staffName' => $staff?->full_names ?? auth()->user()->name,
+                'annualPlan' => $annualPlan,
+                'currentYear' => $currentYear,
+            ]);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            return redirect()->back()->with('error', 'Failed to load leave page.');
+        }
     }
-
-    return view('self-service.my-leave', compact('staff', 'staffLinked', 'annualPlan', 'currentYear'));
-}
 
      public function showSelf()
     {
