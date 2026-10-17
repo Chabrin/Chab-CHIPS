@@ -1242,6 +1242,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/property/recoveries/landlord-posting/data', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'getData'])->name('property.recoveries.landlord-posting.data');
     Route::post('/property/recoveries/landlord-posting/post', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'post'])->name('property.recoveries.landlord-posting.post');
 
+    // Approve SLA (Approval Control)
+    Route::get('/approvals/sla', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'index'])->name('approvals.sla.index');
+    Route::get('/ajax/approvals/sla/list', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'list'])->name('approvals.sla.list');
+    Route::get('/ajax/approvals/sla/{id}', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'show'])->whereNumber('id')->name('approvals.sla.show');
+    Route::post('/approvals/sla/approve', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'approve'])->name('approvals.sla.approve');
+    Route::post('/approvals/sla/reject', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'reject'])->name('approvals.sla.reject');
+
     // Property Confirmations
     Route::get('/property/confirmations', [PropertyConfirmationController::class, 'index'])->name('property.confirmations.index');
     Route::get('/ajax/property/confirmations/list', [PropertyConfirmationController::class, 'approvalsList'])->name('property.confirmations.list');
