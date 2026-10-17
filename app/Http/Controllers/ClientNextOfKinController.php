@@ -6,6 +6,7 @@ use Exception;
 use App\Models\ClientNextOfKin;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\NextOfKinContactGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Crypt;
@@ -18,6 +19,15 @@ use Illuminate\Support\Facades\Crypt;
  */
 class ClientNextOfKinController extends Controller
 {
+    protected NextOfKinContactGuard $kinGuard;
+
+    /**
+     * Inject the next-of-kin contact guard.
+     */
+    public function __construct(NextOfKinContactGuard $kinGuard) {
+        $this->kinGuard = $kinGuard;
+    }
+
     public function getClientNextOfKin($encryptedClientId)
     {
         try {
@@ -65,6 +75,12 @@ class ClientNextOfKinController extends Controller
             ]);
 
             $clientId = Crypt::decrypt($validated['client_id']);
+
+            $kinErrors = $this->kinGuard->kinErrorsForClient((int) $clientId, $validated['email'] ?? null, $validated['mobile'] ?? null);
+            if ($kinErrors) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => collect($kinErrors)->flatten()->first(), 'errors' => $kinErrors], 422);
+            }
 
             $fullName = trim(
                 $validated['first_name'] . ' ' .
@@ -128,6 +144,12 @@ class ClientNextOfKinController extends Controller
                     ($validated['second_name'] ?? '') . ' ' .
                     $validated['last_name']
             );
+
+            $kinErrors = $this->kinGuard->kinErrorsForClient((int) $kin->parent_id, $validated['email'] ?? null, $validated['mobile'] ?? null);
+            if ($kinErrors) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => collect($kinErrors)->flatten()->first(), 'errors' => $kinErrors], 422);
+            }
 
             $kin->update([
                 'kin_first_name' => $validated['first_name'],

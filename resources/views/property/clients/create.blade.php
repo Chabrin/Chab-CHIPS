@@ -75,7 +75,7 @@
 
                         <form action="{{ route('property.clients.store') }}" method="POST" id="clientCreateForm" enctype="multipart/form-data">
                             @csrf
-                            <input type="hidden" name="draft_token" id="draft_token" value="{{ $draftToken }}">
+                            <input type="hidden" name="draft_token" id="draft_token" value="{{ old('draft_token', $draftToken) }}">
 
                             <!-- Nav Tabs -->
                             <ul class="nav nav-tabs" id="clientCreateTabs" role="tablist">
@@ -88,7 +88,7 @@
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="banking-tab" data-bs-toggle="tab" data-bs-target="#banking" type="button" role="tab" aria-controls="banking" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">account_balance</span>
-                                        Bank Details
+                                        Bank Details <span class="text-danger">*</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
@@ -100,7 +100,7 @@
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="nextofkin-tab" data-bs-toggle="tab" data-bs-target="#nextofkin" type="button" role="tab" aria-controls="nextofkin" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">family_restroom</span>
-                                        Next of Kin
+                                        Next of Kin <span class="text-danger kin-required-star">*</span>
                                     </button>
                                 </li>
                             </ul>
@@ -459,7 +459,7 @@
                                 
                                 
                                         <div class="col-md-3 mb-3 individual-only" id="individualIdFields">
-                                            <label for="national_id" class="form-label">National ID</label>
+                                            <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id') }}" placeholder="Enter national ID number">
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -468,11 +468,12 @@
                                         </div>
 
                                         <div class="col-md-3 mb-3 individual-only">
-                                            <label for="passport_number" class="form-label">Passport Number</label>
+                                            <label for="passport_number" class="form-label">Passport Number <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('passport_number') is-invalid @enderror" id="passport_number" name="passport_number" value="{{ old('passport_number') }}" placeholder="Enter passport number">
                                             @error('passport_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            <small class="text-muted d-block">National ID or Passport Number is required (one is enough).</small>
                                         </div>
 
                                         <div class="col-md-3 mb-3">
@@ -571,6 +572,9 @@
 
                                 <!-- Bank Details Tab -->
                                 <div class="tab-pane fade" id="banking" role="tabpanel" aria-labelledby="banking-tab">
+                                    @error('banks')
+                                    <div class="alert alert-danger py-2">{{ $message }}</div>
+                                    @enderror
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <h6 class="mb-0">Bank Accounts</h6>
                                         <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addBankModal">
@@ -609,6 +613,9 @@
 
                                 <!-- Next of Kin Tab -->
                                 <div class="tab-pane fade" id="nextofkin" role="tabpanel" aria-labelledby="nextofkin-tab">
+                                    @error('next_of_kin')
+                                    <div class="alert alert-danger py-2">{{ $message }}</div>
+                                    @enderror
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <h6 class="mb-0">Next of Kin</h6>
                                         <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addNextOfKinModal">
@@ -848,6 +855,9 @@
             // First/Last Name/Gender are required for Individual; entity name for Company/Partnership.
             $('#first_name, #last_name, #gender').prop('required', isIndividual);
             $('#company_name').prop('required', isEntity);
+
+            // Next of kin is required for individuals only; a bank account is required for everyone.
+            $('.kin-required-star').toggle(isIndividual);
         }
 
         $('#client_type_id').on('change', toggleClientTypeFields);
@@ -898,6 +908,49 @@
 
         $('#company_registration_number').on('blur', function() {
             checkDuplicateIdentifier('company_registration_number', 3, 'Registration Number');
+        });
+
+        // Individuals need a National ID or a Passport Number (the server enforces the same
+        // rule). Runs first so a blocked submit doesn't leave the Save button stuck disabled.
+        $('#clientCreateForm').on('submit', function(e) {
+            var isIndividual = $('#client_type_id').val() === '1';
+
+            if (isIndividual && !$('#national_id').val().trim() && !$('#passport_number').val().trim()) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                var personalTab = document.getElementById('personal-tab');
+                if (personalTab) {
+                    bootstrap.Tab.getOrCreateInstance(personalTab).show();
+                }
+                $('#national_id, #passport_number').addClass('is-invalid');
+                toastr.error('National ID or Passport Number is required.');
+                $('#national_id').focus();
+            }
+        });
+        $('#national_id, #passport_number').on('input', function() {
+            $('#national_id, #passport_number').removeClass('is-invalid');
+        });
+
+        // A bank account is required for every client; next of kin for individuals.
+        // Only blocks once a table has loaded and is known to be empty — the server decides otherwise.
+        $('#clientCreateForm').on('submit', function(e) {
+            var needsKin = $('#client_type_id').val() === '1';
+            var missing = [];
+            if (draftCounts.bank === 0) {
+                missing.push({ tab: 'banking-tab', msg: 'Add at least one bank account on the Bank Details tab.' });
+            }
+            if (needsKin && draftCounts.nextofkin === 0) {
+                missing.push({ tab: 'nextofkin-tab', msg: 'Add at least one next of kin on the Next of Kin tab.' });
+            }
+            if (missing.length) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                var tabButton = document.getElementById(missing[0].tab);
+                if (tabButton) {
+                    bootstrap.Tab.getOrCreateInstance(tabButton).show();
+                }
+                toastr.error(missing.map(function(m) { return m.msg; }).join(' '));
+            }
         });
 
         // Block submission while a flagged duplicate is showing for the active client
@@ -995,6 +1048,7 @@
         // until the client itself is saved. See ClientDraftRepeatersController.
         // ─────────────────────────────────────────────────────────────────
         var draftToken = $('#draft_token').val();
+        var draftCounts = {}; // rows staged per kind (bank, nextofkin, ...), set as each table loads
 
         function draftRepeaterUrl() {
             return "{{ url('/ajax/clients/draft-repeaters') }}";
@@ -1004,6 +1058,7 @@
             $.get(draftRepeaterUrl(), { draft_token: draftToken, kind: kind })
                 .done(function(res) {
                     var rows = (res && res.data) ? res.data : [];
+                    draftCounts[kind] = rows.length;
                     if (!rows.length) {
                         $(tbodySelector).html('<tr><td colspan="' + emptyColspan + '" class="text-center text-muted">No entries added yet</td></tr>');
                         return;
@@ -1215,7 +1270,9 @@
                 mobile: $('#modal_nok_mobile').val(),
                 email: $('#modal_nok_email').val(),
                 relation: $('#modal_nok_relation').val(),
-                national_id: $('#modal_nok_national_id').val()
+                national_id: $('#modal_nok_national_id').val(),
+                client_email: $('#email_address').val(),
+                client_mobile: $('#mobile_number').val()
             }, 'addNextOfKinModal', 'saveNextOfKinBtn', reloadNextOfKinTable);
         });
 

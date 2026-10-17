@@ -8,6 +8,7 @@ use App\Models\BankBranch;
 use App\Models\ClientDraftRepeater;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\NextOfKinContactGuard;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
@@ -27,6 +28,15 @@ use Illuminate\Validation\Rule;
  */
 class ClientDraftRepeatersController extends Controller
 {
+    protected NextOfKinContactGuard $kinGuard;
+
+    /**
+     * Inject the next-of-kin contact guard.
+     */
+    public function __construct(NextOfKinContactGuard $kinGuard) {
+        $this->kinGuard = $kinGuard;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -106,6 +116,13 @@ class ClientDraftRepeatersController extends Controller
 
             $validated = $request->validate($rules);
 
+            if ($kind === 'nextofkin') {
+                $kinErrors = $this->kinGuard->kinErrors($request->input('client_email'), $request->input('client_mobile'), $validated['email'] ?? null, $validated['mobile'] ?? null);
+                if ($kinErrors) {
+                    return response()->json(['success' => false, 'message' => collect($kinErrors)->flatten()->first(), 'errors' => $kinErrors], 422);
+                }
+            }
+
             $row = ClientDraftRepeater::create($this->mapToColumns($validated));
 
             return response()->json([
@@ -134,6 +151,14 @@ class ClientDraftRepeatersController extends Controller
 
             $kind = $row->kind;
             $validated = $request->validate($this->rulesForKind($kind));
+
+            if ($kind === 'nextofkin') {
+                $kinErrors = $this->kinGuard->kinErrors($request->input('client_email'), $request->input('client_mobile'), $validated['email'] ?? null, $validated['mobile'] ?? null);
+                if ($kinErrors) {
+                    return response()->json(['success' => false, 'message' => collect($kinErrors)->flatten()->first(), 'errors' => $kinErrors], 422);
+                }
+            }
+
             $validated['draft_token'] = $row->draft_token;
             $validated['kind'] = $kind;
 
