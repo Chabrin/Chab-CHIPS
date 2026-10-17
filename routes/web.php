@@ -1249,6 +1249,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/approvals/sla/approve', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'approve'])->name('approvals.sla.approve');
     Route::post('/approvals/sla/reject', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'reject'])->name('approvals.sla.reject');
 
+    // Approve Leases (Approval Control)
+    Route::get('/approvals/leases', [App\Http\Controllers\LeaseAgreementApprovalController::class, 'index'])->name('approvals.leases.index');
+    Route::get('/ajax/approvals/leases/list', [App\Http\Controllers\LeaseAgreementApprovalController::class, 'list'])->name('approvals.leases.list');
+    Route::get('/ajax/approvals/leases/{id}', [App\Http\Controllers\LeaseAgreementApprovalController::class, 'show'])->whereNumber('id')->name('approvals.leases.show');
+    Route::post('/approvals/leases/approve', [App\Http\Controllers\LeaseAgreementApprovalController::class, 'approve'])->name('approvals.leases.approve');
+    Route::post('/approvals/leases/reject', [App\Http\Controllers\LeaseAgreementApprovalController::class, 'reject'])->name('approvals.leases.reject');
+
     // Property Confirmations
     Route::get('/property/confirmations', [PropertyConfirmationController::class, 'index'])->name('property.confirmations.index');
     Route::get('/ajax/property/confirmations/list', [PropertyConfirmationController::class, 'approvalsList'])->name('property.confirmations.list');

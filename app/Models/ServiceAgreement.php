@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class ServiceAgreement extends Model
 {
+    const STATUS_PENDING = 1;
+    const STATUS_APPROVED = 5;
+    const STATUS_REJECTED = 41;
+
     protected $table = 'sys_pm_service_agreements';
     protected $primaryKey = 'id';
     public $timestamps = false; // table has no created_at/updated_at columns
@@ -53,6 +57,20 @@ class ServiceAgreement extends Model
         'water_bill_selected'          => 'boolean',
         'service_charges_selected'     => 'boolean',
     ];
+
+    /**
+     * Whether this service agreement has been approved.
+     */
+    public function isApproved(): bool {
+        return (int) $this->current_status_id === self::STATUS_APPROVED;
+    }
+
+    /**
+     * Limit a query to approved service agreements.
+     */
+    public function scopeApproved($query) {
+        return $query->where('current_status_id', self::STATUS_APPROVED);
+    }
 
     public function property()
     {

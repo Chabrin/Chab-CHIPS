@@ -6,6 +6,8 @@ $(function () {
     const csrf = $('meta[name="csrf-token"]').attr('content');
     const selected = new Set();
     let modalId = null;
+    let modalBlock = null;
+    let modalLabel = '';
 
     /* ---------- filters ---------- */
     function filters() {
@@ -23,7 +25,11 @@ $(function () {
             { data: 'id', orderable: false, className: 'text-end', render: (id, t, r) => {
                 const open = '<button class="icon-btn act-view" data-id="' + id + '" title="Review">' + H.icon('arrow_outward') + '</button>';
                 if (r.status_id !== 1) { return '<div class="row-actions">' + open + '</div>'; }
-                return '<div class="row-actions"><button class="icon-btn ok act-approve" data-id="' + id + '" title="Approve">' + H.icon('check') + '</button>' +
+                const blocked = Q.blockReason ? Q.blockReason(r) : null;
+                const approveBtn = blocked
+                    ? '<button class="icon-btn blocked act-blocked" data-id="' + id + '" title="' + H.esc(blocked) + '">' + H.icon('lock') + '</button>'
+                    : '<button class="icon-btn ok act-approve" data-id="' + id + '" title="Approve">' + H.icon('check') + '</button>';
+                return '<div class="row-actions">' + approveBtn +
                     '<button class="icon-btn bad act-reject" data-id="' + id + '" title="Reject">' + H.icon('close') + '</button>' + open + '</div>';
             } },
         ]);
@@ -141,13 +147,33 @@ $(function () {
         if (on) { $btn.append('<span class="spinner-border spinner-border-sm ms-2" aria-hidden="true"></span>'); }
     }
 
+    /* ---------- notice dialog: why something was not approved ---------- */
+    function showNotice(title, items, lead) {
+        const groups = {};
+        items.forEach(function (it) { (groups[it.reason] = groups[it.reason] || []).push(it.label); });
+        $('#noticeModalTitle').text(title);
+        $('#noticeModalLead').text(lead || '');
+        $('#noticeModalList').html(Object.keys(groups).map(function (reason) {
+            const labels = groups[reason];
+            const shown = labels.slice(0, 6).map(H.esc).join(', ') + (labels.length > 6 ? ' and ' + (labels.length - 6) + ' more' : '');
+            return '<div class="notice-group">' + H.esc(reason) + '<div class="who-list">' + labels.length + ' ' + (labels.length === 1 ? Q.noun : Q.plural) + ': ' + shown + '</div></div>';
+        }).join(''));
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('noticeModal')).show();
+    }
+    Q.showNotice = showNotice;
+
     /* ---------- approve / reject ---------- */
     function send(url, payload, $btn, done) {
         busy($btn, true);
         $.post(url, Object.assign({ _token: csrf }, payload))
             .done(function (res) {
-                if (res.success) { toastr.success(res.message || 'Done'); } else { toastr.warning(res.error || res.message || 'Nothing changed'); }
+                const items = res.skipped_items || Object.keys(res.skipped || {}).map(id => ({ label: '#' + id, reason: res.skipped[id] }));
+                if (res.success) { toastr.success(res.message || 'Done'); } else if (!items.length) { toastr.warning(res.error || res.message || 'Nothing changed'); }
                 done(res);
+                if (items.length) {
+                    const lead = res.success ? 'The rest went through. These were left as they are:' : 'Nothing was changed:';
+                    setTimeout(function () { showNotice(res.success ? 'Some were not approved' : 'Not approved', items, lead); }, 450);
+                }
             })
             .fail(function (xhr) {
                 const j = xhr.responseJSON || {};
@@ -174,6 +200,11 @@ $(function () {
         table.ajax.reload(null, false);
     }
     $('#sla-table').on('click', '.act-approve', function (e) { e.stopPropagation(); approveIds([Number($(this).data('id'))], $(this)); });
+    $('#sla-table').on('click', '.act-blocked', function (e) {
+        e.stopPropagation();
+        const row = table.row($(this).closest('tr')).data();
+        showNotice('Cannot approve yet', [{ label: row.reference, reason: row.block_reason }], 'This one has to wait:');
+    });
     $('#sla-table').on('click', '.act-reject', function (e) { e.stopPropagation(); rejectIds([Number($(this).data('id'))], $(this)); });
     $('#sla-table').on('click', '.act-view', function (e) { e.stopPropagation(); openModal(Number($(this).data('id'))); });
     $('#sla-table tbody').on('click', 'tr', function (e) {
@@ -183,7 +214,11 @@ $(function () {
     });
     $('#bulk-approve').on('click', function () { approveIds(Array.from(selected), $(this)); });
     $('#bulk-reject').on('click', function () { rejectIds(Array.from(selected), $(this)); });
-    $('#modal-approve').on('click', function () { if (modalId) approveIds([modalId], $(this)); });
+    $('#modal-approve').on('click', function () {
+        if (!modalId) return;
+        if (modalBlock) { showNotice('Cannot approve yet', [{ label: modalLabel, reason: modalBlock }], 'This one has to wait:'); return; }
+        approveIds([modalId], $(this));
+    });
     $('#modal-reject').on('click', function () { if (modalId) rejectIds([modalId], $(this)); });
 
     /* ---------- review modal ---------- */
@@ -199,11 +234,17 @@ $(function () {
         $('#slaModalBody').html(Q.tabs.map((t, i) => '<div class="m-pane' + (i === 0 ? ' active' : '') + '" data-pane="' + t.key + '">' + (out.panes[t.key] || '') + '</div>').join(''));
         showPane(Q.tabs[0].key);
         const pending = d.status_id === 1;
-        $('#modal-approve, #modal-reject').toggleClass('d-none', !pending);
-        $('#foot-note').text(pending ? Q.footNote : '');
+        const blocked = pending && d.can_approve === false;
+        modalBlock = blocked ? d.block_reason : null;
+        modalLabel = Q.itemLabel ? Q.itemLabel(d) : '';
+        $('#modal-approve').toggleClass('d-none', !pending).toggleClass('is-blocked', blocked);
+        $('#modal-reject').toggleClass('d-none', !pending);
+        $('#foot-note').text(blocked ? d.block_reason : (pending ? Q.footNote : '')).css('color', blocked ? '#b7791f' : '');
     }
     function openModal(id) {
         modalId = id;
+        modalBlock = null;
+        $('#modal-approve').removeClass('is-blocked');
         $('#slaHeroInner').html('<div class="hero-row"><div class="avatar lg" style="background:#eef2f7;"></div><div><div class="hero-name">Loading…</div></div></div><div style="height:22px;"></div>');
         $('#slaModalBody').html('<div class="sla-empty">Loading…</div>');
         $('#modal-approve, #modal-reject').addClass('d-none');

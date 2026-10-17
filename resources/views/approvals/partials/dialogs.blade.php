@@ -64,3 +64,24 @@
         </div>
     </div>
 </div>
+
+{{-- Notice: shown when some or all items could not be approved or rejected, with the reasons --}}
+<div class="modal fade small-modal" id="noticeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body p-4">
+                <div class="d-flex align-items-start gap-3">
+                    <span class="notice-ico"><span class="material-symbols-outlined">block</span></span>
+                    <div class="flex-grow-1">
+                        <h5 class="mb-1" id="noticeModalTitle">Not approved</h5>
+                        <p class="text-muted mb-3" id="noticeModalLead"></p>
+                        <div id="noticeModalList"></div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="button" class="btn-soft" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

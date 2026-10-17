@@ -163,6 +163,13 @@
     @media (min-width: 992px) {
         .modal.sla-modal, .modal.small-modal { padding-left: var(--sidebar-width, 170px); padding-top: var(--header-height, 54px); }
     }
+    .btn-ok.is-blocked { background: #fff; color: var(--warn); border: 1px solid #e9b44c; box-shadow: none; }
+    .btn-ok.is-blocked:hover { background: var(--warn-soft); color: var(--warn); }
+    .icon-btn.blocked { color: var(--warn); border-color: #f0d49a; background: var(--warn-soft); }
+    .notice-ico { width: 44px; height: 44px; border-radius: 14px; background: var(--warn-soft); color: var(--warn); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .notice-ico .material-symbols-outlined { font-size: 26px; }
+    .notice-group { border-left: 3px solid #e9b44c; background: #fffaf0; border-radius: 0 10px 10px 0; padding: 10px 14px; margin-bottom: 10px; font-size: 14px; color: var(--ink); }
+    .notice-group .who-list { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
     .sla-empty { text-align: center; padding: 56px 0; color: var(--muted); }
     .small-modal .modal-content { border: 0; border-radius: 18px; box-shadow: 0 30px 80px -20px rgba(15,23,42,.45); }
 </style>
