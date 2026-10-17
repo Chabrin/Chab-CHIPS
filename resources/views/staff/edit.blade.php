@@ -179,7 +179,7 @@
     .staff-edit-page .staff-footer-note .material-symbols-outlined { font-size:18px; }
     @media (max-width: 767.98px) { .staff-edit-page { padding-top:14px; } .staff-edit-page .staff-card-body { padding:15px; } .staff-edit-page .staff-card-header { padding:15px; } .staff-edit-page .nav-tabs .nav-link { padding:9px 11px; } .staff-edit-page .staff-photo-panel { align-items:flex-start; flex-direction:column; } .staff-edit-page .staff-form-footer { align-items:stretch; } .staff-edit-page .staff-form-footer .btn { width:100%; justify-content:center; } }
 </style>
-<div class="page-body staff-edit-page">
+<div class="page-body staff-onboarding staff-edit-page">
     <div class="container-fluid">
         <div class="staff-edit-heading">
             <div>
@@ -604,8 +604,8 @@
                                 <div class="tab-pane fade" id="banking" role="tabpanel" aria-labelledby="banking-tab">
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
-                                            <label for="bank_name" class="form-label">Bank</label>
-                                            <select class="form-select @error('bank_name') is-invalid @enderror" id="bank_name" name="bank_name">
+                                            <label for="bank_name" class="form-label">Bank <span class="text-danger">*</span></label>
+                                            <select class="form-select @error('bank_name') is-invalid @enderror" id="bank_name" name="bank_name" data-required="true">
                                                 <option value="">Select Bank</option>
                                                 @foreach($banks as $bank)
                                                 <option value="{{ $bank->id }}" {{ old('bank_name', $staff->bank_name) == $bank->id ? 'selected' : '' }}>
@@ -618,36 +618,36 @@
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="account_name" class="form-label">Account Name</label>
-                                            <input type="text" class="form-control @error('account_name') is-invalid @enderror" id="account_name" name="account_name" value="{{ old('account_name', $staff->account_name) }}">
+                                            <label for="account_name" class="form-label">Account Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('account_name') is-invalid @enderror" id="account_name" name="account_name" value="{{ old('account_name', $staff->account_name) }}" data-required="true">
                                             @error('account_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="account_number" class="form-label">Account Number</label>
-                                            <input type="text" class="form-control @error('account_number') is-invalid @enderror" id="account_number" name="account_number" value="{{ old('account_number', $staff->account_number) }}">
+                                            <label for="account_number" class="form-label">Account Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('account_number') is-invalid @enderror" id="account_number" name="account_number" value="{{ old('account_number', $staff->account_number) }}" data-required="true">
                                             @error('account_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="pin_number" class="form-label">PIN Number</label>
-                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number', $staff->pin_number) }}">
+                                            <label for="pin_number" class="form-label">KRA PIN Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number', $staff->pin_number) }}" data-required="true">
                                             @error('pin_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="nhif_number" class="form-label">NHIF Number</label>
-                                            <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ old('nhif_number', $staff->nhif_number) }}">
+                                            <label for="nhif_number" class="form-label">SHA Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ old('nhif_number', $staff->nhif_number) }}" data-required="true">
                                             @error('nhif_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="nssf_number" class="form-label">NSSF Number</label>
-                                            <input type="text" class="form-control @error('nssf_number') is-invalid @enderror" id="nssf_number" name="nssf_number" value="{{ old('nssf_number', $staff->nssf_number) }}">
+                                            <label for="nssf_number" class="form-label">NSSF Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('nssf_number') is-invalid @enderror" id="nssf_number" name="nssf_number" value="{{ old('nssf_number', $staff->nssf_number) }}" data-required="true">
                                             @error('nssf_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -699,6 +699,20 @@
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+
+    // Account Name follows Full Names unless it has been changed to something else
+    var fullNameInput = document.getElementById('full_names');
+    var accountNameInput = document.getElementById('account_name');
+    if (fullNameInput && accountNameInput) {
+        if (accountNameInput.value.trim() === '') accountNameInput.value = fullNameInput.value;
+        var lastFullName = fullNameInput.value;
+        fullNameInput.addEventListener('input', function () {
+            if (accountNameInput.value.trim() === '' || accountNameInput.value.toUpperCase() === lastFullName.toUpperCase()) {
+                accountNameInput.value = this.value;
+            }
+            lastFullName = this.value;
+        });
+    }
 
     var TABS = [
         { pane: 'personal',   btn: 'personal-tab',   label: 'Personal Information' },

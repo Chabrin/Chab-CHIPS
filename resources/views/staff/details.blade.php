@@ -3,7 +3,7 @@ use Illuminate\Support\Facades\Crypt;
 @endphp
 @extends('layouts.main')
 @section('content')
-<div class="page-body staff-details-page" style="padding-top:10px;">
+<div class="page-body staff-onboarding staff-details-page" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
@@ -384,7 +384,7 @@ use Illuminate\Support\Facades\Crypt;
                                                     <div class="col-5"><small class="text-muted">PIN Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->pin_number ?? '-' }}</small></div>
 
-                                                    <div class="col-5"><small class="text-muted">NHIF Number:</small></div>
+                                                    <div class="col-5"><small class="text-muted">SHA Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->nhif_number ?? '-' }}</small></div>
 
                                                     <div class="col-5"><small class="text-muted">NSSF Number:</small></div>
@@ -566,9 +566,6 @@ use Illuminate\Support\Facades\Crypt;
                                            <tbody>
                                             @php
                                                 $nssfFormulaId = (int) config('nssf.formula_id');
-                                                // Gross pay = basic salary + the contract's allowances
-                                                $contractGross = (float) $staff->contract->basic_salary
-                                                    + (float) $staff->contract->elements->where('entry_type_id', 2)->sum('amount');
                                             @endphp
 
                                             @foreach($staff->contract->elements as $i => $element)
@@ -592,7 +589,7 @@ use Illuminate\Support\Facades\Crypt;
                                             </tr>
 
                                             @if($isNssf)
-                                                @php $nssf = app(\App\Services\NssfCalculator::class)->calculate($contractGross); @endphp
+                                                @php $nssf = $nssfBreakdown; @endphp
                                                 @foreach($nssf['tiers'] as $tier)
                                                 <tr class="table-light">
                                                     <td></td>

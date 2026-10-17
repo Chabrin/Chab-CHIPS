@@ -18,6 +18,7 @@ use App\Models\HelbDeductionRepeat;
 use App\Models\ProratedDeduction;
 use App\Models\ProratedDeductionRepeat;
 use App\Services\ErrorDispatcher;
+use App\Services\NssfCalculator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -25,6 +26,9 @@ use Illuminate\Validation\ValidationException;
 
 class PayrollController extends Controller
 {
+    public function __construct(private NssfCalculator $nssfCalculator) {
+    }
+
     /**
      * Display tax bands index page
      */
@@ -898,11 +902,11 @@ class PayrollController extends Controller
      * Build a self-describing payslip element entry.
      * Stores name/type/position inline so display never requires a second DB lookup.
      */
-    private function makePayslipEntry(?PayrollElement $element, float $amount, string $fallbackName = '', string $fallbackType = '1', int $fallbackPos = 999): array
+    private function makePayslipEntry(?PayrollElement $element, float $amount, string $fallbackName = '', string $fallbackType = '1', int $fallbackPos = 999, ?string $nameOverride = null): array
     {
         return [
             'element_id'       => $element?->id ?? 0,
-            'element_name'     => $element?->element_name ?? $fallbackName,
+            'element_name'     => $nameOverride ?? $element?->element_name ?? $fallbackName,
             'element_type'     => $element?->element_type ?? $fallbackType,
             'payslip_position' => $element?->payslip_position ?? $fallbackPos,
             'amount'           => $amount,
@@ -953,8 +957,11 @@ class PayrollController extends Controller
         $housingLevyElement = $payrollElements->get('housing_levy');
         $payeeElement      = $payrollElements->get('payee');
 
-        // NSSF on pensionable pay (basic salary only in Kenya)
-        $nssf = $this->calculateNSSF((float) $basicSalary);
+        // NSSF (Tier I + Tier II) on gross pay, same calculation as the contract form
+        $nssfBreakdown = $this->nssfCalculator->calculate($grossPay);
+        $nssf = $nssfBreakdown['total'];
+        $nssfTier1 = $nssfBreakdown['tiers'][0]['amount'];
+        $nssfTier2 = $nssfBreakdown['tiers'][1]['amount'];
         // NHIF/SHIF and Housing Levy on full gross (basic + allowances)
         $nhif        = $this->calculateNHIF($grossPay);
         $housingLevy = $this->calculateHousingLevy($grossPay);
@@ -975,7 +982,8 @@ class PayrollController extends Controller
         $payslipElements = array_merge(
             $allowanceEntries,
             [
-                $this->makePayslipEntry($nssfElement,       $nssf,        'NSSF',         '1', 10),
+                $this->makePayslipEntry($nssfElement,       $nssfTier1,   'NSSF Tier I',  '1', 10, 'NSSF Tier I'),
+                $this->makePayslipEntry($nssfElement,       $nssfTier2,   'NSSF Tier II', '1', 11, 'NSSF Tier II'),
                 $this->makePayslipEntry($nhifElement,       $nhif,        'SHIF (NHIF)',  '1', 20),
                 $this->makePayslipEntry($housingLevyElement, $housingLevy, 'Housing Levy', '1', 30),
                 $this->makePayslipEntry($payeeElement,      $paye,        'PAYE',         '1', 40),
@@ -1045,6 +1053,8 @@ class PayrollController extends Controller
             'basic_salary' => $basicSalary,
             'gross_pay' => $grossPay,
             'nssf' => $nssf,
+            'nssf_tier1' => $nssfTier1,
+            'nssf_tier2' => $nssfTier2,
             'nhif' => $nhif,
             'housing_levy' => $housingLevy,
             'taxable_income' => $taxableIncome,
@@ -1056,36 +1066,6 @@ class PayrollController extends Controller
             'helb_deduction_info' => $helbDeductionInfo,
             'prorated_deductions_info' => $proratedDeductionsInfo,
         ];
-    }
-
-    /**
-     * Calculate NSSF contribution
-     * Rates: 6% of pensionable earnings
-     * Tier I: Up to KES 8,000, Tier II: Up to KES 72,000
-     * Min: KES 480/month, Max: KES 4,320/month
-     */
-    private function calculateNSSF($grossPay)
-    {
-        $tierILimit = 8000;   // Tier I upper limit
-        $tierIILimit = 72000; // Tier II upper limit
-        $rate = 0.06;         // 6%
-        $minContribution = 480;   // Minimum monthly contribution
-        $maxContribution = 4320;  // Maximum monthly contribution
-
-        $nssf = 0;
-
-        if ($grossPay <= $tierILimit) {
-            $nssf = $grossPay * $rate;
-        } elseif ($grossPay <= $tierIILimit) {
-            $nssf = ($tierILimit * $rate) + (($grossPay - $tierILimit) * $rate);
-        } else {
-            $nssf = $tierIILimit * $rate; // Max at Tier II limit
-        }
-
-        // Apply minimum and maximum limits
-        $nssf = max($minContribution, min($nssf, $maxContribution));
-
-        return round($nssf, 2);
     }
 
     /**
@@ -1183,6 +1163,8 @@ class PayrollController extends Controller
             'tax_payable' => $payrollData['paye'],
             'nhif' => $payrollData['nhif'],
             'nssf' => $payrollData['nssf'],
+            'nssf_tier1' => $payrollData['nssf_tier1'],
+            'nssf_tier2' => $payrollData['nssf_tier2'],
             'housing_levy' => $payrollData['housing_levy'],
             'total_deductions' => $payrollData['total_deductions'],
             'net_pay' => $payrollData['net_salary'],

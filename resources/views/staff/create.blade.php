@@ -64,7 +64,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
         align-items: center;
     }
 </style>
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body staff-onboarding" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
@@ -94,6 +94,9 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                             </ul>
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
+                        @endif
+                        @if(!$canCreateUsers)
+                        <div class="alert alert-warning">You need the "create users" permission to add staff, because every staff member gets a system login.</div>
                         @endif
 
                        <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" enctype="multipart/form-data">
@@ -432,8 +435,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                 <div class="tab-pane fade" id="banking" role="tabpanel" aria-labelledby="banking-tab">
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
-                                            <label for="bank_name" class="form-label">Bank</label>
-                                            <select class="form-select @error('bank_name') is-invalid @enderror" id="bank_name" name="bank_name">
+                                            <label for="bank_name" class="form-label">Bank <span class="text-danger">*</span></label>
+                                            <select class="form-select @error('bank_name') is-invalid @enderror" id="bank_name" name="bank_name" required>
                                                 <option value="">Select Bank</option>
                                                 @foreach($banks as $bank)
                                                 <option value="{{ $bank->id }}" {{ old('bank_name') == $bank->id ? 'selected' : '' }}>
@@ -445,37 +448,37 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                       <div class="col-md-4 mb-3">
-                                            <label for="account_name" class="form-label">
-                                                Account Name <span class="text-danger">*</span>
-                                            </label>
-                                            <input type="text" 
-                                                class="form-control @error('account_name') is-invalid @enderror" 
-                                                id="account_name" 
-                                                name="account_name" 
-                                                value="{{ old('account_name') }}" 
-                                                required>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="account_name" class="form-label">Account Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('account_name') is-invalid @enderror" id="account_name" name="account_name" value="{{ old('account_name') }}" required>
                                             @error('account_name')
-                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="pin_number" class="form-label">PIN Number</label>
-                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number') }}">
+                                            <label for="account_number" class="form-label">Account Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('account_number') is-invalid @enderror" id="account_number" name="account_number" value="{{ old('account_number') }}" required>
+                                            @error('account_number')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="pin_number" class="form-label">KRA PIN Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number') }}" required>
                                             @error('pin_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="nhif_number" class="form-label"> SHA Number</label>
-                                            <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ old('nhif_number') }}">
+                                            <label for="nhif_number" class="form-label">SHA Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ old('nhif_number') }}" required>
                                             @error('nhif_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="nssf_number" class="form-label">NSSF Number</label>
-                                            <input type="text" class="form-control @error('nssf_number') is-invalid @enderror" id="nssf_number" name="nssf_number" value="{{ old('nssf_number') }}">
+                                            <label for="nssf_number" class="form-label">NSSF Number <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control @error('nssf_number') is-invalid @enderror" id="nssf_number" name="nssf_number" value="{{ old('nssf_number') }}" required>
                                             @error('nssf_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror

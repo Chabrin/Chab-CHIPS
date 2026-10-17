@@ -34,7 +34,7 @@
                         @endif
 
 
-                        <form action="{{ route('contract.update', ['id' => $contract->id]) }}" method="POST" id="staffContractCreateForm">
+                        <form action="{{ route('contract.update', ['id' => $contract->id]) }}" method="POST" id="staffContractCreateForm" enctype="multipart/form-data">
                             @csrf
                             @method('PUT')
                         
@@ -64,6 +64,20 @@
                                 <div class="mb-3 col-12">
                                     <label for="basic_salary" class="form-label">Basic Salary</label>
                                     <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" value="{{ $contract->basic_salary }}">
+                                </div>
+                                <div class="mb-3 col-12">
+                                    <label for="signed_contract" class="form-label">Signed Contract (PDF)</label>
+                                    @if($contract->signedDocument)
+                                    <div class="mb-1">
+                                        <a href="{{ route('documents.view', $contract->signedDocument->id) }}" target="_blank">{{ $contract->signedDocument->file_name }}</a>
+                                        <span class="text-muted small">- uploading a new file replaces it</span>
+                                    </div>
+                                    @endif
+                                    <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf">
+                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB).</small>
+                                    @error('signed_contract')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
                                 </div>
                             </div>
                         

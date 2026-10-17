@@ -9,6 +9,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidths
 {
@@ -24,10 +25,18 @@ class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidt
         return $this->data;
     }
 
+    /**
+     * Letter of the last column, from the width of the table header row (row 5).
+     */
+    private function lastColumn(): string {
+        return Coordinate::stringFromColumnIndex(max(count($this->data[4] ?? []), 5));
+    }
+
     public function styles(Worksheet $sheet)
     {
+        $last = $this->lastColumn();
         // Style the header rows (first 3 rows)
-        $sheet->getStyle('A1:E1')->applyFromArray([
+        $sheet->getStyle('A1:' . $last . '1')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'size' => 16,
@@ -37,16 +46,16 @@ class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidt
             ],
         ]);
 
-        $sheet->mergeCells('A1:E1');
+        $sheet->mergeCells('A1:' . $last . '1');
 
-        $sheet->getStyle('A2:E3')->applyFromArray([
+        $sheet->getStyle('A2:' . $last . '3')->applyFromArray([
             'font' => [
                 'size' => 11,
             ],
         ]);
 
         // Style the table header (row 5)
-        $sheet->getStyle('A5:E5')->applyFromArray([
+        $sheet->getStyle('A5:' . $last . '5')->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
@@ -67,7 +76,7 @@ class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidt
 
         // Style data rows with borders
         $lastRow = count($this->data);
-        $sheet->getStyle('A5:E' . $lastRow)->applyFromArray([
+        $sheet->getStyle('A5:' . $last . $lastRow)->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,
@@ -77,7 +86,7 @@ class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidt
         ]);
 
         // Style footer rows (last 2 rows)
-        $sheet->getStyle('A' . ($lastRow - 1) . ':E' . $lastRow)->applyFromArray([
+        $sheet->getStyle('A' . ($lastRow - 1) . ':' . $last . $lastRow)->applyFromArray([
             'font' => [
                 'bold' => true,
             ],
@@ -88,7 +97,7 @@ class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidt
         ]);
 
         // Right align amount column
-        $sheet->getStyle('E6:E' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getStyle($last . '6:' . $last . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
         return [];
     }
@@ -101,6 +110,8 @@ class StatutoryDeductionsExport implements FromArray, WithStyles, WithColumnWidt
             'C' => 35,
             'D' => 20,
             'E' => 18,
+            'F' => 18,
+            'G' => 18,
         ];
     }
 }

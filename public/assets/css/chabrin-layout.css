@@ -1050,13 +1050,13 @@ p, span, label, a, td, th, li, input, select, textarea, button {
 }
 
 /* Page background and spacing */
-.page-body {
+.page-body.staff-onboarding {
     background: var(--chabrin-background);
     min-height: 100vh;
     padding: 24px 0 40px !important;
 }
 
-.page-body > .container-fluid {
+.page-body.staff-onboarding > .container-fluid {
     max-width: 1600px;
     margin: 0 auto;
     padding-left: 24px;
@@ -1064,7 +1064,7 @@ p, span, label, a, td, th, li, input, select, textarea, button {
 }
 
 /* Main form card */
-.page-body .card {
+.page-body.staff-onboarding .card {
     border: 1px solid var(--chabrin-border);
     border-radius: 16px;
     background: var(--chabrin-surface);
@@ -1072,7 +1072,7 @@ p, span, label, a, td, th, li, input, select, textarea, button {
     overflow: hidden;
 }
 
-.page-body .card-header {
+.page-body.staff-onboarding .card-header {
     background: #fff;
     border-bottom: 1px solid var(--chabrin-border);
     padding: 22px 28px;
@@ -1081,14 +1081,14 @@ p, span, label, a, td, th, li, input, select, textarea, button {
     flex-wrap: wrap;
 }
 
-.page-body .card-header h4 {
+.page-body.staff-onboarding .card-header h4 {
     color: var(--chabrin-text);
     font-size: 22px;
     font-weight: 700;
     letter-spacing: -0.5px;
 }
 
-.page-body .card-header h4::before {
+.page-body.staff-onboarding .card-header h4::before {
     content: "";
     display: inline-block;
     width: 4px;
@@ -1099,12 +1099,12 @@ p, span, label, a, td, th, li, input, select, textarea, button {
     background: var(--chabrin-primary);
 }
 
-.page-body .card-body {
+.page-body.staff-onboarding .card-body {
     padding: 28px;
 }
 
 /* Buttons */
-.page-body .btn {
+.page-body.staff-onboarding .btn {
     border-radius: 8px;
     padding: 10px 15px;
     font-weight: 600;
@@ -1115,35 +1115,35 @@ p, span, label, a, td, th, li, input, select, textarea, button {
                 transform .2s ease;
 }
 
-.page-body .btn-primary {
+.page-body.staff-onboarding .btn-primary {
     background: var(--chabrin-primary);
     border-color: var(--chabrin-primary);
     color: #fff;
 }
 
-.page-body .btn-primary:hover,
-.page-body .btn-primary:focus-visible {
+.page-body.staff-onboarding .btn-primary:hover,
+.page-body.staff-onboarding .btn-primary:focus-visible {
     background: var(--chabrin-primary-dark);
     border-color: var(--chabrin-primary-dark);
     box-shadow: 0 4px 12px rgba(57, 118, 91, .2);
 }
 
-.page-body .btn-light {
+.page-body.staff-onboarding .btn-light {
     background: #fff;
     border: 1px solid var(--chabrin-border);
     color: var(--chabrin-text);
 }
 
-.page-body .btn-light:hover {
+.page-body.staff-onboarding .btn-light:hover {
     background: var(--chabrin-primary-light);
     border-color: #b9d5c2;
 }
 
-.page-body .btn:active {
+.page-body.staff-onboarding .btn:active {
     transform: translateY(1px);
 }
 
-.page-body .btn .material-symbols-outlined {
+.page-body.staff-onboarding .btn .material-symbols-outlined {
     font-size: 18px;
     vertical-align: middle;
 }
@@ -1312,37 +1312,34 @@ p, span, label, a, td, th, li, input, select, textarea, button {
 }
 
 /* Select2 — match the Chabrin form controls */
-.select2-container--default .select2-selection--multiple,
-.select2-container--default .select2-selection--single {
+.staff-onboarding .select2-container--default .select2-selection--multiple,
+.staff-onboarding .select2-container--default .select2-selection--single {
     min-height: 43px;
     border: 1px solid #dce5de;
     border-radius: 8px;
     background: #fff;
 }
 
-.select2-container--default .select2-selection--single {
+.staff-onboarding .select2-container--default .select2-selection--single {
     padding: 6px 10px;
 }
 
-.select2-container--default .select2-selection--single
-.select2-selection__rendered {
+.staff-onboarding .select2-container--default .select2-selection--single .select2-selection__rendered {
     line-height: 28px;
     padding-left: 0;
     color: var(--chabrin-text);
     font-size: 13px;
 }
 
-.select2-container--default .select2-selection--single
-.select2-selection__arrow {
+.staff-onboarding .select2-container--default .select2-selection--single .select2-selection__arrow {
     height: 41px;
 }
 
-.select2-container--default .select2-selection--multiple {
+.staff-onboarding .select2-container--default .select2-selection--multiple {
     padding: 5px;
 }
 
-.select2-container--default .select2-selection--multiple
-.select2-selection__choice {
+.staff-onboarding .select2-container--default .select2-selection--multiple .select2-selection__choice {
     margin-top: 3px;
     padding: 3px 8px;
     border: 1px solid #cce0d1;
@@ -1352,23 +1349,21 @@ p, span, label, a, td, th, li, input, select, textarea, button {
     font-size: 12px;
 }
 
-.select2-container--default.select2-container--focus
-.select2-selection--multiple,
-.select2-container--default.select2-container--open
-.select2-selection--single {
+.staff-onboarding .select2-container--default.select2-container--focus .select2-selection--multiple,
+.staff-onboarding .select2-container--default.select2-container--open .select2-selection--single {
     border-color: #78a98a;
     box-shadow: 0 0 0 3px rgba(57, 118, 91, .11);
 }
 
 /* Validation messages */
-.page-body .alert-danger {
+.page-body.staff-onboarding .alert-danger {
     border: 1px solid #f0cccc;
     border-radius: 10px;
 }
 
 /* Keyboard accessibility */
-.page-body button:focus-visible,
-.page-body a:focus-visible,
+.page-body.staff-onboarding button:focus-visible,
+.page-body.staff-onboarding a:focus-visible,
 #staffCreateTabs .nav-link:focus-visible {
     outline: 3px solid rgba(57, 118, 91, .3);
     outline-offset: 2px;
@@ -1376,28 +1371,28 @@ p, span, label, a, td, th, li, input, select, textarea, button {
 
 /* Responsive layout */
 @media (max-width: 767.98px) {
-    .page-body > .container-fluid {
+    .page-body.staff-onboarding > .container-fluid {
         padding-left: 12px;
         padding-right: 12px;
     }
 
-    .page-body .card-header {
+    .page-body.staff-onboarding .card-header {
         padding: 18px;
     }
 
-    .page-body .card-body {
+    .page-body.staff-onboarding .card-body {
         padding: 18px 14px;
     }
 
-    .page-body .card-header h4 {
+    .page-body.staff-onboarding .card-header h4 {
         font-size: 19px;
     }
 
-    .page-body .card-header .ms-auto {
+    .page-body.staff-onboarding .card-header .ms-auto {
         width: 100%;
     }
 
-    .page-body .card-header .ms-auto .btn {
+    .page-body.staff-onboarding .card-header .ms-auto .btn {
         flex: 1;
         justify-content: center;
     }
@@ -1413,7 +1408,7 @@ p, span, label, a, td, th, li, input, select, textarea, button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .page-body *,
+    .page-body.staff-onboarding *,
     #staffCreateTabs .nav-link {
         transition: none !important;
     }

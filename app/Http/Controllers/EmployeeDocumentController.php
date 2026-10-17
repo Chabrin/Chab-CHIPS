@@ -17,29 +17,31 @@ class EmployeeDocumentController extends Controller
      */
     public function store(Request $request, Employee $employee)
     {
+        abort_unless(auth()->user()->hasPermission('update_staff'), 403);
+
         $request->validate([
             'document_type_id' => 'required|exists:document_types,id',
-            'title'            => 'required|string|max:255',
-            'document_file'    => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120', // max 5MB
+            'title' => 'required|string|max:255',
+            'document_file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120', // max 5MB
         ]);
 
         $file = $request->file('document_file');
         $originalName = $file->getClientOriginalName();
-        $mimeType = $file->getClientMimeType();
+        $mimeType = $file->getMimeType();
         $fileSize = round($file->getSize() / 1024); // KB
 
         // Store privately inside storage/app/employee_documents/
         $storedPath = $file->store('employee_documents/' . $employee->id, 'local');
 
         EmployeeDocument::create([
-            'employee_id'      => $employee->id,
+            'employee_id' => $employee->id,
             'document_type_id' => $request->document_type_id,
-            'title'            => $request->title,
-            'file_path'        => $storedPath,
-            'file_name'        => $originalName,
-            'file_size'        => $fileSize,
-            'mime_type'        => $mimeType,
-            'uploaded_by'      => Auth::id(),
+            'title' => $request->title,
+            'file_path' => $storedPath,
+            'file_name' => $originalName,
+            'file_size' => $fileSize,
+            'mime_type' => $mimeType,
+            'uploaded_by' => Auth::id(),
         ]);
 
         return back()->with('success', 'Document uploaded successfully.');
@@ -50,7 +52,8 @@ class EmployeeDocumentController extends Controller
      */
     public function download(EmployeeDocument $document)
     {
-        // Add your authorization check here if needed (e.g. Admin or self)
+        abort_unless(auth()->user()->hasPermission('read_staff'), 403);
+
         if (!Storage::disk('local')->exists($document->file_path)) {
             abort(Response::HTTP_NOT_FOUND, 'The requested document does not exist.');
         }
@@ -78,6 +81,8 @@ class EmployeeDocumentController extends Controller
      */
     public function destroy(EmployeeDocument $document)
     {
+        abort_unless(auth()->user()->hasPermission('update_staff'), 403);
+
         if (Storage::disk('local')->exists($document->file_path)) {
             Storage::disk('local')->delete($document->file_path);
         }
@@ -92,6 +97,8 @@ class EmployeeDocumentController extends Controller
      */
     public function updatePhoto(Request $request, Employee $employee)
     {
+        abort_unless(auth()->user()->hasPermission('update_staff'), 403);
+
         $request->validate([
             'photo' => 'required|image|mimes:jpeg,png,jpg|max:2048', // max 2MB
         ]);
@@ -114,6 +121,8 @@ class EmployeeDocumentController extends Controller
      */
     public function report(Request $request)
     {
+        abort_unless(auth()->user()->hasPermission('read_staff'), 403);
+
         $query = EmployeeDocument::with(['employee', 'documentType', 'uploader']);
 
         // Filter by Document Type

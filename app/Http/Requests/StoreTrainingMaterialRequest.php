@@ -2,25 +2,27 @@
 
 namespace App\Http\Requests;
 
-namespace App\Http\Requests;
-
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreTrainingMaterialRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
+    /**
+     * Only users allowed to manage staff may upload training material.
+     */
+    public function authorize(): bool {
+        return (bool) $this->user()?->hasPermission('update_staff');
     }
 
-    public function rules(): array
-    {
+    /**
+     * Validation rules for an uploaded training file.
+     */
+    public function rules(): array {
         return [
-            'title'        => 'required|string|max:255',
-            'description'  => 'nullable|string',
-            'version'      => 'nullable|string|max:20',
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'version' => 'nullable|string|max:20',
             'is_mandatory' => 'nullable|boolean',
-            'document'     => [
+            'document' => [
                 'required',
                 'file',
                 'max:51200', // 50MB max limit to accommodate PDFs, slide decks, and MP4 videos

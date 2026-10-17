@@ -65,6 +65,8 @@ class HrReportsController extends Controller
                 'sys_hr_payroll_summary.staff_id',
                 'sys_hr_payroll_summary.period',
                 'sys_hr_payroll_summary.' . $column . ' as amount',
+                'sys_hr_payroll_summary.nssf_tier1',
+                'sys_hr_payroll_summary.nssf_tier2',
                 'sys_staff.full_names',
                 'sys_staff.national_id',
                 'sys_staff.staff_number'
@@ -79,13 +81,15 @@ class HrReportsController extends Controller
             // Calculate total
             $total = $deductions->sum('amount');
 
-            // Format data for DataTables
+            // Format data for DataTables (Tier I / Tier II are only filled for NSSF, and only on periods processed with the tier split)
             $data = $deductions->map(function ($item, $index) {
                 return [
                     'no' => $index + 1,
                     'staff_number' => $item->staff_number ?? 'N/A',
                     'full_names' => $item->full_names,
                     'national_id' => $item->national_id ?? 'N/A',
+                    'tier1' => $item->nssf_tier1 === null ? '-' : number_format($item->nssf_tier1, 2),
+                    'tier2' => $item->nssf_tier2 === null ? '-' : number_format($item->nssf_tier2, 2),
                     'amount' => number_format($item->amount, 2)
                 ];
             });
@@ -94,6 +98,8 @@ class HrReportsController extends Controller
                 'success' => true,
                 'data' => $data,
                 'total' => number_format($total, 2),
+                'total_tier1' => number_format($deductions->sum('nssf_tier1'), 2),
+                'total_tier2' => number_format($deductions->sum('nssf_tier2'), 2),
                 'count' => $deductions->count()
             ]);
         } catch (\Exception $e) {
@@ -135,6 +141,8 @@ class HrReportsController extends Controller
                 'sys_hr_payroll_summary.staff_id',
                 'sys_hr_payroll_summary.period',
                 'sys_hr_payroll_summary.' . $column . ' as amount',
+                'sys_hr_payroll_summary.nssf_tier1',
+                'sys_hr_payroll_summary.nssf_tier2',
                 'sys_staff.full_names',
                 'sys_staff.national_id',
                 'sys_staff.staff_number'
@@ -146,29 +154,43 @@ class HrReportsController extends Controller
                 ->orderBy('sys_staff.full_names', 'asc')
                 ->get();
 
+            $isNssf = $deductionType === 'NSSF';
+
             // Prepare data for export
             $exportData = [];
             $exportData[] = [$deductionType . ' Deductions Report'];
             $exportData[] = ['Period: ' . date('F Y', strtotime($period))];
             $exportData[] = ['Generated: ' . date('d/m/Y H:i:s')];
             $exportData[] = []; // Empty row
-            $exportData[] = ['No.', 'Staff Number', 'Full Names', 'National ID', 'Amount (KSh)'];
+            $exportData[] = $isNssf
+                ? ['No.', 'Staff Number', 'Full Names', 'National ID', 'Tier I (NSSF) (KSh)', 'Tier II (KSh)', 'Total (KSh)']
+                : ['No.', 'Staff Number', 'Full Names', 'National ID', 'Amount (KSh)'];
 
             $total = 0;
             foreach ($deductions as $index => $item) {
-                $exportData[] = [
+                $row = [
                     $index + 1,
                     $item->staff_number ?? 'N/A',
                     $item->full_names,
                     $item->national_id ?? 'N/A',
-                    number_format($item->amount, 2)
                 ];
+
+                if ($isNssf) {
+                    $row[] = $item->nssf_tier1 === null ? '-' : number_format($item->nssf_tier1, 2);
+                    $row[] = $item->nssf_tier2 === null ? '-' : number_format($item->nssf_tier2, 2);
+                }
+
+                $row[] = number_format($item->amount, 2);
+                $exportData[] = $row;
                 $total += $item->amount;
             }
 
+            $padding = $isNssf ? ['', '', '', '', '', 'Total:'] : ['', '', '', 'Total:'];
+            $countPadding = $isNssf ? ['', '', '', '', '', 'Count:'] : ['', '', '', 'Count:'];
+
             $exportData[] = []; // Empty row
-            $exportData[] = ['', '', '', 'Total:', number_format($total, 2)];
-            $exportData[] = ['', '', '', 'Count:', $deductions->count()];
+            $exportData[] = array_merge($padding, [number_format($total, 2)]);
+            $exportData[] = array_merge($countPadding, [$deductions->count()]);
 
             // Create Excel file
             return Excel::download(

@@ -44,7 +44,21 @@ use App\Models\EmployeeTerminationDocumentTracker;
 
 class StaffController extends Controller
 {
-      private const DOCUMENT_MAP = [
+    public function __construct(private NssfCalculator $nssfCalculator) {
+    }
+
+    /** Friendlier field names for validation messages on the banking & statutory section. */
+    private const STATUTORY_ATTRIBUTES = [
+        'bank_name' => 'bank',
+        'account_name' => 'account name',
+        'account_number' => 'account number',
+        'pin_number' => 'KRA PIN number',
+        'nhif_number' => 'SHA number',
+        'nssf_number' => 'NSSF number',
+        'login_email' => 'login email',
+    ];
+
+    private const DOCUMENT_MAP = [
         'national_id' => 'National ID / Passport',
         'kra_pin'     => 'KRA PIN Certificate',
         'contract'    => 'Signed Employment Contract',
@@ -194,54 +208,55 @@ class StaffController extends Controller
         return $username;
     }
 
-    public function elementBreakdown(Request $request, $id)
-{
-    $element = PayrollElement::findOrFail($id);
+    /**
+     * NSSF Tier I / Tier II breakdown for a payroll element at a given gross pay (empty for non-NSSF elements).
+     */
+    public function elementBreakdown(Request $request, $id) {
+        $element = PayrollElement::findOrFail($id);
 
-    if ((int) $element->formula_id !== (int) config('nssf.formula_id')) {
-        return response()->json(['tiers' => [], 'total' => 0]);
+        if ((int) $element->formula_id !== (int) config('nssf.formula_id')) {
+            return response()->json(['tiers' => [], 'total' => 0]);
+        }
+
+        return response()->json(
+            $this->nssfCalculator->calculate((float) $request->query('gross', 0))
+        );
     }
 
-    return response()->json(
-        app(NssfCalculator::class)->calculate((float) $request->query('gross', 0))
-    );
-}
+    /**
+     * Recalculate NSSF rows on the server so the saved amount can't be edited in the browser.
+     */
+    private function applyNssfAmounts(array $validated): array {
+        if (empty($validated['elements'])) {
+            return $validated;
+        }
 
-/**
- * Recalculate NSSF rows on the server so the saved amount can't be edited in the browser.
- */
-private function applyNssfAmounts(array $validated): array
-{
-    if (empty($validated['elements'])) {
+        $nssfIds = PayrollElement::whereIn('id', array_column($validated['elements'], 'element'))
+            ->where('formula_id', config('nssf.formula_id'))
+            ->pluck('id')->map(fn ($v) => (int) $v)->all();
+
+        if (empty($nssfIds)) {
+            return $validated;
+        }
+
+        $gross = (float) $validated['basic_salary'];
+        foreach ($validated['elements'] as $e) {
+            if (!in_array((int) $e['element'], $nssfIds, true) && (int) $e['entry_type'] === 2) {
+                $gross += (float) $e['amount'];
+            }
+        }
+
+        $total = $this->nssfCalculator->calculate($gross)['total'];
+
+        foreach ($validated['elements'] as $i => $e) {
+            if (in_array((int) $e['element'], $nssfIds, true)) {
+                $validated['elements'][$i]['amount'] = $total;
+                $validated['elements'][$i]['entry_type'] = 1; // always a deduction
+            }
+        }
+
         return $validated;
     }
-
-    $nssfIds = PayrollElement::whereIn('id', array_column($validated['elements'], 'element'))
-        ->where('formula_id', config('nssf.formula_id'))
-        ->pluck('id')->map(fn ($v) => (int) $v)->all();
-
-    if (empty($nssfIds)) {
-        return $validated;
-    }
-
-    $gross = (float) $validated['basic_salary'];
-    foreach ($validated['elements'] as $e) {
-        if (!in_array((int) $e['element'], $nssfIds, true) && (int) $e['entry_type'] === 2) {
-            $gross += (float) $e['amount'];
-        }
-    }
-
-    $total = app(NssfCalculator::class)->calculate($gross)['total'];
-
-    foreach ($validated['elements'] as $i => $e) {
-        if (in_array((int) $e['element'], $nssfIds, true)) {
-            $validated['elements'][$i]['amount'] = $total;
-            $validated['elements'][$i]['entry_type'] = 1; // always a deduction
-        }
-    }
-
-    return $validated;
-}
 
     /**
      * Display staff details page
@@ -278,9 +293,12 @@ private function applyNssfAmounts(array $validated): array
                 'witnessStatements'
             ])->findOrFail($id);
 
-            // dd($staff);
+            // NSSF Tier I / Tier II for the contract's gross pay (basic + allowances)
+            $nssfBreakdown = $staff->contract
+                ? $this->nssfCalculator->calculate((float) $staff->contract->basic_salary + (float) $staff->contract->elements->where('entry_type_id', 2)->sum('amount'))
+                : null;
 
-            return view('staff.details', compact('staff'));
+            return view('staff.details', compact('staff', 'nssfBreakdown'));
         } catch (\Exception $e) {
             Log::error('Error fetching staff details: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Staff member not found');
@@ -312,11 +330,14 @@ private function applyNssfAmounts(array $validated): array
      * Store a newly created staff member, optionally creating a linked system-user login
      * when the requester has the create_users permission and fills in the password field.
      */
-     public function store(Request $request)
+    public function store(Request $request)
     {
         try {
+            if (!auth()->user()->hasPermission('create_users')) {
+                return redirect()->back()->with('error', 'You need the create users permission to add staff, because every staff member gets a system login.')->withInput();
+            }
+
             $validated = $request->validate([
-               'staff_number' => 'nullable',
                 'full_names' => 'required|string|max:255',
                 'mobile_number' => 'nullable|string|max:255',
                 'email_address' => 'required|email|max:255|unique:sys_staff,email_address',
@@ -333,12 +354,12 @@ private function applyNssfAmounts(array $validated): array
                 'managed_zone_ids.*' => 'integer|exists:sys_set_zones,id',
                 'supervised_zone_ids' => 'nullable|array',
                 'supervised_zone_ids.*' => 'integer|exists:sys_set_zones,id',
-                'bank_name' => 'nullable|integer',
-                'account_name' => 'nullable|string|max:255',
-                'account_number' => 'nullable|string|max:255',
-                'pin_number' => 'nullable|string|max:255',
-                'nhif_number' => 'nullable|string|max:255',
-                'nssf_number' => 'nullable|string|max:255',
+                'bank_name' => 'required|integer',
+                'account_name' => 'required|string|max:255',
+                'account_number' => 'required|string|max:255',
+                'pin_number' => 'required|string|max:255',
+                'nhif_number' => 'required|string|max:255',
+                'nssf_number' => 'required|string|max:255',
                 'marital' => 'required|string',
                 'spouse_name' => 'nullable|string|max:255',
                 'kins_names' => 'nullable|string|max:255',
@@ -356,15 +377,23 @@ private function applyNssfAmounts(array $validated): array
                 'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
                 'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
                 'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
-            ]);
+                'login_email' => 'required|email|max:255',
+                'role_id' => 'required|integer|exists:cb_roles,id',
+                'password' => 'nullable|string|min:8|max:255',
+            ], [], self::STATUTORY_ATTRIBUTES);
 
             $managedZoneIds = $validated['managed_zone_ids'] ?? [];
             $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
             unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
             $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
 
-            // CHANGED: keep uploaded files out of fill(); they are handled separately below
-            unset($validated['photo'], $validated['documents']);
+            // Uploaded files and the system-login fields are handled separately below, not mass-assigned to the staff record
+            $userValidated = [
+                'email' => $validated['login_email'],
+                'role_id' => $validated['role_id'],
+                'password' => $validated['password'] ?? null,
+            ];
+            unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password']);
 
             // Uppercase names
             if (isset($validated['full_names'])) {
@@ -374,30 +403,20 @@ private function applyNssfAmounts(array $validated): array
                 $validated['spouse_name'] = strtoupper($validated['spouse_name']);
             }
 
-            // Optional system-login creation: triggered by selecting a role, gated by permission regardless.
-            // Password is optional — a random one is generated (and shown once) when left blank.
-            $createUser = $request->filled('role_id') && auth()->user()->hasPermission('create_users');
-            $userValidated = null;
+            // Every staff member gets a system login. A random password is generated (and shown once) when left blank.
             $generatedPassword = null;
-            if ($createUser) {
-                $userValidated = $request->validate([
-                    'password' => 'nullable|string|min:8|max:255',
-                    'role_id' => 'required|integer|exists:cb_roles,id',
-                ]);
-
-                if (empty($userValidated['password'])) {
-                    $generatedPassword = Str::password(12);
-                    $userValidated['password'] = $generatedPassword;
-                }
-
-                if (User::where('email', $validated['email_address'])->exists()) {
-                    throw ValidationException::withMessages([
-                        'email_address' => ['This email is already registered as a system user login.'],
-                    ]);
-                }
+            if (empty($userValidated['password'])) {
+                $generatedPassword = Str::password(12);
+                $userValidated['password'] = $generatedPassword;
             }
 
-            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $createUser, $userValidated, $generatedPassword) {
+            if (User::where('email', $userValidated['email'])->exists()) {
+                throw ValidationException::withMessages([
+                    'login_email' => ['This email is already registered as a system user login.'],
+                ]);
+            }
+
+            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword) {
                 $staff = new Staff();
                 $staff->fill($validated);
                 $staff->date_time = now();
@@ -406,47 +425,45 @@ private function applyNssfAmounts(array $validated): array
                 $staff->current_status_id = 1;
                 $staff->save();
 
-                // CHANGED: save the profile photo
+                // Save the profile photo
                 if ($request->hasFile('photo')) {
                     $staff->photo = $request->file('photo')->store('staff_photos', 'public');
                     $staff->save();
                 }
 
-                // CHANGED: save the uploaded documents (REQ-01)
+                // Save the uploaded documents (REQ-01)
                 $this->storeStaffDocuments($request, $staff);
 
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
-                if ($createUser) {
-                    $username = $this->buildUniqueUsername($staff->email_address, $staff);
+                $username = $this->buildUniqueUsername($userValidated['email'], $staff);
 
-                    $user = User::create([
-                        'name' => $staff->full_names,
-                        'username' => $username,
-                        'email' => $staff->email_address,
-                        'password' => $userValidated['password'],
-                        'block' => 0,
-                        'sendEmail' => 0,
-                        'registerDate' => now(),
-                        'activation' => '',
-                        'params' => '',
-                        'resetCount' => 0,
-                        'otpKey' => '',
-                        'otep' => '',
-                        'requireReset' => $generatedPassword ? 1 : 0,
-                        'staff_id' => $staff->id,
-                    ]);
+                $user = User::create([
+                    'name' => $staff->full_names,
+                    'username' => $username,
+                    'email' => $userValidated['email'],
+                    'password' => $userValidated['password'],
+                    'block' => 0,
+                    'sendEmail' => 0,
+                    'registerDate' => now(),
+                    'activation' => '',
+                    'params' => '',
+                    'resetCount' => 0,
+                    'otpKey' => '',
+                    'otep' => '',
+                    'requireReset' => $generatedPassword ? 1 : 0,
+                    'staff_id' => $staff->id,
+                ]);
 
-                    DB::table('cb_role_user')->insert([
-                        'user_id' => $user->id,
-                        'role_id' => $userValidated['role_id'],
-                    ]);
+                DB::table('cb_role_user')->insert([
+                    'user_id' => $user->id,
+                    'role_id' => $userValidated['role_id'],
+                ]);
 
-                    UserStaffLink::create([
-                        'user_id' => $user->id,
-                        'staff_id' => $staff->id,
-                    ]);
-                }
+                UserStaffLink::create([
+                    'user_id' => $user->id,
+                    'staff_id' => $staff->id,
+                ]);
 
                 return $staff;
             });
@@ -459,7 +476,6 @@ private function applyNssfAmounts(array $validated): array
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
-            // CHANGED: log the real error so it can be diagnosed
             Log::error('Staff create failed: ' . $e->getMessage(), [
                 'file' => $e->getFile() . ':' . $e->getLine(),
             ]);
@@ -471,51 +487,61 @@ private function applyNssfAmounts(array $validated): array
             return redirect()->back()->with('error', 'Failed to create staff member')->withInput();
         }
     }
-    private function storeStaffDocuments(Request $request, Staff $staff): void
-{
-    $map = [
-        'national_id' => 'National ID / Passport',
-        'kra_pin'     => 'KRA PIN Certificate',
-        'contract'    => 'Signed Employment Contract',
-        'cv'          => 'Curriculum Vitae (CV)',
-        'academic'    => 'Academic Certificates & Transcripts',
-    ];
-    $types = DocumentType::pluck('id', 'name');
+    /**
+     * Save the documents uploaded on the create-staff form (REQ-01).
+     */
+    private function storeStaffDocuments(Request $request, Staff $staff): void {
+        $types = DocumentType::pluck('id', 'name');
 
-    foreach ($map as $key => $typeName) {
-        $file = $request->file("documents.$key");
-        if (!$file || !$file->isValid()) {
-            continue;
+        foreach (self::DOCUMENT_MAP as $key => $typeName) {
+            $file = $request->file("documents.$key");
+            if (!$file || !$file->isValid()) {
+                continue;
+            }
+            if (!isset($types[$typeName])) {
+                throw new \RuntimeException("Document type missing: $typeName");
+            }
+
+            $this->saveEmployeeDocument($staff, $types[$typeName], $typeName, $file);
         }
-        if (!isset($types[$typeName])) {
-            throw new \RuntimeException("Document type missing: $typeName");
+    }
+
+    /**
+     * Attach the physically signed contract (PDF) to a contract, replacing any earlier upload for that contract.
+     */
+    private function saveSignedContract(Contract $contract, UploadedFile $file): void {
+        $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
+        if (!$typeId) {
+            throw new \RuntimeException('Document type missing: Signed Employment Contract');
         }
 
-        EmployeeDocument::create([
-            'employee_id'      => $staff->id,
-            'document_type_id' => $types[$typeName],
-            'title'            => $typeName,
-            'file_path'        => $file->store("employee_documents/{$staff->id}", 'local'),
-            'file_name'        => $file->getClientOriginalName(),
-            'file_size'        => (int) round($file->getSize() / 1024),
-            'mime_type'        => $file->getClientMimeType(),
-            'uploaded_by'      => auth()->id(),
+        $staff = Staff::findOrFail($contract->staff_id);
+        $previous = EmployeeDocument::where('contract_id', $contract->id)->get();
+
+        $document = $this->saveEmployeeDocument($staff, $typeId, 'Signed contract ' . date('d M Y', strtotime($contract->date_start)) . ' - ' . date('d M Y', strtotime($contract->date_end)), $file);
+        $document->update(['contract_id' => $contract->id]);
+
+        foreach ($previous as $old) {
+            Storage::disk('local')->delete($old->file_path);
+            $old->delete();
+        }
+    }
+
+    /**
+     * Store one uploaded file on the private disk and record it against the staff member.
+     */
+    private function saveEmployeeDocument(Staff $staff, int $typeId, string $title, UploadedFile $file): EmployeeDocument {
+        return EmployeeDocument::create([
+            'employee_id' => $staff->id,
+            'document_type_id' => $typeId,
+            'title' => $title,
+            'file_path' => $file->store("employee_documents/{$staff->id}", 'local'),
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => (int) round($file->getSize() / 1024),
+            'mime_type' => $file->getMimeType(),
+            'uploaded_by' => auth()->id(),
         ]);
     }
-}
-private function saveEmployeeDocument(Staff $staff, int $typeId, string $title, UploadedFile $file): EmployeeDocument
-{
-    return EmployeeDocument::create([
-        'employee_id'      => $staff->id,
-        'document_type_id' => $typeId,
-        'title'            => $title,
-        'file_path'        => $file->store("employee_documents/{$staff->id}", 'local'),
-        'file_name'        => $file->getClientOriginalName(),
-        'file_size'        => (int) round($file->getSize() / 1024),
-        'mime_type'        => $file->getClientMimeType(),
-        'uploaded_by'      => auth()->id(),
-    ]);
-}
 
 /**
  * Apply photo/document changes from the edit form.
@@ -655,12 +681,12 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             'supervised_zone_ids' => 'nullable|array',
             'supervised_zone_ids.*' => 'integer|exists:sys_set_zones,id',
             'hire_date' => 'nullable|date',
-            'bank_name' => 'nullable|integer',
-            'account_name' => 'nullable|string|max:255',
-            'account_number' => 'nullable|string|max:255',
-            'pin_number' => 'nullable|string|max:255',
-            'nhif_number' => 'nullable|string|max:255',
-            'nssf_number' => 'nullable|string|max:255',
+            'bank_name' => 'required|integer',
+            'account_name' => 'required|string|max:255',
+            'account_number' => 'required|string|max:255',
+            'pin_number' => 'required|string|max:255',
+            'nhif_number' => 'required|string|max:255',
+            'nssf_number' => 'required|string|max:255',
             'marital' => 'required|string',
             'spouse_name' => 'nullable|string|max:255',
             'kins_names' => 'nullable|string|max:255',
@@ -680,13 +706,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
             'remove_documents'      => 'nullable|array',
             'remove_documents.*'    => 'in:' . implode(',', array_keys(self::DOCUMENT_MAP)),
-        ]);
-
-        // TEMPORARY: confirms the files actually reach the server (remove once working)
-        Log::info('Staff update files', [
-            'photo' => $request->hasFile('photo'),
-            'documents' => array_keys($request->allFiles()['documents'] ?? []),
-        ]);
+        ], [], self::STATUTORY_ATTRIBUTES);
 
         $managedZoneIds = $validated['managed_zone_ids'] ?? [];
         $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
@@ -867,6 +887,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 'elements.*.element' => 'required|integer',
                 'elements.*.entry_type' => 'required|in:1,2',
                 'elements.*.amount' => 'required|numeric|min:0',
+                'signed_contract' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
             $validated = $this->applyNssfAmounts($validated);
@@ -896,8 +917,13 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 }
             }
 
+            if ($request->hasFile('signed_contract')) {
+                $this->saveSignedContract($contract, $request->file('signed_contract'));
+            }
 
             return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract created successfully');
+        } catch (ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -922,6 +948,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 'elements.*.element' => 'required|integer',
                 'elements.*.entry_type' => 'required|in:1,2',
                 'elements.*.amount' => 'required|numeric|min:0',
+                'signed_contract' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
             $validated = $this->applyNssfAmounts($validated);
@@ -953,7 +980,13 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 }
             }
 
+            if ($request->hasFile('signed_contract')) {
+                $this->saveSignedContract($contract, $request->file('signed_contract'));
+            }
+
             return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract updated successfully');
+        } catch (ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
