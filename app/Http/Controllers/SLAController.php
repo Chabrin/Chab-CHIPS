@@ -12,6 +12,7 @@ use App\Services\ErrorDispatcher;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\ServiceAgreementDocument;
 use App\Traits\ClientSearchTrait;
@@ -306,6 +307,8 @@ class SLAController extends Controller
      */
     public function store(Request $request)
     {
+        $documentPaths = [];
+
         try {
             // Validate the request
             $validated = $request->validate([
@@ -353,7 +356,6 @@ class SLAController extends Controller
             }
 
             // Handle file uploads
-            $documentPaths = [];
             if ($request->hasFile('sla_documents')) {
                 foreach ($request->file('sla_documents') as $document) {
                     $path = $document->store('sla_documents', 'public');
@@ -378,76 +380,82 @@ class SLAController extends Controller
 
             Log::info('Creating Service Agreement for Client ID: ' . $validated['client_id'] . ', Property ID: ' . $validated['property_id']);
 
-            // Create the Service Agreement
-            $serviceAgreement = ServiceAgreement::create([
-                'date_time'                   => now(),
-                'client_d'                    => $validated['client_id'],
-                'property_id'                 => $validated['property_id'],
-                'zone_id'                     => $property->zone_id ?? null,
-                'commission_percentage'        => $validated['commission_percentage'],
-                'vat'                         => $vatValue,
-                'vat_per'                     => $validated['vat_percentage'] ?? 0,
-                'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
-                'date_start'                  => $validated['date_start'] ?? null,
-                'date_end'                    => $endDate ? $endDate->format('Y-m-d') : null,
-                'years'                       => $validated['duration_years'] ?? null,
-                'landlord_payment_date'       => $validated['payment_date'],
-                'auto_renewal'                => $validated['auto_renewal'],
-                'created_by_id'               => Auth::id(),
-                'current_status_id'           => 1, // Pending — awaiting maker-checker approval
-                'reference_number'            => null,
-                'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
-                'charge_registration_fee'     => !empty($validated['charge_registration_fee']),
-                'returns_combination'         => $validated['returns_combination'] ?? 'each_separate',
-                'rent_selected'               => !empty($validated['rent_selected']),
-                'electricity_bill_selected'   => !empty($validated['electricity_bill_selected']),
-                'electricity_bill_cost'       => !empty($validated['electricity_bill_selected']) ? ($validated['electricity_bill_cost'] ?? 0) : null,
-                'water_bill_selected'         => !empty($validated['water_bill_selected']),
-                'water_bill_cost'             => !empty($validated['water_bill_selected']) ? ($validated['water_bill_cost'] ?? 0) : null,
-                'service_charges_selected'    => !empty($validated['service_charges_selected']),
-                'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
-            ]);
+            // The SLA, its documents and its tenant billing items are saved together or not at all,
+            // so a failure part-way cannot leave a half-created SLA behind.
+            $serviceAgreement = DB::transaction(function () use ($validated, $property, $vatValue, $endDate, $documentPaths) {
+                // Create the Service Agreement
+                $serviceAgreement = ServiceAgreement::create([
+                    'date_time'                   => now(),
+                    'client_d'                    => $validated['client_id'],
+                    'property_id'                 => $validated['property_id'],
+                    'zone_id'                     => $property->zone_id ?? null,
+                    'commission_percentage'        => $validated['commission_percentage'],
+                    'vat'                         => $vatValue,
+                    'vat_per'                     => $validated['vat_percentage'] ?? 0,
+                    'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
+                    'date_start'                  => $validated['date_start'] ?? null,
+                    'date_end'                    => $endDate ? $endDate->format('Y-m-d') : null,
+                    'years'                       => $validated['duration_years'] ?? null,
+                    'landlord_payment_date'       => $validated['payment_date'],
+                    'auto_renewal'                => $validated['auto_renewal'],
+                    'created_by_id'               => Auth::id(),
+                    'current_status_id'           => 1, // Pending — awaiting maker-checker approval
+                    'reference_number'            => null,
+                    'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
+                    'charge_registration_fee'     => !empty($validated['charge_registration_fee']),
+                    'returns_combination'         => $validated['returns_combination'] ?? 'each_separate',
+                    'rent_selected'               => !empty($validated['rent_selected']),
+                    'electricity_bill_selected'   => !empty($validated['electricity_bill_selected']),
+                    'electricity_bill_cost'       => !empty($validated['electricity_bill_selected']) ? ($validated['electricity_bill_cost'] ?? 0) : null,
+                    'water_bill_selected'         => !empty($validated['water_bill_selected']),
+                    'water_bill_cost'             => !empty($validated['water_bill_selected']) ? ($validated['water_bill_cost'] ?? 0) : null,
+                    'service_charges_selected'    => !empty($validated['service_charges_selected']),
+                    'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
+                ]);
 
-            Log::info('Service Agreement created with ID: ' . $serviceAgreement->id);
+                Log::info('Service Agreement created with ID: ' . $serviceAgreement->id);
 
-            // Generate and update reference number after getting the ID
-            $serviceAgreement->reference_number = $this->generateReferenceNumber(
-                $property->property_name,
-                $serviceAgreement->id
-            );
-            $serviceAgreement->save();
+                // Generate and update reference number after getting the ID
+                $serviceAgreement->reference_number = $this->generateReferenceNumber(
+                    $property->property_name,
+                    $serviceAgreement->id
+                );
+                $serviceAgreement->save();
 
-            //store uploaded documents info
-            if (!empty($documentPaths)) {
-                foreach ($documentPaths as $docPath) {
-                    $serviceAgreement->serviceAgreementDocuments()->create([
-                        'sla_documents' => $docPath,
-                        'params' => null,
+                //store uploaded documents info
+                if (!empty($documentPaths)) {
+                    foreach ($documentPaths as $docPath) {
+                        $serviceAgreement->serviceAgreementDocuments()->create([
+                            'sla_documents' => $docPath,
+                            'params' => null,
+                        ]);
+                    }
+                }
+
+                Log::info('SLA Documents stored for SLA ID: ' . $serviceAgreement->id);
+
+                // Store selected Tenant Invoiceable Items — amount and
+                // percentage_of_rent are both optional and mutually exclusive
+                // (driven by the row's "Amount" / "% of Rent" radio on the form).
+                foreach ($validated['items'] ?? [] as $itemId => $itemData) {
+                    if (empty($itemData['selected'])) {
+                        continue;
+                    }
+
+                    $choice = $itemData['choice'] ?? null;
+
+                    SlaInvoiceableItem::create([
+                        'sla_id' => $serviceAgreement->id,
+                        'item_id' => (int) $itemId,
+                        'amount' => $choice === 'amount' ? ($itemData['amount'] ?? null) : null,
+                        'percentage_of_rent' => $choice === 'percentage' ? ($itemData['percentage_of_rent'] ?? null) : null,
                     ]);
                 }
-            }
 
-            Log::info('SLA Documents stored for SLA ID: ' . $serviceAgreement->id);
+                Log::info('Tenant Invoiceable Items stored for SLA ID: ' . $serviceAgreement->id);
 
-            // Store selected Tenant Invoiceable Items — amount and
-            // percentage_of_rent are both optional and mutually exclusive
-            // (driven by the row's "Amount" / "% of Rent" radio on the form).
-            foreach ($validated['items'] ?? [] as $itemId => $itemData) {
-                if (empty($itemData['selected'])) {
-                    continue;
-                }
-
-                $choice = $itemData['choice'] ?? null;
-
-                SlaInvoiceableItem::create([
-                    'sla_id' => $serviceAgreement->id,
-                    'item_id' => (int) $itemId,
-                    'amount' => $choice === 'amount' ? ($itemData['amount'] ?? null) : null,
-                    'percentage_of_rent' => $choice === 'percentage' ? ($itemData['percentage_of_rent'] ?? null) : null,
-                ]);
-            }
-
-            Log::info('Tenant Invoiceable Items stored for SLA ID: ' . $serviceAgreement->id);
+                return $serviceAgreement;
+            });
 
             Log::info('Service Agreement created successfully', ['sla_id' => $serviceAgreement->id]);
 
@@ -461,6 +469,9 @@ class SLAController extends Controller
                 ->withErrors($e->validator)
                 ->withInput();
         } catch (\Exception $e) {
+            if ($documentPaths) {
+                Storage::disk('public')->delete($documentPaths);
+            }
             ErrorDispatcher::dispatch($e);
             Log::error('Error creating service agreement: ' . $e->getMessage());
             return redirect()
@@ -665,6 +676,8 @@ class SLAController extends Controller
      */
     public function update(Request $request, $encryptedId)
     {
+        $storedPaths = [];
+
         try {
             $id = Crypt::decrypt($encryptedId);
             $serviceAgreement = ServiceAgreement::findOrFail($id);
@@ -714,17 +727,6 @@ class SLAController extends Controller
                 $endDate->modify('+' . $validated['duration_years'] . ' years');
             }
 
-            // Handle file uploads (new documents)
-            if ($request->hasFile('sla_documents')) {
-                foreach ($request->file('sla_documents') as $document) {
-                    $path = $document->store('sla_documents', 'public');
-                    $serviceAgreement->serviceAgreementDocuments()->create([
-                        'sla_documents' => $path,
-                        'params' => null,
-                    ]);
-                }
-            }
-    
             // Get property to retrieve zone_id. Bypass the zone-assignment scope here —
             // property_id was already validated as existing above (unscoped `exists` rule),
             // so re-fetching with the restrictive scope would wrongly 404 a property that
@@ -739,50 +741,66 @@ class SLAController extends Controller
                 $vatValue = 'Flat Rate';
             }
     
-            // Update the Service Agreement
-            $serviceAgreement->update([
-                'client_d'                    => $validated['client_id'],
-                'property_id'                 => $validated['property_id'],
-                'zone_id'                     => $property->zone_id ?? null,
-                'commission_percentage'        => $validated['commission_percentage'],
-                'vat'                         => $vatValue,
-                'vat_per'                     => $validated['vat_percentage'] ?? 0,
-                'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
-                'date_start'                  => $validated['date_start'] ?? null,
-                'date_end'                    => $endDate ? $endDate->format('Y-m-d') : null,
-                'years'                       => $validated['duration_years'] ?? null,
-                'landlord_payment_date'       => $validated['payment_date'],
-                'auto_renewal'                => $validated['auto_renewal'],
-                'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
-                'charge_registration_fee'     => !empty($validated['charge_registration_fee']),
-                'returns_combination'         => $validated['returns_combination'] ?? $serviceAgreement->returns_combination,
-                'rent_selected'               => !empty($validated['rent_selected']),
-                'electricity_bill_selected'   => !empty($validated['electricity_bill_selected']),
-                'electricity_bill_cost'       => !empty($validated['electricity_bill_selected']) ? ($validated['electricity_bill_cost'] ?? 0) : null,
-                'water_bill_selected'         => !empty($validated['water_bill_selected']),
-                'water_bill_cost'             => !empty($validated['water_bill_selected']) ? ($validated['water_bill_cost'] ?? 0) : null,
-                'service_charges_selected'    => !empty($validated['service_charges_selected']),
-                'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
-            ]);
-
-            // Replace the Tenant Invoiceable Items selection with whatever the
-            // form submitted — the staged table on the edit page is the full,
-            // authoritative list each time (same shape store() writes).
-            SlaInvoiceableItem::where('sla_id', $serviceAgreement->id)->delete();
-            foreach ($validated['items'] ?? [] as $itemId => $itemData) {
-                if (empty($itemData['selected'])) {
-                    continue;
+            // New documents, the SLA fields and the tenant billing items are saved together or not at all,
+            // so a failure part-way cannot drop the existing billing items or leave a half-edited SLA.
+            DB::transaction(function () use ($request, $serviceAgreement, $validated, $property, $vatValue, $endDate, &$storedPaths) {
+                // Handle file uploads (new documents)
+                if ($request->hasFile('sla_documents')) {
+                    foreach ($request->file('sla_documents') as $document) {
+                        $path = $document->store('sla_documents', 'public');
+                        $storedPaths[] = $path;
+                        $serviceAgreement->serviceAgreementDocuments()->create([
+                            'sla_documents' => $path,
+                            'params' => null,
+                        ]);
+                    }
                 }
 
-                $choice = $itemData['choice'] ?? null;
-
-                SlaInvoiceableItem::create([
-                    'sla_id' => $serviceAgreement->id,
-                    'item_id' => (int) $itemId,
-                    'amount' => $choice === 'amount' ? ($itemData['amount'] ?? null) : null,
-                    'percentage_of_rent' => $choice === 'percentage' ? ($itemData['percentage_of_rent'] ?? null) : null,
+                // Update the Service Agreement
+                $serviceAgreement->update([
+                    'client_d'                    => $validated['client_id'],
+                    'property_id'                 => $validated['property_id'],
+                    'zone_id'                     => $property->zone_id ?? null,
+                    'commission_percentage'        => $validated['commission_percentage'],
+                    'vat'                         => $vatValue,
+                    'vat_per'                     => $validated['vat_percentage'] ?? 0,
+                    'flat_rate_vat'               => $validated['flat_rate_vat'] ?? 0,
+                    'date_start'                  => $validated['date_start'] ?? null,
+                    'date_end'                    => $endDate ? $endDate->format('Y-m-d') : null,
+                    'years'                       => $validated['duration_years'] ?? null,
+                    'landlord_payment_date'       => $validated['payment_date'],
+                    'auto_renewal'                => $validated['auto_renewal'],
+                    'move_in_inspection_required' => !empty($validated['move_in_inspection_required']),
+                    'charge_registration_fee'     => !empty($validated['charge_registration_fee']),
+                    'returns_combination'         => $validated['returns_combination'] ?? $serviceAgreement->returns_combination,
+                    'rent_selected'               => !empty($validated['rent_selected']),
+                    'electricity_bill_selected'   => !empty($validated['electricity_bill_selected']),
+                    'electricity_bill_cost'       => !empty($validated['electricity_bill_selected']) ? ($validated['electricity_bill_cost'] ?? 0) : null,
+                    'water_bill_selected'         => !empty($validated['water_bill_selected']),
+                    'water_bill_cost'             => !empty($validated['water_bill_selected']) ? ($validated['water_bill_cost'] ?? 0) : null,
+                    'service_charges_selected'    => !empty($validated['service_charges_selected']),
+                    'service_charges_cost'        => !empty($validated['service_charges_selected']) ? ($validated['service_charges_cost'] ?? 0) : null,
                 ]);
-            }
+
+                // Replace the Tenant Invoiceable Items selection with whatever the
+                // form submitted — the staged table on the edit page is the full,
+                // authoritative list each time (same shape store() writes).
+                SlaInvoiceableItem::where('sla_id', $serviceAgreement->id)->delete();
+                foreach ($validated['items'] ?? [] as $itemId => $itemData) {
+                    if (empty($itemData['selected'])) {
+                        continue;
+                    }
+
+                    $choice = $itemData['choice'] ?? null;
+
+                    SlaInvoiceableItem::create([
+                        'sla_id' => $serviceAgreement->id,
+                        'item_id' => (int) $itemId,
+                        'amount' => $choice === 'amount' ? ($itemData['amount'] ?? null) : null,
+                        'percentage_of_rent' => $choice === 'percentage' ? ($itemData['percentage_of_rent'] ?? null) : null,
+                    ]);
+                }
+            });
 
             Log::info('Service Agreement updated successfully', [
                 'sla_id' => $serviceAgreement->id,
@@ -799,6 +817,9 @@ class SLAController extends Controller
                 ->withErrors($e->validator)
                 ->withInput();
         } catch (\Exception $e) {
+            if ($storedPaths) {
+                Storage::disk('public')->delete($storedPaths);
+            }
             ErrorDispatcher::dispatch($e);
             Log::error('Error updating service agreement: ' . $e->getMessage());
             return redirect()
