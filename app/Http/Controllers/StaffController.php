@@ -56,6 +56,8 @@ class StaffController extends Controller
         'nhif_number' => 'SHA number',
         'nssf_number' => 'NSSF number',
         'login_email' => 'login email',
+        'documents.national_id' => 'National ID / Passport copy',
+        'documents.kra_pin' => 'KRA PIN certificate',
     ];
 
     private const DOCUMENT_MAP = [
@@ -372,8 +374,8 @@ class StaffController extends Controller
                 'disability' => 'required|string',
                 'photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
                 'documents' => 'nullable|array',
-                'documents.national_id' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
-                'documents.kra_pin'     => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'documents.national_id' => 'required|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'documents.kra_pin'     => 'required|file|mimes:pdf,png,jpg,jpeg|max:5120',
                 'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
                 'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
                 'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',

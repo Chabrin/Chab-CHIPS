@@ -499,7 +499,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <label class="form-label fw-semibold small mb-1">
                                                     National ID / Passport Copy <span class="text-danger">*</span>
                                                 </label>
-                                                <input type="file" name="documents[national_id]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+                                                <input type="file" name="documents[national_id]" class="form-control @error('documents.national_id') is-invalid @enderror" required accept=".pdf,.png,.jpg,.jpeg">
                                                 <small class="text-muted">Scanned front/back copy or passport bio-page</small>
                                             </div>
                                         </div>
@@ -510,7 +510,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <label class="form-label fw-semibold small mb-1">
                                                     KRA PIN Certificate <span class="text-danger">*</span>
                                                 </label>
-                                                <input type="file" name="documents[kra_pin]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+                                                <input type="file" name="documents[kra_pin]" class="form-control @error('documents.kra_pin') is-invalid @enderror" required accept=".pdf,.png,.jpg,.jpeg">
                                                 <small class="text-muted">KRA PIN registration certificate</small>
                                             </div>
                                         </div>

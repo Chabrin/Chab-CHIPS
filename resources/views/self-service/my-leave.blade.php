@@ -86,6 +86,9 @@
                             <input type="number" class="form-control" id="sl_available_days" readonly>
                         </div>
                     </div>
+                    <div class="alert alert-info py-2 mb-3 d-none" id="sl_tier_alert">
+                        <span id="sl_tier_text"></span>
+                    </div>
                     <div class="row mb-3">
                         <div class="col-12">
                             <label class="form-label">Leave Duration <span class="text-danger">*</span></label>
@@ -430,6 +433,36 @@ $(function () {
             $('#sl_hours_section').show();
         }
     });
+
+    // ── Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) ───────────────
+    function showTierBreakdown() {
+        var leaveTypeId = $('#sl_leave_type_id').val();
+        $('#sl_tier_alert').addClass('d-none');
+        if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/evaluate-application') }}",
+            method: 'POST',
+            data: {
+                staff_id: staffId,
+                leave_type_id: leaveTypeId,
+                start_date: $('#sl_start_date').val() || new Date().toISOString().split('T')[0],
+                requested_days: parseFloat($('#sl_requested_days').val()) || 1,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function (res) {
+                if (res.success && res.sick_breakdown) {
+                    var b = res.sick_breakdown;
+                    $('#sl_tier_text').html('<strong>Pay breakdown:</strong> ' + b.summary_text + ' (days already used this year: ' + b.used_this_year + ')');
+                    $('#sl_tier_alert').removeClass('d-none');
+                }
+            },
+            error: function (xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
+            }
+        });
+    }
+    $('#sl_leave_type_id, #sl_start_date, #sl_requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
 
     // ── Available days ───────────────────────────────────────────────────────
     $('#sl_leave_type_id').on('change', function () {

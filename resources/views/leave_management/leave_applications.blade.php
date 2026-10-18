@@ -1040,7 +1040,6 @@
             let selectedText = $('#leave_type_id option:selected').text().toLowerCase();
 
             let isAnnual = selectedText.includes('annual') || selectedText.includes('normal');
-            let isSick = selectedText.includes('sick');
 
             // Reset containers
             $('#annualSlotPickerContainer').addClass('d-none');
@@ -1072,35 +1071,43 @@
                 });
             }
 
-            // 2. Sick Leave Flow: Check and show Tier status
-            if (isSick) {
-                $('#sickLeaveTierAlert').removeClass('d-none');
-                $('#sickTierText').text('Evaluating sick pay tiers for the current year...');
+            // 2. Tiered leave (e.g. Sick Leave): show how the requested days are paid
+            showTierBreakdown();
+        }
 
-                let startDate = $('#start_date').val() || new Date().toISOString().split('T')[0];
-                let endDate = $('#end_date').val() || startDate;
+        // Pay tier preview for the requested days; the server returns nothing for leave types without tiers
+        function showTierBreakdown() {
+            let staffId = $('#staff_id').val();
+            let leaveTypeId = $('#leave_type_id').val();
 
-                $.ajax({
-                    url: "{{ url('/ajax/leave-management/evaluate-application') }}",
-                    type: 'POST',
-                    data: {
-                        staff_id: staffId,
-                        leave_type_id: leaveTypeId,
-                        start_date: startDate,
-                        end_date: endDate,
-                        _token: '{{ csrf_token() }}'
-                    },
-                    success: function(res) {
-                        if (res.success && res.sick_breakdown) {
-                            let b = res.sick_breakdown;
-                            $('#sickTierText').html(`<strong>Sick Pay Breakdown:</strong> ${b.summary_text} (Used this year: ${b.used_this_year} days)`);
-                        }
+            $('#sickLeaveTierAlert').addClass('d-none');
+            if (!staffId || !leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') return;
+
+            $.ajax({
+                url: "{{ url('/ajax/leave-management/evaluate-application') }}",
+                type: 'POST',
+                data: {
+                    staff_id: staffId,
+                    leave_type_id: leaveTypeId,
+                    start_date: $('#start_date').val() || new Date().toISOString().split('T')[0],
+                    requested_days: parseFloat($('#requested_days').val()) || 1,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(res) {
+                    if (res.success && res.sick_breakdown) {
+                        let b = res.sick_breakdown;
+                        $('#sickTierText').html(`<strong>Pay Breakdown:</strong> ${b.summary_text} (days already used this year: ${b.used_this_year})`);
+                        $('#sickLeaveTierAlert').removeClass('d-none');
                     }
-                });
-            }
+                },
+                error: function(xhr) {
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
+                }
+            });
         }
 
         $('#staff_id, #leave_type_id').on('change', handleLeaveTypeSpecifics);
+        $('#start_date, #requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
 
         // When a scheduled block is selected from the dropdown
         $('#scheduled_slot_select').on('change', function() {

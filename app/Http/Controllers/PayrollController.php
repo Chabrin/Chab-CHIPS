@@ -818,6 +818,13 @@ class PayrollController extends Controller
                 ], 422);
             }
 
+            if (!$period->start_date || !$period->end_date) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'This payroll period has no start or end date. Set both in the Payroll Calendar before processing.'
+                ], 422);
+            }
+
             $startDate = $period->start_date->format('Y-m-d');
             $endDate = $period->end_date->format('Y-m-d');
 
@@ -880,17 +887,17 @@ class PayrollController extends Controller
                     'message' => 'Payroll processed successfully for ' . count($results) . ' employees',
                     'results' => $results
                 ]);
-            } catch (\Exception $ex) {
+            } catch (\Throwable $ex) {
                 // Rollback on any error
                 DB::rollBack();
                 throw $ex;
             }
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             try {
                 ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
+            } catch (\Throwable $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             Log::error('Error processing payroll: ' . $e->getMessage());

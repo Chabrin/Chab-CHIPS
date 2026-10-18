@@ -167,7 +167,8 @@ class LeaveManagementController extends Controller
             $plans = LeaveCalendarPlan::with(['createdBy', 'employee', 'leaveType'])
                 ->whereYear('start_date', $currentYear)
                 ->orderBy('id', 'desc')
-                ->get();
+                ->get()
+                ->filter(fn($plan) => $this->calendar->isAnnualLeaveType($plan->leaveType?->type_name));
             
             $user = Auth::user();
             $canUpdate = $user ? $user->isAbleTo('update_leave_calendar_plans') : true;
@@ -186,8 +187,8 @@ class LeaveManagementController extends Controller
                         ] : null,
                         'start_date' => $plan->start_date ? \Carbon\Carbon::parse($plan->start_date)->format('Y-m-d') : null,
                         'end_date' => $plan->end_date ? \Carbon\Carbon::parse($plan->end_date)->format('Y-m-d') : null,
-                        'entitled_days' => (int) ($plan->entitled_days ?? 0),
-                        'balance' => (int) ($plan->balance ?? 0),
+                        'entitled_days' => round((float) ($plan->entitled_days ?? 0), 2),
+                        'balance' => round((float) ($plan->balance ?? 0), 2),
                         'current_status_id' => $plan->current_status_id,
                     ];
                 })->values();
@@ -263,8 +264,8 @@ class LeaveManagementController extends Controller
     
 
     /**
-     * Initialize the year's leave plans: sync the public holidays entered in the modal, then queue plan generation
-     * for all active staff (annual leave pro-rated for mid-year hires, other types at their configured entitlement).
+     * Initialize the year's annual leave plans: sync the public holidays entered in the modal, then queue plan
+     * generation for all active staff (annual leave only, pro-rated for mid-year hires).
      */
     public function generateAnnualPlans(Request $request) {
         try {
@@ -285,15 +286,18 @@ class LeaveManagementController extends Controller
                 return response()->json(['success' => false, 'error' => 'No active staff found'], 400);
             }
 
-            $leaveTypesCount = $leaveTypeIds ? LeaveType::whereIn('id', $leaveTypeIds)->count() : LeaveType::count();
+            $annualTypeIds = LeaveType::all()
+                ->filter(fn($type) => $this->calendar->isAnnualLeaveType($type->type_name))
+                ->pluck('id');
+            if ($leaveTypeIds) {
+                $annualTypeIds = $annualTypeIds->intersect($leaveTypeIds);
+            }
+            $leaveTypesCount = $annualTypeIds->count();
             if ($leaveTypesCount === 0) {
-                return response()->json(['success' => false, 'error' => 'No valid leave types found'], 400);
+                return response()->json(['success' => false, 'error' => 'Annual leave type not configured in HR settings.'], 400);
             }
 
-            $existingPlans = LeaveCalendarPlan::whereYear('start_date', $year);
-            if ($leaveTypeIds) {
-                $existingPlans->whereIn('leave_type_id', $leaveTypeIds);
-            }
+            $existingPlans = LeaveCalendarPlan::whereYear('start_date', $year)->whereIn('leave_type_id', $annualTypeIds);
 
             $existingPlansCount = $existingPlans->count();
             if ($existingPlansCount > 0 && !$override) {
@@ -309,7 +313,7 @@ class LeaveManagementController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Plan generation for {$year} started in the background for {$activeStaffCount} staff member(s) across {$leaveTypesCount} leave type(s).",
+                'message' => "Annual leave plan generation for {$year} started in the background for {$activeStaffCount} staff member(s).",
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
@@ -366,7 +370,8 @@ class LeaveManagementController extends Controller
             'staff_id' => 'required|integer',
             'leave_type_id' => 'required|integer',
             'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'requested_days' => 'nullable|numeric|min:0.5',
         ]);
 
         $user = Auth::user();
@@ -374,7 +379,13 @@ class LeaveManagementController extends Controller
             return response()->json(['success' => false, 'error' => 'Unauthorized access.'], 403);
         }
 
-        $days = $this->calendar->countDeductibleDays($validated['start_date'], $validated['end_date'], (int) $validated['leave_type_id']);
+        if (!empty($validated['requested_days'])) {
+            $days = (int) ceil($validated['requested_days']);
+        } elseif (!empty($validated['end_date'])) {
+            $days = $this->calendar->countDeductibleDays($validated['start_date'], $validated['end_date'], (int) $validated['leave_type_id']);
+        } else {
+            $days = 1;
+        }
         $breakdown = $this->tiers->breakdown((int) $validated['staff_id'], (int) $validated['leave_type_id'], \Carbon\Carbon::parse($validated['start_date'])->year, $days);
 
         return response()->json(['success' => true, 'sick_breakdown' => $breakdown]);
@@ -429,7 +440,7 @@ class LeaveManagementController extends Controller
                 'employee_id'   => 'required|integer',
                 'leave_type_id' => 'required|integer',
                 'start_date'    => 'required|date',
-                'entitled_days' => 'required|integer|min:0',
+                'entitled_days' => 'required|numeric|min:0',
             ]);
 
             $result = $this->calculateEndDate($validated['start_date'], $validated['entitled_days'], $validated['leave_type_id'], $validated['entitled_days']);
@@ -477,7 +488,7 @@ class LeaveManagementController extends Controller
                 'employee_id'   => 'required|integer',
                 'leave_type_id' => 'required|integer',
                 'start_date'    => 'required|date',
-                'entitled_days' => 'required|integer|min:0',
+                'entitled_days' => 'required|numeric|min:0',
             ]);
 
             $result = $this->calculateEndDate($validated['start_date'], $validated['entitled_days'], $validated['leave_type_id'], $validated['entitled_days']);
@@ -739,32 +750,28 @@ class LeaveManagementController extends Controller
 
             $currentYear = (int) date('Y', strtotime($validated['start_date']));
 
-            // 1. Try finding a direct matching plan (accepting both pending or approved plans)
-            $staff_leave_plan = LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
-                ->where('leave_type_id', $validated['leave_type_id'])
-                ->whereYear('start_date', $currentYear)
-                ->first();
+            // Only annual leave is planned; sick, compassionate etc. have no calendar plan
+            $targetLeaveType = LeaveType::find($validated['leave_type_id']);
+            $staff_leave_plan = null;
 
-            // 2. Fallback: match by related Annual/Normal leave types
-            if (!$staff_leave_plan) {
-                $targetLeaveType = LeaveType::find($validated['leave_type_id']);
-                $targetName = strtolower($targetLeaveType->type_name ?? '');
-
-                if (str_contains($targetName, 'annual') || str_contains($targetName, 'normal')) {
-                    $staff_leave_plan = LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
+            if ($this->calendar->isAnnualLeaveType($targetLeaveType?->type_name)) {
+                // 1. Direct matching plan (pending or approved), else any annual/normal plan for the year
+                $staff_leave_plan = LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
+                    ->where('leave_type_id', $validated['leave_type_id'])
+                    ->whereYear('start_date', $currentYear)
+                    ->first()
+                    ?? LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
                         ->whereYear('start_date', $currentYear)
                         ->whereHas('leaveType', function ($q) {
                             $q->where('type_name', 'ILIKE', '%annual%')
                               ->orWhere('type_name', 'ILIKE', '%normal%');
                         })
                         ->first();
-                }
             }
 
-            // 3. Fallback for leave types without calendar envelopes (e.g., Sick, Compassionate)
+            // 2. No plan: annual leave is pro-rated from the hire date, other types use their configured days
             if (!$staff_leave_plan) {
-                $leaveType = LeaveType::find($validated['leave_type_id']);
-                $entitledDays = (float) ($leaveType->entitled_days ?? $validated['available_days'] ?? 0);
+                $entitledDays = $this->entitlementWithoutPlan((int) $validated['staff_id'], $targetLeaveType, $currentYear);
                 $balanceDays  = max(0, $entitledDays - (float) $requestModel->requested_days);
             } else {
                 $entitledDays = (float) $staff_leave_plan->entitled_days;
@@ -896,24 +903,39 @@ class LeaveManagementController extends Controller
         }
     }
 
-public function availableLeaveDays($staffId, $leaveTypeId)
+/**
+     * Entitled days for a leave type when the staff member has no calendar plan: annual leave is pro-rated
+     * from the hire date, every other type uses its configured days.
+     */
+    private function entitlementWithoutPlan(int $staffId, ?LeaveType $leaveType, int $year): float {
+        if ($leaveType && $this->calendar->isAnnualLeaveType($leaveType->type_name)) {
+            $hireDate = Staff::find($staffId)?->getRawOriginal('hire_date');
+
+            return $this->calendar->calculateAnnualEntitlement($hireDate, $year);
+        }
+
+        return (float) ($leaveType->entitled_days ?? 0);
+    }
+
+    public function availableLeaveDays($staffId, $leaveTypeId)
     {
         try {
             $currentYear = (int) date('Y');
 
-            // Find plan for the current calendar year
-            $plan = LeaveCalendarPlan::where('employee_id', $staffId)
-                ->where('leave_type_id', $leaveTypeId)
-                ->whereYear('start_date', $currentYear)
-                ->orderBy('id', 'desc')
-                ->first();
+            $leaveType = LeaveType::find($leaveTypeId);
 
-            // If not found by year, search without year constraint as fallback
-            if (!$plan) {
+            // Only annual leave is planned; find its plan for the current year, else the latest one
+            $plan = null;
+            if ($this->calendar->isAnnualLeaveType($leaveType?->type_name)) {
                 $plan = LeaveCalendarPlan::where('employee_id', $staffId)
                     ->where('leave_type_id', $leaveTypeId)
+                    ->whereYear('start_date', $currentYear)
                     ->orderBy('id', 'desc')
-                    ->first();
+                    ->first()
+                    ?? LeaveCalendarPlan::where('employee_id', $staffId)
+                        ->where('leave_type_id', $leaveTypeId)
+                        ->orderBy('id', 'desc')
+                        ->first();
             }
 
             if ($plan) {
@@ -928,8 +950,7 @@ public function availableLeaveDays($staffId, $leaveTypeId)
                 ]);
             }
 
-            // Fallback for non-annual leave types (e.g., Compassionate, Sick) that don't have pre-generated calendar envelopes
-            $leaveType = LeaveType::find($leaveTypeId);
+            // No plan: non-annual types (Compassionate, Sick) never have one, and annual leave is pro-rated from the hire date
             if ($leaveType) {
                 $usedDays = LeaveRequest::where('staff_id', $staffId)
                     ->where('leave_type_id', $leaveTypeId)
@@ -937,7 +958,7 @@ public function availableLeaveDays($staffId, $leaveTypeId)
                     ->whereIn('current_status_id', [5, 49])
                     ->sum('days');
 
-                $entitled = (float) ($leaveType->entitled_days ?? 0);
+                $entitled = $this->entitlementWithoutPlan((int) $staffId, $leaveType, $currentYear);
                 $available = max(0, $entitled - (float) $usedDays);
 
                 return response()->json([

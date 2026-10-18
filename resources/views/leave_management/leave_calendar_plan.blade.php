@@ -200,7 +200,7 @@ $(document).ready(function() {
                             data-entitled-days="${row.entitled_days}"
                             data-employee-name="${row.employee_name}">
                             <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span>
-                            Schedule ${row.entitled_days} Days
+                            Schedule ${Math.floor(row.entitled_days)} Days
                         </button>
                     `;
                 }
@@ -216,7 +216,8 @@ $(document).ready(function() {
         let leaveTypeId = $(this).data('leave-type-id');
         let empName = $(this).data('employee-name');
 
-        requiredPlanDays = parseInt($(this).data('entitled-days')) || 21;
+        requiredPlanDays = Math.floor(parseFloat($(this).data('entitled-days')));
+        if (isNaN(requiredPlanDays)) { requiredPlanDays = 21; }
 
         $('#modalPlanId').val(planId);
         $('#modalLeaveTypeId').val(leaveTypeId);

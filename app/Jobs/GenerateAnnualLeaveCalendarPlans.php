@@ -44,14 +44,12 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
         // Get all active staff
         $activeStaff = Staff::where('current_status_id', 1)->get();
         
-        // Get leave types based on selection
+        // Only annual leave is planned; sick, compassionate and the like are applied for as they happen
+        $leaveTypes = LeaveType::all()->filter(fn($type) => $calendar->isAnnualLeaveType($type->type_name));
         if ($this->leaveTypeIds && count($this->leaveTypeIds) > 0) {
-            $leaveTypes = LeaveType::whereIn('id', $this->leaveTypeIds)->get();
-            Log::info("Generating for selected leave types: " . implode(', ', $this->leaveTypeIds));
-        } else {
-            $leaveTypes = LeaveType::all();
-            Log::info("Generating for all leave types");
+            $leaveTypes = $leaveTypes->whereIn('id', $this->leaveTypeIds);
         }
+        Log::info("Generating annual leave plans for: " . $leaveTypes->pluck('type_name')->implode(', '));
         
         if ($activeStaff->isEmpty() || $leaveTypes->isEmpty()) {
             Log::warning("No active staff or leave types found for annual plan generation");
@@ -122,15 +120,10 @@ class GenerateAnnualLeaveCalendarPlans implements ShouldQueue
     }
 
     /**
-     * Entitled days for a staff member and leave type: annual leave is pro-rated for mid-year hires,
-     * every other type uses its configured entitlement.
+     * Entitled days for a staff member's annual leave, pro-rated for mid-year hires.
      */
     private function entitlementFor(LeaveCalendarService $calendar, Staff $staff, LeaveType $leaveType) {
-        if ($calendar->isAnnualLeaveType($leaveType->type_name)) {
-            return $calendar->calculateAnnualEntitlement($staff->getRawOriginal('hire_date'), (int) $this->year);
-        }
-
-        return $leaveType->entitled_days;
+        return $calendar->calculateAnnualEntitlement($staff->getRawOriginal('hire_date'), (int) $this->year);
     }
 
     /**

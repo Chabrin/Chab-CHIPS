@@ -96,10 +96,36 @@ class LeaveCalendarServiceTest extends TestCase
     {
         $service = $this->service();
 
-        $this->assertSame(21, $service->calculateAnnualEntitlement('2024-03-01', 2026));
-        $this->assertSame(0, $service->calculateAnnualEntitlement('2027-01-01', 2026));
-        $this->assertSame(11, $service->calculateAnnualEntitlement('2026-07-01', 2026));
-        $this->assertSame(21, $service->calculateAnnualEntitlement('01/01/2026', 2026));
+        $this->assertSame(21.0, $service->calculateAnnualEntitlement('2024-03-01', 2026));
+        $this->assertSame(0.0, $service->calculateAnnualEntitlement('2027-01-01', 2026));
+        $this->assertSame(10.5, $service->calculateAnnualEntitlement('2026-07-01', 2026));
+        $this->assertSame(21.0, $service->calculateAnnualEntitlement('01/01/2026', 2026));
+    }
+
+    public function test_october_hire_gets_5_25_days_not_rounded_up(): void
+    {
+        $service = $this->service();
+
+        $this->assertSame(5.25, $service->calculateAnnualEntitlement('2026-10-04', 2026));
+        $this->assertSame(1.75, $service->calculateAnnualEntitlement('2026-12-15', 2026));
+    }
+
+    public function test_hire_dates_in_every_stored_format_are_read_correctly(): void
+    {
+        $service = $this->service();
+
+        // ISO, legacy "Mon d Y", day-first slash, month-first slash (second part above 12)
+        $this->assertSame('2026-10-04', $service->parseHireDate('2026-10-04 00:00:00')->toDateString());
+        $this->assertSame('2010-01-01', $service->parseHireDate('Jan  1 2010 12:00AM')->toDateString());
+        $this->assertSame('2026-10-04', $service->parseHireDate('04/10/2026')->toDateString());
+        $this->assertSame('2026-10-04', $service->parseHireDate('4/10/2026')->toDateString());
+        $this->assertSame('2025-02-25', $service->parseHireDate('25/02/2025')->toDateString());
+        $this->assertSame('2026-03-25', $service->parseHireDate('03/25/2026')->toDateString());
+        $this->assertNull($service->parseHireDate(null));
+        $this->assertNull($service->parseHireDate('not a date'));
+
+        // A month-first date used to roll over into 2028 and give 0 days; March to December is 10 months
+        $this->assertSame(17.5, $service->calculateAnnualEntitlement('03/25/2026', 2026));
     }
 
     public function test_annual_leave_type_names_are_recognised(): void

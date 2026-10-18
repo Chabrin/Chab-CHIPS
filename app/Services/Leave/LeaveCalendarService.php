@@ -199,46 +199,65 @@ class LeaveCalendarService
     }
 
     /**
-     * Calculate entitled annual leave days, applying statutory pro-rata rules
-     * (1.75 days per month of service) for staff hired mid-year.
+     * Calculate entitled annual leave days. Staff hired in an earlier year get the full 21 days; staff hired in the
+     * year get 1.75 days per month of service, the hire month counting in full, kept to two decimals
+     * (hired in October = 3 months = 5.25 days). No rounding up.
      *
      * @param Carbon|string|null $hireDate
      * @param int $year
-     * @return int
+     * @return float
      */
-    public function calculateAnnualEntitlement($hireDate, int $year): int
-    {
-        if (empty($hireDate)) {
-            return 21;
-        }
+    public function calculateAnnualEntitlement($hireDate, int $year): float {
+        $hired = $this->parseHireDate($hireDate);
 
-        try {
-            // Handle date formats like '25/02/2025' or '2025-02-25'
-            if (is_string($hireDate) && str_contains($hireDate, '/')) {
-                $hireCarbon = Carbon::createFromFormat('d/m/Y', trim($hireDate));
-            } else {
-                $hireCarbon = Carbon::parse($hireDate);
-            }
-        } catch (\Throwable $e) {
-            // Fallback in case of an unexpected date string
-            return 21;
+        if (!$hired) {
+            return 21.0;
         }
 
         // Hired in a future year: 0 days for this year
-        if ($hireCarbon->year > $year) {
-            return 0;
+        if ($hired->year > $year) {
+            return 0.0;
         }
 
         // Hired in a prior year: full 21 working days
-        if ($hireCarbon->year < $year) {
-            return 21;
+        if ($hired->year < $year) {
+            return 21.0;
         }
 
-        // Hired in the current year: statutory pro-rata calculation
-        $monthsServed = 12 - (int) $hireCarbon->month + 1;
-        $proRata = $monthsServed * 1.75;
+        $monthsServed = 12 - $hired->month + 1;
 
-        // Round up using ceil() to guarantee statutory minimum compliance
-        return (int) min(21, max(1, (int) ceil($proRata)));
+        return round(min(21, $monthsServed * 1.75), 2);
+    }
+
+    /**
+     * Read a staff hire date, which is stored in mixed formats: ISO, legacy "Jan  1 2010 12:00AM", and slash dates
+     * in both orders. Slash dates are day-first unless the second part cannot be a month (05/23/2023).
+     * Returns null when the value is empty or unreadable.
+     *
+     * @param Carbon|string|null $hireDate
+     * @return Carbon|null
+     */
+    public function parseHireDate($hireDate): ?Carbon {
+        if (empty($hireDate)) {
+            return null;
+        }
+
+        if ($hireDate instanceof \DateTimeInterface) {
+            return Carbon::instance($hireDate);
+        }
+
+        $value = trim((string) $hireDate);
+
+        try {
+            if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})#', $value, $m)) {
+                $format = ((int) $m[2] > 12) ? 'm/d/Y' : 'd/m/Y';
+
+                return Carbon::createFromFormat($format, $m[1] . '/' . $m[2] . '/' . $m[3])->startOfDay();
+            }
+
+            return Carbon::parse($value);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }
