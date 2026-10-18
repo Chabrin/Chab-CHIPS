@@ -20,7 +20,7 @@ class LeaveCalendarSlot extends Model
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
-        'days_count' => 'integer',
+        'days_count' => 'float',
     ];
 
     public function plan()

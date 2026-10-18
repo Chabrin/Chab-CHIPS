@@ -162,6 +162,7 @@
                             <div class="col-lg-6 mb-3">
                                 <label for="requested_days" class="form-label">Requested Days <span style="color:red">*</span></label>
                                 <input type="number" class="form-control" name="requested_days" id="requested_days" min="0.5" step="0.5">
+                                <small class="text-muted">A Saturday counts as half a day.</small>
                             </div>
                         </div>
                     </div>
@@ -1094,9 +1095,13 @@
                     _token: '{{ csrf_token() }}'
                 },
                 success: function(res) {
-                    if (res.success && res.sick_breakdown) {
+                    if (!res.success) return;
+                    let requested = parseFloat($('#requested_days').val()) || 1;
+                    let changed = Math.abs(res.charged_days - requested) > 0.001;
+                    if (res.sick_breakdown || changed) {
                         let b = res.sick_breakdown;
-                        $('#sickTierText').html(`<strong>Pay Breakdown:</strong> ${b.summary_text} (days already used this year: ${b.used_this_year})`);
+                        let tiers = b ? `Pay Breakdown: ${b.summary_text} (days already used this year: ${b.used_this_year}). ` : '';
+                        $('#sickTierText').text(`${tiers}Leave runs to ${res.end_date}, ${res.charged_days} day(s) charged${changed ? ' (a Saturday counts as half a day)' : ''}.`);
                         $('#sickLeaveTierAlert').removeClass('d-none');
                     }
                 },

@@ -572,6 +572,7 @@ class WorkflowApprovalController extends Controller
                             'date' => date('Y-m-d', strtotime($day->leave_date)),
                             'type' => $day->day_type_id,
                             'day_name' => date('l', strtotime($day->leave_date)),
+                            'day_fraction' => (float) ($day->day_fraction ?? 1),
                             'is_public_holiday' => $isPublicHoliday ? true : false,
                             'holiday_title' => $isPublicHoliday ? $isPublicHoliday->title : null,
                         ];
@@ -754,6 +755,7 @@ class WorkflowApprovalController extends Controller
                             'current_status_id' => 1, // Pending confirmation
                             'leave_date' => $item->start_date, // Use full datetime from original request
                             'day_type_id' => $day['type'],
+                            'day_fraction' => round(abs($endTime - $startTime) / 3600 / 8, 2),
                         ]);
                     } else {
                         // For full days or multi-day, store all unique days (date only at midnight)
@@ -771,6 +773,8 @@ class WorkflowApprovalController extends Controller
                                 'current_status_id' => 1, // Pending confirmation
                                 'leave_date' => $day['date'] . ' 00:00:00',
                                 'day_type_id' => $day['type'],
+                                // A Saturday is half a day; any other day an approver picked is charged as normal
+                                'day_fraction' => $this->calendar->chargeFor(\Carbon\Carbon::parse($day['date']), (int) $item->leave_type_id),
                             ]);
                         }
                     }
@@ -830,16 +834,16 @@ class WorkflowApprovalController extends Controller
                         $used_days = round($hoursRequested / 8, 2); // Convert hours to days
                     } else {
                         // For full days, count the actual days
-                        $used_days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
+                        $used_days = (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                             ->where('current_status_id', 5)
-                            ->count();
+                            ->sum('day_fraction');
                     }
                     
                     $item->used_days = $used_days;
                     $item->current_status_id = 5; // Approved
                     $item->save();
+                    $this->tiers->retagForRequest($item);
 
-                    
                     // Update the leave calendar plan balance
                     $start_date_only = date('Y-m-d', strtotime($item->start_date)) . ' 00:00:00';
                     $plan = \App\Models\LeaveCalendarPlan::where('employee_id', $item->staff_id)
@@ -1162,9 +1166,9 @@ class WorkflowApprovalController extends Controller
                         \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                             ->update(['current_status_id' => 5]);
                         
-                        $used_days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
+                        $used_days = (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                             ->where('current_status_id', 5)
-                            ->count();
+                            ->sum('day_fraction');
                         
                         $item->used_days = $used_days;
                         $item->current_status_id = 5;

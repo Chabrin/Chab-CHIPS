@@ -27,9 +27,9 @@ class LeaveCalendarServiceTest extends TestCase
                 });
             }
 
-            public function nonWorkingWeekdays(): array
+            public function dayWeights(): array
             {
-                return [6, 7];
+                return [1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0, 5 => 1.0, 6 => 0.5, 7 => 0.0];
             }
 
             public function rulesFor(int $leaveTypeId): array
@@ -68,28 +68,71 @@ class LeaveCalendarServiceTest extends TestCase
     {
         $service = $this->service([['title' => 'Mid-week', 'start_date' => '2026-10-21 00:00:00', 'end_date' => '2026-10-21 00:00:00', 'recurrent' => '2']]);
 
-        // Mon 19 Oct - Sun 25 Oct 2026: 7 days, minus Sat/Sun and the Wednesday holiday
-        $this->assertSame(4, $service->countDeductibleDays('2026-10-19', '2026-10-25', 1));
+        // Mon 19 Oct - Sun 25 Oct 2026: Mon, Tue, Thu, Fri = 4, the Wednesday holiday and Sunday are free, Saturday is half
+        $this->assertSame(4.5, $service->countDeductibleDays('2026-10-19', '2026-10-25', 1));
     }
 
     public function test_leave_types_that_count_weekends_and_holidays_charge_every_day(): void
     {
         $service = $this->service([['title' => 'Mid-week', 'start_date' => '2026-10-21 00:00:00', 'end_date' => '2026-10-21 00:00:00', 'recurrent' => '2']], true, true);
 
-        $this->assertSame(7, $service->countDeductibleDays('2026-10-19', '2026-10-25', 1));
+        $this->assertSame(7.0, $service->countDeductibleDays('2026-10-19', '2026-10-25', 1));
     }
 
     public function test_end_date_skips_non_chargeable_days(): void
     {
         $service = $this->service();
 
-        // Friday + 3 chargeable days = Fri, Mon, Tue
+        // Friday 1 + Saturday 0.5 + Monday 1 = 2.5, Tuesday reaches 3.5, so 3 days ends on Tuesday
         $this->assertSame('2026-10-27', $service->calculateEndDate('2026-10-23', 3, 1));
+        // Friday + Saturday + Monday is exactly 2.5 days
+        $this->assertSame('2026-10-26', $service->calculateEndDate('2026-10-23', 2.5, 1));
+    }
+
+    public function test_saturday_is_half_a_day_and_sunday_is_free(): void
+    {
+        $service = $this->service();
+
+        $this->assertSame(0.5, $service->countDeductibleDays('2026-10-24', '2026-10-24', 1));
+        $this->assertSame(0.0, $service->countDeductibleDays('2026-10-25', '2026-10-25', 1));
+        $this->assertSame(1.5, $service->countDeductibleDays('2026-10-23', '2026-10-25', 1));
+    }
+
+    public function test_a_saturday_request_ends_on_that_saturday(): void
+    {
+        // Half a day requested starting on a Saturday is already covered by the Saturday itself
+        $this->assertSame('2026-10-24', $this->service()->calculateEndDate('2026-10-24', 0.5, 1));
+    }
+
+    public function test_a_holiday_saturday_chosen_by_an_approver_is_still_half_a_day(): void
+    {
+        $service = $this->service([['title' => 'Holiday Saturday', 'start_date' => '2026-10-24 00:00:00', 'end_date' => '2026-10-24 00:00:00', 'recurrent' => '2']]);
+
+        $this->assertSame(0.5, $service->chargeFor(Carbon::parse('2026-10-24'), 1));
+    }
+
+    public function test_day_sizes_between_two_dates_are_listed_in_order(): void
+    {
+        $this->assertSame([1.0, 0.5, 1.0], $this->service()->dayWeightsBetween('2026-10-23', '2026-10-26', 1));
+    }
+
+    public function test_an_absurdly_long_range_is_capped_to_a_year(): void
+    {
+        $this->assertLessThanOrEqual(366.0, $this->service()->countDeductibleDays('2026-01-01', '2999-12-31', 1));
+    }
+
+    public function test_an_approver_choosing_a_sunday_charges_a_full_day_and_a_saturday_half(): void
+    {
+        $service = $this->service();
+
+        $this->assertSame(0.5, $service->chargeFor(Carbon::parse('2026-10-24'), 1));
+        $this->assertSame(1.0, $service->chargeFor(Carbon::parse('2026-10-25'), 1));
+        $this->assertSame(1.0, $service->chargeFor(Carbon::parse('2026-10-26'), 1));
     }
 
     public function test_end_date_before_start_date_counts_zero_days(): void
     {
-        $this->assertSame(0, $this->service()->countDeductibleDays('2026-10-25', '2026-10-19', 1));
+        $this->assertSame(0.0, $this->service()->countDeductibleDays('2026-10-25', '2026-10-19', 1));
     }
 
     public function test_pro_rata_entitlement_for_mid_year_hires(): void

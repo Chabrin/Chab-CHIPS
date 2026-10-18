@@ -36,6 +36,7 @@ class LeaveApprovalService
         }
 
         $isPartialDay = $this->isPartialDay($request);
+        $rules = $this->calendar->rulesFor((int) $request->leave_type_id);
         $dates = $isPartialDay
             ? collect([Carbon::parse($request->start_date)])
             : $this->calendar->countableDates($request->start_date, $request->end_date, (int) $request->leave_type_id);
@@ -44,19 +45,25 @@ class LeaveApprovalService
             return ['success' => false, 'error' => 'The requested dates contain no chargeable leave days.'];
         }
 
-        $usedDays = DB::transaction(function () use ($request, $approverId, $dates, $isPartialDay) {
+        $usedDays = DB::transaction(function () use ($request, $approverId, $dates, $isPartialDay, $rules) {
             LeaveRequestDaysTaken::where('parent_id', $request->id)->delete();
 
+            $usedDays = 0.0;
+
             foreach ($dates as $date) {
+                // A partial day is charged by hours; otherwise by the day's weight (a Saturday is half a day)
+                $fraction = $isPartialDay ? $this->partialDayUsedDays($request) : $this->calendar->dayWeight($date, $rules);
+
                 LeaveRequestDaysTaken::create([
                     'parent_id' => $request->id,
                     'current_status_id' => self::STATUS_APPROVED,
                     'leave_date' => $isPartialDay ? $request->start_date : $date->format('Y-m-d') . ' 00:00:00',
                     'day_type_id' => $this->dayTypeFor($date),
+                    'day_fraction' => $fraction,
                 ]);
-            }
 
-            $usedDays = $isPartialDay ? $this->partialDayUsedDays($request) : (float) $dates->count();
+                $usedDays += $fraction;
+            }
 
             $request->used_days = $usedDays;
             $request->current_status_id = self::STATUS_APPROVED;

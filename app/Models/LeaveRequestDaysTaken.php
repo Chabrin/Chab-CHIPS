@@ -22,12 +22,14 @@ class LeaveRequestDaysTaken extends Model
         'current_status_id',
         'leave_date',
         'day_type_id',
+        'day_fraction',
         'pay_rate',
         'tier_order',
     ];
 
     protected $casts = [
         'leave_date' => 'datetime',
+        'day_fraction' => 'float',
     ];
 
     public function leaveRequest()

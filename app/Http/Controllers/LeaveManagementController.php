@@ -137,9 +137,10 @@ class LeaveManagementController extends Controller
             ];
         }
 
-        // Validate allocation matches the staff member's entitled days (pro-rata support)
-        $requiredDays = (int) $plan->entitled_days;
-        if ($totalDays !== $requiredDays) {
+        // Validate allocation matches the staff member's entitled days (pro-rata support). Saturdays count half,
+        // so schedules are made in half days and a fractional entitlement (5.25) is scheduled down to the half day (5).
+        $requiredDays = floor((float) $plan->entitled_days * 2) / 2;
+        if (abs($totalDays - $requiredDays) > 0.001) {
             return response()->json([
                 'success' => false,
                 'error'   => "Total scheduled days must equal exactly {$requiredDays} working days. Your current selection totals {$totalDays} days.",
@@ -371,7 +372,7 @@ class LeaveManagementController extends Controller
             'leave_type_id' => 'required|integer',
             'start_date' => 'required|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
-            'requested_days' => 'nullable|numeric|min:0.5',
+            'requested_days' => 'nullable|numeric|min:0.5|max:366',
         ]);
 
         $user = Auth::user();
@@ -379,16 +380,23 @@ class LeaveManagementController extends Controller
             return response()->json(['success' => false, 'error' => 'Unauthorized access.'], 403);
         }
 
-        if (!empty($validated['requested_days'])) {
-            $days = (int) ceil($validated['requested_days']);
-        } elseif (!empty($validated['end_date'])) {
-            $days = $this->calendar->countDeductibleDays($validated['start_date'], $validated['end_date'], (int) $validated['leave_type_id']);
-        } else {
-            $days = 1;
-        }
-        $breakdown = $this->tiers->breakdown((int) $validated['staff_id'], (int) $validated['leave_type_id'], \Carbon\Carbon::parse($validated['start_date'])->year, $days);
+        $typeId = (int) $validated['leave_type_id'];
+        $endDate = $validated['end_date'] ?? null;
 
-        return response()->json(['success' => true, 'sick_breakdown' => $breakdown]);
+        // Work out the real dates so a Saturday inside the range counts as half a day
+        if (!empty($validated['requested_days'])) {
+            $endDate = $this->calendar->calculateEndDate($validated['start_date'], (float) $validated['requested_days'], $typeId);
+        }
+
+        $weights = $endDate ? $this->calendar->dayWeightsBetween($validated['start_date'], $endDate, $typeId) : [1.0];
+        $breakdown = $this->tiers->breakdown((int) $validated['staff_id'], $typeId, \Carbon\Carbon::parse($validated['start_date'])->year, $weights);
+
+        return response()->json([
+            'success' => true,
+            'sick_breakdown' => $breakdown,
+            'end_date' => $endDate,
+            'charged_days' => array_sum($weights),
+        ]);
     }
 
     /**
@@ -414,6 +422,16 @@ class LeaveManagementController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => 'Status updated successfully.']);
+    }
+
+    /**
+     * Days a leave request really charges between its start and end dates (a Saturday is half a day).
+     * Falls back to the requested days when the dates charge nothing.
+     */
+    private function chargedDays(string $startDate, string $endDate, float $requestedDays, int $leaveTypeId): float {
+        $charged = $this->calendar->countDeductibleDays($startDate, $endDate, $leaveTypeId);
+
+        return $charged > 0 ? $charged : $requestedDays;
     }
 
     private function calculateEndDate($start_date, $requested_days, $leave_type_id, $available_days)
@@ -549,7 +567,7 @@ class LeaveManagementController extends Controller
                     ->whereIn('current_status_id', [5, 49]);
             })
             ->where('current_status_id', 5)
-            ->count();
+            ->sum('day_fraction');
             
             $entitledDays = $leaveType->entitled_days;
             $availableDays = $entitledDays - $usedDays;
@@ -709,7 +727,7 @@ class LeaveManagementController extends Controller
             
             if ($durationType === 'full_day') {
                 $rules['start_date'] = 'required|date';
-                $rules['requested_days'] = 'required|numeric|min:0.5';
+                $rules['requested_days'] = 'required|numeric|min:0.5|max:366';
             } else {
                 $rules['start_date'] = 'required|date';
                 $rules['end_date']   = 'required|date';
@@ -733,8 +751,10 @@ class LeaveManagementController extends Controller
                 
                 $requestModel->start_date     = $validated['start_date'] . ' 08:00:00';
                 $requestModel->end_date       = $result['end_date'] . ' 17:00:00';
-                $requestModel->days           = $validated['requested_days'];
-                $requestModel->requested_days = $validated['requested_days'];
+                // Record what the dates really charge: a request that runs into a Saturday can cost half a day more
+                $charged = $this->chargedDays($validated['start_date'], $result['end_date'], (float) $validated['requested_days'], (int) $validated['leave_type_id']);
+                $requestModel->days           = $charged;
+                $requestModel->requested_days = $charged;
             } else {
                 $requestModel->start_date = $validated['start_date'];
                 $requestModel->end_date   = $validated['end_date'];
@@ -815,7 +835,7 @@ class LeaveManagementController extends Controller
             
             if ($durationType === 'full_day') {
                 $rules['start_date'] = 'required|date';
-                $rules['requested_days'] = 'required|numeric|min:0.5';
+                $rules['requested_days'] = 'required|numeric|min:0.5|max:366';
             } else {
                 $rules['start_date'] = 'required|date';
                 $rules['end_date']   = 'required|date';
@@ -839,8 +859,10 @@ class LeaveManagementController extends Controller
                 
                 $requestModel->start_date     = $validated['start_date'] . ' 08:00:00';
                 $requestModel->end_date       = $result['end_date'] . ' 17:00:00';
-                $requestModel->days           = $validated['requested_days'];
-                $requestModel->requested_days = $validated['requested_days'];
+                // Record what the dates really charge: a request that runs into a Saturday can cost half a day more
+                $charged = $this->chargedDays($validated['start_date'], $result['end_date'], (float) $validated['requested_days'], (int) $validated['leave_type_id']);
+                $requestModel->days           = $charged;
+                $requestModel->requested_days = $charged;
             } else {
                 $requestModel->start_date = $validated['start_date'];
                 $requestModel->end_date   = $validated['end_date'];
@@ -1236,13 +1258,13 @@ class LeaveManagementController extends Controller
                 ->whereIn('current_status_id', [5])
                 ->get()
                 ->map(function($request) {
-                    $daysTaken = \App\Models\LeaveRequestDaysTaken::where('parent_id', $request->id)
+                    $daysTaken = (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $request->id)
                         ->where('current_status_id', 5)
-                        ->count();
+                        ->sum('day_fraction');
                     
-                    $daysRefunded = \App\Models\LeaveRequestDaysTaken::where('parent_id', $request->id)
+                    $daysRefunded = (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $request->id)
                         ->where('current_status_id', 41)
-                        ->count();
+                        ->sum('day_fraction');
                     
                     $adjustmentCount = \App\Models\LeaveAdjustment::where('leave_request_id', $request->id)->count();
 
@@ -1337,7 +1359,7 @@ class LeaveManagementController extends Controller
             }
             
             // Calculate days to refund
-            $daysToRefund = ($isPartialDay == 'true' || $isPartialDay === true) ? round($hoursToRefund / 8, 2) : count($validated['day_ids']);
+            $daysToRefund = ($isPartialDay == 'true' || $isPartialDay === true) ? round($hoursToRefund / 8, 2) : (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $id)->whereIn('id', $validated['day_ids'])->sum('day_fraction');
             
             // Create adjustment request (pending approval)
             $adjustment = \App\Models\LeaveAdjustment::create([

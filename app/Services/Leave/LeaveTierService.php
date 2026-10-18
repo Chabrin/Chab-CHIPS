@@ -45,7 +45,7 @@ class LeaveTierService
     }
 
     /**
-     * Re-tag all confirmed (status 5) days for this staff/type/year in date order.
+     * Re-tag all confirmed (status 5) days for this staff/type/year in date order, counting each day by its fraction.
      *
      * @param int $staffId
      * @param int $leaveTypeId
@@ -71,26 +71,34 @@ class LeaveTierService
                 ->select("$d.*")
                 ->get();
 
-            foreach ($days as $i => $day) {
-                $tier = $this->tierForPosition($tiers, $i + 1);
-                $day->pay_rate   = $tier->pay_rate;
-                $day->tier_order = $tier->tier_order;
+            // Walk the days in date order; a day that straddles a tier boundary is paid at the blend of the tiers it covers
+            $daysBefore = 0.0;
+            foreach ($days as $day) {
+                $fraction = (float) ($day->day_fraction ?? 1);
+                $parts = $this->split($tiers, $daysBefore, max($fraction, 0.01));
+                $paid = array_sum(array_map(fn($part) => $part[0]->pay_rate * $part[1], $parts));
+
+                $day->pay_rate   = round($paid / array_sum(array_column($parts, 1)), 2);
+                $day->tier_order = $parts[0][0]->tier_order;
                 $day->save();
+
+                $daysBefore += $fraction;
             }
         });
     }
 
     /**
-     * Preview how a number of new days would fall across the leave type's tiers, given the days already used this year.
+     * Preview how new days would fall across the leave type's tiers, given the days already used this year.
+     * Pass the size of each day (a Saturday is 0.5) when the dates are known, or a plain number of days.
      * Returns null when the leave type has no tiers.
      *
      * @param int $staffId
      * @param int $leaveTypeId
      * @param int $year
-     * @param int $requestedDays
-     * @return array{used_this_year: int, summary_text: string, tiers: array}|null
+     * @param float|array $requestedDays
+     * @return array{used_this_year: float, summary_text: string, tiers: array}|null
      */
-    public function breakdown(int $staffId, int $leaveTypeId, int $year, int $requestedDays): ?array {
+    public function breakdown(int $staffId, int $leaveTypeId, int $year, float|array $requestedDays): ?array {
         $tiers = LeaveTypeTier::where('leave_type_id', $leaveTypeId)->orderBy('tier_order')->get();
         if ($tiers->isEmpty()) {
             return null;
@@ -102,48 +110,85 @@ class LeaveTierService
             ->where('r.leave_type_id', $leaveTypeId)
             ->whereYear('sys_hr_leave_requests_234_repeat.leave_date', $year)
             ->where('sys_hr_leave_requests_234_repeat.current_status_id', 5)
-            ->count();
+            ->sum(DB::raw('COALESCE(day_fraction, 1)'));
+        $used = (float) $used;
+
+        // A plain number of days is whole days with any remainder as a part day
+        if (!is_array($requestedDays)) {
+            $requestedDays = array_merge(array_fill(0, (int) floor($requestedDays), 1.0), fmod($requestedDays, 1.0) > 0.0001 ? [fmod($requestedDays, 1.0)] : []);
+        }
 
         $counts = [];
-        for ($i = 1; $i <= $requestedDays; $i++) {
-            $tier = $this->tierForPosition($tiers, $used + $i);
-            $counts[$tier->tier_order] = ($counts[$tier->tier_order] ?? 0) + 1;
+        $position = $used;
+        foreach ($requestedDays as $size) {
+            foreach ($this->split($tiers, $position, (float) $size) as [$tier, $days]) {
+                $counts[$tier->tier_order] = ($counts[$tier->tier_order] ?? 0) + $days;
+            }
+            $position += (float) $size;
         }
 
         $parts = [];
         $rows = [];
         foreach ($tiers as $tier) {
             if (!empty($counts[$tier->tier_order])) {
-                $parts[] = $counts[$tier->tier_order] . ' day(s) at ' . $tier->label . ' (' . rtrim(rtrim((string) $tier->pay_rate, '0'), '.') . '%)';
-                $rows[] = ['label' => $tier->label, 'pay_rate' => $tier->pay_rate, 'days' => $counts[$tier->tier_order]];
+                $days = round($counts[$tier->tier_order], 2);
+                $parts[] = $days . ' day(s) at ' . $tier->label . ' (' . (float) $tier->pay_rate . '%)';
+                $rows[] = ['label' => $tier->label, 'pay_rate' => $tier->pay_rate, 'days' => $days];
             }
         }
 
         return [
-            'used_this_year' => $used,
+            'used_this_year' => round($used, 2),
             'summary_text' => $parts ? implode(', ', $parts) : 'No chargeable days in this range',
             'tiers' => $rows,
         ];
     }
 
     /**
-     * The tier a given day position (1 = first day of the year) falls in.
+     * Split a stretch of leave starting after `$position` days across the tiers. A stretch that crosses a tier
+     * boundary comes back as several parts.
      *
      * @param Collection $tiers
-     * @param int $position
-     * @return LeaveTypeTier
+     * @param float $position days already used before this stretch
+     * @param float $days size of the stretch
+     * @return array list of [LeaveTypeTier, days]
      */
-    private function tierForPosition(Collection $tiers, int $position): LeaveTypeTier {
-        $upTo = 0;
+    private function split(Collection $tiers, float $position, float $days): array {
+        $parts = [];
+
+        while ($days > 0.0001) {
+            [$tier, $room] = $this->tierAt($tiers, $position);
+            $take = $room === null ? $days : min($days, $room);
+            $parts[] = [$tier, $take];
+            $position += $take;
+            $days -= $take;
+        }
+
+        return $parts ?: [[$this->tierAt($tiers, $position)[0], 0.0]];
+    }
+
+    /**
+     * The tier that day position `$position` (days used so far) falls in, and how many days are left in it
+     * (null when the tier has no limit).
+     *
+     * @param Collection $tiers
+     * @param float $position
+     * @return array [LeaveTypeTier, float|null]
+     */
+    private function tierAt(Collection $tiers, float $position): array {
+        $upTo = 0.0;
+
         foreach ($tiers as $tier) {
             if ($tier->days === null) {
-                return $tier;
+                return [$tier, null];
             }
+
             $upTo += $tier->days;
-            if ($position <= $upTo) {
-                return $tier;
+            if ($position + 0.0001 < $upTo) {
+                return [$tier, $upTo - $position];
             }
         }
-        return $tiers->last();
+
+        return [$tiers->last(), null];
     }
 }

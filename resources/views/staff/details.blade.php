@@ -1108,6 +1108,9 @@ use Illuminate\Support\Facades\Crypt;
                             <input type="number" class="form-control" name="available_days" id="sl_available_days" readonly>
                         </div>
                     </div>
+                    <div class="alert alert-info py-2 mb-3 d-none" id="sl_tier_alert">
+                        <span id="sl_tier_text"></span>
+                    </div>
                     <div class="row mb-3">
                         <div class="col-12">
                             <label class="form-label">Leave Duration <span class="text-danger">*</span></label>
@@ -1127,7 +1130,8 @@ use Illuminate\Support\Facades\Crypt;
                             </div>
                             <div class="col-lg-6 mb-3">
                                 <label class="form-label">Requested Days <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" name="requested_days" id="sl_requested_days" min="0.5" step="0.5">
+                                <input type="number" class="form-control" name="requested_days" id="sl_requested_days" min="0.5" max="366" step="0.5">
+                                <small class="text-muted">A Saturday counts as half a day.</small>
                             </div>
                         </div>
                     </div>
@@ -1662,10 +1666,44 @@ $(document).ready(function() {
         }
     });
 
+    // Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) for the days requested
+    function showTierBreakdown() {
+        var leaveTypeId = $('#sl_leave_type_id').val();
+        $('#sl_tier_alert').addClass('d-none');
+        if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/evaluate-application') }}",
+            method: 'POST',
+            data: {
+                staff_id: {{ $staff->id }},
+                leave_type_id: leaveTypeId,
+                start_date: $('#sl_start_date').val() || new Date().toISOString().split('T')[0],
+                requested_days: parseFloat($('#sl_requested_days').val()) || 1,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(res) {
+                if (!res.success) { return; }
+                var requested = parseFloat($('#sl_requested_days').val()) || 1;
+                var changed = Math.abs(res.charged_days - requested) > 0.001;
+                if (res.sick_breakdown || changed) {
+                    var b = res.sick_breakdown;
+                    var tiers = b ? 'Pay breakdown: ' + b.summary_text + ' (days already used this year: ' + b.used_this_year + '). ' : '';
+                    $('#sl_tier_text').text(tiers + 'Leave runs to ' + res.end_date + ', ' + res.charged_days + ' day(s) charged' + (changed ? ' (a Saturday counts as half a day)' : '') + '.');
+                    $('#sl_tier_alert').removeClass('d-none');
+                }
+            },
+            error: function(xhr) {
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
+            }
+        });
+    }
+    $('#sl_leave_type_id, #sl_start_date, #sl_requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
+
     $('#sl_leave_type_id').on('change', function() {
         var leaveTypeId = $(this).val();
         if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
-        $.get('/ajax/leave-management/calendar-plan/available-leave-days/{{ $staff->id }}/' + leaveTypeId, function(res) {
+        $.get('/ajax/hr/leave/available-days/{{ $staff->id }}/' + leaveTypeId, function(res) {
             $('#sl_available_days').val(res.available_days ?? 0);
         });
     });

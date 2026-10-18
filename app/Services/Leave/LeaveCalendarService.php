@@ -11,11 +11,14 @@ use Illuminate\Support\Facades\DB;
 
 class LeaveCalendarService
 {
-    /** Weekdays treated as non-working when none are configured in HR settings (ISO: 6=Sat, 7=Sun). */
-    private const DEFAULT_NON_WORKING_WEEKDAYS = [6, 7];
+    /** How much of a day each ISO weekday is worth when HR settings don't say otherwise: Saturday is a half day, Sunday is off. */
+    private const DEFAULT_DAY_WEIGHTS = [1 => 1.0, 2 => 1.0, 3 => 1.0, 4 => 1.0, 5 => 1.0, 6 => 0.5, 7 => 0.0];
+
+    /** Work type ids in sys_hr_working_days mapped to the share of a day they are worth. */
+    private const WORK_TYPE_WEIGHTS = [1 => 1.0, 2 => 0.5, 3 => 0.0];
 
     private ?Collection $holidays = null;
-    private ?array $nonWorkingWeekdays = null;
+    private ?array $dayWeights = null;
 
     /**
      * Active public holidays.
@@ -28,23 +31,29 @@ class LeaveCalendarService
     }
 
     /**
-     * ISO weekday numbers (1=Mon..7=Sun) configured as non-working (work_type_id 3).
-     * Falls back to Saturday and Sunday when HR settings define no non-working days.
+     * The share of a day each ISO weekday (1=Mon..7=Sun) is worth for leave: 1 full day, 0.5 half day, 0 non-working.
+     * Starts from the defaults (Saturday half day, Sunday off) and is overridden by the working days in HR settings.
      *
      * @return array
      */
-    public function nonWorkingWeekdays(): array
+    public function dayWeights(): array
     {
-        if ($this->nonWorkingWeekdays !== null) {
-            return $this->nonWorkingWeekdays;
+        if ($this->dayWeights !== null) {
+            return $this->dayWeights;
         }
 
-        $configured = WorkDay::where('work_type_id', 3)
-            ->pluck('week_day')
-            ->map(fn($d) => (int) $d)
-            ->all();
+        $weights = self::DEFAULT_DAY_WEIGHTS;
 
-        return $this->nonWorkingWeekdays = $configured ?: self::DEFAULT_NON_WORKING_WEEKDAYS;
+        foreach (WorkDay::where('current_status_id', 5)->get() as $workDay) {
+            $weekday = (int) $workDay->week_day;
+            $type = (int) $workDay->work_type_id;
+
+            if (isset($weights[$weekday]) && isset(self::WORK_TYPE_WEIGHTS[$type])) {
+                $weights[$weekday] = self::WORK_TYPE_WEIGHTS[$type];
+            }
+        }
+
+        return $this->dayWeights = $weights;
     }
 
     /**
@@ -92,6 +101,27 @@ class LeaveCalendarService
     }
 
     /**
+     * How much of a day is charged against the leave balance for a date: 1 for a full working day, 0.5 for a half day
+     * (Saturday), 0 for a day that is not charged. Leave types that count weekends or public holidays charge them in full.
+     *
+     * @param Carbon $date
+     * @param array $rules
+     * @return float
+     */
+    public function dayWeight(Carbon $date, array $rules): float
+    {
+        if (!$rules['holidays'] && $this->holidayOn($date)) {
+            return 0.0;
+        }
+
+        if ($rules['weekends']) {
+            return 1.0;
+        }
+
+        return $this->dayWeights()[$date->dayOfWeekIso] ?? 1.0;
+    }
+
+    /**
      * Determines whether a given day is chargeable against the leave balance.
      *
      * @param Carbon $date
@@ -100,15 +130,28 @@ class LeaveCalendarService
      */
     public function isCountableDay(Carbon $date, array $rules): bool
     {
-        if (!$rules['weekends'] && in_array($date->dayOfWeekIso, $this->nonWorkingWeekdays(), true)) {
-            return false;
+        return $this->dayWeight($date, $rules) > 0;
+    }
+
+    /**
+     * What to charge for a day someone chose on purpose: its normal weight, or a full day when it is
+     * normally not charged (an approver explicitly adding a Sunday or holiday).
+     *
+     * @param Carbon $date
+     * @param int $leaveTypeId
+     * @return float
+     */
+    public function chargeFor(Carbon $date, int $leaveTypeId): float
+    {
+        $weight = $this->dayWeight($date, $this->rulesFor($leaveTypeId));
+        if ($weight > 0) {
+            return $weight;
         }
 
-        if (!$rules['holidays'] && $this->holidayOn($date)) {
-            return false;
-        }
+        // Normally-charged day that falls on a holiday keeps its usual size (a holiday Saturday is still half a day)
+        $usual = $this->dayWeights()[$date->dayOfWeekIso] ?? 1.0;
 
-        return true;
+        return $usual > 0 ? $usual : 1.0;
     }
 
     /**
@@ -128,6 +171,11 @@ class LeaveCalendarService
             return collect();
         }
 
+        // No leave runs longer than a year; this keeps a bad range from looping for ages
+        if ($end->gt($start->copy()->addDays(366))) {
+            $end = $start->copy()->addDays(366);
+        }
+
         $rules = $this->rulesFor($leaveTypeId);
 
         return collect(CarbonPeriod::create($start, $end))
@@ -136,21 +184,39 @@ class LeaveCalendarService
     }
 
     /**
-     * Given a Start Date and End Date, calculate the number of billable/chargeable leave days.
-     * Use this when users pick date ranges (e.g., Annual Leave blocks or Maternity Leave).
+     * The size of every chargeable day between two dates (1 for a full day, 0.5 for a Saturday), in date order.
      *
      * @param string $startDate
      * @param string $endDate
      * @param int $leaveTypeId
-     * @return int
+     * @return array
      */
-    public function countDeductibleDays(string $startDate, string $endDate, int $leaveTypeId = 0): int
+    public function dayWeightsBetween(string $startDate, string $endDate, int $leaveTypeId = 0): array
     {
-        return $this->countableDates($startDate, $endDate, $leaveTypeId)->count();
+        $rules = $this->rulesFor($leaveTypeId);
+
+        return $this->countableDates($startDate, $endDate, $leaveTypeId)
+            ->map(fn($date) => $this->dayWeight($date, $rules))
+            ->all();
     }
 
     /**
-     * Given a Start Date and a number of requested days, determine the exact End Date.
+     * Given a Start Date and End Date, calculate the number of billable/chargeable leave days.
+     * Use this when users pick date ranges (e.g., Annual Leave blocks or Maternity Leave). A Saturday is worth half a day.
+     *
+     * @param string $startDate
+     * @param string $endDate
+     * @param int $leaveTypeId
+     * @return float
+     */
+    public function countDeductibleDays(string $startDate, string $endDate, int $leaveTypeId = 0): float
+    {
+        return (float) array_sum($this->dayWeightsBetween($startDate, $endDate, $leaveTypeId));
+    }
+
+    /**
+     * Given a Start Date and a number of days to charge, find the date the leave ends on: the first date by which
+     * that many days (Saturday counting as half) have been charged.
      *
      * @param string $start
      * @param float|int $days
@@ -161,26 +227,20 @@ class LeaveCalendarService
     {
         $rules = $this->rulesFor($leaveTypeId);
         $cursor = Carbon::parse($start)->startOfDay();
-        $target = max(1, (int) ceil($days));
-        $counted = 0;
+        $target = max(0.5, (float) $days);
+        $charged = 0.0;
 
         // Failsafe counter to prevent execution timeouts
         $safetyLimit = 365 * 2;
-        $iterations = 0;
 
-        while ($counted < $target && $iterations < $safetyLimit) {
-            $iterations++;
+        for ($i = 0; $i < $safetyLimit; $i++) {
+            $charged += $this->dayWeight($cursor, $rules);
 
-            if ($this->isCountableDay($cursor, $rules)) {
-                $counted++;
-            }
-
-            // Only advance if we still have days left to count
-            if ($counted < $target) {
-                $cursor->addDay();
-            } else {
+            if ($charged + 0.0001 >= $target) {
                 break;
             }
+
+            $cursor->addDay();
         }
 
         return $cursor->toDateString();

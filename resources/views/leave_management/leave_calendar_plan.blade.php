@@ -200,7 +200,7 @@ $(document).ready(function() {
                             data-entitled-days="${row.entitled_days}"
                             data-employee-name="${row.employee_name}">
                             <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span>
-                            Schedule ${Math.floor(row.entitled_days)} Days
+                            Schedule ${Math.floor(row.entitled_days * 2) / 2} Days
                         </button>
                     `;
                 }
@@ -216,7 +216,8 @@ $(document).ready(function() {
         let leaveTypeId = $(this).data('leave-type-id');
         let empName = $(this).data('employee-name');
 
-        requiredPlanDays = Math.floor(parseFloat($(this).data('entitled-days')));
+        // Saturdays count half, so schedules are made in half days (5.25 entitled = schedule 5)
+        requiredPlanDays = Math.floor(parseFloat($(this).data('entitled-days')) * 2) / 2;
         if (isNaN(requiredPlanDays)) { requiredPlanDays = 21; }
 
         $('#modalPlanId').val(planId);
@@ -324,7 +325,7 @@ $(document).ready(function() {
     function updateRunningTotal() {
         let total = 0;
         $('.slot-days').each(function() {
-            total += parseInt($(this).val()) || 0;
+            total += parseFloat($(this).val()) || 0;
         });
 
         currentTotalDays = total;
@@ -332,7 +333,7 @@ $(document).ready(function() {
 
         $('#allocatedDaysBadge').text(total + ' Days');
         
-        if (remaining === 0) {
+        if (Math.abs(remaining) < 0.001) {
             $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Requirement Met!)');
             $('#saveScheduleBtn').prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
         } else if (remaining < 0) {

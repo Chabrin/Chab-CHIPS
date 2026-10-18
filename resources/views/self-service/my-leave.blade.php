@@ -109,6 +109,7 @@
                             <div class="col-lg-6 mb-3">
                                 <label class="form-label">Requested Days <span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" name="requested_days" id="sl_requested_days" min="0.5" step="0.5">
+                                <small class="text-muted">A Saturday counts as half a day.</small>
                             </div>
                         </div>
                     </div>
@@ -144,9 +145,10 @@
 <!-- Annual Leave Schedule Card -->
 @if($annualPlan)
     @php
-        $requiredDays = (int) $annualPlan->entitled_days;
-        $scheduledDays = (int) $annualPlan->slots->sum('days_count');
-        $isFullyScheduled = ($scheduledDays === $requiredDays);
+        // Saturdays count half, so schedules are made in half days (5.25 entitled = schedule 5)
+        $requiredDays = floor((float) $annualPlan->entitled_days * 2) / 2;
+        $scheduledDays = (float) $annualPlan->slots->sum('days_count');
+        $isFullyScheduled = abs($scheduledDays - $requiredDays) < 0.001;
     @endphp
 
     <div class="card border-primary shadow-sm mb-4">
@@ -225,7 +227,8 @@ $(document).ready(function() {
         let planId = $(this).data('plan-id');
         let leaveTypeId = $(this).data('leave-type-id');
         let empName = $(this).data('employee-name');
-        requiredDays = parseInt($(this).data('entitled-days')) || 0;
+        requiredDays = Math.floor(parseFloat($(this).data('entitled-days')) * 2) / 2;
+        if (isNaN(requiredDays)) { requiredDays = 0; }
 
         $('#modalTargetDays').text(requiredDays + ' Days');
         $('#saveRequiredDays').text(requiredDays);
@@ -326,7 +329,7 @@ $(document).ready(function() {
     function updateRunningTotal() {
         let total = 0;
         $('.slot-days').each(function() {
-            total += parseInt($(this).val()) || 0;
+            total += parseFloat($(this).val()) || 0;
         });
 
         currentTotalDays = total;
@@ -334,7 +337,7 @@ $(document).ready(function() {
 
         $('#allocatedDaysBadge').text(total + ' Days');
 
-        if (remaining === 0) {
+        if (Math.abs(remaining) < 0.001) {
             $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Perfect!)');
             $('#saveScheduleBtn').prop('disabled', false);
         } else if (remaining < 0) {
@@ -347,7 +350,7 @@ $(document).ready(function() {
     }
 
     $('#saveScheduleBtn').on('click', function() {
-        if (currentTotalDays !== requiredDays) {
+        if (Math.abs(currentTotalDays - requiredDays) > 0.001) {
             toastr.error('You must allocate exactly ' + requiredDays + ' working days.');
             return;
         }
@@ -451,9 +454,13 @@ $(function () {
                 _token: $('meta[name="csrf-token"]').attr('content')
             },
             success: function (res) {
-                if (res.success && res.sick_breakdown) {
+                if (!res.success) { return; }
+                var requested = parseFloat($('#sl_requested_days').val()) || 1;
+                var changed = Math.abs(res.charged_days - requested) > 0.001;
+                if (res.sick_breakdown || changed) {
                     var b = res.sick_breakdown;
-                    $('#sl_tier_text').html('<strong>Pay breakdown:</strong> ' + b.summary_text + ' (days already used this year: ' + b.used_this_year + ')');
+                    var tiers = b ? 'Pay breakdown: ' + b.summary_text + ' (days already used this year: ' + b.used_this_year + '). ' : '';
+                    $('#sl_tier_text').text(tiers + 'Leave runs to ' + res.end_date + ', ' + res.charged_days + ' day(s) charged' + (changed ? ' (a Saturday counts as half a day)' : '') + '.');
                     $('#sl_tier_alert').removeClass('d-none');
                 }
             },
@@ -468,7 +475,7 @@ $(function () {
     $('#sl_leave_type_id').on('change', function () {
         var leaveTypeId = $(this).val();
         if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
-        $.get('/ajax/leave-management/calendar-plan/available-leave-days/' + staffId + '/' + leaveTypeId, function (res) {
+        $.get('/ajax/hr/leave/available-days/' + staffId + '/' + leaveTypeId, function (res) {
             $('#sl_available_days').val(res.available_days ?? 0);
         });
     });
