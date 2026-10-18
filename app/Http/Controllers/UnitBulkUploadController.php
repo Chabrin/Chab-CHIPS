@@ -9,6 +9,7 @@ use App\Models\UnitCategory;
 use App\Models\UnitTopology;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\ServiceAgreementApprovalService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -47,6 +48,16 @@ class UnitBulkUploadController extends Controller
     ];
 
     private const USAGE_TYPE_MAP = ['commercial' => 1, 'residential' => 2, 'hybrid' => 3];
+
+    private ServiceAgreementApprovalService $slaApprovals;
+
+    /**
+     * Inject the SLA approval service, used to approve new units under an already-approved SLA.
+     */
+    public function __construct(ServiceAgreementApprovalService $slaApprovals)
+    {
+        $this->slaApprovals = $slaApprovals;
+    }
 
     /**
      * Excel template for a single property. Not pre-filled with data (unlike
@@ -514,7 +525,7 @@ class UnitBulkUploadController extends Controller
             throw new \RuntimeException("Initial Water Meter Reading '{$waterMeter}' is not a number");
         }
 
-        Unit::create([
+        $unit = Unit::create([
             'unit_code' => $unitCode,
             'property_id' => $property->id,
             'client_id' => $property->client_id,
@@ -535,6 +546,9 @@ class UnitBulkUploadController extends Controller
             'occupancy_status_id' => 31, // Vacant
             'current_status_id' => 1, // Pending — awaiting maker-checker approval
         ]);
+
+        // Pending unless the property's SLA is already approved.
+        $this->slaApprovals->approveNewUnits($property->id, [$unit->id], Auth::id(), 'unit_bulk_upload');
 
         $usedUnitNumbers[$unitNumber] = true;
 

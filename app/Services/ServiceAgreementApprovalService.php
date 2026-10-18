@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\Log;
  * behind it, mirroring the Landlord Onboarding bundle on the Property Confirmations page.
  * An SLA that fails a blocking readiness check (see evaluateChecks()) cannot be approved.
  * Rejecting an SLA rejects only that SLA, since the landlord and property may have other
- * agreements. Every action is recorded in confirmation_logs, as the existing page does.
+ * agreements. Units created after a property's SLA is approved are approved on creation
+ * (see approveNewUnits()). Every action is recorded in confirmation_logs, as the existing
+ * page does.
  */
 class ServiceAgreementApprovalService
 {
@@ -516,6 +518,56 @@ class ServiceAgreementApprovalService
         $posted = $client ? $this->accounts->postRegistration($sla, $client, $property, $userId, $payment) : ClientAccountService::RESULT_NONE;
 
         return ['flipped' => $flipped, 'posted' => $posted];
+    }
+
+    /**
+     * Approve units that were just created under a property whose SLA is already approved and
+     * still running, so they don't wait in the queue for an approval the SLA already gave. Units
+     * under a property with no such SLA stay Pending; approving that SLA later picks them up.
+     * Only units that are still Pending are touched. Writes the confirmation log entry and
+     * returns the ids approved.
+     *
+     * @param int $propertyId
+     * @param array $unitIds
+     * @param int|null $userId
+     * @param string $source
+     */
+    public function approveNewUnits(int $propertyId, array $unitIds, ?int $userId, string $source): array {
+        $unitIds = $this->cleanIds($unitIds);
+
+        // confirmation_logs.confirmed_by is required, so without a user the units stay Pending.
+        if (!$unitIds || !$userId) {
+            return [];
+        }
+
+        $hasApprovedSla = ServiceAgreement::withoutGlobalScopes()
+            ->where('property_id', $propertyId)
+            ->approved()
+            ->where(fn($q) => $q->whereNull('date_end')->orWhereDate('date_end', '>=', today()))
+            ->exists();
+
+        if (!$hasApprovedSla) {
+            return [];
+        }
+
+        // One transaction (a savepoint when the caller already has one): the status change and its
+        // log entry are saved together or not at all.
+        return DB::transaction(function () use ($propertyId, $unitIds, $userId, $source) {
+            $approved = Unit::withoutGlobalScopes()
+                ->whereIn('id', $unitIds)
+                ->where('property_id', $propertyId)
+                ->where('current_status_id', self::STATUS_PENDING)
+                ->lockForUpdate()
+                ->pluck('id')
+                ->all();
+
+            if ($approved) {
+                Unit::withoutGlobalScopes()->whereIn('id', $approved)->update(['current_status_id' => self::STATUS_APPROVED]);
+                $this->logConfirmations(['Units' => $approved], $this->logModels(), 'approve', $userId, self::STATUS_APPROVED, 'unit_auto_approval', null, $source);
+            }
+
+            return $approved;
+        });
     }
 
     /**
