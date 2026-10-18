@@ -547,12 +547,7 @@
                         <div class="col-md-4 mb-3">
                             <label for="unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
-                            <div class="invalid-feedback"></div>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label for="unit_name" class="form-label">Unit Name</label>
-                            <input type="text" class="form-control" id="unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                            <small class="text-muted">Unit code = property code + unit number.</small>
                             <div class="invalid-feedback"></div>
                         </div>
 
@@ -677,12 +672,6 @@
                         <div class="col-md-4 mb-3">
                             <label for="edit_unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="edit_unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
-                            <div class="invalid-feedback"></div>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label for="edit_unit_name" class="form-label">Unit Name</label>
-                            <input type="text" class="form-control" id="edit_unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
                             <div class="invalid-feedback"></div>
                         </div>
 
@@ -1486,7 +1475,6 @@
             $('#editUnitForm .is-invalid').removeClass('is-invalid');
             $('#edit_unit_id').val(row.encrypted_id);
             $('#edit_unit_number').val(row.unit_number_raw || '');
-            $('#edit_unit_name').val(row.unit_name_raw || '');
             $('#edit_unit_type_id').val(row.unit_type_id || '');
             $('#edit_usage_type_id').val(row.usage_type_id || '');
             $('#edit_unit_condition_id').val(row.unit_condition_id || '');

@@ -46,7 +46,11 @@ class UnitTenantUploadParserTest extends TestCase
         $spreadsheet = $this->workbook();
         $units = $spreadsheet->getSheetByName('units');
         $units->setCellValue('A2', ' A1 ');
-        $units->setCellValue($this->cell($spreadsheet, 'units', 'unit_name', 2), 'Unit A1');
+        // The template's read-only unit_code column and an old template's unit_name column are both ignored.
+        $units->setCellValue('Z1', 'unit_code');
+        $units->setCellValue('Z2', '=IF(A2="","","2J-"&TRIM(A2))');
+        $units->setCellValue('Y1', 'unit_name');
+        $units->setCellValue('Y2', 'Unit A1');
         $units->setCellValue($this->cell($spreadsheet, 'units', 'rent_amount', 2), 25000);
         $units->setCellValue('A4', 'A3');
 
@@ -63,6 +67,8 @@ class UnitTenantUploadParserTest extends TestCase
 
         $this->assertCount(2, $parsed['units']);
         $this->assertSame('A1', $parsed['units'][0]['unit_number']);
+        $this->assertArrayNotHasKey('unit_code', $parsed['units'][0]);
+        $this->assertArrayNotHasKey('unit_name', $parsed['units'][0]);
         $this->assertSame('25000', $parsed['units'][0]['rent_amount']);
         $this->assertSame(4, $parsed['units'][1]['row_no']);
         $this->assertCount(1, $parsed['individual']);

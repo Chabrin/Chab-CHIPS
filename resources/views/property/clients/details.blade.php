@@ -1263,12 +1263,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                 <div class="col-md-4 mb-3">
                                                     <label for="unit_number" class="form-label">Unit Number <span class="text-danger">*</span></label>
                                                     <input type="text" class="form-control" id="unit_number" name="unit_number" placeholder="e.g. Shop 1" required>
-                                                    <div class="invalid-feedback"></div>
-                                                </div>
-
-                                                <div class="col-md-4 mb-3">
-                                                    <label for="unit_name" class="form-label">Unit Name</label>
-                                                    <input type="text" class="form-control" id="unit_name" name="unit_name" placeholder="e.g. Block A - Shop 1">
+                                                    <small class="text-muted">Unit code = property code + unit number.</small>
                                                     <div class="invalid-feedback"></div>
                                                 </div>
 

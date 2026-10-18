@@ -36,7 +36,7 @@ class UnitTenantUploadTemplateService
         $spreadsheet = new Spreadsheet();
         $lists = $this->lookupLists();
 
-        $this->addUnitsSheet($spreadsheet->getActiveSheet(), $lists);
+        $this->addUnitsSheet($spreadsheet->getActiveSheet(), $lists, $property);
         $this->addTenantSheet($spreadsheet->createSheet(), UnitTenantUploadColumns::SHEET_INDIVIDUAL, $lists);
         $this->addTenantSheet($spreadsheet->createSheet(), UnitTenantUploadColumns::SHEET_CORPORATE, $lists);
         $this->addReadmeSheet($spreadsheet->createSheet(), $property);
@@ -81,23 +81,61 @@ class UnitTenantUploadTemplateService
     }
 
     /**
-     * Units sheet: headers, dropdowns and date/number formats.
+     * Units sheet: headers, dropdowns, date/number formats and the locked unit_code formulas.
      *
      * @param Worksheet $sheet
      * @param array $lists
+     * @param Property $property
      */
-    private function addUnitsSheet(Worksheet $sheet, array $lists): void
+    private function addUnitsSheet(Worksheet $sheet, array $lists, Property $property): void
     {
         $sheet->setTitle(UnitTenantUploadColumns::SHEET_UNITS);
-        $headers = array_keys(UnitTenantUploadColumns::UNITS);
+        $columns = $this->withUnitCode(UnitTenantUploadColumns::UNITS);
+        $headers = array_keys($columns);
+        $lastCol = Coordinate::stringFromColumnIndex(count($headers));
+        $codeCol = Coordinate::stringFromColumnIndex(array_search(UnitTenantUploadColumns::UNIT_CODE, $headers) + 1);
 
-        $this->writeHeaders($sheet, UnitTenantUploadColumns::UNITS);
+        $this->writeHeaders($sheet, $columns);
         $this->addDropdowns($sheet, $headers, $lists);
-        $this->formatColumns($sheet, $headers, ['rent_amount', 'initial_water_reading']);
+        $this->formatColumns($sheet, $headers, ['rent_amount', 'initial_water_reading', UnitTenantUploadColumns::UNIT_CODE]);
+
+        // unit_code = property code + unit number; shown for reference, the importer always rebuilds it.
+        $prefix = str_replace('"', '""', $property->reference_number . '-');
+        for ($row = 2; $row <= $this->lastRow(); $row++) {
+            $sheet->setCellValue($codeCol . $row, '=IF(A' . $row . '="","","' . $prefix . '"&TRIM(A' . $row . '))');
+        }
+
+        $sheet->getStyle($codeCol . '1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9D9D9');
+
+        // Only the unit_code column stays locked once the sheet is protected.
+        $sheet->getStyle('A2:' . $lastCol . $this->lastRow())->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
+        $sheet->getStyle($codeCol . '2:' . $codeCol . $this->lastRow())->getProtection()->setLocked(Protection::PROTECTION_PROTECTED);
+        $sheet->getProtection()->setSheet(true);
     }
 
     /**
-     * Tenant sheet: locked unit_number formulas, dropdowns and protection.
+     * Columns of a sheet with the read-only unit_code placed right after unit_number.
+     *
+     * @param array $columns
+     * @return array
+     */
+    private function withUnitCode(array $columns): array
+    {
+        $layout = [];
+
+        foreach ($columns as $header => $optional) {
+            $layout[$header] = $optional;
+
+            if ($header === 'unit_number') {
+                $layout[UnitTenantUploadColumns::UNIT_CODE] = false;
+            }
+        }
+
+        return $layout;
+    }
+
+    /**
+     * Tenant sheet: locked unit_number and unit_code formulas, dropdowns and protection.
      *
      * @param Worksheet $sheet
      * @param string $name
@@ -106,25 +144,28 @@ class UnitTenantUploadTemplateService
     private function addTenantSheet(Worksheet $sheet, string $name, array $lists): void
     {
         $sheet->setTitle($name);
-        $columns = UnitTenantUploadColumns::forSheet($name);
+        $columns = $this->withUnitCode(UnitTenantUploadColumns::forSheet($name));
         $headers = array_keys($columns);
         $lastCol = Coordinate::stringFromColumnIndex(count($headers));
+        $unitsCodeCol = Coordinate::stringFromColumnIndex(array_search(UnitTenantUploadColumns::UNIT_CODE, array_keys($this->withUnitCode(UnitTenantUploadColumns::UNITS))) + 1);
 
         $this->writeHeaders($sheet, $columns);
         $this->addDropdowns($sheet, $headers, $lists);
+        $sheet->getStyle('B1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D9D9D9');
 
         for ($row = 2; $row <= $this->lastRow(); $row++) {
             $sheet->setCellValue('A' . $row, '=IF(units!A' . $row . '="","",units!A' . $row . ')');
+            $sheet->setCellValue('B' . $row, '=IF(units!' . $unitsCodeCol . $row . '="","",units!' . $unitsCodeCol . $row . ')');
         }
 
-        $this->formatColumns($sheet, $headers, ['unit_number', 'lease_start_date', 'lease_end_date']);
+        $this->formatColumns($sheet, $headers, ['unit_number', UnitTenantUploadColumns::UNIT_CODE, 'lease_start_date', 'lease_end_date']);
         foreach (['lease_start_date', 'lease_end_date'] as $dateHeader) {
             $dateCol = Coordinate::stringFromColumnIndex(array_search($dateHeader, $headers) + 1);
             $sheet->getStyle($dateCol . '2:' . $dateCol . $this->lastRow())->getNumberFormat()->setFormatCode('yyyy-mm-dd');
         }
 
-        // Everything except column A stays editable once the sheet is protected.
-        $sheet->getStyle('B2:' . $lastCol . $this->lastRow())->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
+        // Everything except columns A (unit_number) and B (unit_code) stays editable once the sheet is protected.
+        $sheet->getStyle('C2:' . $lastCol . $this->lastRow())->getProtection()->setLocked(Protection::PROTECTION_UNPROTECTED);
         $sheet->getProtection()->setSheet(true);
     }
 
@@ -160,7 +201,8 @@ class UnitTenantUploadTemplateService
             'Units & tenants upload — ' . $property->reference_number . ' - ' . $property->property_name,
             '',
             'Yellow headers are optional; all other columns are required.',
-            'Fill the units sheet first. unit_number on the tenant sheets fills itself and is locked.',
+            'Fill the units sheet first. unit_number and unit_code on the tenant sheets fill themselves and are locked.',
+            'unit_code on the units sheet fills itself and is locked: ' . $property->reference_number . '-<unit_number>. Units have no separate name; the unit code is the unit\'s identifier.',
             'A unit with a tenant goes on individual_tenants OR corporate_tenants, never both. Leave the other row blank.',
             'A unit with no tenant row is created vacant.',
             'Individuals need a National ID or a Passport number (either one).',

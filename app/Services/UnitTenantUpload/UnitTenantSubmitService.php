@@ -285,13 +285,15 @@ class UnitTenantSubmitService
     {
         $unitTypeId = $this->lookups->id('unit_types', $row->unit_type) ?? $this->lookups->id('unit_types', 'Normal');
 
+        $unitCode = Unit::generateUnitCode($property, $row->unit_number);
+
         return Unit::create([
-            'unit_code' => Unit::generateUnitCode($property, $row->unit_number),
+            'unit_code' => $unitCode,
             'property_id' => $property->id,
             'client_id' => $property->client_id,
             'zone_id' => $property->zone_id,
             'unit_number' => $row->unit_number,
-            'unit_name' => $row->unit_name,
+            'unit_name' => $unitCode,
             'unit_type_id' => (string) $unitTypeId,
             'usage_type_id' => $this->lookups->id('usage_types', $row->usage_type),
             'topology_id' => $this->lookups->id('topologies', $row->topology),

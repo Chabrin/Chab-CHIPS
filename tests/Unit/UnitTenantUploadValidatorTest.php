@@ -24,7 +24,7 @@ class UnitTenantUploadValidatorTest extends TestCase
 
     private function unit(array $over = []): array
     {
-        return $over + ['row_no' => 2, 'unit_number' => 'A1', 'unit_name' => 'Unit A1', 'unit_type' => null, 'usage_type' => null, 'topology' => '1 Bedroom', 'rent_amount' => '1000', 'vat_able' => null, 'initial_water_reading' => '0', 'unit_category' => null];
+        return $over + ['row_no' => 2, 'unit_number' => 'A1', 'unit_type' => null, 'usage_type' => null, 'topology' => '1 Bedroom', 'rent_amount' => '1000', 'vat_able' => null, 'initial_water_reading' => '0', 'unit_category' => null];
     }
 
     private function individual(array $over = []): array
@@ -52,9 +52,9 @@ class UnitTenantUploadValidatorTest extends TestCase
 
     public function test_unit_required_fields_and_unknown_lookups_are_reported(): void
     {
-        $result = $this->check([1 => $this->unit(['unit_name' => null, 'topology' => 'Nonsense', 'rent_amount' => 'abc', 'vat_able' => '2'])], []);
+        $result = $this->check([1 => $this->unit(['unit_number' => null, 'topology' => 'Nonsense', 'rent_amount' => 'abc', 'vat_able' => '2'])], []);
 
-        $this->assertStringContainsString('unit_name required', $result['units'][1]);
+        $this->assertStringContainsString('unit_number required', $result['units'][1]);
         $this->assertStringContainsString("Topology 'Nonsense' not recognised", $result['units'][1]);
         $this->assertStringContainsString('Rent Amount', $result['units'][1]);
         $this->assertStringContainsString('vat_able must be 0 or 1', $result['units'][1]);
@@ -174,9 +174,9 @@ class UnitTenantUploadValidatorTest extends TestCase
 
     public function test_long_values_and_out_of_range_numbers_are_reported(): void
     {
-        $result = $this->check([1 => $this->unit(['unit_name' => str_repeat('x', 256), 'rent_amount' => '100000000000', 'initial_water_reading' => '10.5'])], []);
+        $result = $this->check([1 => $this->unit(['unit_condition' => str_repeat('x', 256), 'rent_amount' => '100000000000', 'initial_water_reading' => '10.5'])], []);
 
-        $this->assertStringContainsString('unit_name is longer than 255 characters', $result['units'][1]);
+        $this->assertStringContainsString('unit_condition is longer than 255 characters', $result['units'][1]);
         $this->assertStringContainsString('Rent Amount is too large', $result['units'][1]);
         $this->assertStringContainsString('must be a whole number', $result['units'][1]);
     }

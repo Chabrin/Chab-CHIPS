@@ -10,13 +10,15 @@ final class UnitTenantUploadColumns
 {
     public const MAX_ROWS = 100;
 
+    /** Read-only column in the units sheet (property code + unit number); filled by formula, never read back. */
+    public const UNIT_CODE = 'unit_code';
+
     public const SHEET_UNITS = 'units';
     public const SHEET_INDIVIDUAL = 'individual_tenants';
     public const SHEET_CORPORATE = 'corporate_tenants';
 
     public const UNITS = [
         'unit_number' => false,
-        'unit_name' => false,
         'topology' => false,
         'rent_amount' => false,
         'initial_water_reading' => false,
