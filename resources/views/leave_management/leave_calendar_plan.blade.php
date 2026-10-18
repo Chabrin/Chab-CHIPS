@@ -51,10 +51,10 @@
             </div>
             <div class="modal-body">
                 <!-- Counter Tracker -->
-                <div class="d-flex justify-content-between align-items-center p-3 mb-3 bg-light rounded border">
-                    <div><strong>Target:</strong> <span id="modalTargetDaysBadge" class="fw-bold">21 Days</span></div>
-                    <div><strong>Allocated:</strong> <span id="allocatedDaysBadge" class="badge bg-secondary">0 Days</span></div>
-                    <div><strong>Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">21 Days</span></div>
+                <div class="d-flex justify-content-between align-items-center p-3 mb-3 bg-light rounded border text-dark">
+                    <div><strong class="text-dark">Target:</strong> <span id="modalTargetDaysBadge" class="fw-bold text-dark">21 Days</span></div>
+                    <div><strong class="text-dark">Allocated:</strong> <span id="allocatedDaysBadge" class="badge bg-secondary">0 Days</span></div>
+                    <div><strong class="text-dark">Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">21 Days</span></div>
                 </div>
 
                 <form id="scheduleSlotsForm">

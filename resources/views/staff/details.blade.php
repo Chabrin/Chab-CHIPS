@@ -1667,12 +1667,15 @@ $(document).ready(function() {
     });
 
     // Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) for the days requested
+    var tierRequest = null;
     function showTierBreakdown() {
         var leaveTypeId = $('#sl_leave_type_id').val();
         $('#sl_tier_alert').addClass('d-none');
         if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
 
-        $.ajax({
+        // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
+        if (tierRequest) { tierRequest.abort(); }
+        tierRequest = $.ajax({
             url: "{{ url('/ajax/leave-management/evaluate-application') }}",
             method: 'POST',
             data: {
@@ -1693,7 +1696,8 @@ $(document).ready(function() {
                     $('#sl_tier_alert').removeClass('d-none');
                 }
             },
-            error: function(xhr) {
+            error: function(xhr, status) {
+                if (status === 'abort') { return; }
                 toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
             }
         });

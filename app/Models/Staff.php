@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Observers\AuditLogsObserver;
+use App\Support\HireDate;
 use Illuminate\Database\Eloquent\Model;
 
 class Staff extends Model
@@ -60,7 +61,6 @@ class Staff extends Model
 
     protected $casts = [
         'birth_date' => 'date',
-        'hire_date' => 'datetime',
         'date_time' => 'datetime',
     ];
 
@@ -69,6 +69,13 @@ class Staff extends Model
 
     /** Bootstrap badge classes matching STATUSES, keyed the same way. */
     public const STATUS_BADGE_CLASSES = [1 => 'badge-light-success', 2 => 'badge-light-warning', 3 => 'badge-light-danger', 4 => 'badge-light-info'];
+
+    /**
+     * The hire date as a date, whatever format it was stored in (a plain datetime cast threw on day-first dates).
+     */
+    public function getHireDateAttribute($value) {
+        return HireDate::parse($value);
+    }
 
     // Relationships
     public function department()

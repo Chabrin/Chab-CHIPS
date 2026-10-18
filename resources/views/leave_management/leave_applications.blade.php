@@ -1077,6 +1077,7 @@
         }
 
         // Pay tier preview for the requested days; the server returns nothing for leave types without tiers
+        let tierRequest = null;
         function showTierBreakdown() {
             let staffId = $('#staff_id').val();
             let leaveTypeId = $('#leave_type_id').val();
@@ -1084,7 +1085,9 @@
             $('#sickLeaveTierAlert').addClass('d-none');
             if (!staffId || !leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') return;
 
-            $.ajax({
+            // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
+            if (tierRequest) tierRequest.abort();
+            tierRequest = $.ajax({
                 url: "{{ url('/ajax/leave-management/evaluate-application') }}",
                 type: 'POST',
                 data: {
@@ -1105,7 +1108,8 @@
                         $('#sickLeaveTierAlert').removeClass('d-none');
                     }
                 },
-                error: function(xhr) {
+                error: function(xhr, status) {
+                    if (status === 'abort') return;
                     toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
                 }
             });

@@ -4,6 +4,7 @@ namespace App\Services\Leave;
 
 use App\Models\PublicHoliday;
 use App\Models\WorkDay;
+use App\Support\HireDate;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
@@ -290,34 +291,13 @@ class LeaveCalendarService
     }
 
     /**
-     * Read a staff hire date, which is stored in mixed formats: ISO, legacy "Jan  1 2010 12:00AM", and slash dates
-     * in both orders. Slash dates are day-first unless the second part cannot be a month (05/23/2023).
+     * Read a staff hire date, which is stored in mixed formats (see HireDate::parse).
      * Returns null when the value is empty or unreadable.
      *
      * @param Carbon|string|null $hireDate
      * @return Carbon|null
      */
     public function parseHireDate($hireDate): ?Carbon {
-        if (empty($hireDate)) {
-            return null;
-        }
-
-        if ($hireDate instanceof \DateTimeInterface) {
-            return Carbon::instance($hireDate);
-        }
-
-        $value = trim((string) $hireDate);
-
-        try {
-            if (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})#', $value, $m)) {
-                $format = ((int) $m[2] > 12) ? 'm/d/Y' : 'd/m/Y';
-
-                return Carbon::createFromFormat($format, $m[1] . '/' . $m[2] . '/' . $m[3])->startOfDay();
-            }
-
-            return Carbon::parse($value);
-        } catch (\Throwable $e) {
-            return null;
-        }
+        return HireDate::parse($hireDate);
     }
 }

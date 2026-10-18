@@ -190,10 +190,10 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="d-flex justify-content-between align-items-center p-3 mb-3 bg-light rounded border">
-                    <div><strong>Target:</strong> <span id="modalTargetDays">0 Days</span></div>
-                    <div><strong>Allocated:</strong> <span id="allocatedDaysBadge" class="badge bg-secondary">0 Days</span></div>
-                    <div><strong>Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">0 Days</span></div>
+                <div class="d-flex justify-content-between align-items-center p-3 mb-3 bg-light rounded border text-dark">
+                    <div><strong class="text-dark">Target:</strong> <span id="modalTargetDays" class="text-dark">0 Days</span></div>
+                    <div><strong class="text-dark">Allocated:</strong> <span id="allocatedDaysBadge" class="badge bg-secondary">0 Days</span></div>
+                    <div><strong class="text-dark">Remaining:</strong> <span id="remainingDaysBadge" class="badge bg-warning text-dark">0 Days</span></div>
                 </div>
 
                 <form id="scheduleSlotsForm">
@@ -438,12 +438,15 @@ $(function () {
     });
 
     // ── Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) ───────────────
+    var tierRequest = null;
     function showTierBreakdown() {
         var leaveTypeId = $('#sl_leave_type_id').val();
         $('#sl_tier_alert').addClass('d-none');
         if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
 
-        $.ajax({
+        // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
+        if (tierRequest) { tierRequest.abort(); }
+        tierRequest = $.ajax({
             url: "{{ url('/ajax/leave-management/evaluate-application') }}",
             method: 'POST',
             data: {
@@ -464,7 +467,8 @@ $(function () {
                     $('#sl_tier_alert').removeClass('d-none');
                 }
             },
-            error: function (xhr) {
+            error: function (xhr, status) {
+                if (status === 'abort') { return; }
                 toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
             }
         });

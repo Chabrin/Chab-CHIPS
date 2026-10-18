@@ -1100,8 +1100,9 @@ class LeaveManagementController extends Controller
                 return response()->json(['success' => false, 'error' => 'Staff ID is required'], 400);
             }
             
+            // Active (1) or On Leave (4); suspended and terminated staff have no balance report
             $employee = Staff::where('id', $staffId)
-                ->where('current_status_id', 5)
+                ->whereIn('current_status_id', [1, 4])
                 ->with(['department', 'position'])
                 ->first();
             
@@ -1113,51 +1114,40 @@ class LeaveManagementController extends Controller
             $leaveBalances = [];
             
             foreach ($leaveTypes as $leaveType) {
-                $plan = LeaveCalendarPlan::where('employee_id', $employee->id)
+                // Only annual leave has a plan; the other types use their configured days (annual with no plan is pro-rated)
+                $plan = !$this->calendar->isAnnualLeaveType($leaveType->type_name) ? null : LeaveCalendarPlan::where('employee_id', $employee->id)
                     ->where('leave_type_id', $leaveType->id)
                     ->whereYear('start_date', $year)
                     ->where('current_status_id', 5)
                     ->first();
-                
-                if ($plan) {
-                    $daysTaken = LeaveRequest::where('staff_id', $employee->id)
-                        ->where('leave_type_id', $leaveType->id)
-                        ->whereYear('start_date', $year)
-                        ->whereIn('current_status_id', [5, 19, 49])
-                        ->sum('used_days');
-                    
-                    $daysPending = LeaveRequest::where('staff_id', $employee->id)
-                        ->where('leave_type_id', $leaveType->id)
-                        ->whereYear('start_date', $year)
-                        ->whereIn('current_status_id', [1, 24])
-                        ->sum('requested_days');
-                    
-                    $leaveBalances[] = [
-                        'leave_type_id'     => $leaveType->id,
-                        'leave_type_name'   => $leaveType->type_name,
-                        'plan_start_date'   => $plan->start_date ? date('Y-m-d', strtotime($plan->start_date)) : '-',
-                        'plan_end_date'     => $plan->end_date ? date('Y-m-d', strtotime($plan->end_date)) : '-',
-                        'entitled_days'     => round($plan->entitled_days, 2),
-                        'days_taken'        => round($daysTaken, 2),
-                        'days_pending'      => round($daysPending, 2),
-                        'current_balance'   => round($plan->balance, 2),
-                        'available_balance' => round($plan->balance - $daysPending, 2),
-                        'has_plan'          => true,
-                    ];
-                } else {
-                    $leaveBalances[] = [
-                        'leave_type_id'     => $leaveType->id,
-                        'leave_type_name'   => $leaveType->type_name,
-                        'plan_start_date'   => '-',
-                        'plan_end_date'     => '-',
-                        'entitled_days'     => 0,
-                        'days_taken'        => 0,
-                        'days_pending'      => 0,
-                        'current_balance'   => 0,
-                        'available_balance' => 0,
-                        'has_plan'          => false,
-                    ];
-                }
+
+                $daysTaken = LeaveRequest::where('staff_id', $employee->id)
+                    ->where('leave_type_id', $leaveType->id)
+                    ->whereYear('start_date', $year)
+                    ->whereIn('current_status_id', [5, 19, 49])
+                    ->sum(DB::raw("CAST(NULLIF(used_days, '') AS NUMERIC)")); // used_days is a text column
+
+                $daysPending = LeaveRequest::where('staff_id', $employee->id)
+                    ->where('leave_type_id', $leaveType->id)
+                    ->whereYear('start_date', $year)
+                    ->whereIn('current_status_id', [1, 24])
+                    ->sum('requested_days');
+
+                $entitled = $plan ? (float) $plan->entitled_days : $this->entitlementWithoutPlan((int) $employee->id, $leaveType, (int) $year);
+                $balance = $plan ? (float) $plan->balance : $entitled - (float) $daysTaken;
+
+                $leaveBalances[] = [
+                    'leave_type_id'     => $leaveType->id,
+                    'leave_type_name'   => $leaveType->type_name,
+                    'plan_start_date'   => $plan && $plan->start_date ? date('Y-m-d', strtotime($plan->start_date)) : '-',
+                    'plan_end_date'     => $plan && $plan->end_date ? date('Y-m-d', strtotime($plan->end_date)) : '-',
+                    'entitled_days'     => round($entitled, 2),
+                    'days_taken'        => round($daysTaken, 2),
+                    'days_pending'      => round($daysPending, 2),
+                    'current_balance'   => round($balance, 2),
+                    'available_balance' => round($balance - $daysPending, 2),
+                    'has_plan'          => (bool) $plan,
+                ];
             }
             
             $reportData = [

@@ -384,7 +384,7 @@
                                             @php
                                                 $currentPhoto = ($staff->photo && \Illuminate\Support\Facades\Storage::disk('public')->exists($staff->photo))
                                                     ? asset('storage/' . $staff->photo)
-                                                    : asset('images/default-avatar.png');
+                                                    : asset('images/default-avatar.svg');
                                             @endphp
                                             <div class="staff-photo-panel">
                                                 <div class="col-auto p-0">

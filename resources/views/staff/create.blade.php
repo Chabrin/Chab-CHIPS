@@ -260,7 +260,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="row mb-4 align-items-center">
                                             <div class="col-auto">
-                                                <img id="photo-preview" src="{{ asset('images/default-avatar.png') }}" 
+                                                <img id="photo-preview" src="{{ asset('images/default-avatar.svg') }}" 
                                                     class="rounded-circle border" width="90" height="90" style="object-fit: cover;">
                                             </div>
                                             <div class="col-md-5">
