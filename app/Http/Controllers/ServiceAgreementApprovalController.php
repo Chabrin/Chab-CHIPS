@@ -135,15 +135,20 @@ class ServiceAgreementApprovalController extends Controller
         $count = count($result['done']);
         $message = $count . ' service agreement' . ($count === 1 ? '' : 's') . ' ' . $verb . '.';
 
-        if (!empty($result['skipped'])) {
-            $message .= ' Skipped ' . count($result['skipped']) . ' (not pending or not found).';
+        $reasons = [];
+        foreach (array_count_values(array_values($result['skipped'])) as $reason => $n) {
+            $reasons[] = $n . ' x ' . $reason;
+        }
+        if ($reasons) {
+            $message .= ' Skipped ' . count($result['skipped']) . ': ' . implode(' | ', array_slice($reasons, 0, 2)) . (count($reasons) > 2 ? ' ...' : '');
         }
 
         return [
             'success' => $count > 0,
             'message' => $message,
-            'error' => $count > 0 ? null : 'Nothing to do: the selected items are not pending.',
+            'error' => $count > 0 ? null : ($reasons ? 'Not ' . $verb . '. ' . $reasons[0] : 'Nothing to do: the selected items are not pending.'),
             'skipped' => $result['skipped'],
+            'skipped_items' => collect($result['skipped'])->map(fn($reason, $id) => ['label' => $result['labels'][$id] ?? ('#' . $id), 'reason' => $reason])->values()->all(),
             'flipped' => $result['flipped'],
         ];
     }

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Approving an SLA also approves the landlord, property and units that are still Pending
  * behind it, mirroring the Landlord Onboarding bundle on the Property Confirmations page.
+ * An SLA that fails a blocking readiness check (see evaluateChecks()) cannot be approved.
  * Rejecting an SLA rejects only that SLA, since the landlord and property may have other
  * agreements. Every action is recorded in confirmation_logs, as the existing page does.
  */
@@ -105,7 +106,7 @@ class ServiceAgreementApprovalService
         $direction = strtolower($orderDir) === 'asc' ? 'asc' : 'desc';
 
         $rows = $this->baseQuery($filters)
-            ->select([
+            ->select(array_merge([
                 's.id',
                 's.reference_number',
                 's.current_status_id',
@@ -122,7 +123,7 @@ class ServiceAgreementApprovalService
                 'z.zone_name',
                 'u.name as created_by_name',
                 DB::raw('(select count(*) from sys_pm_units un where un.property_id = p.id) as units_count'),
-            ])
+            ], $this->factSelects()))
             ->orderBy($orderColumn, $direction)
             ->orderBy('s.id', 'desc')
             ->skip($start)
@@ -133,6 +134,7 @@ class ServiceAgreementApprovalService
                     'id' => $row->id,
                     'reference' => $row->reference_number ?? '-',
                     'status_id' => (int) $row->current_status_id,
+                    'block_reason' => (int) $row->current_status_id === self::STATUS_PENDING ? $this->blockReason($this->evaluateChecks($row)) : null,
                     'status' => $this->statusLabel((int) $row->current_status_id),
                     'client_name' => $row->client_name ?? '-',
                     'client_ref' => $row->client_ref ?? '',
@@ -245,17 +247,15 @@ class ServiceAgreementApprovalService
         $unitsPending = (clone $unitsQuery)->where('current_status_id', self::STATUS_PENDING)->count();
         $units = $unitsQuery->orderBy('unit_code')->limit(100)->get(['unit_code', 'unit_name', 'rent_amount', 'current_status_id']);
 
-        $otherSlas = DB::table('sys_pm_service_agreements')
-            ->where('property_id', $sla->property_id)
-            ->where('id', '<>', $sla->id)
-            ->count();
-
-        $hasBank = $banks->isNotEmpty() || ($client && !empty($client->account_number));
+        $checks = $this->evaluateChecks($this->factsFor($id));
+        $blockReason = (int) $sla->current_status_id === self::STATUS_PENDING ? $this->blockReason($checks) : null;
 
         return [
             'id' => $sla->id,
             'status_id' => (int) $sla->current_status_id,
             'status' => $this->statusLabel((int) $sla->current_status_id),
+            'can_approve' => $blockReason === null,
+            'block_reason' => $blockReason,
             'sla' => [
                 'reference' => $sla->reference_number ?? '-',
                 'commission' => $sla->commission_percentage !== null ? (float) $sla->commission_percentage : null,
@@ -319,18 +319,73 @@ class ServiceAgreementApprovalService
                     'status' => $this->statusLabel((int) $u->current_status_id),
                 ])->all(),
             ] : null,
-            'checks' => [
-                ['label' => 'Client found', 'ok' => (bool) $client],
-                ['label' => 'Client has a payout bank account', 'ok' => $hasBank],
-                ['label' => 'Client has a phone or email', 'ok' => $client && (!empty($client->mobile_number) || !empty($client->email_address))],
-                ['label' => 'Property found', 'ok' => (bool) $property],
-                ['label' => 'Property has units', 'ok' => $unitsTotal > 0],
-                ['label' => 'Property has a field officer', 'ok' => $property && !empty($property->field_officer)],
-                ['label' => 'Commission is set', 'ok' => $sla->commission_percentage !== null && (float) $sla->commission_percentage > 0],
-                ['label' => 'Start date is set', 'ok' => !empty($sla->date_start)],
-                ['label' => 'No other SLA on this property', 'ok' => $otherSlas === 0],
-            ],
+            'checks' => $checks,
         ];
+    }
+
+    /**
+     * Column selects that give the facts the readiness checks need, for a query that is built on
+     * baseQuery() (it supplies the s, p and c aliases).
+     */
+    protected function factSelects(): array {
+        $today = now()->toDateString();
+
+        return [
+            's.commission_percentage as f_commission',
+            's.date_start as f_date_start',
+            DB::raw('(c.id is not null) as f_client'),
+            DB::raw("(exists (select 1 from clients_bank_details b where b.client_id = c.id) or nullif(trim(c.account_number), '') is not null) as f_bank"),
+            DB::raw("(nullif(trim(c.mobile_number), '') is not null or nullif(trim(c.email_address), '') is not null) as f_contact"),
+            DB::raw('(p.id is not null) as f_property'),
+            // Another SLA that is pending or approved and has not ended. Legacy-ended (2) and rejected (41) SLAs are ignored,
+            // otherwise a property with an old ended SLA could never get a new one approved.
+            DB::raw("(exists (select 1 from sys_pm_service_agreements o where o.property_id = s.property_id and o.id <> s.id and o.current_status_id in (1, 5) and (o.date_end is null or o.date_end::date >= '{$today}'))) as f_other_sla"),
+            DB::raw('(select count(*) from sys_pm_units un where un.property_id = s.property_id) as f_units'),
+            DB::raw('(exists (select 1 from sys_staff fo where fo.id = p.field_officer_id)) as f_officer'),
+        ];
+    }
+
+    /**
+     * The check facts for one SLA, read fresh from the database.
+     *
+     * @param int $id
+     */
+    protected function factsFor(int $id): ?object {
+        return $this->baseQuery(['status' => 'all'], false)
+            ->where('s.id', $id)
+            ->select($this->factSelects())
+            ->first();
+    }
+
+    /**
+     * The readiness checks for one SLA. A check marked blocking stops the approval; the others
+     * only warn the approver.
+     *
+     * @param object $facts
+     */
+    protected function evaluateChecks(object $facts): array {
+        return [
+            ['label' => 'Client found', 'ok' => (bool) $facts->f_client, 'blocking' => true],
+            ['label' => 'Client has a payout bank account', 'ok' => (bool) $facts->f_bank, 'blocking' => true],
+            ['label' => 'Client has a phone or email', 'ok' => (bool) $facts->f_contact, 'blocking' => true],
+            ['label' => 'Property found', 'ok' => (bool) $facts->f_property, 'blocking' => true],
+            ['label' => 'Property has units', 'ok' => (int) $facts->f_units > 0, 'blocking' => false],
+            ['label' => 'Property has a field officer', 'ok' => (bool) $facts->f_officer, 'blocking' => false],
+            ['label' => 'Commission is set', 'ok' => $facts->f_commission !== null && (float) $facts->f_commission > 0, 'blocking' => true],
+            ['label' => 'Start date is set', 'ok' => !empty($facts->f_date_start), 'blocking' => false],
+            ['label' => 'No other current SLA on this property', 'ok' => !$facts->f_other_sla, 'blocking' => true],
+        ];
+    }
+
+    /**
+     * Why an SLA cannot be approved yet, or null when every blocking check passes.
+     *
+     * @param array $checks
+     */
+    protected function blockReason(array $checks): ?string {
+        $failing = array_column(array_filter($checks, fn($check) => $check['blocking'] && !$check['ok']), 'label');
+
+        return $failing ? 'Requirements not met: ' . implode('; ', $failing) . '.' : null;
     }
 
     /**
@@ -356,6 +411,12 @@ class ServiceAgreementApprovalService
             foreach ($slas as $sla) {
                 if ((int) $sla->current_status_id !== self::STATUS_PENDING) {
                     $skipped[$sla->id] = 'Not pending';
+                    continue;
+                }
+
+                $reason = $this->blockReason($this->evaluateChecks($this->factsFor($sla->id)));
+                if ($reason !== null) {
+                    $skipped[$sla->id] = $reason;
                     continue;
                 }
 
@@ -394,7 +455,12 @@ class ServiceAgreementApprovalService
 
         $this->logConfirmations($flipped, $this->logModels(), 'approve', $userId, self::STATUS_APPROVED, 'sla_approval', null, 'approve_sla_page');
 
-        return ['done' => $flipped['Service Agreements'], 'skipped' => $skipped, 'flipped' => array_map('count', $flipped)];
+        return [
+            'done' => $flipped['Service Agreements'],
+            'skipped' => $skipped,
+            'labels' => $slas->pluck('reference_number', 'id')->all(),
+            'flipped' => array_map('count', $flipped),
+        ];
     }
 
     /**
@@ -431,7 +497,7 @@ class ServiceAgreementApprovalService
 
         $this->logConfirmations(['Service Agreements' => $rejected], $this->logModels(), 'reject', $userId, self::STATUS_REJECTED, 'sla_rejection', $reason, 'approve_sla_page');
 
-        return ['done' => $rejected, 'skipped' => $skipped, 'flipped' => ['Service Agreements' => count($rejected)]];
+        return ['done' => $rejected, 'skipped' => $skipped, 'labels' => $slas->pluck('reference_number', 'id')->all(), 'flipped' => ['Service Agreements' => count($rejected)]];
     }
 
     /**

@@ -134,8 +134,11 @@
     .check.ok .dot { background: var(--ok-soft); color: var(--ok); }
     .check.bad { background: #fffafa; border-color: #f7d4d0; }
     .check.bad .dot { background: var(--bad-soft); color: var(--bad); }
+    .check.warn { background: #fffdf7; border-color: #f3e2bd; }
+    .check.warn .dot { background: var(--warn-soft); color: var(--warn); }
     .banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; margin-bottom: 16px; }
     .banner.warn { background: var(--warn-soft); color: #7a4f0f; }
+    .banner.bad { background: var(--bad-soft); color: #8a1f17; }
     .banner.ok { background: var(--ok-soft); color: #0b6b35; }
     .banner .material-symbols-outlined { font-size: 20px; }
     .bank-card { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }

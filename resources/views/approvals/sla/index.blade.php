@@ -156,7 +156,8 @@
         columns: [
             { data: 'reference', render: (v, t, r) => '<div class="t-ref">' + dash(v) + '</div><div class="t-sub">' +
                 (r.date_start !== '-' ? 'From ' + esc(r.date_start) : 'No start date') + (r.years ? ' · ' + esc(r.years) + ' yr' : '') +
-                (!r.registration_fee ? ' · <span style="color:#b7791f;">No reg. fee</span>' : '') + '</div>' },
+                (!r.registration_fee ? ' · <span style="color:#b7791f;">No reg. fee</span>' : '') +
+                (r.status_id === 1 && r.block_reason ? ' · <span style="color:#b7791f;">Not ready</span>' : '') + '</div>' },
             { data: 'client_name', render: (v, t, r) => '<div class="t-main">' + dash(v) + '</div><div class="t-sub">' + esc(r.client_ref) + '</div>' },
             { data: 'property_name', render: (v, t, r) => '<div class="t-main">' + dash(v) + '</div><div class="t-sub">' + esc(r.property_ref) + ' &middot; ' + r.units_count + ' unit' + (r.units_count === 1 ? '' : 's') + '</div>' },
             { data: 'zone', render: v => v && v !== '-' ? '<span class="chip zone">Zone ' + esc(v) + '</span>' : dash(v) },
@@ -164,6 +165,7 @@
             { data: 'created_at', render: (v, t, r) => '<div class="t-main">' + dash(v) + '</div><div class="t-sub">' + dash(r.created_by) + '</div>' },
         ],
         renderModal: renderModal,
+        blockReason: r => r.block_reason,
         approveNote: many => 'The client, property and units behind ' + (many ? 'them' : 'it') + ' that are still pending will be approved too.',
         footNote: 'Approving also approves the client, property and units behind this agreement that are still pending.',
     };

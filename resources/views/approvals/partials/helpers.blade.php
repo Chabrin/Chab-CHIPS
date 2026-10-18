@@ -35,10 +35,16 @@ window.QH = (function () {
     /** Banner plus the checklist, for the Overview tab. */
     function checksBlock(checks) {
         const r = readiness(checks);
-        const banner = r.failing.length
-            ? '<div class="banner warn">' + icon('warning') + '<div>' + r.failing.length + ' check' + (r.failing.length === 1 ? '' : 's') + ' to look at before you approve: ' + esc(r.failing.map(f => f.label).join('; ')) + '.</div></div>'
-            : '<div class="banner ok">' + icon('verified') + '<div>Everything we check looks complete.</div></div>';
-        const list = '<div class="checks">' + checks.map(k => '<div class="check ' + (k.ok ? 'ok' : 'bad') + '"><span class="dot">' + icon(k.ok ? 'check' : 'priority_high') + '</span>' + esc(k.label) + '</div>').join('') + '</div>';
+        // Checks flagged blocking:true stop the approval; blocking:false (or no flag) only warn.
+        const blocking = r.failing.filter(f => f.blocking === true), advisory = r.failing.filter(f => f.blocking !== true);
+        const names = list => esc(list.map(f => f.label).join('; '));
+        let banner = '<div class="banner ok">' + icon('verified') + '<div>Everything we check looks complete.</div></div>';
+        if (blocking.length) {
+            banner = '<div class="banner bad">' + icon('block') + '<div>Cannot approve until: ' + names(blocking) + '.' + (advisory.length ? ' Also worth a look: ' + names(advisory) + '.' : '') + '</div></div>';
+        } else if (advisory.length) {
+            banner = '<div class="banner warn">' + icon('warning') + '<div>' + advisory.length + ' check' + (advisory.length === 1 ? '' : 's') + ' to look at before you approve: ' + names(advisory) + '.</div></div>';
+        }
+        const list = '<div class="checks">' + checks.map(k => '<div class="check ' + (k.ok ? 'ok' : (k.blocking === false ? 'warn' : 'bad')) + '"><span class="dot">' + icon(k.ok ? 'check' : 'priority_high') + '</span>' + esc(k.label) + '</div>').join('') + '</div>';
         return { banner: banner, list: list };
     }
     return { esc, dash, money, icon, statusPill, avatar, kv, warn, readiness, checksBlock };
