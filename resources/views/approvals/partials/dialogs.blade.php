@@ -37,7 +37,8 @@
         <div class="modal-content">
             <div class="modal-body p-4">
                 <h5 class="mb-2" id="confirmActionModalTitle">Confirm</h5>
-                <p class="text-muted mb-4" id="confirmActionModalBody"></p>
+                <p class="text-muted mb-3" id="confirmActionModalBody"></p>
+                <div id="confirmActionExtras" class="mb-4"></div>
                 <div class="d-flex justify-content-end gap-2">
                     <button type="button" class="btn-soft" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn-ok" id="confirmActionModalConfirmBtn">Confirm</button>

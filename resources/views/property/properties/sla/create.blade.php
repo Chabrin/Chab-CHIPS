@@ -181,6 +181,7 @@
                                             Charge Registration Fee
                                         </label>
                                     </div>
+                                    <small class="form-text text-muted" id="registrationFeeHint"></small>
                                 </div>
                             </div>
 
@@ -425,6 +426,11 @@
         // rather than letting the team fill out the whole form only to be
         // rejected on submit. Hard block, not overridable — matches
         // SLAController::findCurrentSlaForProperty()'s server-side check exactly.
+        // The registration fee starts ticked for a property's first SLA and unticked for a
+        // renewal. Once the user touches the switch themselves, we stop changing it.
+        let registrationFeeTouched = false;
+        $('#charge_registration_fee').on('change', function() { registrationFeeTouched = true; });
+
         $('#property_id').on('change', function() {
             const propertyId = $(this).val();
             const $warning = $('#currentSlaWarning');
@@ -432,6 +438,7 @@
 
             $warning.addClass('d-none').text('');
             $saveButton.prop('disabled', false);
+            $('#registrationFeeHint').text('');
 
             if (!propertyId) return;
 
@@ -448,6 +455,13 @@
                         );
                         $saveButton.prop('disabled', true);
                     }
+
+                    if (!registrationFeeTouched) {
+                        $('#charge_registration_fee').prop('checked', !response.is_renewal);
+                    }
+                    $('#registrationFeeHint').text(response.is_renewal
+                        ? 'This property already had an SLA, so the registration fee is off by default. Switch it on to charge it.'
+                        : '');
                 },
                 error: function(xhr, status, error) {
                     console.error('Error checking for a current SLA:', xhr.responseText);

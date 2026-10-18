@@ -114,14 +114,18 @@ $(function () {
     $('#bulk-clear').on('click', function () { selected.clear(); $('#sla-table .row-check').prop('checked', false); updateBulk(); });
 
     /* ---------- confirm / reason dialogs ---------- */
-    function confirmAction(title, body) {
+    function confirmAction(title, body, extras) {
         return new Promise(resolve => {
             $('#confirmActionModalTitle').text(title);
             $('#confirmActionModalBody').text(body);
+            $('#confirmActionExtras').html(extras || '');
             const el = document.getElementById('confirmActionModal');
             const modal = bootstrap.Modal.getOrCreateInstance(el);
             let settled = false;
-            $('#confirmActionModalConfirmBtn').off('click').on('click', function () { settled = true; modal.hide(); resolve(true); });
+            $('#confirmActionModalConfirmBtn').off('click').on('click', function () {
+                if (extras && Q.validateExtras && !Q.validateExtras()) { return; }
+                settled = true; modal.hide(); resolve(true);
+            });
             $(el).off('hidden.bs.modal').on('hidden.bs.modal', function () { if (!settled) resolve(false); });
             modal.show();
         });
@@ -184,9 +188,13 @@ $(function () {
     }
     async function approveIds(ids, $btn) {
         const many = ids.length > 1;
-        const ok = await confirmAction(many ? 'Approve ' + ids.length + ' ' + Q.plural + '?' : 'Approve this ' + Q.noun + '?', Q.approveNote(many));
+        // A page can add its own questions to the approve dialog when exactly one item is approved.
+        const row = many ? null : table.rows().data().toArray().find(r => Number(r.id) === Number(ids[0]));
+        const extras = row && Q.approveExtras ? Q.approveExtras(row) : null;
+        const ok = await confirmAction(many ? 'Approve ' + ids.length + ' ' + Q.plural + '?' : 'Approve this ' + Q.noun + '?', Q.approveNote(many), extras);
         if (!ok) return;
-        send(Q.urls.approve, { ids: ids }, $btn, function () { afterAction(ids); });
+        const payload = Object.assign({ ids: ids }, extras && Q.collectExtras ? Q.collectExtras() : {});
+        send(Q.urls.approve, payload, $btn, function () { afterAction(ids); });
     }
     async function rejectIds(ids, $btn) {
         const reason = await promptReason();

@@ -76,6 +76,49 @@
 <script>
 (function () {
     const H = window.QH, esc = H.esc, dash = H.dash, money = H.money, icon = H.icon, kv = H.kv, avatar = H.avatar, pill = H.statusPill;
+    const registration = @json($registration);
+
+    // --- registration fee choice, shown in the approve dialog when one agreement that charges the fee is approved ---
+    const methodIcons = { cash: 'payments', mpesa: 'smartphone', bank: 'account_balance', equity: 'account_balance' };
+    const feeIsPaid = () => String($('.fee-opt.active').data('paid')) === '1';
+
+    function feeBoxHtml() {
+        const amount = 'KES ' + Number(registration.amount).toLocaleString('en-KE', { minimumFractionDigits: 2 });
+        return '<div class="fee-box">' +
+            '<div class="fee-head"><span class="fee-title">Registration fee</span><span class="fee-amt">' + esc(amount) + '</span></div>' +
+            '<div class="fee-seg" role="group" aria-label="Registration fee"><button type="button" class="fee-opt active" data-paid="0">Charge to account</button><button type="button" class="fee-opt" data-paid="1">Already paid</button></div>' +
+            '<div class="fee-note" id="feeNote">Charged to the client\'s account and deducted from the landlord\'s next return.</div>' +
+            '<div class="fee-paid d-none" id="feePaidFields">' +
+                '<div class="fee-label">How was it paid?</div>' +
+                '<div class="fee-methods" id="feeMethods">' + registration.methods.map(m =>
+                    '<button type="button" class="fee-method" data-key="' + esc(m.key) + '" data-account="' + esc(m.account || '') + '">' + icon(methodIcons[m.key] || 'payments') + '<span>' + esc(m.label) + '</span></button>').join('') + '</div>' +
+                '<div class="fee-label">Reference</div>' +
+                '<input type="text" id="feePayRef" class="fee-input" maxlength="100" placeholder="Receipt no., M-Pesa code or slip no." autocomplete="off">' +
+                '<div class="fee-error d-none" id="feeError">Choose how it was paid and enter the reference.</div>' +
+            '</div></div>';
+    }
+    function refreshFeeNote() {
+        const method = $('.fee-method.active');
+        let text = 'Charged to the client\'s account and deducted from the landlord\'s next return.';
+        if (feeIsPaid()) {
+            text = method.length
+                ? 'Recorded as received into ' + (method.data('account') || method.text()) + '. It will not be deducted from returns.'
+                : 'Choose how it was paid. It is then recorded as received and will not be deducted from returns.';
+        }
+        $('#feeNote').text(text);
+    }
+    $(document).on('click', '.fee-opt', function () {
+        $('.fee-opt').removeClass('active'); $(this).addClass('active');
+        $('#feePaidFields').toggleClass('d-none', !feeIsPaid());
+        refreshFeeNote();
+    });
+    $(document).on('click', '.fee-method', function () {
+        $('.fee-method').removeClass('active'); $(this).addClass('active');
+        $('#feeMethods').removeClass('invalid');
+        refreshFeeNote();
+    });
+    $(document).on('input', '#feePayRef', function () { $(this).removeClass('is-invalid'); });
+    // --- end registration fee choice ---
 
     function renderModal(d) {
         const s = d.sla, c = d.client, p = d.property;
@@ -166,8 +209,20 @@
         ],
         renderModal: renderModal,
         blockReason: r => r.block_reason,
-        approveNote: many => 'The client, property and units behind ' + (many ? 'them' : 'it') + ' that are still pending will be approved too.',
-        footNote: 'Approving also approves the client, property and units behind this agreement that are still pending.',
+        approveExtras: row => (!row.registration_fee || !(registration.amount > 0) || !registration.methods.length) ? null : feeBoxHtml(),
+        validateExtras: () => {
+            if (!feeIsPaid()) { return true; }
+            const methodOk = $('.fee-method.active').length > 0, ref = $('#feePayRef'), refOk = ref.val().trim() !== '';
+            $('#feeMethods').toggleClass('invalid', !methodOk);
+            ref.toggleClass('is-invalid', !refOk);
+            $('#feeError').toggleClass('d-none', methodOk && refOk);
+            return methodOk && refOk;
+        },
+        collectExtras: () => feeIsPaid()
+            ? { paid: 1, payment_method: $('.fee-method.active').data('key'), payment_reference: $('#feePayRef').val().trim() }
+            : {},
+        approveNote: many => 'The client, property and units behind ' + (many ? 'them' : 'it') + ' that are still pending will be approved too, and the client account is updated for the registration fee.',
+        footNote: 'Approving also approves the client, property and units behind this agreement that are still pending, and posts the registration fee to the client account.',
     };
 })();
 </script>

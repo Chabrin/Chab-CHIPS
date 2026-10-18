@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ClientAccountService;
 use App\Services\ServiceAgreementApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class ServiceAgreementApprovalController extends Controller
 {
@@ -30,6 +32,7 @@ class ServiceAgreementApprovalController extends Controller
         return view('approvals.sla.index', [
             'counts' => $this->approvals->statusCounts(),
             'options' => $this->approvals->filterOptions(),
+            'registration' => $this->approvals->registrationOptions(),
         ]);
     }
 
@@ -87,10 +90,21 @@ class ServiceAgreementApprovalController extends Controller
         $validated = $request->validate([
             'ids' => 'required|array|min:1|max:500',
             'ids.*' => 'integer',
+            'paid' => 'nullable|boolean',
+            'payment_method' => ['required_if:paid,1', 'nullable', Rule::in(array_keys(ClientAccountService::PAYMENT_METHODS))],
+            'payment_reference' => 'required_if:paid,1|nullable|string|max:100',
         ]);
 
+        $payment = null;
+        if (!empty($validated['paid'])) {
+            if (count($validated['ids']) > 1) {
+                return response()->json(['success' => false, 'error' => 'Settle the registration fee on one service agreement at a time.'], 422);
+            }
+            $payment = ['method' => $validated['payment_method'], 'reference' => trim($validated['payment_reference'])];
+        }
+
         try {
-            $result = $this->approvals->approve($validated['ids'], (int) Auth::id());
+            $result = $this->approvals->approve($validated['ids'], (int) Auth::id(), $payment);
 
             return response()->json($this->actionResponse($result, 'approved'));
         } catch (\Throwable $e) {
@@ -134,6 +148,17 @@ class ServiceAgreementApprovalController extends Controller
     protected function actionResponse(array $result, string $verb): array {
         $count = count($result['done']);
         $message = $count . ' service agreement' . ($count === 1 ? '' : 's') . ' ' . $verb . '.';
+
+        $posted = array_count_values($result['posted'] ?? []);
+        if (!empty($posted[ClientAccountService::RESULT_CHARGED])) {
+            $message .= ' Registration fee charged on ' . $posted[ClientAccountService::RESULT_CHARGED] . '.';
+        }
+        if (!empty($posted[ClientAccountService::RESULT_SETTLED])) {
+            $message .= ' Registration fee charged and paid on ' . $posted[ClientAccountService::RESULT_SETTLED] . '.';
+        }
+        if (!empty($posted[ClientAccountService::RESULT_OPENED])) {
+            $message .= ' Client account opened on ' . $posted[ClientAccountService::RESULT_OPENED] . '.';
+        }
 
         $reasons = [];
         foreach (array_count_values(array_values($result['skipped'])) as $reason => $n) {

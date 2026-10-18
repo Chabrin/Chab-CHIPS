@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\ClientAccountException;
 use App\Models\Client;
 use App\Models\ConfirmationLog;
 use App\Models\Property;
@@ -10,6 +11,7 @@ use App\Models\Unit;
 use App\Services\Concerns\ApprovalQueueHelpers;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Approval queue for Service Agreements (SLAs).
@@ -37,6 +39,15 @@ class ServiceAgreementApprovalService
         'start' => 's.date_start',
         'created' => 's.date_time',
     ];
+
+    protected ClientAccountService $accounts;
+
+    /**
+     * Inject the service that posts to the client account.
+     */
+    public function __construct(ClientAccountService $accounts) {
+        $this->accounts = $accounts;
+    }
 
     /**
      * Base query for the SLA queue. The client is resolved through the property when the
@@ -154,6 +165,13 @@ class ServiceAgreementApprovalService
             ->all();
 
         return ['total' => $total, 'filtered' => $filtered, 'rows' => $rows];
+    }
+
+    /**
+     * The registration fee amount and the ways of paying it, for the approve dialog.
+     */
+    public function registrationOptions(): array {
+        return $this->accounts->registrationOptions();
     }
 
     /**
@@ -390,15 +408,19 @@ class ServiceAgreementApprovalService
 
     /**
      * Approve the given pending SLAs, together with the pending landlord, property and units
-     * behind each one. SLAs that are not pending are skipped and reported back.
+     * behind each one, and post the registration fee row to the client account. SLAs that are
+     * not pending, fail a blocking readiness check, or whose fee cannot be posted are skipped
+     * and reported back; each SLA is approved or skipped on its own.
      *
      * @param array $ids
      * @param int $userId
+     * @param array|null $payment ['method' => ..., 'reference' => ...] when the registration fee was paid at approval; one SLA at a time
      */
-    public function approve(array $ids, int $userId): array {
+    public function approve(array $ids, int $userId, ?array $payment = null): array {
         $ids = $this->cleanIds($ids);
         $slas = ServiceAgreement::whereIn('id', $ids)->get()->keyBy('id');
         $skipped = [];
+        $posted = [];
         $flipped = ['Service Agreements' => [], 'Properties' => [], 'Clients' => [], 'Units' => []];
 
         foreach ($ids as $id) {
@@ -407,10 +429,12 @@ class ServiceAgreementApprovalService
             }
         }
 
-        DB::transaction(function () use ($slas, &$skipped, &$flipped) {
-            foreach ($slas as $sla) {
-                if ((int) $sla->current_status_id !== self::STATUS_PENDING) {
-                    $skipped[$sla->id] = 'Not pending';
+        DB::transaction(function () use ($slas, $userId, $payment, &$skipped, &$posted, &$flipped) {
+            foreach ($slas as $listed) {
+                // Re-read under a lock so two approvers cannot both approve, and post the fee for, the same SLA.
+                $sla = ServiceAgreement::whereKey($listed->id)->lockForUpdate()->first();
+                if (!$sla || (int) $sla->current_status_id !== self::STATUS_PENDING) {
+                    $skipped[$listed->id] = 'Not pending';
                     continue;
                 }
 
@@ -420,36 +444,18 @@ class ServiceAgreementApprovalService
                     continue;
                 }
 
-                $sla->current_status_id = self::STATUS_APPROVED;
-                $sla->save();
-                $flipped['Service Agreements'][] = $sla->id;
-
-                $property = $sla->property_id ? Property::withoutGlobalScopes()->find($sla->property_id) : null;
-                if ($property && (int) $property->current_status_id === self::STATUS_PENDING) {
-                    $property->current_status_id = self::STATUS_APPROVED;
-                    $property->save();
-                    $flipped['Properties'][] = $property->id;
+                try {
+                    $one = DB::transaction(fn() => $this->approveOne($sla, $userId, $payment));
+                } catch (\Throwable $e) {
+                    Log::error('Error approving service agreement ' . $sla->id . ': ' . $e->getMessage());
+                    $skipped[$sla->id] = $e instanceof ClientAccountException ? $e->getMessage() : 'Could not post the registration fee. Nothing was changed.';
+                    continue;
                 }
 
-                $clientId = $sla->client_d ?: ($property->client_id ?? null);
-                $client = $clientId ? Client::withoutGlobalScopes()->find($clientId) : null;
-                if ($client && (int) $client->current_status_id === self::STATUS_PENDING) {
-                    $client->current_status_id = self::STATUS_APPROVED;
-                    $client->save();
-                    $flipped['Clients'][] = $client->id;
+                foreach ($one['flipped'] as $section => $rowIds) {
+                    $flipped[$section] = array_merge($flipped[$section], $rowIds);
                 }
-
-                if ($property) {
-                    $unitIds = Unit::withoutGlobalScopes()
-                        ->where('property_id', $property->id)
-                        ->where('current_status_id', self::STATUS_PENDING)
-                        ->pluck('id')
-                        ->all();
-                    if ($unitIds) {
-                        Unit::withoutGlobalScopes()->whereIn('id', $unitIds)->update(['current_status_id' => self::STATUS_APPROVED]);
-                        $flipped['Units'] = array_merge($flipped['Units'], $unitIds);
-                    }
-                }
+                $posted[$sla->id] = $one['posted'];
             }
         });
 
@@ -458,9 +464,58 @@ class ServiceAgreementApprovalService
         return [
             'done' => $flipped['Service Agreements'],
             'skipped' => $skipped,
+            'posted' => $posted,
             'labels' => $slas->pluck('reference_number', 'id')->all(),
             'flipped' => array_map('count', $flipped),
         ];
+    }
+
+    /**
+     * Approve one SLA with the pending property, client and units behind it, and post its
+     * registration fee row. Runs inside the caller's transaction, so a failed posting undoes
+     * the whole approval of this SLA. Returns the ids flipped per section and the posting result.
+     *
+     * @param ServiceAgreement $sla
+     * @param int $userId
+     * @param array|null $payment
+     */
+    protected function approveOne(ServiceAgreement $sla, int $userId, ?array $payment = null): array {
+        $flipped = ['Service Agreements' => [], 'Properties' => [], 'Clients' => [], 'Units' => []];
+
+        $sla->current_status_id = self::STATUS_APPROVED;
+        $sla->save();
+        $flipped['Service Agreements'][] = $sla->id;
+
+        $property = $sla->property_id ? Property::withoutGlobalScopes()->find($sla->property_id) : null;
+        if ($property && (int) $property->current_status_id === self::STATUS_PENDING) {
+            $property->current_status_id = self::STATUS_APPROVED;
+            $property->save();
+            $flipped['Properties'][] = $property->id;
+        }
+
+        $clientId = $sla->client_d ?: ($property->client_id ?? null);
+        $client = $clientId ? Client::withoutGlobalScopes()->find($clientId) : null;
+        if ($client && (int) $client->current_status_id === self::STATUS_PENDING) {
+            $client->current_status_id = self::STATUS_APPROVED;
+            $client->save();
+            $flipped['Clients'][] = $client->id;
+        }
+
+        if ($property) {
+            $unitIds = Unit::withoutGlobalScopes()
+                ->where('property_id', $property->id)
+                ->where('current_status_id', self::STATUS_PENDING)
+                ->pluck('id')
+                ->all();
+            if ($unitIds) {
+                Unit::withoutGlobalScopes()->whereIn('id', $unitIds)->update(['current_status_id' => self::STATUS_APPROVED]);
+                $flipped['Units'] = $unitIds;
+            }
+        }
+
+        $posted = $client ? $this->accounts->postRegistration($sla, $client, $property, $userId, $payment) : ClientAccountService::RESULT_NONE;
+
+        return ['flipped' => $flipped, 'posted' => $posted];
     }
 
     /**

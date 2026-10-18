@@ -295,8 +295,16 @@ class SLAController extends Controller
             $request->filled('exclude_id') ? (int) $request->input('exclude_id') : null
         );
 
+        // A renewal is any new SLA on a property that already had one that was not rejected.
+        // The create form uses this to leave the registration fee off by default.
+        $isRenewal = ServiceAgreement::where('property_id', (int) $request->input('property_id'))
+            ->where(fn ($q) => $q->whereNull('current_status_id')->orWhere('current_status_id', '<>', 41))
+            ->when($request->filled('exclude_id'), fn ($q) => $q->where('id', '!=', (int) $request->input('exclude_id')))
+            ->exists();
+
         return response()->json([
             'exists' => (bool) $existing,
+            'is_renewal' => $isRenewal,
             'reference_number' => $existing->reference_number ?? null,
             'date_end' => $existing ? $this->formatSlaDateEnd($existing->date_end) : null,
         ]);

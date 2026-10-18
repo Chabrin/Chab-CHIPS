@@ -175,4 +175,27 @@
     .notice-group .who-list { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
     .sla-empty { text-align: center; padding: 56px 0; color: var(--muted); }
     .small-modal .modal-content { border: 0; border-radius: 18px; box-shadow: 0 30px 80px -20px rgba(15,23,42,.45); }
+
+    /* registration fee choice in the approve dialog */
+    .fee-box { text-align: left; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--canvas); }
+    .fee-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .fee-title { font-size: 11.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+    .fee-amt { font-size: 20px; font-weight: 500; letter-spacing: -.01em; color: var(--ink); }
+    .fee-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: #fff; border: 1px solid var(--line); border-radius: 11px; }
+    .fee-opt { appearance: none; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+    .fee-opt:hover { color: var(--ink); }
+    .fee-opt.active { background: var(--brand-soft); color: var(--brand-ink); }
+    .fee-note { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+    .fee-label { font-size: 12.5px; font-weight: 500; color: var(--ink-2); margin: 14px 0 6px; }
+    .fee-methods { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .fee-method { appearance: none; display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+    .fee-method .material-symbols-outlined { font-size: 19px; color: var(--faint); }
+    .fee-method:hover { border-color: #c9d3df; }
+    .fee-method.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-ink); box-shadow: 0 0 0 3px rgba(53,152,219,.12); }
+    .fee-method.active .material-symbols-outlined { color: var(--brand); }
+    .fee-methods.invalid .fee-method:not(.active) { border-color: #f7c6c1; background: #fffafa; }
+    .fee-input { width: 100%; height: 40px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font-size: 13.5px; color: var(--ink); background: #fff; outline: none; }
+    .fee-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(53,152,219,.15); }
+    .fee-input.is-invalid { border-color: var(--bad); }
+    .fee-error { font-size: 12.5px; color: var(--bad); margin-top: 10px; }
 </style>
