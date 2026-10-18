@@ -3,7 +3,7 @@ use Illuminate\Support\Facades\Crypt;
 @endphp
 @extends('layouts.main')
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body staff-onboarding staff-details-page" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
@@ -46,24 +46,49 @@ use Illuminate\Support\Facades\Crypt;
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
-
                         <!-- Summary Header -->
-                        <div class="mb-3">
-                            <h5 class="mb-1 d-inline"><b>{{ $staff->full_names }}</b></h5>
-                            <span class="text-muted ms-2" style="font-size: 0.875rem;">
-                                <strong>Staff #:</strong> {{ $staff->staff_number }} |
-                                <strong>Dept:</strong> <span class="badge bg-primary">
-                                    {{ $staff->department->department_name ?? 'N/A' }}</span>
-                            </span>
-                            <p class="text-muted mb-0" style="font-size: 0.8rem;">
-                                <strong>ID:</strong> {{ $staff->national_id ?? '-' }} |
-                                <strong>Email:</strong> <span style="text-decoration:underline; color: #1976d2;">{{ $staff->email_address ?? '-' }}</span> |
-                                <strong>Phone:</strong> {{ $staff->mobile_number ?? '-' }}
-                            </p>
+                        @php
+                            $photoUrl = ($staff->photo && \Illuminate\Support\Facades\Storage::disk('public')->exists($staff->photo))
+                                ? asset('storage/' . $staff->photo)
+                                : null;
+
+                            // Initials: first letter of the first and last name
+                            $nameParts = preg_split('/\s+/', trim($staff->full_names ?? ''));
+                            $initials = strtoupper(
+                                mb_substr($nameParts[0] ?? '', 0, 1) .
+                                (count($nameParts) > 1 ? mb_substr(end($nameParts), 0, 1) : '')
+                            );
+                        @endphp
+                        <div class="staff-profile-summary mb-4 d-flex align-items-center">
+                            <div class="me-3 flex-shrink-0">
+                                @if($photoUrl)
+                                <img src="{{ $photoUrl }}" alt="" 
+                                     class="rounded-circle border"
+                                     style="width:70px; height:70px; object-fit:cover;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                @endif
+                                <div class="rounded-circle align-items-center justify-content-center fw-bold text-white"
+                                     style="width:70px; height:70px; background:#1976d2; font-size:1.5rem; display:{{ $photoUrl ? 'none' : 'flex' }};">
+                                    {{ $initials ?: '?' }}
+                                </div>
+                            </div>
+                            <div>
+                                <h5 class="mb-1 d-inline"><b>{{ $staff->full_names }}</b></h5>
+                                <span class="text-muted ms-2" style="font-size: 0.875rem;">
+                                    <strong>Staff #:</strong> {{ $staff->staff_number }} |
+                                    <strong>Dept:</strong> <span class="badge bg-primary">
+                                        {{ $staff->department->department_name ?? 'N/A' }}</span>
+                                </span>
+                                <p class="text-muted mb-0" style="font-size: 0.8rem;">
+                                    <strong>ID:</strong> {{ $staff->national_id ?? '-' }} |
+                                    <strong>Email:</strong> <span style="text-decoration:underline; color: #1976d2;">{{ $staff->email_address ?? '-' }}</span> |
+                                    <strong>Phone:</strong> {{ $staff->mobile_number ?? '-' }}
+                                </p>
+                            </div>
                         </div>
 
                         <!-- Tabs Navigation -->
-                        <ul class="nav nav-tabs mb-4" id="staffTabs" role="tablist">
+                        <ul class="nav nav-tabs staff-details-tabs mb-4" id="staffTabs" role="tablist" aria-label="Staff information sections">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="personal-tab" data-bs-toggle="tab" data-bs-target="#personal" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">person</span>
@@ -88,6 +113,13 @@ use Illuminate\Support\Facades\Crypt;
                                     Contacts
                                 </button>
                             </li>
+                              <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">folder_open</span>
+                                    Documents
+                                    <span class="badge bg-secondary ms-1">{{ $staff->employeeDocuments->count() }}</span>
+                                </button>
+                            </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#contract" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">contract</span>
@@ -95,13 +127,13 @@ use Illuminate\Support\Facades\Crypt;
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#discipline" type="button" role="tab">
+                                <button class="nav-link" id="discipline-tab" data-bs-toggle="tab" data-bs-target="#discipline" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">record_voice_over</span>
                                     Disciplinary
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="contract-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab">
+                                <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">punch_clock</span>
                                     Attendance
                                 </button>
@@ -352,7 +384,7 @@ use Illuminate\Support\Facades\Crypt;
                                                     <div class="col-5"><small class="text-muted">PIN Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->pin_number ?? '-' }}</small></div>
 
-                                                    <div class="col-5"><small class="text-muted">NHIF Number:</small></div>
+                                                    <div class="col-5"><small class="text-muted">SHA Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->nhif_number ?? '-' }}</small></div>
 
                                                     <div class="col-5"><small class="text-muted">NSSF Number:</small></div>
@@ -420,10 +452,80 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                 </div>
                             </div>
+                            <!-- Documents Tab -->
+                            <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
+                                <div class="card">
+                                    <div class="card-header bg-light py-2">
+                                        <h6 class="mb-0" style="font-size: 0.9rem;">
+                                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">folder_open</span>
+                                            Staff Documents
+                                        </h6>
+                                    </div>
+                                    <div class="card-body py-2">
+                                        @if($staff->employeeDocuments->count())
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover table-bordered mb-0">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width:50px;">#</th>
+                                                        <th>Document Type</th>
+                                                        <th>File Name</th>
+                                                        <th style="width:90px;">Size</th>
+                                                        <th>Uploaded By</th>
+                                                        <th style="width:130px;">Date Uploaded</th>
+                                                        <th style="width:150px;">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($staff->employeeDocuments as $i => $doc)
+                                                    <tr>
+                                                        <td>{{ $i + 1 }}</td>
+                                                        <td>
+                                                            <strong>{{ $doc->documentType->name ?? $doc->title }}</strong>
+                                                            @if($doc->documentType && $doc->documentType->is_mandatory)
+                                                            <span class="badge bg-danger ms-1">Required</span>
+                                                            @endif
+                                                        </td>
+                                                        <td>{{ $doc->file_name }}</td>
+                                                        <td>
+                                                            {{ $doc->file_size >= 1024
+                                                                ? number_format($doc->file_size / 1024, 1) . ' MB'
+                                                                : $doc->file_size . ' KB' }}
+                                                        </td>
+                                                        <td>{{ $doc->uploader->name ?? '-' }}</td>
+                                                        <td>{{ $doc->created_at ? $doc->created_at->format('d M Y') : '-' }}</td>
+                                                        <td>
+                                                            <a href="{{ route('documents.view', $doc->id) }}" target="_blank"
+                                                               class="btn btn-sm btn-outline-primary">
+                                                                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">visibility</span> View
+                                                            </a>
+                                                            <a href="{{ route('documents.download', $doc->id) }}"
+                                                               class="btn btn-sm btn-outline-success">
+                                                                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">download</span> Download
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        @else
+                                        <div class="text-muted" style="font-size: 0.875rem;">No documents have been uploaded for this staff member.</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Contract Tab -->
                             <div class="tab-pane fade" id="contract" role="tabpanel" aria-labelledby="contract-tab">
                                 @if($staff->contract)
+                                @if($staff->contract->current_status_id != 5)
+                                <div class="alert alert-warning d-flex align-items-center justify-content-between">
+                                    <span>This contract is inactive.</span>
+                                    <a href="{{ route('contract.create', ['staff_id' => $staff->id, 'position_id' => $staff->position_id]) }}"
+                                       class="btn btn-primary btn-sm">Add New Contract</a>
+                                </div>
+                                @endif
                                 <div class="card mb-3">
                                     <div class="card-header bg-light py-2">
                                         <h6 class="mb-0" style="font-size: 0.9rem;">
@@ -461,24 +563,54 @@ use Illuminate\Support\Facades\Crypt;
                                                     <th>Amount</th>
                                                 </tr>
                                             </thead>
-                                            <tbody>
-                                                @foreach($staff->contract->elements as $i => $element)
-                                                <tr>
-                                                    <td>{{ $i + 1 }}</td>
-                                                    <td>{{ $element->payrollElement->element_name ?? '-' }}</td>
-                                                    <td>
-                                                        @if($element->entry_type_id == 2)
-                                                        Allowance
-                                                        @elseif($element->entry_type_id == 1)
-                                                        Deduction
-                                                        @else
-                                                        -
-                                                        @endif
-                                                    </td>
-                                                    <td>{{ number_format($element->amount, 2) }}</td>
+                                           <tbody>
+                                            @php
+                                                $nssfFormulaId = (int) config('nssf.formula_id');
+                                            @endphp
+
+                                            @foreach($staff->contract->elements as $i => $element)
+                                            @php
+                                                $isNssf = $element->payrollElement
+                                                    && (int) $element->payrollElement->formula_id === $nssfFormulaId;
+                                            @endphp
+                                            <tr>
+                                                <td>{{ $i + 1 }}</td>
+                                                <td>{{ $element->payrollElement->element_name ?? '-' }}</td>
+                                                <td>
+                                                    @if($element->entry_type_id == 2)
+                                                    Allowance
+                                                    @elseif($element->entry_type_id == 1)
+                                                    Deduction
+                                                    @else
+                                                    -
+                                                    @endif
+                                                </td>
+                                                <td>{{ number_format($element->amount, 2) }}</td>
+                                            </tr>
+
+                                            @if($isNssf)
+                                                @php $nssf = $nssfBreakdown; @endphp
+                                                @foreach($nssf['tiers'] as $tier)
+                                                <tr class="table-light">
+                                                    <td></td>
+                                                    <td class="ps-4"><small class="text-muted">{{ $tier['name'] }}</small></td>
+                                                    <td></td>
+                                                    <td><small class="text-muted">{{ number_format($tier['amount'], 2) }}</small></td>
                                                 </tr>
                                                 @endforeach
-                                            </tbody>
+                                                @if(abs($nssf['total'] - (float) $element->amount) > 0.01)
+                                                <tr>
+                                                    <td></td>
+                                                    <td colspan="3">
+                                                        <small class="text-warning">
+                                                            The saved NSSF amount differs from the current calculation ({{ number_format($nssf['total'], 2) }}). Re-save the contract to update it.
+                                                        </small>
+                                                    </td>
+                                                </tr>
+                                                @endif
+                                            @endif
+                                            @endforeach
+                                        </tbody>
                                         </table>
                                         @else
                                         <div class="text-muted">No contract elements found.</div>
@@ -486,7 +618,19 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                 </div>
                                 @else
-                                <div class="alert alert-info mt-3">No contract found for this staff member.</div>
+                                {{-- No contract at all: offer a direct link to create one for this staff member --}}
+                                <div class="card">
+                                    <div class="card-body text-center py-5">
+                                        <span class="material-symbols-outlined" style="font-size:48px; color:var(--chabrin-green);">contract</span>
+                                        <h6 class="mt-2 mb-1">No contract found for this staff member</h6>
+                                        <p class="text-muted small mb-3">A contract is required before payroll can be processed for this staff member.</p>
+                                        <a href="{{ route('contract.create', ['staff_id' => $staff->id, 'position_id' => $staff->position_id]) }}"
+                                           class="btn btn-primary btn-sm d-inline-flex align-items-center">
+                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">add_circle</span>
+                                            Add Contract
+                                        </a>
+                                    </div>
+                                </div>
                                 @endif
                             </div>
 
@@ -964,6 +1108,9 @@ use Illuminate\Support\Facades\Crypt;
                             <input type="number" class="form-control" name="available_days" id="sl_available_days" readonly>
                         </div>
                     </div>
+                    <div class="alert alert-info py-2 mb-3 d-none" id="sl_tier_alert">
+                        <span id="sl_tier_text"></span>
+                    </div>
                     <div class="row mb-3">
                         <div class="col-12">
                             <label class="form-label">Leave Duration <span class="text-danger">*</span></label>
@@ -983,7 +1130,8 @@ use Illuminate\Support\Facades\Crypt;
                             </div>
                             <div class="col-lg-6 mb-3">
                                 <label class="form-label">Requested Days <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" name="requested_days" id="sl_requested_days" min="0.5" step="0.5">
+                                <input type="number" class="form-control" name="requested_days" id="sl_requested_days" min="0.5" max="366" step="0.5">
+                                <small class="text-muted">A Saturday counts as half a day.</small>
                             </div>
                         </div>
                     </div>
@@ -1017,28 +1165,211 @@ use Illuminate\Support\Facades\Crypt;
 </div>
 
 <style>
-    .card-header {
-        border-bottom: 1px solid #e0e0e0;
+    /* Chabrin staff profile: scoped styles so other pages remain unchanged. */
+    .staff-details-page {
+        --chabrin-green: #477b63;
+        --chabrin-green-dark: #315b48;
+        --chabrin-green-soft: #edf5f0;
+        --chabrin-border: #e3eae6;
+        --chabrin-muted: #6b7780;
+        padding-bottom: 28px;
+        color: #26332d;
     }
-
-    .card-body .row.g-1>div {
-        padding-top: 0.25rem;
-        padding-bottom: 0.25rem;
-        line-height: 1.5;
+    .staff-details-page > .container-fluid > .row > .col-sm-12 > .card {
+        border: 1px solid var(--chabrin-border);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 28px rgba(28, 56, 41, .055);
     }
-
-    .material-symbols-outlined {
-        font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+    .staff-details-page > .container-fluid > .row > .col-sm-12 > .card > .card-header {
+        padding: 18px 22px;
+        background: #fff;
+        border-bottom: 1px solid var(--chabrin-border);
     }
-
-    .nav-link {
+    .staff-details-page > .container-fluid > .row > .col-sm-12 > .card > .card-header h5 {
+        font-size: 1.12rem;
+        font-weight: 700;
+        color: #263b30;
+        letter-spacing: -.02em;
+    }
+    .staff-details-page > .container-fluid > .row > .col-sm-12 > .card > .card-body {
+        padding: 22px;
+        background: #fbfcfb;
+    }
+    .staff-details-page .btn {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+    }
+    .staff-details-page .btn:hover { transform: translateY(-1px); }
+    .staff-details-page .btn-primary {
+        background: var(--chabrin-green);
+        border-color: var(--chabrin-green);
+    }
+    .staff-details-page .btn-primary:hover,
+    .staff-details-page .btn-primary:focus {
+        background: var(--chabrin-green-dark);
+        border-color: var(--chabrin-green-dark);
+        box-shadow: 0 4px 12px rgba(71, 123, 99, .18);
+    }
+    .staff-profile-summary {
+        gap: 16px;
+        padding: 20px 22px;
+        background: linear-gradient(115deg, #f0f7f2 0%, #ffffff 78%);
+        border: 1px solid #dce9df;
+        border-radius: 14px;
+    }
+    .staff-profile-summary img,
+    .staff-profile-summary > div:first-child > div {
+        width: 82px !important;
+        height: 82px !important;
+        border: 3px solid #fff;
+        box-shadow: 0 2px 9px rgba(30, 70, 46, .12);
+    }
+    .staff-profile-summary > div:last-child { min-width: 0; }
+    .staff-profile-summary h5 {
+        display: block !important;
+        margin-bottom: 7px !important;
+        color: #263b30;
+        font-size: 1.3rem;
+        font-weight: 750;
+        letter-spacing: -.025em;
+    }
+    .staff-profile-summary > div:last-child > span {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin: 0 0 7px !important;
+        color: #53635a !important;
+    }
+    .staff-profile-summary .badge.bg-primary {
+        color: #315b48;
+        background: #dcece1 !important;
+        font-weight: 600;
+    }
+    .staff-profile-summary p {
+        line-height: 1.8;
+        overflow-wrap: anywhere;
+    }
+    .staff-profile-summary p span { color: var(--chabrin-green) !important; }
+    .staff-details-tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 5px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 6px 6px 0;
+        border-bottom: 1px solid var(--chabrin-border);
+        scrollbar-width: thin;
+        scrollbar-color: #c4d8ca transparent;
+    }
+    .staff-details-tabs .nav-item { flex: 0 0 auto; }
+    .staff-details-tabs .nav-link {
         display: flex;
         align-items: center;
-        gap: 0.25rem;
+        gap: 6px;
+        white-space: nowrap;
+        padding: 11px 13px;
+        color: #68766e;
+        border: 1px solid transparent;
+        border-radius: 9px 9px 0 0;
+        font-size: .84rem;
+        font-weight: 600;
     }
-
-    .card {
-        border: 1px solid #e0e0e0;
+    .staff-details-tabs .nav-link:hover {
+        color: var(--chabrin-green-dark);
+        background: #f1f6f2;
+        border-color: #e7eee9;
+    }
+    .staff-details-tabs .nav-link.active {
+        color: var(--chabrin-green-dark);
+        background: #fff;
+        border-color: var(--chabrin-border) var(--chabrin-border) #fff;
+        box-shadow: inset 0 3px 0 var(--chabrin-green);
+    }
+    .staff-details-tabs .material-symbols-outlined { font-size: 19px !important; }
+    .staff-details-tabs .badge { background: var(--chabrin-green) !important; font-weight: 600; }
+    .staff-details-page .tab-content { padding-top: 2px; }
+    .staff-details-page .tab-content .card {
+        height: 100%;
+        border: 1px solid var(--chabrin-border);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 3px 12px rgba(30, 60, 43, .035);
+        background: #fff;
+    }
+    .staff-details-page .tab-content .card-header {
+        padding: 13px 15px !important;
+        background: #f5f8f6 !important;
+        border-bottom: 1px solid var(--chabrin-border);
+    }
+    .staff-details-page .tab-content .card-header h6 {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #334c3d;
+        font-size: .9rem !important;
+        font-weight: 700;
+    }
+    .staff-details-page .tab-content .card-header .material-symbols-outlined {
+        color: var(--chabrin-green);
+        font-size: 19px !important;
+    }
+    .staff-details-page .tab-content .card-body { padding: 15px !important; }
+    .staff-details-page .tab-content .row.g-1 > div {
+        padding-top: 7px;
+        padding-bottom: 7px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+    .staff-details-page .tab-content .row.g-1 > div:nth-child(odd) {
+        color: var(--chabrin-muted);
+    }
+    .staff-details-page .tab-content .row.g-1 > div:nth-child(even) {
+        color: #2d3c33;
+    }
+    .staff-details-page .tab-content .row.g-1 > div:nth-child(n+3) {
+        border-top: 1px solid #f0f3f1;
+    }
+    .staff-details-page .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+        vertical-align: middle;
+    }
+    .staff-details-page .alert { border-radius: 10px; }
+    .staff-details-page .table { --bs-table-bg: transparent; }
+    .staff-details-page .table thead th {
+        color: #53665a;
+        background: #f4f8f5;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .035em;
+        border-bottom-color: var(--chabrin-border);
+    }
+    .staff-details-page .table td { vertical-align: middle; }
+    @media (max-width: 767.98px) {
+        .staff-details-page > .container-fluid > .row > .col-sm-12 > .card > .card-header {
+            align-items: flex-start !important;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .staff-details-page > .container-fluid > .row > .col-sm-12 > .card > .card-header .ms-auto {
+            margin-left: 0 !important;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+        .staff-details-page > .container-fluid > .row > .col-sm-12 > .card > .card-body { padding: 14px; }
+        .staff-profile-summary { align-items: flex-start !important; padding: 15px; gap: 12px; }
+        .staff-profile-summary img,
+        .staff-profile-summary > div:first-child > div {
+            width: 62px !important;
+            height: 62px !important;
+        }
+        .staff-profile-summary h5 { font-size: 1.05rem; }
+        .staff-profile-summary > div:last-child > span { margin-left: 0 !important; }
+        .staff-profile-summary p { font-size: .78rem !important; }
+        .staff-details-tabs .nav-link { padding: 9px 11px; }
     }
 </style>
 
@@ -1335,10 +1666,48 @@ $(document).ready(function() {
         }
     });
 
+    // Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) for the days requested
+    var tierRequest = null;
+    function showTierBreakdown() {
+        var leaveTypeId = $('#sl_leave_type_id').val();
+        $('#sl_tier_alert').addClass('d-none');
+        if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
+
+        // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
+        if (tierRequest) { tierRequest.abort(); }
+        tierRequest = $.ajax({
+            url: "{{ url('/ajax/leave-management/evaluate-application') }}",
+            method: 'POST',
+            data: {
+                staff_id: {{ $staff->id }},
+                leave_type_id: leaveTypeId,
+                start_date: $('#sl_start_date').val() || new Date().toISOString().split('T')[0],
+                requested_days: parseFloat($('#sl_requested_days').val()) || 1,
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(res) {
+                if (!res.success) { return; }
+                var requested = parseFloat($('#sl_requested_days').val()) || 1;
+                var changed = Math.abs(res.charged_days - requested) > 0.001;
+                if (res.sick_breakdown || changed) {
+                    var b = res.sick_breakdown;
+                    var tiers = b ? 'Pay breakdown: ' + b.summary_text + ' (days already used this year: ' + b.used_this_year + '). ' : '';
+                    $('#sl_tier_text').text(tiers + 'Leave runs to ' + res.end_date + ', ' + res.charged_days + ' day(s) charged' + (changed ? ' (a Saturday counts as half a day)' : '') + '.');
+                    $('#sl_tier_alert').removeClass('d-none');
+                }
+            },
+            error: function(xhr, status) {
+                if (status === 'abort') { return; }
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
+            }
+        });
+    }
+    $('#sl_leave_type_id, #sl_start_date, #sl_requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
+
     $('#sl_leave_type_id').on('change', function() {
         var leaveTypeId = $(this).val();
         if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
-        $.get('/ajax/leave-management/calendar-plan/available-leave-days/{{ $staff->id }}/' + leaveTypeId, function(res) {
+        $.get('/ajax/hr/leave/available-days/{{ $staff->id }}/' + leaveTypeId, function(res) {
             $('#sl_available_days').val(res.available_days ?? 0);
         });
     });

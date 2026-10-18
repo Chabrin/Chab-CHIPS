@@ -309,7 +309,7 @@ $(document).ready(function() {
                     let dayTypeName = dayTypeNames[day.day_type_id] || 'Unknown';
                     
                     let row = `
-                        <tr>
+                        <tr data-fraction="${day.day_fraction ?? 1}">
                             <td class="text-center">${checkbox}</td>
                             <td>${new Date(day.leave_date).toLocaleDateString()}</td>
                             <td>${dayTypeName}</td>
@@ -342,8 +342,11 @@ $(document).ready(function() {
     });
 
     function updateSummary() {
-        let totalDays = $('#days-taken-list tr').length;
-        let selectedDays = $('.day-checkbox:checked').length;
+        // Days count by the share of a day they charge (a Saturday is half a day)
+        let totalDays = 0;
+        $('#days-taken-list tr[data-fraction]').each(function() { totalDays += parseFloat($(this).data('fraction')) || 1; });
+        let selectedDays = 0;
+        $('.day-checkbox:checked').each(function() { selectedDays += parseFloat($(this).closest('tr').data('fraction')) || 1; });
         let netDays = totalDays - selectedDays;
         
         $('#original-days-count').text(isPartialDay ? `${totalHours} hrs` : `${totalDays} days`);

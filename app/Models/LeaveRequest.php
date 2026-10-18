@@ -40,6 +40,8 @@ class LeaveRequest extends Model
         'date_time' => 'datetime',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
+        'days' => 'float',
+        'requested_days' => 'float',
     ];
 
     public function employee()

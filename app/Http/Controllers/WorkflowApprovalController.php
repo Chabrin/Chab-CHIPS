@@ -10,6 +10,11 @@ use App\Jobs\SendApprovalNotification;
 
 class WorkflowApprovalController extends Controller
 {
+    public function __construct(private \App\Services\Leave\LeaveCalendarService $calendar,
+        private \App\Services\Leave\LeaveTierService $tiers)
+    {
+    }
+
     private $workflowStatuses = [
         1 => 'Pending',
         2 => 'Paid',
@@ -475,10 +480,7 @@ class WorkflowApprovalController extends Controller
     {
         try {
             $item = \App\Models\LeaveRequest::findOrFail($id);
-            
-            // Get all active public holidays once
-            $publicHolidays = \App\Models\PublicHoliday::where('current_status_id', 5)->get();
-            
+
             if ($item->current_status_id == 1) {
                 // Stage 1: Generate suggested days based on start and end date
                 
@@ -506,10 +508,8 @@ class WorkflowApprovalController extends Controller
                     if ($dayOfWeek == 7) $dayTypeId = 3; // Sunday
                     
                     // Check if it's a public holiday
-                    $currentMonth = (int) date('m', $startTime);
-                    $currentDay = (int) date('d', $startTime);
-                    $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                    
+                    $isPublicHoliday = $this->checkIfPublicHoliday(date('Y-m-d', $startTime));
+
                     $days = [[
                         'date' => date('Y-m-d', $startTime),
                         'type' => $dayTypeId,
@@ -527,11 +527,8 @@ class WorkflowApprovalController extends Controller
                     
                     // Mark public holidays in the days array
                     foreach ($days as &$day) {
-                        $dayTime = strtotime($day['date']);
-                        $currentMonth = (int) date('m', $dayTime);
-                        $currentDay = (int) date('d', $dayTime);
-                        $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                        
+                        $isPublicHoliday = $this->checkIfPublicHoliday($day['date']);
+
                         $day['is_public_holiday'] = $isPublicHoliday ? true : false;
                         $day['holiday_title'] = $isPublicHoliday ? $isPublicHoliday->title : null;
                     }
@@ -568,16 +565,14 @@ class WorkflowApprovalController extends Controller
                 $days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                     ->orderBy('leave_date')
                     ->get()
-                    ->map(function($day) use ($publicHolidays) {
-                        $dayTime = strtotime($day->leave_date);
-                        $currentMonth = (int) date('m', $dayTime);
-                        $currentDay = (int) date('d', $dayTime);
-                        $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                        
+                    ->map(function($day) {
+                        $isPublicHoliday = $this->checkIfPublicHoliday(date('Y-m-d', strtotime($day->leave_date)));
+
                         return [
                             'date' => date('Y-m-d', strtotime($day->leave_date)),
                             'type' => $day->day_type_id,
                             'day_name' => date('l', strtotime($day->leave_date)),
+                            'day_fraction' => (float) ($day->day_fraction ?? 1),
                             'is_public_holiday' => $isPublicHoliday ? true : false,
                             'holiday_title' => $isPublicHoliday ? $isPublicHoliday->title : null,
                         ];
@@ -598,42 +593,11 @@ class WorkflowApprovalController extends Controller
         }
     }
     
-    // Helper method to check if a date is a public holiday (year-agnostic)
-    private function checkIfPublicHoliday($month, $day, $publicHolidays)
-    {
-        return $publicHolidays->first(function($holiday) use ($month, $day) {
-            $holidayStartMonth = (int) date('m', strtotime($holiday->start_date));
-            $holidayStartDay = (int) date('d', strtotime($holiday->start_date));
-            $holidayEndMonth = (int) date('m', strtotime($holiday->end_date));
-            $holidayEndDay = (int) date('d', strtotime($holiday->end_date));
-            
-            // Same month holiday (e.g., Dec 25 to Dec 25, or Dec 25 to Dec 26)
-            if ($holidayStartMonth == $holidayEndMonth) {
-                return $month == $holidayStartMonth && 
-                       $day >= $holidayStartDay && 
-                       $day <= $holidayEndDay;
-            }
-            
-            // Multi-month holiday (e.g., Dec 31 to Jan 2)
-            // Check if date falls in start month from start day onwards
-            if ($month == $holidayStartMonth && $day >= $holidayStartDay) {
-                return true;
-            }
-            
-            // Check if date falls in end month up to end day
-            if ($month == $holidayEndMonth && $day <= $holidayEndDay) {
-                return true;
-            }
-            
-            // Check if month is between start and end months
-            if ($holidayStartMonth < $holidayEndMonth) {
-                // Normal case: e.g., Nov to Dec
-                return $month > $holidayStartMonth && $month < $holidayEndMonth;
-            } else {
-                // Year-spanning case: e.g., Dec to Jan
-                return $month > $holidayStartMonth || $month < $holidayEndMonth;
-            }
-        });
+    /**
+     * Find the public holiday (if any) falling on the given date, honouring each holiday's recurrent flag.
+     */
+    private function checkIfPublicHoliday($date) {
+        return $this->calendar->holidayOn(\Carbon\Carbon::parse($date));
     }
 
     /**
@@ -791,6 +755,7 @@ class WorkflowApprovalController extends Controller
                             'current_status_id' => 1, // Pending confirmation
                             'leave_date' => $item->start_date, // Use full datetime from original request
                             'day_type_id' => $day['type'],
+                            'day_fraction' => round(abs($endTime - $startTime) / 3600 / 8, 2),
                         ]);
                     } else {
                         // For full days or multi-day, store all unique days (date only at midnight)
@@ -808,6 +773,8 @@ class WorkflowApprovalController extends Controller
                                 'current_status_id' => 1, // Pending confirmation
                                 'leave_date' => $day['date'] . ' 00:00:00',
                                 'day_type_id' => $day['type'],
+                                // A Saturday is half a day; any other day an approver picked is charged as normal
+                                'day_fraction' => $this->calendar->chargeFor(\Carbon\Carbon::parse($day['date']), (int) $item->leave_type_id),
                             ]);
                         }
                     }
@@ -867,15 +834,16 @@ class WorkflowApprovalController extends Controller
                         $used_days = round($hoursRequested / 8, 2); // Convert hours to days
                     } else {
                         // For full days, count the actual days
-                        $used_days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
+                        $used_days = (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                             ->where('current_status_id', 5)
-                            ->count();
+                            ->sum('day_fraction');
                     }
                     
                     $item->used_days = $used_days;
                     $item->current_status_id = 5; // Approved
                     $item->save();
-                    
+                    $this->tiers->retagForRequest($item);
+
                     // Update the leave calendar plan balance
                     $start_date_only = date('Y-m-d', strtotime($item->start_date)) . ' 00:00:00';
                     $plan = \App\Models\LeaveCalendarPlan::where('employee_id', $item->staff_id)
@@ -995,6 +963,7 @@ class WorkflowApprovalController extends Controller
                     // Mark days as refunded
                     \App\Models\LeaveRequestDaysTaken::whereIn('id', $adjustment->day_ids)
                         ->update(['current_status_id' => 41]); // Refunded
+                        $this->tiers->retagForRequest($leaveRequest);
                     
                     // Update leave request used_days
                     $leaveRequest = $adjustment->leaveRequest;
@@ -1197,13 +1166,14 @@ class WorkflowApprovalController extends Controller
                         \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                             ->update(['current_status_id' => 5]);
                         
-                        $used_days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
+                        $used_days = (float) \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
                             ->where('current_status_id', 5)
-                            ->count();
+                            ->sum('day_fraction');
                         
                         $item->used_days = $used_days;
                         $item->current_status_id = 5;
                         $item->save();
+                        $this->tiers->retagForRequest($item);
                         
                         // Update leave calendar plan
                         $plan = \App\Models\LeaveCalendarPlan::where('employee_id', $item->staff_id)

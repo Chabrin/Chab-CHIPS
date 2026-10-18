@@ -683,7 +683,7 @@ $(document).ready(function() {
                             </tbody>
                         </table>
                         <div class="text-end">
-                            <strong>Total Days: ${res.days.length}</strong>
+                            <strong>Total Days: ${res.days.reduce((sum, d) => sum + (parseFloat(d.day_fraction) || 1), 0)}</strong>
                         </div>
                     </div>`;
                 

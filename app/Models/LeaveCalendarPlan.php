@@ -51,4 +51,9 @@ class LeaveCalendarPlan extends Model
         return $this->belongsTo(LeaveType::class, 'leave_type_id');
     }
 
+    public function slots()
+    {
+        return $this->hasMany(LeaveCalendarSlot::class, 'leave_calendar_plan_id');
+    }
+
 }

@@ -132,7 +132,7 @@ class HrSettingsController extends Controller
             return response()->json(['success' => false, 'error' => 'Failed to delete department'], 500);
         }
     }
-
+// leave type edits
     // Leave Types CRUD
     public function leaveTypeIndex()
     {
@@ -142,11 +142,27 @@ class HrSettingsController extends Controller
     public function leaveTypeList()
     {
         try {
-            $leaveTypes = HrLeaveType::all()->map(function ($leaveType) {
-                $leaveType->can_update = Auth::user()->isAbleTo('update_leave_types');
-                $leaveType->can_delete = Auth::user()->isAbleTo('delete_leave_types');
-                return $leaveType;
+            $user = Auth::user();
+            
+            // Check permissions safely
+            $canUpdate = $user ? $user->isAbleTo('update_leave_types') : true;
+            $canDelete = $user ? $user->isAbleTo('delete_leave_types') : true;
+
+            $leaveTypes = HrLeaveType::all()->map(function ($leaveType) use ($canUpdate, $canDelete) {
+                return [
+                    'id'                     => $leaveType->id,
+                    'type_name'              => $leaveType->type_name,
+                    'current_status_id'      => $leaveType->current_status_id,
+                    'entitled_days'          => $leaveType->entitled_days,
+                    'salary_rate'            => $leaveType->salary_rate,
+                    'leave_type_id'          => $leaveType->leave_type_id,
+                    'counts_weekends'        => (bool) $leaveType->counts_weekends,
+                    'counts_public_holidays' => (bool) $leaveType->counts_public_holidays,
+                    'can_update'             => $canUpdate,
+                    'can_delete'             => $canDelete,
+                ];
             });
+
             return response()->json(['leave_types' => $leaveTypes]);
         } catch (\Exception $e) {
             try {
@@ -154,18 +170,37 @@ class HrSettingsController extends Controller
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
+            Log::error('Error loading leave types: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load leave types'], 500);
         }
     }
 
-    public function leaveTypeStore(Request $request)
+    public function leaveTypeDelete($id)
+    {
+        try {
+            $leaveType = HrLeaveType::findOrFail($id);
+            $leaveType->delete();
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to delete leave type'], 500);
+        }
+    }
+
+   public function leaveTypeStore(Request $request)
     {
         try {
             $validated = $request->validate([
-                'type_name' => 'required|string|max:255',
-                'entitled_days' => 'required|integer|min:0',
-                'salary_rate' => 'required|numeric|min:0|max:100',
-                'leave_type_id' => 'nullable|integer',
+                'type_name'               => 'required|string|max:255',
+                'entitled_days'           => 'required|integer|min:0',
+                'salary_rate'             => 'required|numeric|min:0|max:100',
+                'leave_type_id'           => 'nullable|integer',
+                'counts_weekends'         => 'nullable|boolean',
+                'counts_public_holidays'  => 'nullable|boolean',
             ]);
 
             $exists = HrLeaveType::where('type_name', $validated['type_name'])->exists();
@@ -180,6 +215,9 @@ class HrSettingsController extends Controller
             $leaveType->salary_rate = $validated['salary_rate'];
             $leaveType->leave_type_id = null;
             $leaveType->date_time = now();
+            // Save the counting rules flags
+            $leaveType->counts_weekends = $request->boolean('counts_weekends');
+            $leaveType->counts_public_holidays = $request->boolean('counts_public_holidays');
             $leaveType->save();
 
             return response()->json(['success' => true, 'leave_type' => $leaveType]);
@@ -200,11 +238,13 @@ class HrSettingsController extends Controller
     {
         try {
             $validated = $request->validate([
-                'type_name' => 'required|string|max:255',
-                'current_status_id' => 'nullable|integer',
-                'entitled_days' => 'required|integer|min:0',
-                'salary_rate' => 'required|numeric|min:0|max:100',
-                'leave_type_id' => 'nullable|integer',
+                'type_name'               => 'required|string|max:255',
+                'current_status_id'       => 'nullable|integer',
+                'entitled_days'           => 'required|integer|min:0',
+                'salary_rate'             => 'required|numeric|min:0|max:100',
+                'leave_type_id'           => 'nullable|integer',
+                'counts_weekends'         => 'nullable|boolean',
+                'counts_public_holidays'  => 'nullable|boolean',
             ]);
 
             $leaveType = HrLeaveType::findOrFail($id);
@@ -222,6 +262,9 @@ class HrSettingsController extends Controller
             $leaveType->salary_rate = $validated['salary_rate'];
             $leaveType->leave_type_id = null;
             $leaveType->date_time = now();
+            // Update the counting rules flags
+            $leaveType->counts_weekends = $request->boolean('counts_weekends');
+            $leaveType->counts_public_holidays = $request->boolean('counts_public_holidays');
             $leaveType->save();
 
             return response()->json(['success' => true, 'leave_type' => $leaveType]);
@@ -236,23 +279,6 @@ class HrSettingsController extends Controller
             return response()->json(['success' => false, 'error' => 'Failed to update leave type'], 500);
         }
     }
-
-    public function leaveTypeDelete($id)
-    {
-        try {
-            $leaveType = HrLeaveType::findOrFail($id);
-            $leaveType->delete();
-            return response()->json(['success' => true]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to delete leave type'], 500);
-        }
-    }
-
     // Staff Positions CRUD
     public function positionsIndex()
     {
@@ -738,7 +764,7 @@ class HrSettingsController extends Controller
         }
     }
 
-    public function publicHolidaysUpdate(Request $request, $id)
+       public function publicHolidaysUpdate(Request $request, $id)
     {
         try {
             $validated = $request->validate([
@@ -746,13 +772,13 @@ class HrSettingsController extends Controller
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'pay_rate' => 'required|numeric|min:0|max:100',
-                'recurrent' => 'required|in:yes,no',
+                'recurrent' => 'required|in:1,2',
             ]);
 
             $holiday = PublicHoliday::findOrFail($id);
             $holiday->title = $validated['title'];
-            $holiday->start_date = $validated['start_date'];
-            $holiday->end_date = $validated['end_date'];
+            $holiday->start_date = $validated['start_date'] . ' 00:00:00';
+            $holiday->end_date = $validated['end_date'] . ' 00:00:00';
             $holiday->pay_rate = $validated['pay_rate'];
             $holiday->recurrent = $validated['recurrent'];
             $holiday->save();

@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Crypt;
         <div class="row">
             <div class="col-sm-12">
                 <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Leave Applications</h5>
+                   <div class="card-header card-no-border d-flex align-items-center">
+                        <h5 class="mb-0">Leave Application Details</h5>
                         <div class="ms-auto d-flex gap-2">
                             <a href="{{ route('leave-management.leave-applications') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
@@ -21,11 +21,25 @@ use Illuminate\Support\Facades\Crypt;
                         @if($leave_applications && $leave_applications->count())
                             @foreach($leave_applications as $application)
                             <div class="card mb-3">
-                                <div class="card-header bg-light py-2">
+                                <div class="card-header bg-light py-2 d-flex align-items-center">
                                     <h6 class="mb-0" style="font-size: 0.9rem;">
                                         <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">event_available</span>
                                         Leave Application - {{ $application->leaveType->type_name ?? '-' }}
                                     </h6>
+                                    @if(in_array($application->current_status_id, [1, 24]))
+                                        @permission('update_leave_applications')
+                                        <div class="ms-auto d-flex gap-2">
+                                            <button type="button" class="btn btn-success btn-sm d-flex align-items-center btn-approve-leave" data-id="{{ $application->id }}">
+                                                <span class="material-symbols-outlined">check_circle</span>
+                                                <span class="ms-1">Approve Leave</span>
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm d-flex align-items-center btn-reject-leave" data-id="{{ $application->id }}">
+                                                <span class="material-symbols-outlined">cancel</span>
+                                                <span class="ms-1">Reject</span>
+                                            </button>
+                                        </div>
+                                        @endpermission
+                                    @endif
                                 </div>
                                 <div class="card-body py-2">
                                     <div class="row g-2">
@@ -108,6 +122,40 @@ use Illuminate\Support\Facades\Crypt;
         </div>
     </div>
 </div>
+
+<script>
+$(document).ready(function() {$('.btn-approve-leave, .btn-reject-leave').on('click', function() {
+        let isApprove = $(this).hasClass('btn-approve-leave');
+        let action = isApprove ? 'approve' : 'reject';
+        let id = $(this).data('id');
+
+        if (!confirm(`Are you sure you want to ${action} this leave application?`)) {
+            return;
+        }
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/leave-applications/status-update') }}",
+            type: 'POST',
+            data: {
+                id: id,
+                status: isApprove ? 5 : 41, // 5 = Approved, 41 = Rejected
+                _token: '{{ csrf_token() }}'
+            },
+            success: function(res) {
+                if (res.success) {
+                    toastr.success(`Leave application ${action}d successfully.`);
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    toastr.error(res.error || 'Failed to update status');
+                }
+            },
+            error: function() {
+                toastr.error('Server error updating status');
+            }
+        });
+    });
+});
+</script>
 
 <style>
     .card-header {

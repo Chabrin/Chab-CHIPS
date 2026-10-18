@@ -99,6 +99,31 @@
                                 <!-- Populate dynamically -->
                             </select>
                         </div>
+                        <!-- Pre-scheduled Annual Leave Block Picker -->
+                    <div class="row mb-3 d-none" id="annualSlotPickerContainer">
+                        <div class="col-12">
+                            <div class="p-3 bg-light border rounded">
+                                <label for="scheduled_slot_select" class="form-label fw-bold text-primary mb-1">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">event_available</span>
+                                    Select Pre-Scheduled 21-Day Leave Block <span style="color:red">*</span>
+                                </label>
+                                <select class="form-select" id="scheduled_slot_select">
+                                    <option value="">-- Choose from your scheduled plan --</option>
+                                </select>
+                                <small class="text-muted">Dates and working days will automatically populate from your approved annual calendar plan.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sick Leave Pay Tier Notice -->
+                    <div class="row mb-3 d-none" id="sickLeaveTierAlert">
+                        <div class="col-12">
+                            <div class="alert alert-info py-2 mb-0" id="sickTierContent">
+                                <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">info</span>
+                                <span id="sickTierText">Calculating pay tier breakdown...</span>
+                            </div>
+                        </div>
+                    </div>
                     </div>
 
                     <!-- Leave Duration Type -->
@@ -137,6 +162,7 @@
                             <div class="col-lg-6 mb-3">
                                 <label for="requested_days" class="form-label">Requested Days <span style="color:red">*</span></label>
                                 <input type="number" class="form-control" name="requested_days" id="requested_days" min="0.5" step="0.5">
+                                <small class="text-muted">A Saturday counts as half a day.</small>
                             </div>
                         </div>
                     </div>
@@ -390,6 +416,49 @@
                 $('#start_date_combined, #start_time_combined, #end_date_combined, #end_time_combined').prop('required', true);
             }
         });
+        // Handle Quick Approve / Reject from the Applications Table
+   $(document).on('click', '.btn-quick-approve, .btn-quick-reject', function() {
+        let $btn =$(this);
+        let isApprove = $btn.hasClass('btn-quick-approve');
+        let action = isApprove ? 'approve' : 'reject';
+        let statusId = isApprove ? 5 : 41; // 5 = Approved, 41 = Rejected
+        let applicationId = $btn.data('id');
+
+        if (!confirm(`Are you sure you want to ${action} this leave application?`)) {
+            return;
+        }
+
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/leave-applications/status-update') }}",
+            type: 'POST',
+            data: {
+                id: applicationId,
+                status: statusId,
+                _token: '{{ csrf_token() }}'
+            },
+            success: function(res) {
+                if (res.success) {
+                    toastr.success(`Application ${action}d successfully`);
+                    table.ajax.reload(null, false);
+                } else {
+                    toastr.error(res.error || `Failed to ${action} leave application`);
+                    $btn.prop('disabled', false);
+                }
+            },
+            error: function(xhr) {
+                $btn.prop('disabled', false);
+                let msg = 'Error updating status';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    msg = xhr.responseJSON.error;
+                } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                }
+                toastr.error(msg);
+            }
+        });
+    });
 
         // Calculate hours for hours-only section
         $('#start_time_only, #end_time_only').on('change', function() {
@@ -655,6 +724,18 @@
                                 <a href="{{ url('/hr/leave-management/leave-applications/') }}/${row.encrypted_leave_application_id}" class="btn btn-xs btn-light" style="padding:1px 2px;">
                                     <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
                                 </a>`;
+                        }
+
+                        // Show quick Approve & Reject buttons for Pending / Partially Approved applications
+                        if (row.can_update && (row.current_status_id == 1 || row.current_status_id == 24)) {
+                            buttons += `
+                                <button class="btn btn-xs btn-outline-success btn-quick-approve" data-id="${row.id}" title="Approve Leave" style="padding:1px 4px;">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">check_circle</span>
+                                </button>
+                                <button class="btn btn-xs btn-outline-danger btn-quick-reject" data-id="${row.id}" title="Reject Leave" style="padding:1px 4px;">
+                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">cancel</span>
+                                </button>
+                            `;
                         }
                         if (row.can_update) {
                             buttons += `
@@ -922,8 +1003,8 @@
                             toastr.warning('Annual leave calendar must be created and approved for this employee');
 
                             // Clear staff and leave type selections
-                            $('#staff_id').val('').trigger('change');
-                            $('#leave_type_id').val('').trigger('change');
+                            // $('#staff_id').val('').trigger('change');
+                            // $('#leave_type_id').val('').trigger('change');
 
                             // Clear min/max constraints
                             $('#start_date, #leave_date_hours, #start_date_combined, #end_date_combined').removeAttr('min').removeAttr('max');
@@ -953,6 +1034,106 @@
         }
 
         $('#staff_id, #leave_type_id').on('change', fetchAvailableDays);
+        // Check for Annual Leave Block selection or Sick Leave Tier evaluation
+        function handleLeaveTypeSpecifics() {
+            let staffId = $('#staff_id').val();
+            let leaveTypeId = $('#leave_type_id').val();
+            let selectedText = $('#leave_type_id option:selected').text().toLowerCase();
+
+            let isAnnual = selectedText.includes('annual') || selectedText.includes('normal');
+
+            // Reset containers
+            $('#annualSlotPickerContainer').addClass('d-none');
+            $('#sickLeaveTierAlert').addClass('d-none');
+
+            if (!staffId || !leaveTypeId) return;
+
+            // 1. Annual Leave Flow: Fetch scheduled blocks
+            if (isAnnual) {
+                $('#annualSlotPickerContainer').removeClass('d-none');
+                $('#scheduled_slot_select').html('<option value="">Loading your scheduled blocks...</option>');
+
+                $.ajax({
+                    url: "{{ url('/ajax/leave-management/staff-annual-slots') }}",
+                    type: 'GET',
+                    data: { staff_id: staffId, year: new Date().getFullYear() },
+                    success: function(res) {
+                        if (res.success && res.slots && res.slots.length > 0) {
+                            let options = '<option value="">-- Choose from your scheduled plan --</option>';
+                            res.slots.forEach(slot => {
+                                options += `<option value="${slot.id}" data-start="${slot.start_date}" data-end="${slot.end_date}" data-days="${slot.days}">${slot.display}</option>`;
+                            });
+                            $('#scheduled_slot_select').html(options);
+                        } else {
+                            $('#scheduled_slot_select').html('<option value="">No scheduled blocks found for this year</option>');
+                            toastr.warning(res.message || 'You must first schedule your 21 days in the Leave Calendar Plan.');
+                        }
+                    }
+                });
+            }
+
+            // 2. Tiered leave (e.g. Sick Leave): show how the requested days are paid
+            showTierBreakdown();
+        }
+
+        // Pay tier preview for the requested days; the server returns nothing for leave types without tiers
+        let tierRequest = null;
+        function showTierBreakdown() {
+            let staffId = $('#staff_id').val();
+            let leaveTypeId = $('#leave_type_id').val();
+
+            $('#sickLeaveTierAlert').addClass('d-none');
+            if (!staffId || !leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') return;
+
+            // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
+            if (tierRequest) tierRequest.abort();
+            tierRequest = $.ajax({
+                url: "{{ url('/ajax/leave-management/evaluate-application') }}",
+                type: 'POST',
+                data: {
+                    staff_id: staffId,
+                    leave_type_id: leaveTypeId,
+                    start_date: $('#start_date').val() || new Date().toISOString().split('T')[0],
+                    requested_days: parseFloat($('#requested_days').val()) || 1,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(res) {
+                    if (!res.success) return;
+                    let requested = parseFloat($('#requested_days').val()) || 1;
+                    let changed = Math.abs(res.charged_days - requested) > 0.001;
+                    if (res.sick_breakdown || changed) {
+                        let b = res.sick_breakdown;
+                        let tiers = b ? `Pay Breakdown: ${b.summary_text} (days already used this year: ${b.used_this_year}). ` : '';
+                        $('#sickTierText').text(`${tiers}Leave runs to ${res.end_date}, ${res.charged_days} day(s) charged${changed ? ' (a Saturday counts as half a day)' : ''}.`);
+                        $('#sickLeaveTierAlert').removeClass('d-none');
+                    }
+                },
+                error: function(xhr, status) {
+                    if (status === 'abort') return;
+                    toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Could not load the pay breakdown');
+                }
+            });
+        }
+
+        $('#staff_id, #leave_type_id').on('change', handleLeaveTypeSpecifics);
+        $('#start_date, #requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
+
+        // When a scheduled block is selected from the dropdown
+        $('#scheduled_slot_select').on('change', function() {
+            let opt = $(this).find('option:selected');
+            let start = opt.data('start');
+            let end = opt.data('end');
+            let days = opt.data('days');
+
+            if (start && end) {
+                // Ensure full day duration is checked
+                $('input[name="leave_duration_type"][value="full_day"]').prop('checked', true).trigger('change');
+                
+                $('#start_date').val(start);
+                $('#requested_days').val(days);
+                toastr.info(`Selected block: ${days} working day(s)`);
+            }
+        });
 
         $('#leaveApplicationForm').on('submit', function(e) {
             e.preventDefault();
