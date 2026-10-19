@@ -67,7 +67,7 @@ class GlTransactionsExport implements FromCollection, WithHeadings, WithStyles, 
         $sheet->getColumnDimension('A')->setWidth(12);
         $sheet->getColumnDimension('B')->setWidth(13);
         $sheet->getColumnDimension('C')->setWidth(18);
-        $sheet->getColumnDimension('D')->setWidth(14);
+        $sheet->getColumnDimension('D')->setWidth(32);
         $sheet->getColumnDimension('E')->setWidth(16);
         $sheet->getColumnDimension('F')->setWidth(16);
         $sheet->getColumnDimension('G')->setWidth(40);
