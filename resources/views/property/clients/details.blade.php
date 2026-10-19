@@ -34,6 +34,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
                             </a>
+                            @if($hasLedger)
+                            <a href="{{ route('landlord.account.statement', ['landlord' => Crypt::encrypt($client->id)]) }}" class="btn btn-outline-primary btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">description</span>
+                                <span class="ms-1">Statement</span>
+                            </a>
+                            @endif
                             <a href="/property/clients/{{ Crypt::encrypt($client->id) }}/edit" class="btn btn-primary btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">edit_document</span>
                                 <span class="ms-1">Edit Client</span>

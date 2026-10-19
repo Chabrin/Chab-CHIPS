@@ -410,7 +410,9 @@ class ClientsController extends Controller
             $client = Client::with(['otherContacts', 'nextOfKins', 'partners', 'bankAccounts.bank'])->findOrFail($id);
             $unitTopologies = \App\Models\UnitTopology::orderBy('topology_name')->get();
             $unitCategories = \App\Models\UnitCategory::orderBy('category_name')->get();
-            return view('property.clients.details', compact('client', 'unitTopologies', 'unitCategories'));
+            // The Statement button only makes sense once the landlord has an account with entries
+            $hasLedger = $client->isClient() && \App\Models\LandlordAccount::where('client_id', $client->id)->exists();
+            return view('property.clients.details', compact('client', 'unitTopologies', 'unitCategories', 'hasLedger'));
         } catch (\Exception $e) {
             Log::error('Error loading client details: ' . $e->getMessage());
             return redirect()->route('property.clients.index')->with('error', 'Client not found');
