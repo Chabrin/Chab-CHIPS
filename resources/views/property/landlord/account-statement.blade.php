@@ -3,27 +3,6 @@
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/chabrin.css') }}">
 <style>
-    .card-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(255, 255, 255, 0.85);
-        z-index: 10;
-        display: none;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .card-overlay.active {
-        display: flex;
-    }
-
-    .card.position-relative {
-        position: relative;
-    }
-
     .btn-outline-primary.date-filter-radio {
         color: #3598db;
         border-color: #3598db;
@@ -41,12 +20,44 @@
         border-color: #3598db;
     }
 
-    .sticky-top {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        background: white;
-    }
+    /* ── Statement shown on the page ───────────── */
+    .stmt-sheet { background: #fff; border: 1px solid #e3e8ef; border-radius: 8px; padding: 20px 22px; }
+    .stmt-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stmt-name { font-size: 1.2rem; font-weight: 700; color: #0b1b63; letter-spacing: .2px; }
+    .stmt-meta { margin-top: 4px; font-size: .82rem; color: #5b6475; }
+    .stmt-meta span + span::before { content: '\00b7'; margin: 0 8px; color: #b0b7c3; }
+    .stmt-period { font-size: .95rem; font-weight: 600; color: #12b5c0; white-space: nowrap; }
+    .stmt-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .stmt-tile { background: #f3f6fb; border: 1px solid #dfe5ef; border-left: 3px solid #12b5c0; border-radius: 6px; padding: 10px 14px; }
+    .stmt-tile-label { font-size: .68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #12b5c0; }
+    .stmt-tile-value { font-size: 1.15rem; font-weight: 700; color: #0b1b63; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .stmt-tile-closing { background: #0b1b63; border-color: #0b1b63; border-left-color: #12b5c0; }
+    .stmt-tile-closing .stmt-tile-value { color: #fff; font-size: 1.35rem; }
+    .stmt-tile-note { font-size: .72rem; color: #b9c3e6; margin-top: 1px; }
+    .stmt-sheet .dr { color: #a8232c; }
+    .stmt-sheet .cr { color: #137a46; }
+    .stmt-sheet .neg { color: #a8232c; }
+    .stmt-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .84rem; }
+    .stmt-table thead th { position: sticky; top: var(--header-height, 54px); z-index: 3; background: #0b1b63; color: #fff; font-size: .7rem; letter-spacing: .6px; text-transform: uppercase; padding: 9px 10px; text-align: left; white-space: nowrap; }
+    .stmt-table th.r, .stmt-table td.r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .stmt-table td { padding: 8px 10px; border-bottom: 1px solid #e9edf4; vertical-align: top; }
+    .stmt-table tbody tr:nth-child(even) td { background: #f8fafd; }
+    .stmt-table tbody tr:hover td { background: #eef4fb; }
+    .stmt-table tbody tr.bf td { background: #e8f7f8; color: #0b1b63; font-weight: 700; border-bottom-color: #b9e3e7; }
+    .stmt-table .nowrap { white-space: nowrap; }
+    .stmt-table .ref { color: #5b6475; font-size: .78rem; white-space: nowrap; }
+    .stmt-table td.empty { text-align: center; color: #8a93a4; padding: 22px; }
+    .stmt-table tfoot td { font-weight: 700; padding: 9px 10px; border-bottom: 0; }
+    .stmt-table tfoot tr.totals td { background: #eef1f8; border-top: 2px solid #0b1b63; }
+    .stmt-table tfoot tr.final td { background: #0b1b63; color: #fff; }
+    .stmt-note { margin-top: 12px; font-size: .75rem; color: #6b7486; line-height: 1.5; }
+    .stmt-empty { text-align: center; color: #6b7a90; padding: 56px 12px; background: #fff; border: 1px dashed #d5dce8; border-radius: 8px; }
+    .stmt-empty .material-symbols-outlined { font-size: 56px; color: #b8c2d3; }
+    #statement_area { position: relative; min-height: 180px; }
+    #sheet_content.is-loading { opacity: .35; pointer-events: none; }
+    #sheet_loading { position: absolute; inset: 0; display: none; align-items: flex-start; justify-content: center; padding-top: 70px; z-index: 5; }
+    @media (max-width: 991px) { .stmt-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 767px) { .stmt-table-wrap { overflow-x: auto; } .stmt-table thead th { position: static; } }
 </style>
 @endsection
 
@@ -55,20 +66,26 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card position-relative">
-                    <div class="card-overlay" id="card-overlay">
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-3 text-muted">Processing...</p>
-                        </div>
-                    </div>
+
+                <!-- Selection -->
+                <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Landlord Account Statement</h5>
                     </div>
-                    <div class="card-body">
-                        <form id="searchForm">
+                    <div class="card-body pt-2">
+                        <form id="searchForm" onsubmit="return false;">
+                            @if(!empty($preselected))
+                            <div class="d-flex align-items-center mb-3" id="picked_summary">
+                                <span class="material-symbols-outlined me-2 text-primary">person</span>
+                                <div>
+                                    <strong>{{ $preselected['names'] }}</strong>
+                                    <span class="text-muted">&middot; {{ $preselected['reference_number'] }}</span>
+                                </div>
+                                <button type="button" class="btn btn-link btn-sm ms-2 p-0" id="change_landlord_btn">Change landlord</button>
+                            </div>
+                            @endif
+
+                            <div id="picker_block" class="{{ !empty($preselected) ? 'd-none' : '' }}">
                             <!-- Search Mode Toggle -->
                             <div class="row mb-3">
                                 <div class="col-md-12">
@@ -158,37 +175,31 @@
                                 </div>
                             </div>
 
-                            <div class="row mb-3">
-                                <div class="col-md-12 mb-3">
-                                    <label class="form-label d-block">Date Filter Type <span class="text-danger">*</span></label>
-                                    <div class="btn-group" role="group" aria-label="Date filter type">
-                                        <input type="radio" class="btn-check" name="date_type" id="date_type_range" value="range" checked autocomplete="off">
-                                        <label class="btn btn-outline-primary date-filter-radio" for="date_type_range">
-                                            <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">date_range</span>
-                                            Date Range
-                                        </label>
 
-                                        <input type="radio" class="btn-check" name="date_type" id="date_type_end" value="end" autocomplete="off">
-                                        <label class="btn btn-outline-primary date-filter-radio" for="date_type_end">
-                                            <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">event</span>
-                                            End Date Only
-                                        </label>
-                                    </div>
-                                </div>
                             </div>
-                            <div class="row mb-3">
-                                <div class="col-md-4">
-                                    <label for="date_from" class="form-label">Date From <span class="text-danger" id="date_from_required">*</span></label>
-                                    <input type="date" class="form-control" id="date_from" name="date_from" required>
+
+                            <div class="row mb-1 align-items-end">
+                                <div class="col-md-3 mb-2">
+                                    <label for="period_preset" class="form-label mb-1">Period</label>
+                                    <select class="form-select form-select-sm" id="period_preset">
+                                        <option value="3m">Last 3 months</option>
+                                        <option value="6m">Last 6 months</option>
+                                        <option value="12m">Last 12 months</option>
+                                        <option value="year">This year</option>
+                                        <option value="custom">Custom range</option>
+                                    </select>
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="date_to" class="form-label">Date To <span class="text-danger">*</span></label>
-                                    <input type="date" class="form-control" id="date_to" name="date_to" required>
+                                <div class="col-md-3 mb-2">
+                                    <label for="date_from" class="form-label mb-1">From</label>
+                                    <input type="date" class="form-control form-control-sm" id="date_from" value="{{ $from }}">
                                 </div>
-                                <div class="col-md-4 d-flex align-items-end gap-2">
+                                <div class="col-md-3 mb-2">
+                                    <label for="date_to" class="form-label mb-1">To</label>
+                                    <input type="date" class="form-control form-control-sm" id="date_to" value="{{ $to }}">
+                                </div>
+                                <div class="col-md-3 mb-2">
                                     <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
-                                        <span class="material-symbols-outlined" id="search_icon">search</span>
-                                        <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display: none;"></span>
+                                        <span class="material-symbols-outlined" style="font-size:18px;">picture_as_pdf</span>
                                         <span class="ms-1">View Statement</span>
                                     </button>
                                 </div>
@@ -196,87 +207,32 @@
                         </form>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Statement Modal -->
-<div class="modal fade" id="statementModal" tabindex="-1" aria-labelledby="statementModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-            <!-- Thin Header with Actions -->
-            <div class="modal-header py-2 px-3 bg-white border-bottom">
-                <div class="d-flex align-items-center gap-2 w-100">
-                    <span class="material-symbols-outlined text-dark">description</span>
-                    <h6 class="mb-0 flex-grow-1 text-dark">Landlord Account Statement</h6>
-                    <button type="button" class="btn btn-sm d-flex align-items-center" id="download_excel_btn" style="padding: 2px 8px; background-color: #3598db !important; color: white !important; border-color: #3598db !important;">
-                        <span class="material-symbols-outlined" id="excel_icon" style="font-size: 18px;">download</span>
-                        <span class="spinner-border spinner-border-sm" id="excel_spinner" role="status" style="display: none; font-size: 12px; width: 16px; height: 16px;"></span>
-                        <span class="ms-1" style="font-size: 0.75rem;">Excel</span>
-                    </button>
-                    <button type="button" class="btn btn-sm d-flex align-items-center" id="download_pdf_btn" style="padding: 2px 8px; background-color: #3598db !important; color: white !important; border-color: #3598db !important;">
-                        <span class="material-symbols-outlined" id="pdf_icon" style="font-size: 18px;">picture_as_pdf</span>
-                        <span class="spinner-border spinner-border-sm" id="pdf_spinner" role="status" style="display: none; font-size: 12px; width: 16px; height: 16px;"></span>
-                        <span class="ms-1" style="font-size: 0.75rem;">PDF</span>
-                    </button>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="padding: 4px; font-size: 0.875rem;"></button>
+                <!-- Statement, shown on the page -->
+                <div id="sheet_toolbar" class="d-none justify-content-end flex-wrap gap-2 mb-2">
+                    <a id="open_tab_btn" class="btn btn-outline-primary btn-sm d-flex align-items-center" href="#" target="_blank" rel="noopener">
+                        <span class="material-symbols-outlined" style="font-size:17px;">open_in_new</span><span class="ms-1">Open</span>
+                    </a>
+                    <a id="download_pdf_btn" class="btn btn-sm d-flex align-items-center" href="#" style="background-color:#3598db;color:#fff;">
+                        <span class="material-symbols-outlined" style="font-size:17px;">picture_as_pdf</span><span class="ms-1">PDF</span>
+                    </a>
+                    <a id="download_excel_btn" class="btn btn-success btn-sm d-flex align-items-center" href="#">
+                        <span class="material-symbols-outlined" style="font-size:17px;">download</span><span class="ms-1">Excel</span>
+                    </a>
                 </div>
-            </div>
 
-            <!-- Modal Body -->
-            <div class="modal-body p-0" style="background-color: #f8f9fa;">
-                <!-- Search Bar -->
-                <div class="p-3 bg-white border-bottom">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-0">
-                            <span class="material-symbols-outlined" style="font-size: 18px;">search</span>
-                        </span>
-                        <input type="text" class="form-control border-0 bg-light" id="statement_search" placeholder="Search transactions...">
+                <div id="statement_area">
+                    <div id="sheet_loading">
+                        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
                     </div>
-                </div>
-
-                <!-- Statement Info Banner -->
-                <div class="px-3 py-2 bg-white border-bottom">
-                    <div class="row">
-                        <div class="col-6">
-                            <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                <strong>Landlord:</strong> <span id="stmt_landlord_name"></span>
-                            </small>
-                        </div>
-                        <div class="col-6 text-end">
-                            <small class="d-block" style="font-size: 0.75rem;">
-                                <strong>Balance:</strong> <span id="stmt_total_amount" class="fw-bold text-dark"></span>
-                            </small>
+                    <div id="sheet_content">
+                        <div class="stmt-empty" id="sheet_empty">
+                            <span class="material-symbols-outlined">description</span>
+                            <p class="mt-2 mb-0">Choose a landlord and period, then View Statement.</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Scrollable Table -->
-                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                    <table class="table table-hover table-sm table-borderless mb-0" id="statement_table" style="font-size: 0.82rem; line-height: 1.2;">
-                        <thead class="sticky-top" style="background-color: #e9ecef; border-bottom: 2px solid #dee2e6; font-size: 0.82rem;">
-                            <tr>
-                                <th class="py-1 px-2" style="white-space:nowrap;">Date</th>
-                                <th class="py-1 px-2" style="white-space:nowrap;">Reference</th>
-                                <th class="py-1 px-2">Narration</th>
-                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Dr</th>
-                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Cr</th>
-                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Balance</th>
-                            </tr>
-                        </thead>
-                        <tbody id="statement_tbody" class="bg-white">
-                            <tr>
-                                <td colspan="6" class="text-center py-5">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p class="mt-2 text-muted mb-0" style="font-size: 0.875rem;">Loading statement...</p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
             </div>
         </div>
     </div>
@@ -516,174 +472,107 @@
             }
         });
 
-        // Date type toggle
-        $('input[name="date_type"]').on('change', function() {
-            const dateType = $(this).val();
-            if (dateType === 'end') {
-                $('#date_from').prop('disabled', true).prop('required', false).val('');
-                $('#date_from_required').hide();
-            } else {
-                $('#date_from').prop('disabled', false).prop('required', true);
-                $('#date_from_required').show();
+
+        // ── Period + statement ───────────────────────────────────────────
+        const pdfUrl = '{{ route("landlord.statement.export.pdf") }}';
+        const excelUrl = '{{ route("landlord.statement.export.excel") }}';
+        const sheetUrl = '{{ route("ajax.landlord.statement.view") }}';
+        const pad = n => String(n).padStart(2, '0');
+        const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+
+        // Same rule as the server's default period: N months back (day clamped to month end), plus one day
+        function monthsBack(n) {
+            const today = new Date();
+            const t = new Date(today.getFullYear(), today.getMonth() - n, 1);
+            t.setDate(Math.min(today.getDate(), new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()) + 1);
+            return t;
+        }
+
+        function presetRange(key) {
+            const today = new Date();
+            if (key === '3m') return [ymd(monthsBack(3)), ymd(today)];
+            if (key === '6m') return [ymd(monthsBack(6)), ymd(today)];
+            if (key === '12m') return [ymd(monthsBack(12)), ymd(today)];
+            if (key === 'year') return [today.getFullYear() + '-01-01', ymd(today)];
+            return null;
+        }
+
+        function syncPreset() {
+            const from = $('#date_from').val(), to = $('#date_to').val();
+            const hit = ['3m', '6m', '12m', 'year'].find(k => { const r = presetRange(k); return r[0] === from && r[1] === to; });
+            $('#period_preset').val(hit || 'custom');
+        }
+
+        $('#period_preset').on('change', function() {
+            const r = presetRange($(this).val());
+            if (r) {
+                $('#date_from').val(r[0]);
+                $('#date_to').val(r[1]);
             }
         });
+        $('#date_from, #date_to').on('change', syncPreset);
+        syncPreset();
 
-        // Statement search filter
-        $('#statement_search').on('keyup', function() {
-            const searchTerm = $(this).val().toLowerCase();
-            $('#statement_tbody tr').each(function() {
-                const rowText = $(this).text().toLowerCase();
-                $(this).toggle(rowText.indexOf(searchTerm) > -1);
-            });
-        });
+        let sheetRequest = null;
 
-        // View Statement
-        $('#search_btn').on('click', function() {
-            const mode = $('input[name="search_mode"]:checked').val();
+        function showStatement() {
             const landlordId = $('#landlord_id').val();
-            const dateType = $('input[name="date_type"]:checked').val();
-            const dateFrom = $('#date_from').val();
-            const dateTo = $('#date_to').val();
+            const from = $('#date_from').val(), to = $('#date_to').val();
 
             if (!landlordId) {
                 toastr.warning('Please select a landlord');
                 return;
             }
-            if (dateType === 'range' && !dateFrom) {
-                toastr.warning('Please select Date From');
+            if (!from || !to) {
+                toastr.warning('Please choose both dates');
                 return;
             }
-            if (!dateTo) {
-                toastr.warning('Please select Date To');
+            if (from > to) {
+                toastr.warning('The From date must not be after the To date');
                 return;
             }
 
-            $('#statementModal').modal('show');
-            $('#stmt_landlord_name').text($('#selected_landlord_name').text());
+            const qs = 'landlord=' + encodeURIComponent(landlordId) + '&from=' + from + '&to=' + to;
+            $('#open_tab_btn').attr('href', pdfUrl + '?' + qs + '&inline=1');
+            $('#download_pdf_btn').attr('href', pdfUrl + '?' + qs);
+            $('#download_excel_btn').attr('href', excelUrl + '?' + qs);
+            $('#sheet_toolbar').removeClass('d-none').addClass('d-flex');
 
-            const propertyId = (mode === 'property') ? $('#property_id').val() : '';
-            loadStatement(landlordId, dateFrom, dateTo, dateType, propertyId);
-        });
+            if (sheetRequest) sheetRequest.abort();
+            $('#sheet_content').addClass('is-loading');
+            $('#sheet_loading').css('display', 'flex');
 
-        function loadStatement(landlordId, dateFrom, dateTo, dateType, propertyId) {
-            $('#statement_tbody').html(`
-                <tr>
-                    <td colspan="6" class="text-center py-5">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2 text-muted mb-0" style="font-size: 0.875rem;">Loading statement...</p>
-                    </td>
-                </tr>
-            `);
-
-            $.ajax({
-                url: '/ajax/landlord/statement/search',
-                type: 'POST',
-                data: {
-                    landlord_id: landlordId,
-                    property_id: propertyId,
-                    date_from: dateFrom,
-                    date_to: dateTo,
-                    date_type: dateType,
-                    _token: '{{ csrf_token() }}'
+            sheetRequest = $.ajax({
+                url: sheetUrl,
+                method: 'GET',
+                dataType: 'html',
+                data: { landlord: landlordId, from: from, to: to },
+                success: function(html) {
+                    $('#sheet_content').html(html);
                 },
-                success: function(response) {
-                    if (response.success && response.statement && response.statement.length > 0) {
-                        let html = '';
-                        response.statement.forEach(function(entry) {
-                            html += `
-                                <tr>
-                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.date_formatted}</td>
-                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.reference}</td>
-                                    <td class="py-1 px-2" style="word-wrap:break-word;white-space:normal;">${entry.narration}</td>
-                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.debit_formatted}</td>
-                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.credit_formatted}</td>
-                                    <td class="py-1 px-2 text-end fw-semibold" style="white-space:nowrap;">${entry.balance_formatted}</td>
-                                </tr>
-                            `;
-                        });
-                        $('#statement_tbody').html(html);
-
-                        if (response.statement.length > 0) {
-                            const lastEntry = response.statement[response.statement.length - 1];
-                            $('#stmt_total_amount').text(lastEntry.balance_formatted);
-                        }
-
-                        window.statementData = {
-                            landlord_id: landlordId,
-                            property_id: propertyId,
-                            date_from: dateFrom,
-                            date_to: dateTo,
-                            date_type: dateType
-                        };
-                    } else {
-                        $('#statement_tbody').html(`
-                            <tr>
-                                <td colspan="6" class="text-center py-5 text-muted">
-                                    <span class="material-symbols-outlined d-block mb-2" style="font-size: 48px; opacity: 0.3;">receipt_long</span>
-                                    No transactions found for the selected period
-                                </td>
-                            </tr>
-                        `);
-                        $('#stmt_total_amount').text('0.00');
-                    }
+                error: function(xhr, status) {
+                    if (status === 'abort') return;
+                    $('#sheet_content').html('<div class="stmt-empty"><span class="material-symbols-outlined">error</span><p class="mt-2 mb-0">The statement could not be loaded.</p></div>');
+                    toastr.error('Error loading the statement');
                 },
-                error: function() {
-                    toastr.error('Failed to load statement');
-                    $('#statement_tbody').html(`
-                        <tr>
-                            <td colspan="6" class="text-center py-5 text-danger">
-                                <span class="material-symbols-outlined d-block mb-2" style="font-size: 48px; opacity: 0.3;">error</span>
-                                Error loading statement
-                            </td>
-                        </tr>
-                    `);
+                complete: function(xhr, status) {
+                    if (status === 'abort') return;
+                    $('#sheet_content').removeClass('is-loading');
+                    $('#sheet_loading').hide();
                 }
             });
+
+            try { history.replaceState(null, '', '?' + qs); } catch (e) {}
         }
 
-        // Download Excel
-        $('#download_excel_btn').on('click', function() {
-            if (!window.statementData) {
-                toastr.warning('No statement data to export');
-                return;
-            }
-            $('#excel_icon').hide();
-            $('#excel_spinner').show();
-            $('#download_excel_btn').prop('disabled', true);
+        $('#search_btn').on('click', showStatement);
 
-            const params = new URLSearchParams(window.statementData);
-            window.location.href = '/landlord/account/statement/export/excel?' + params.toString();
-
-            setTimeout(function() {
-                $('#excel_spinner').hide();
-                $('#excel_icon').show();
-                $('#download_excel_btn').prop('disabled', false);
-            }, 2000);
+        $('#change_landlord_btn').on('click', function() {
+            $('#picked_summary').removeClass('d-flex').addClass('d-none');
+            $('#picker_block').removeClass('d-none');
         });
 
-        // Download PDF
-        $('#download_pdf_btn').on('click', function() {
-            if (!window.statementData) {
-                toastr.warning('No statement data to export');
-                return;
-            }
-            $('#pdf_icon').hide();
-            $('#pdf_spinner').show();
-            $('#download_pdf_btn').prop('disabled', true);
-
-            const params = new URLSearchParams(window.statementData);
-            window.location.href = '/landlord/account/statement/export/pdf?' + params.toString();
-
-            setTimeout(function() {
-                $('#pdf_spinner').hide();
-                $('#pdf_icon').show();
-                $('#download_pdf_btn').prop('disabled', false);
-            }, 2000);
-        });
-
-        // Opened from Client Ledgers: preselect that landlord in Landlord mode
+        // Opened from Client Ledgers or the client page: preselect that landlord and load the statement
         @if(!empty($preselected))
         (function() {
             const l = @json($preselected);
@@ -696,6 +585,7 @@
                     .attr('data-id-number', l.national_id || 'N/A')
                     .text((l.names || '') + ' - ' + (l.reference_number || ''))
             ).prop('disabled', false).val(l.encrypted_id).trigger('change');
+            showStatement();
         })();
         @endif
     });

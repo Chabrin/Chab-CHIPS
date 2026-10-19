@@ -72,7 +72,7 @@ class ClientLedgerService
         $client = DB::table('sys_pm_clients')
             ->where('id', $clientId)
             ->where('reference_number', 'like', 'LAN%')
-            ->first(['id', 'names', 'reference_number', 'mobile_number']);
+            ->first(['id', 'names', 'reference_number', 'mobile_number', 'email_address', 'national_id']);
 
         if (!$client) {
             return null;
@@ -83,6 +83,8 @@ class ClientLedgerService
             'names' => (string) ($client->names ?? ''),
             'reference_number' => (string) ($client->reference_number ?? ''),
             'mobile_number' => (string) ($client->mobile_number ?? ''),
+            'email_address' => (string) ($client->email_address ?? ''),
+            'national_id' => (string) ($client->national_id ?? ''),
         ];
     }
 
@@ -111,6 +113,84 @@ class ClientLedgerService
             'credit' => round($entry['credit'], 2),
             'balance' => round($entry['balance'], 2),
         ])->all();
+    }
+
+    /**
+     * The period a statement opens on when nobody picks one: the last three months, ending today.
+     * Every link into the statement page relies on this, so the period is set in one place.
+     */
+    public function defaultPeriod(): array {
+        $to = now();
+
+        return ['from' => $to->copy()->subMonthsNoOverflow(3)->addDay()->toDateString(), 'to' => $to->toDateString()];
+    }
+
+    /**
+     * A landlord's statement for a period: the balance brought forward from before the period,
+     * every entry inside it with its running balance, and the totals and closing balance.
+     *
+     * Balances follow the same rule as the rest of the ledger (see statementEntries), so the
+     * closing balance is the account balance as at the end of the period. Entries with no date
+     * cannot be placed in a period and are only counted. Rows carried forward from the old
+     * system (B/F and C/F) are listed but left out of the debit and credit totals.
+     *
+     * @param int $clientId
+     * @param string $from Y-m-d, first day of the period
+     * @param string $to Y-m-d, last day of the period
+     */
+    public function statement(int $clientId, string $from, string $to): array {
+        $lines = $this->statementEntries(
+            LandlordAccount::where('client_id', $clientId)
+                ->orderBy('entry_date', 'asc')
+                ->orderByRaw('EXTRACT(YEAR FROM entry_date) ASC')
+                ->orderByRaw('EXTRACT(MONTH FROM entry_date) ASC')
+                ->orderBy('id', 'asc')
+                ->get()
+        );
+
+        $opening = 0.0;
+        $rows = [];
+        $undated = 0;
+        $debits = 0.0;
+        $credits = 0.0;
+        $hasCarriedForward = false;
+
+        foreach ($lines as $line) {
+            $date = $line['date'] ? substr((string) $line['date'], 0, 10) : null;
+
+            if ($date === null) {
+                $undated++;
+                continue;
+            }
+            if ($date < $from) {
+                $opening = (float) $line['balance'];
+                continue;
+            }
+            if ($date > $to) {
+                break;
+            }
+
+            $rows[] = array_merge($line, ['date_ymd' => $date]);
+            if ($line['is_marker']) {
+                $hasCarriedForward = true;
+            } else {
+                $debits += $line['debit'];
+                $credits += $line['credit'];
+            }
+        }
+
+        return [
+            'from' => $from,
+            'to' => $to,
+            'opening' => round($opening, 2),
+            'rows' => $rows,
+            'debits' => round($debits, 2),
+            'credits' => round($credits, 2),
+            'closing' => round($rows ? (float) end($rows)['balance'] : $opening, 2),
+            'has_carried_forward' => $hasCarriedForward,
+            'undated' => $undated,
+            'properties' => DB::table('sys_pm_properties')->where('client_id', $clientId)->orderBy('property_name')->pluck('property_name')->filter()->values()->all(),
+        ];
     }
 
     /**
@@ -152,6 +232,7 @@ class ClientLedgerService
             }
 
             $statementEntries[] = [
+                'is_marker' => in_array($narration, ['Opening Balance B/F', 'Closing Balance C/F'], true),
                 'date' => $txn->entry_date,
                 'reference' => $txn->transaction_number ?? '-',
                 'narration' => $narration,

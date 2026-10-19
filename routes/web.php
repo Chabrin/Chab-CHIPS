@@ -1020,6 +1020,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/landlord/statement/search', [App\Http\Controllers\LandlordController::class, 'searchStatement'])->name('ajax.landlord.statement.search');
     Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
     Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
+    Route::get('/ajax/landlord/statement/view', [App\Http\Controllers\LandlordController::class, 'statementSheet'])->name('ajax.landlord.statement.view');
 
     // Client Ledgers (every landlord's account at a glance)
     Route::get('/client/ledger', [App\Http\Controllers\ClientLedgerController::class, 'index'])->name('client.ledger.index');
