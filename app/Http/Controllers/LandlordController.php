@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Property;
 use App\Models\LandlordAccount;
 use App\Exports\LandlordStatementExport;
+use App\Services\ClientLedgerService;
 use App\Services\ErrorDispatcher;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -16,13 +17,44 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class LandlordController extends Controller
 {
+    protected ClientLedgerService $ledger;
+
+    public function __construct(ClientLedgerService $ledger)
+    {
+        $this->ledger = $ledger;
+    }
+
     /**
-     * Display the landlord account statement page
+     * Display the landlord account statement page. When opened from the Client Ledgers list
+     * with ?landlord=<encrypted id>, that landlord is preselected.
      */
-    public function accountStatement()
+    public function accountStatement(Request $request)
     {
         try {
-            return view('property.landlord.account-statement');
+            $preselected = null;
+
+            if ($request->filled('landlord')) {
+                try {
+                    $landlordId = (int) Crypt::decrypt($request->input('landlord'));
+                } catch (\Exception $e) {
+                    $landlordId = (int) $request->input('landlord');
+                }
+
+                // Same as the landlord search on this page: finance view, not limited to the user's zones.
+                $landlord = Client::withoutGlobalScope('user_clients_properties')->find($landlordId);
+                if ($landlord) {
+                    $preselected = [
+                        'encrypted_id' => Crypt::encrypt($landlord->id),
+                        'names' => $landlord->names ?? 'N/A',
+                        'mobile_number' => $landlord->mobile_number,
+                        'email_address' => $landlord->email_address,
+                        'national_id' => $landlord->national_id,
+                        'reference_number' => $landlord->reference_number,
+                    ];
+                }
+            }
+
+            return view('property.landlord.account-statement', compact('preselected'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading landlord account statement page: ' . $e->getMessage());
@@ -31,55 +63,13 @@ class LandlordController extends Controller
     }
 
     /**
-     * Helper method to process landlord transactions with opening/closing balances
-     * Handles B/F (Brought Forward) and C/F (Carried Forward) balance markers
+     * Process landlord transactions into statement lines with opening/closing balances.
+     * The balance rule (B/F and C/F markers) lives in ClientLedgerService so the Client Ledgers
+     * page and this statement always agree.
      */
     private function processLandlordTransactions($transactions)
     {
-        $statementEntries = [];
-        $balance = 0;
-
-        foreach ($transactions as $txn) {
-            $debit = abs($txn->debit_amount ?? 0);
-            $credit = abs($txn->credit_amount ?? 0);
-
-            // Update balance only for non-balance entries
-            // If entry is marked as opening/closing balance, use it to set the balance
-            if (
-                stripos($txn->entry_description, 'Opening Balance B/F') !== false ||
-                stripos($txn->entry_particulars, 'Opening Balance B/F') !== false
-            ) {
-                // Opening balance - set balance to this amount
-                $balance = $credit - $debit;
-                $narration = 'Opening Balance B/F';
-            } elseif (
-                stripos($txn->entry_description, 'Closing Balance C/F') !== false ||
-                stripos($txn->entry_particulars, 'Closing Balance C/F') !== false
-            ) {
-                // Closing balance - set balance to this amount
-                $balance = $credit - $debit;
-                $narration = 'Closing Balance C/F';
-            } else {
-                // Regular transaction - update balance
-                $balance += $credit - $debit;
-                $narration = $txn->entry_particulars ?: ($txn->entry_description ?? '-');
-            }
-
-            $statementEntries[] = [
-                'date' => $txn->entry_date,
-                'reference' => $txn->transaction_number ?? '-',
-                'narration' => $narration,
-                'debit' => $debit,
-                'credit' => $credit,
-                'balance' => $balance,
-                'date_formatted' => $txn->entry_date ? date('d-m-Y', strtotime($txn->entry_date)) : '',
-                'debit_formatted' => $debit > 0 ? number_format($debit, 2) : '',
-                'credit_formatted' => $credit > 0 ? number_format($credit, 2) : '',
-                'balance_formatted' => number_format($balance, 2),
-            ];
-        }
-
-        return $statementEntries;
+        return $this->ledger->statementEntries($transactions);
     }
 
     /**

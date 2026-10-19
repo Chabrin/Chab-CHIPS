@@ -682,6 +682,22 @@
                 $('#download_pdf_btn').prop('disabled', false);
             }, 2000);
         });
+
+        // Opened from Client Ledgers: preselect that landlord in Landlord mode
+        @if(!empty($preselected))
+        (function() {
+            const l = @json($preselected);
+            $('#mode_landlord').prop('checked', true).trigger('change');
+            $('#landlord_direct_select').empty().append(
+                $('<option>').val(l.encrypted_id)
+                    .attr('data-name', l.names || '')
+                    .attr('data-mobile', l.mobile_number || 'N/A')
+                    .attr('data-email', l.email_address || 'N/A')
+                    .attr('data-id-number', l.national_id || 'N/A')
+                    .text((l.names || '') + ' - ' + (l.reference_number || ''))
+            ).prop('disabled', false).val(l.encrypted_id).trigger('change');
+        })();
+        @endif
     });
 </script>
 @endsection

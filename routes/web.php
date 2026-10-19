@@ -1021,6 +1021,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
     Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
 
+    // Client Ledgers (every landlord's account at a glance)
+    Route::get('/client/ledger', [App\Http\Controllers\ClientLedgerController::class, 'index'])->name('client.ledger.index');
+    Route::get('/ajax/client/ledger/data', [App\Http\Controllers\ClientLedgerController::class, 'data'])->name('ajax.client.ledger.data');
+    Route::get('/client/ledger/export', [App\Http\Controllers\ClientLedgerController::class, 'export'])->name('client.ledger.export');
+    Route::get('/ajax/client/ledger/entries', [App\Http\Controllers\ClientLedgerController::class, 'entries'])->name('ajax.client.ledger.entries');
+    Route::get('/client/ledger/entries/export', [App\Http\Controllers\ClientLedgerController::class, 'exportEntries'])->name('client.ledger.entries.export');
+
 
 
     // Cheque Printing
