@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use Exception;
 use App\Models\Client;
 use App\Models\Property;
-use App\Models\LandlordAccount;
 use App\Exports\LandlordStatementExport;
 use App\Services\ClientLedgerService;
 use App\Services\ErrorDispatcher;
+use App\Traits\ChecksMenuAccess;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -17,8 +17,32 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class LandlordController extends Controller
 {
+    use ChecksMenuAccess;
+
+    /** The menu entry the statement page, its sheet and its downloads belong to. */
+    const STATEMENT_MENU_URL = '/landlord/account/statement';
+
+    /**
+     * The menu entries whose pages look landlords or properties up through the AJAX endpoints below
+     * (statement, tenant statements, advances, clients, tenants, leases and payment vouchers).
+     * A user needs at least one of them.
+     */
+    const LANDLORD_LOOKUP_MENU_URLS = [
+        '/landlord/account/statement',
+        '/tenants/statements',
+        '/client/advances',
+        '/property/clients',
+        '/property/tenants',
+        '/tenants/listing',
+        '/property/leases',
+        '/create/payment/voucher',
+    ];
+
     protected ClientLedgerService $ledger;
 
+    /**
+     * Inject the client ledger service.
+     */
     public function __construct(ClientLedgerService $ledger)
     {
         $this->ledger = $ledger;
@@ -31,6 +55,10 @@ class LandlordController extends Controller
      */
     public function accountStatement(Request $request)
     {
+        if (!$this->menuAllowed(self::STATEMENT_MENU_URL)) {
+            return $this->denied();
+        }
+
         try {
             $preselected = null;
             [$from, $to] = $this->statementPeriod($request);
@@ -56,20 +84,14 @@ class LandlordController extends Controller
     }
 
     /**
-     * Process landlord transactions into statement lines with opening/closing balances.
-     * The balance rule (B/F and C/F markers) lives in ClientLedgerService so the Client Ledgers
-     * page and this statement always agree.
-     */
-    private function processLandlordTransactions($transactions)
-    {
-        return $this->ledger->statementEntries($transactions);
-    }
-
-    /**
      * Search properties for landlord statements (AJAX)
      */
     public function getProperties(Request $request)
     {
+        if (!$this->menuAllowed(self::LANDLORD_LOOKUP_MENU_URLS)) {
+            return $this->denied('json');
+        }
+
         try {
             $query = Property::select('id', 'property_name', 'reference_number');
 
@@ -96,6 +118,10 @@ class LandlordController extends Controller
      */
     public function getLandlordsByProperty(Request $request)
     {
+        if (!$this->menuAllowed(self::LANDLORD_LOOKUP_MENU_URLS)) {
+            return $this->denied('json');
+        }
+
         try {
             $propertyId = $request->input('property_id');
 
@@ -138,19 +164,26 @@ class LandlordController extends Controller
     }
 
     /**
-     * Search landlords directly by name/reference/phone/email (AJAX)
+     * Search landlords directly by name/reference/phone/email (AJAX). Send scoped=1 to limit the
+     * result to the signed-in user's zones.
      */
     public function searchLandlords(Request $request)
     {
+        if (!$this->menuAllowed(self::LANDLORD_LOOKUP_MENU_URLS)) {
+            return $this->denied('json');
+        }
+
         try {
             $search = $request->input('search', '');
             if (strlen($search) < 2) {
                 return response()->json(['success' => false, 'message' => 'Enter at least 2 characters'], 400);
             }
 
-            // Advance creation is a finance operation, not property-management —
-            // bypass the field-officer/zone visibility scope so any staff can search all landlords.
-            $landlords = Client::withoutGlobalScope('user_clients_properties')->select(
+            // Advance creation is a finance operation, not property-management, so by default the
+            // field-officer/zone visibility scope is bypassed and any staff can search all landlords.
+            // The statement page sends scoped=1 so zone-limited users only find their own landlords.
+            $clients = $request->boolean('scoped') ? Client::query() : Client::withoutGlobalScope('user_clients_properties');
+            $landlords = $clients->select(
                 'sys_pm_clients.id',
                 'sys_pm_clients.names',
                 'sys_pm_clients.mobile_number',
@@ -190,77 +223,15 @@ class LandlordController extends Controller
     }
 
     /**
-     * Search landlord account statement (AJAX)
-     */
-    public function searchStatement(Request $request)
-    {
-        try {
-            if (!$request->filled('landlord_id')) {
-                return response()->json(['success' => false, 'message' => 'Landlord is required'], 400);
-            }
-
-            try {
-                $landlordId = (int) Crypt::decrypt($request->landlord_id);
-            } catch (\Exception $e) {
-                $landlordId = (int) $request->landlord_id;
-            }
-
-            $dateType = $request->input('date_type', 'range');
-            $dateFrom = $request->input('date_from');
-            $dateTo = $request->input('date_to');
-
-            $landlord = Client::find($landlordId);
-            $landlordCode = $landlord->reference_number ?? null;
-
-
-            $query = LandlordAccount::where(function ($q) use ($landlordId, $landlordCode) {
-                $q->where('client_id', $landlordId);
-                if ($landlordCode) {
-                    $q->orWhere('landlord_code', $landlordCode);
-                }
-            });
-
-            if ($dateType === 'range' && $dateFrom && $dateTo) {
-                $query->whereDate('entry_date', '>=', $dateFrom)
-                    ->whereDate('entry_date', '<=', $dateTo);
-            } elseif ($dateType === 'end' && $dateTo) {
-                $query->whereDate('entry_date', '<=', $dateTo);
-            }
-
-
-            // Order chronologically: entry_date, year, month, id
-            $transactions = $query->orderBy('entry_date', 'asc')
-                ->orderByRaw('EXTRACT(YEAR FROM entry_date) ASC')
-                ->orderByRaw('EXTRACT(MONTH FROM entry_date) ASC')
-                ->orderBy('id', 'asc')
-                ->get();
-
-            Log::info('[searchStatement] Step 3 — results', [
-                'count'       => $transactions->count(),
-                'raw_count_sql' => "SELECT COUNT(*) FROM cb_landlord_account WHERE (client_id = {$landlordId}" . ($landlordCode ? " OR landlord_code = '{$landlordCode}'" : '') . ");",
-                'full_check_sql' => "SELECT * FROM cb_landlord_account WHERE landlord_code = '" . ($landlordCode ?? '') . "' ORDER BY entry_date ASC, EXTRACT(YEAR FROM entry_date) ASC, EXTRACT(MONTH FROM entry_date) ASC, id ASC;",
-            ]);
-
-            // Process transactions with balance tracking
-            $statementEntries = $this->processLandlordTransactions($transactions);
-
-            return response()->json([
-                'success' => true,
-                'statement' => $statementEntries
-            ]);
-        } catch (Exception $e) {
-            ErrorDispatcher::dispatch($e);
-            Log::error('Error generating landlord statement: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to generate statement'], 500);
-        }
-    }
-
-    /**
      * The statement for ?landlord=&from=&to= as an HTML fragment the statement page puts straight
      * into the page. Uses the same statement data as the PDF and Excel exports.
      */
     public function statementSheet(Request $request)
     {
+        if (!$this->menuAllowed(self::STATEMENT_MENU_URL)) {
+            return $this->denied('fragment');
+        }
+
         try {
             $account = $this->statementAccount($request);
             if (!$account) {
@@ -286,6 +257,10 @@ class LandlordController extends Controller
      */
     public function exportStatementExcel(Request $request)
     {
+        if (!$this->menuAllowed(self::STATEMENT_MENU_URL)) {
+            return $this->denied();
+        }
+
         try {
             ini_set('memory_limit', '512M');
             set_time_limit(300);
@@ -298,15 +273,26 @@ class LandlordController extends Controller
             [$from, $to] = $this->statementPeriod($request);
             $st = $this->ledger->statement($account['id'], $from, $to);
 
+            $rows = array_map(fn($row) => $row['counted'] ? $row : array_merge($row, ['narration' => $row['narration'] . ' (not counted)']), $st['rows']);
+
             $entries = array_merge(
                 [['date' => $from, 'reference' => '', 'narration' => 'Opening balance', 'debit' => 0, 'credit' => 0, 'balance' => $st['opening']]],
-                $st['rows'],
+                $rows,
                 [['date' => $to, 'reference' => '', 'narration' => 'Closing balance (period totals in Dr / Cr)', 'debit' => $st['debits'], 'credit' => $st['credits'], 'balance' => $st['closing']]]
             );
+
+            $notes = [];
+            if ($st['has_uncounted']) {
+                $notes[] = 'Entries marked "not counted" (such as balance snapshots written by the returns process) are listed for reference only and do not change the balance or the totals.';
+            }
+            if ($st['undated'] > 0) {
+                $notes[] = $st['undated'] . ($st['undated'] === 1 ? ' entry has' : ' entries have') . ' no date on the account and ' . ($st['undated'] === 1 ? 'is' : 'are') . ' not shown.';
+            }
 
             $landlordInfo = [
                 'landlord_name' => $account['names'] . ' (' . $account['reference_number'] . ') - ' . date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to)),
                 'property_name' => $st['properties'] ? implode(', ', $st['properties']) : 'N/A',
+                'note' => implode(' ', $notes),
             ];
 
             $fileName = 'Landlord_Statement_' . $account['reference_number'] . '_' . date('Y-m-d') . '.xlsx';
@@ -325,6 +311,10 @@ class LandlordController extends Controller
      */
     public function exportStatementPdf(Request $request)
     {
+        if (!$this->menuAllowed(self::STATEMENT_MENU_URL)) {
+            return $this->denied();
+        }
+
         $inline = $request->boolean('inline');
 
         try {
@@ -371,14 +361,15 @@ class LandlordController extends Controller
      */
     private function statementAccount(Request $request): ?array
     {
-        if (!$request->filled('landlord')) {
+        $value = $request->input('landlord');
+        if (!is_string($value) || $value === '') {
             return null;
         }
 
         try {
-            $landlordId = (int) Crypt::decrypt($request->input('landlord'));
+            $landlordId = (int) Crypt::decrypt($value);
         } catch (\Exception $e) {
-            $landlordId = (int) $request->input('landlord');
+            $landlordId = (int) $value;
         }
 
         return $this->ledger->account($landlordId);

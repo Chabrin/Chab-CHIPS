@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exports\ClientLedgerExport;
 use App\Services\ClientLedgerService;
 use App\Services\ErrorDispatcher;
+use App\Traits\ChecksMenuAccess;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -14,8 +15,15 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ClientLedgerController extends Controller
 {
+    use ChecksMenuAccess;
+
+    const MENU_URL = '/client/ledger';
+
     protected ClientLedgerService $ledger;
 
+    /**
+     * Inject the client ledger service.
+     */
     public function __construct(ClientLedgerService $ledger) {
         $this->ledger = $ledger;
     }
@@ -24,6 +32,10 @@ class ClientLedgerController extends Controller
      * Show the Client Ledgers page: every landlord with the state of their account.
      */
     public function index() {
+        if (!$this->menuAllowed(self::MENU_URL)) {
+            return $this->denied();
+        }
+
         return view('property.landlord.client-ledger');
     }
 
@@ -31,6 +43,10 @@ class ClientLedgerController extends Controller
      * Return the landlord accounts as JSON for the page's table, narrowed by the page filters.
      */
     public function data(Request $request) {
+        if (!$this->menuAllowed(self::MENU_URL)) {
+            return $this->denied('json');
+        }
+
         $filters = $this->filters($request);
 
         try {
@@ -46,6 +62,10 @@ class ClientLedgerController extends Controller
      * Download the landlord accounts as Excel, narrowed by the same filters as the page.
      */
     public function export(Request $request) {
+        if (!$this->menuAllowed(self::MENU_URL)) {
+            return $this->denied();
+        }
+
         $filters = $this->filters($request);
 
         try {
@@ -83,6 +103,10 @@ class ClientLedgerController extends Controller
      * details and the closing balance. Expects ?client=<encrypted id>.
      */
     public function entries(Request $request) {
+        if (!$this->menuAllowed(self::MENU_URL)) {
+            return $this->denied('json');
+        }
+
         try {
             $account = $this->accountFromRequest($request);
             if (!$account) {
@@ -108,6 +132,10 @@ class ClientLedgerController extends Controller
      * Download every ledger entry for one landlord as Excel. Expects ?client=<encrypted id>.
      */
     public function exportEntries(Request $request) {
+        if (!$this->menuAllowed(self::MENU_URL)) {
+            return $this->denied();
+        }
+
         try {
             ini_set('memory_limit', '512M');
 
@@ -120,7 +148,7 @@ class ClientLedgerController extends Controller
             $rows = array_map(fn($e) => [
                 $e['date_formatted'],
                 $e['reference'],
-                $e['narration'],
+                $e['counted'] ? $e['narration'] : $e['narration'] . ' (not counted)',
                 $e['debit'] > 0 ? $e['debit'] : '',
                 $e['credit'] > 0 ? $e['credit'] : '',
                 $e['balance'],
@@ -163,12 +191,13 @@ class ClientLedgerController extends Controller
      * missing, cannot be decrypted, or is not a landlord.
      */
     protected function accountFromRequest(Request $request): ?array {
-        if (!$request->filled('client')) {
+        $value = $request->input('client');
+        if (!is_string($value) || $value === '') {
             return null;
         }
 
         try {
-            $clientId = (int) Crypt::decrypt($request->input('client'));
+            $clientId = (int) Crypt::decrypt($value);
         } catch (\Exception $e) {
             return null;
         }

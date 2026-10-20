@@ -17,6 +17,8 @@
 #entriesTable thead th { font-size: 0.78rem; white-space: nowrap; }
 #entriesTable tbody td { font-size: 0.8rem; vertical-align: middle; }
 #entriesTable td.text-end { font-variant-numeric: tabular-nums; }
+#entriesTable tbody tr.uncounted td, #entriesTable tbody tr.uncounted td span { color: #9aa3b2 !important; }
+.gl-nc { margin-left: 6px; font-size: .68rem; text-transform: uppercase; letter-spacing: .5px; border: 1px solid #d5dce8; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 .bal-pos { color: #157347; font-weight: 600; }
 .bal-neg { color: #b02a37; font-weight: 600; }
 .dash-val { color: #b0b7c3; }
@@ -159,7 +161,7 @@ $(document).ready(function () {
     const entriesExportUrl = '{{ route("client.ledger.entries.export") }}';
 
     const esc = s => $('<div>').text(s == null ? '' : s).html();
-    const money = n => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const money = n => (Number(n) + 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const day = d => { const [y, m, dd] = d.split('-'); return dd + '/' + m + '/' + y; };
     const dash = '<span class="dash-val">—</span>';
 
@@ -256,12 +258,13 @@ $(document).ready(function () {
             { data: 'seq', visible: false },
             { data: 'date', orderData: 0, render: (d, t, r) => esc(r.date_formatted) },
             { data: 'reference', render: d => d && d !== '-' ? `<small class="text-muted">${esc(d)}</small>` : dash },
-            { data: 'narration', render: d => d ? esc(d) : dash },
+            { data: 'narration', render: (d, t, r) => (d ? esc(d) : dash) + (t === 'display' && r.counted === false ? ' <span class="gl-nc">not counted</span>' : '') },
             { data: 'debit', className: 'text-end', render: (d, t) => t === 'display' ? (d > 0 ? `<span style="color:#1a56a0;font-weight:600;">${money(d)}</span>` : dash) : d },
             { data: 'credit', className: 'text-end', render: (d, t) => t === 'display' ? (d > 0 ? `<span style="color:#157347;font-weight:600;">${money(d)}</span>` : dash) : d },
             { data: 'balance', className: 'text-end', render: (d, t) => t === 'display' ? money(d) : d }
         ],
         order: [[0, 'desc']],
+        createdRow: (row, data) => { if (data.counted === false) $(row).addClass('uncounted'); },
         pageLength: 25,
         lengthMenu: [[25, 50, 100, -1], [25, 50, 100, 'All']],
         language: { emptyTable: 'No entries on this account.' }

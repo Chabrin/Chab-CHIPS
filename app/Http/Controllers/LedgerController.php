@@ -723,14 +723,12 @@ class LedgerController extends Controller
                     $amount  = abs((float) ($row->amount ?? 0));
                     return [
                         'parent_id' => $row->parent_id,
-                        'date'      => $row->journal_date
-                                        ? Carbon::parse($row->journal_date)->format('d/m/Y')
-                                        : '-',
+                        'date' => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
                         'reference' => $row->reference ?? '-',
-                        'account'   => $accountLabels[$row->account_id] ?? ($row->account_id ?? '-'),
+                        'account' => $accountLabels[$row->account_id] ?? ($row->account_id ?? '-'),
                         'narration' => $row->narration ?? '-',
-                        'debit'     => $isDebit ? number_format($amount, 2) : '',
-                        'credit'    => !$isDebit ? number_format($amount, 2) : '',
+                        'debit' => $isDebit ? number_format($amount, 2) : '',
+                        'credit' => !$isDebit ? number_format($amount, 2) : '',
                     ];
                 });
 
@@ -787,12 +785,12 @@ class LedgerController extends Controller
                     $amount  = abs((float) ($row->amount ?? 0));
                     return [
                         'parent_id' => $row->parent_id,
-                        'date'      => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
+                        'date' => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
                         'reference' => $row->reference ?? '-',
-                        'account'   => $accountLabels[$row->account_id] ?? ($row->account_id ?? '-'),
+                        'account' => $accountLabels[$row->account_id] ?? ($row->account_id ?? '-'),
                         'narration' => $row->narration ?? '-',
-                        'debit'     => $isDebit ? number_format($amount, 2) : '',
-                        'credit'    => !$isDebit ? number_format($amount, 2) : '',
+                        'debit' => $isDebit ? number_format($amount, 2) : '',
+                        'credit' => !$isDebit ? number_format($amount, 2) : '',
                     ];
                 })
                 ->toArray();

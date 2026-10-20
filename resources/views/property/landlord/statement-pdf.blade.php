@@ -266,6 +266,15 @@
             color: #137a46;
         }
 
+        .txn tr.nc td {
+            color: #9aa3b2;
+        }
+
+        .nc-tag {
+            font-size: 6.5pt;
+            color: #8a93a4;
+        }
+
         .neg {
             color: #a8232c;
         }
@@ -389,10 +398,10 @@
             </tr>
 
             @forelse($st['rows'] as $i => $row)
-            <tr class="{{ $i % 2 ? 'alt' : '' }}">
+            <tr class="{{ $i % 2 ? 'alt' : '' }} {{ $row['counted'] ? '' : 'nc' }}">
                 <td>{{ $row['date_formatted'] }}</td>
                 <td class="ref">{{ $row['reference'] !== '-' ? $row['reference'] : '' }}</td>
-                <td>{{ $row['narration'] }}</td>
+                <td>{{ $row['narration'] }}@unless($row['counted']) <span class="nc-tag">(not counted)</span>@endunless</td>
                 <td class="r dr">{{ $amount($row['debit']) }}</td>
                 <td class="r cr">{{ $amount($row['credit']) }}</td>
                 <td class="r {{ $row['balance'] < 0 ? 'neg' : '' }}">{{ $money($row['balance']) }}</td>
@@ -416,10 +425,10 @@
         </tbody>
     </table>
 
-    @if($st['has_carried_forward'] || $st['undated'] > 0)
+    @if($st['has_uncounted'] || $st['undated'] > 0)
     <div class="note">
-        @if($st['has_carried_forward'])
-        Balance rows carried forward from the previous system are listed as entered and are not counted in the totals.<br>
+        @if($st['has_uncounted'])
+        Entries marked &ldquo;not counted&rdquo; (such as balance snapshots written by the returns process) are listed for reference only and do not change the balance or the totals.<br>
         @endif
         @if($st['undated'] > 0)
         {{ $st['undated'] }} {{ $st['undated'] === 1 ? 'entry has' : 'entries have' }} no date on the account and {{ $st['undated'] === 1 ? 'is' : 'are' }} not shown.

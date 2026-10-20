@@ -51,6 +51,8 @@
     .stmt-table tfoot tr.totals td { background: #eef1f8; border-top: 2px solid #0b1b63; }
     .stmt-table tfoot tr.final td { background: #0b1b63; color: #fff; }
     .stmt-note { margin-top: 12px; font-size: .75rem; color: #6b7486; line-height: 1.5; }
+    .stmt-table tbody tr.uncounted td { color: #9aa3b2 !important; }
+    .stmt-nc { margin-left: 8px; font-size: .68rem; text-transform: uppercase; letter-spacing: .5px; color: #8a93a4; border: 1px solid #d5dce8; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
     .stmt-empty { text-align: center; color: #6b7a90; padding: 56px 12px; background: #fff; border: 1px dashed #d5dce8; border-radius: 8px; }
     .stmt-empty .material-symbols-outlined { font-size: 56px; color: #b8c2d3; }
     #statement_area { position: relative; min-height: 180px; }
@@ -280,7 +282,8 @@
                 url: '/ajax/landlord/search-landlords',
                 method: 'GET',
                 data: {
-                    search: searchTerm
+                    search: searchTerm,
+                    scoped: 1
                 },
                 success: function(response) {
                     $('#landlord_direct_select').empty().append('<option value="">-- Select Landlord --</option>');

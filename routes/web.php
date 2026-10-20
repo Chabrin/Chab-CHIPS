@@ -1017,7 +1017,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/landlord/properties', [App\Http\Controllers\LandlordController::class, 'getProperties'])->name('ajax.landlord.properties');
     Route::get('/ajax/landlord/landlords-by-property', [App\Http\Controllers\LandlordController::class, 'getLandlordsByProperty'])->name('ajax.landlord.landlords.by.property');
     Route::get('/ajax/landlord/search-landlords', [App\Http\Controllers\LandlordController::class, 'searchLandlords'])->name('ajax.landlord.search.landlords');
-    Route::post('/ajax/landlord/statement/search', [App\Http\Controllers\LandlordController::class, 'searchStatement'])->name('ajax.landlord.statement.search');
     Route::get('/landlord/account/statement/export/excel', [App\Http\Controllers\LandlordController::class, 'exportStatementExcel'])->name('landlord.statement.export.excel');
     Route::get('/landlord/account/statement/export/pdf', [App\Http\Controllers\LandlordController::class, 'exportStatementPdf'])->name('landlord.statement.export.pdf');
     Route::get('/ajax/landlord/statement/view', [App\Http\Controllers\LandlordController::class, 'statementSheet'])->name('ajax.landlord.statement.view');
@@ -1658,6 +1657,11 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Transaction Types Management
     Route::get('/finance/transaction-types/create', [TransactionTypesController::class, 'create'])->name('finance.transaction-types.create');
     Route::post('/finance/transaction-types', [TransactionTypesController::class, 'store'])->name('finance.transaction-types.store');
+
+    // Landlord entry type registry (which landlord ledger entries count toward the balance)
+    Route::get('/finance/landlord-entry-types', [App\Http\Controllers\LandlordEntryTypesController::class, 'index'])->name('finance.landlord.entry.types.index');
+    Route::post('/finance/landlord-entry-types', [App\Http\Controllers\LandlordEntryTypesController::class, 'store'])->name('finance.landlord.entry.types.store');
+    Route::put('/finance/landlord-entry-types/{id}', [App\Http\Controllers\LandlordEntryTypesController::class, 'update'])->whereNumber('id')->name('finance.landlord.entry.types.update');
     Route::get('/finance/transaction-types/{id}/edit', [TransactionTypesController::class, 'edit'])->name('finance.transaction-types.edit');
     Route::put('/finance/transaction-types/{id}', [TransactionTypesController::class, 'update'])->name('finance.transaction-types.update');
     Route::delete('/finance/transaction-types/{id}', [TransactionTypesController::class, 'destroy'])->name('finance.transaction-types.destroy');
