@@ -1657,11 +1657,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Transaction Types Management
     Route::get('/finance/transaction-types/create', [TransactionTypesController::class, 'create'])->name('finance.transaction-types.create');
     Route::post('/finance/transaction-types', [TransactionTypesController::class, 'store'])->name('finance.transaction-types.store');
-
-    // Landlord entry type registry (which landlord ledger entries count toward the balance)
-    Route::get('/finance/landlord-entry-types', [App\Http\Controllers\LandlordEntryTypesController::class, 'index'])->name('finance.landlord.entry.types.index');
-    Route::post('/finance/landlord-entry-types', [App\Http\Controllers\LandlordEntryTypesController::class, 'store'])->name('finance.landlord.entry.types.store');
-    Route::put('/finance/landlord-entry-types/{id}', [App\Http\Controllers\LandlordEntryTypesController::class, 'update'])->whereNumber('id')->name('finance.landlord.entry.types.update');
     Route::get('/finance/transaction-types/{id}/edit', [TransactionTypesController::class, 'edit'])->name('finance.transaction-types.edit');
     Route::put('/finance/transaction-types/{id}', [TransactionTypesController::class, 'update'])->name('finance.transaction-types.update');
     Route::delete('/finance/transaction-types/{id}', [TransactionTypesController::class, 'destroy'])->name('finance.transaction-types.destroy');

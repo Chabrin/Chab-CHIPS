@@ -12,10 +12,11 @@ use Illuminate\Support\Facades\DB;
  * Builds the Client Ledgers list: one row per landlord with the state of their account
  * on the client ledger (cb_landlord_account).
  *
- * The balance is credit less debit over every entry whose type counts toward the balance, as set
- * in the landlord entry type registry (LandlordEntryTypeService). Entries whose type does not count
- * (for example the balance snapshots the returns process writes) are still shown, but leave the
- * balance unchanged. The list and the statement use the same rule, so they show the same figure.
+ * The balance is credit less debit over every entry, except the balance snapshots the returns
+ * process writes under code 0008 ("Opening Balance B/F" and "Closing Balance C/F"): those restate a
+ * balance instead of moving money, so they are shown but leave the balance unchanged. The old
+ * system's Opening/Closing Balance C/F pairs (code 00014) count like any other row and cancel out.
+ * The list and the statement use the same rule, so they show the same figure.
  *
  * A landlord with no ledger rows has no account open yet.
  */
@@ -25,16 +26,9 @@ class ClientLedgerService
     const FILTER_FEE = ['all', 'unpaid'];
     const FILTER_BALANCE = ['all', 'owed_to', 'owed_by'];
 
-    protected LandlordEntryTypeService $entryTypes;
-
-    /**
-     * Inject the entry type registry.
-     *
-     * @param LandlordEntryTypeService $entryTypes
-     */
-    public function __construct(LandlordEntryTypeService $entryTypes) {
-        $this->entryTypes = $entryTypes;
-    }
+    /** Entries under this code with one of these descriptions are returns-process snapshots and do not count. */
+    const SNAPSHOT_CODE = '0008';
+    const SNAPSHOT_DESCRIPTIONS = ['Opening Balance B/F', 'Closing Balance C/F'];
 
     /**
      * One row per landlord, newest activity first, optionally narrowed by filters.
@@ -213,8 +207,8 @@ class ClientLedgerService
 
     /**
      * Run a landlord's ledger rows (already in statement order) into statement lines with a
-     * running balance. A row whose entry type counts adds credit less debit; a row whose type does
-     * not count is listed with counted = false and leaves the balance as it was.
+     * running balance. A row that counts adds credit less debit; a returns-process snapshot is
+     * listed with counted = false and leaves the balance as it was.
      *
      * @param iterable $transactions
      */
@@ -225,7 +219,7 @@ class ClientLedgerService
         foreach ($transactions as $txn) {
             $debit = abs($txn->debit_amount ?? 0);
             $credit = abs($txn->credit_amount ?? 0);
-            $counted = $this->entryTypes->counts($txn->entry_type_code, $txn->entry_description);
+            $counted = $this->counts($txn->entry_type_code, $txn->entry_description);
 
             if ($counted) {
                 $balance += $credit - $debit;
@@ -247,6 +241,26 @@ class ClientLedgerService
         }
 
         return $statementEntries;
+    }
+
+    /**
+     * Whether a ledger entry counts toward the balance: everything except the returns-process snapshots.
+     * The SQL in query() applies the same rule.
+     *
+     * @param string|null $code entry_type_code
+     * @param string|null $description entry_description
+     */
+    public function counts(?string $code, ?string $description): bool {
+        if ((string) $code !== self::SNAPSHOT_CODE) {
+            return true;
+        }
+        foreach (self::SNAPSHOT_DESCRIPTIONS as $snapshot) {
+            if (stripos((string) $description, $snapshot) !== false) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -286,21 +300,20 @@ class ClientLedgerService
     /**
      * The SQL behind the list. Every landlord (reference LAN...) is returned, with zeros and
      * null dates when there are no ledger rows; summaries() then narrows it to the landlords the
-     * signed-in user may see. The balance counts only entries whose type counts (see the registry).
+     * signed-in user may see. The balance leaves out the returns-process snapshots (see counts()).
      *
      * unpaid_fee is the registration fee (entry code 0023) still waiting to be recovered.
      */
     protected function query(): string {
         $code = ClientAccountService::REGISTRATION_CODE;
-        $entryTypes = $this->entryTypes->lateralJoin('l');
+        $snapshot = implode(' OR ', array_map(fn($d) => "l.entry_description ILIKE '%" . $d . "%'", self::SNAPSHOT_DESCRIPTIONS));
 
         return "
             WITH rows AS (
                 SELECT l.client_id, l.entry_date, l.entry_type_code, l.debit_amount, l.is_recovered,
-                    COALESCE(et.counts_toward_balance, TRUE) AS counts,
+                    NOT (COALESCE(l.entry_type_code, '') = '" . self::SNAPSHOT_CODE . "' AND COALESCE({$snapshot}, FALSE)) AS counts,
                     ABS(COALESCE(l.credit_amount, 0)) - ABS(COALESCE(l.debit_amount, 0)) AS net
                 FROM cb_landlord_account l
-                {$entryTypes}
                 WHERE l.client_id IS NOT NULL
             ),
             summary AS (
