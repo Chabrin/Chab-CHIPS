@@ -1874,6 +1874,14 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/accounting/gl-transactions',[App\Http\Controllers\LedgerController::class, 'getGlTransactions'])->name('gl.transactions.data');
     Route::get('/accounting/gl-transactions/export',[App\Http\Controllers\LedgerController::class, 'downloadGlTransactionsExcel'])->name('gl.transactions.export');
 
+    // GL Account Balances (trial balance) and account ledgers
+    Route::get('/ledger/balances', [App\Http\Controllers\GlBalancesController::class, 'index'])->name('gl.balances.index');
+    Route::get('/ajax/ledger/balances/view', [App\Http\Controllers\GlBalancesController::class, 'sheet'])->name('ajax.gl.balances.view');
+    Route::get('/ledger/balances/export', [App\Http\Controllers\GlBalancesController::class, 'export'])->name('gl.balances.export');
+    Route::get('/ledger/account-ledger', [App\Http\Controllers\GlBalancesController::class, 'accountLedger'])->name('gl.account.ledger');
+    Route::get('/ajax/ledger/account-ledger/view', [App\Http\Controllers\GlBalancesController::class, 'accountLedgerSheet'])->name('ajax.gl.account.ledger.view');
+    Route::get('/ledger/account-ledger/export', [App\Http\Controllers\GlBalancesController::class, 'accountLedgerExport'])->name('gl.account.ledger.export');
+
     // GL Settings
     Route::get('/generalledger/settings',              [App\Http\Controllers\LedgerController::class, 'glSettingsIndex'])->name('gl.settings.index');
     Route::post('/generalledger/settings',             [App\Http\Controllers\LedgerController::class, 'updateGlSettings'])->name('gl.settings.update');
