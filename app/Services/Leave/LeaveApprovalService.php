@@ -215,4 +215,115 @@ class LeaveApprovalService
             'metadata' => $metadata,
         ]);
     }
+
+    /**
+     * Stage 1: HOD partial approval. Transitions status from 1 (Pending) to 24 (Partial).
+     *
+     * @param LeaveRequest $request
+     * @param int $approverId
+     * @return array{success: bool, error?: string}
+     */
+    /**
+     * Stage 1: HOD Partial Approval. Moves status 1 (Pending) -> 24 (Partial).
+     * Does not charge leave days yet.
+     */
+    public function hodApprove(LeaveRequest $request, int $approverId): array
+    {
+        if ((int) $request->current_status_id !== self::STATUS_PENDING) {
+            return ['success' => false, 'error' => 'Only pending applications can be recommended by HOD.'];
+        }
+
+        if ($error = $this->actionableError($request)) {
+            return ['success' => false, 'error' => $error];
+        }
+
+        DB::transaction(function () use ($request, $approverId) {
+            $request->current_status_id = self::STATUS_PARTIAL;
+            $request->status_changed_by = $approverId;
+            $request->save();
+
+            $this->log('partial_approve', $request->id, $approverId, 1, [
+                'stage' => 'hod_partial_approval',
+                'employee_id' => $request->staff_id,
+                'leave_type_id' => $request->leave_type_id,
+            ]);
+        });
+
+        SendApprovalNotification::dispatch(self::SECTION, $request->id, $approverId);
+
+        return ['success' => true];
+    }
+
+    /**
+     * Stage 2: HR Final Approval. Moves status 24 (Partial) -> 5 (Approved).
+     * Calculates countable days, creates LeaveRequestDaysTaken, deducts balance, and logs stage 2.
+     */
+    public function hrApprove(LeaveRequest $request, int $approverId): array
+    {
+        if ((int) $request->current_status_id !== self::STATUS_PARTIAL) {
+            return ['success' => false, 'error' => 'Application must be partially approved by HOD first.'];
+        }
+
+        if ($error = $this->actionableError($request)) {
+            return ['success' => false, 'error' => $error];
+        }
+
+        $isPartialDay = $this->isPartialDay($request);
+        $rules = $this->calendar->rulesFor((int) $request->leave_type_id);
+        $dates = $isPartialDay
+            ? collect([Carbon::parse($request->start_date)])
+            : $this->calendar->countableDates($request->start_date, $request->end_date, (int) $request->leave_type_id);
+
+        if ($dates->isEmpty()) {
+            return ['success' => false, 'error' => 'The requested dates contain no chargeable leave days.'];
+        }
+
+        $usedDays = DB::transaction(function () use ($request, $approverId, $dates, $isPartialDay, $rules) {
+            LeaveRequestDaysTaken::where('parent_id', $request->id)->delete();
+
+            $usedDays = 0.0;
+
+            foreach ($dates as $date) {
+                $fraction = $isPartialDay ? $this->partialDayUsedDays($request) : $this->calendar->dayWeight($date, $rules);
+
+                LeaveRequestDaysTaken::create([
+                    'parent_id' => $request->id,
+                    'current_status_id' => self::STATUS_APPROVED,
+                    'leave_date' => $isPartialDay ? $request->start_date : $date->format('Y-m-d') . ' 00:00:00',
+                    'day_type_id' => $this->dayTypeFor($date),
+                    'day_fraction' => $fraction,
+                ]);
+
+                $usedDays += $fraction;
+            }
+
+            $request->used_days = $usedDays;
+            $request->current_status_id = self::STATUS_APPROVED;
+            $request->status_changed_by = $approverId;
+            $request->save();
+
+            $plan = $this->planFor($request);
+            if ($plan) {
+                $plan->balance = $plan->balance - $usedDays;
+                $plan->save();
+            }
+
+            $this->log('approve', $request->id, $approverId, 2, [
+                'stage' => 'hr_final_approval',
+                'used_days' => $usedDays,
+                'is_partial_day' => $isPartialDay,
+                'employee_id' => $request->staff_id,
+                'leave_type_id' => $request->leave_type_id,
+                'plan_id' => $plan ? $plan->id : null,
+                'plan_balance_after' => $plan ? $plan->balance : null,
+            ]);
+
+            return $usedDays;
+        });
+
+        $this->tiers->retagForRequest($request);
+        SendApprovalNotification::dispatch(self::SECTION, $request->id, $approverId);
+
+        return ['success' => true, 'used_days' => $usedDays];
+    }
 }

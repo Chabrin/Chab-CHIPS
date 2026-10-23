@@ -26,7 +26,6 @@
                     <div class="card-body">
 
                         @if(!$staffLinked)
-                        {{-- ── Not linked ─────────────────────────────────────────────── --}}
                         <div class="alert alert-warning d-flex align-items-center gap-2">
                             <span class="material-symbols-outlined">warning</span>
                             <div>
@@ -36,7 +35,6 @@
                         </div>
 
                         @else
-                        {{-- ── Leave table ──────────────────────────────────────────── --}}
                         <div class="table-responsive">
                             <table class="display" id="myLeaveTable" style="width:100%">
                                 <thead>
@@ -47,6 +45,7 @@
                                         <th>End Date</th>
                                         <th>Days</th>
                                         <th>Status</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -63,7 +62,7 @@
 </div>
 
 @if($staffLinked)
-{{-- ── Leave Application Modal ────────────────────────────────────────── --}}
+{{-- Leave Application Modal --}}
 <div class="modal fade" id="leaveApplicationModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -75,12 +74,27 @@
                 <form id="leaveForm">
                     <input type="hidden" name="staff_id" value="{{ $staffId }}">
                     <div class="row">
-                        <div class="col-lg-6 mb-3">
-                            <label class="form-label">Leave Type <span class="text-danger">*</span></label>
-                            <select class="form-select" name="leave_type_id" id="sl_leave_type_id" required>
-                                <option value="">Select leave type...</option>
-                            </select>
+                       <div class="col-lg-6 mb-3">
+                        <label class="form-label">Leave Type <span class="text-danger">*</span></label>
+                        <select class="form-select" name="leave_type_id" id="sl_leave_type_id" required>
+                            <option value="">Select leave type...</option>
+                        </select>
+
+                        <div id="preScheduledBlockContainer" class="mb-3 mt-3" style="display: none;">
+                            <div style="background: #f0f7ff; border: 1px solid #b7d7f0; border-radius: 8px; padding: 12px 14px;">
+                                <label class="form-label d-flex align-items-center gap-1 text-primary fw-bold" style="font-size: 13px; margin-bottom: 6px;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">event_available</span>
+                                    Select Pre-Scheduled Leave Block <span class="text-danger">*</span>
+                                </label>
+                                <select id="scheduled_slot_select" class="form-select form-select-sm" style="background-color: #fff;">
+                                    <option value="">-- Choose from your scheduled plan --</option>
+                                </select>
+                                <div class="form-text" style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+                                    Dates and working days will automatically populate from your approved annual calendar plan.
+                                </div>
+                            </div>
                         </div>
+                    </div>
                         <div class="col-lg-6 mb-3">
                             <label class="form-label">Available Days</label>
                             <input type="number" class="form-control" id="sl_available_days" readonly>
@@ -145,7 +159,6 @@
 <!-- Annual Leave Schedule Card -->
 @if($annualPlan)
     @php
-        // Saturdays count half, so schedules are made in half days (5.25 entitled = schedule 5)
         $requiredDays = floor((float) $annualPlan->entitled_days * 2) / 2;
         $scheduledDays = (float) $annualPlan->slots->sum('days_count');
         $isFullyScheduled = abs($scheduledDays - $requiredDays) < 0.001;
@@ -159,7 +172,7 @@
                     Annual Leave Schedule ({{ $currentYear }})
                 </h5>
                 <p class="text-muted small mb-0">
-                    Mandatory {{ $requiredDays }} Working Days Requirement: 
+                    Mandatory {{ $requiredDays }} Working Days Requirement:
                     @if($isFullyScheduled)
                         <span class="badge bg-success">Scheduled ({{ $requiredDays }}/{{ $requiredDays }} Days)</span>
                     @else
@@ -199,9 +212,7 @@
                 <form id="scheduleSlotsForm">
                     <input type="hidden" id="modalPlanId" name="plan_id">
                     <input type="hidden" id="modalLeaveTypeId" name="leave_type_id">
-
                     <div id="slotsContainer"></div>
-
                     <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="addSlotRowBtn">
                         <span class="material-symbols-outlined align-middle" style="font-size:16px;">add</span>
                         Add Leave Block
@@ -219,6 +230,69 @@
 </div>
 
 <script>
+$(document).ready(function () {
+    const currentStaffId = "{{ $staff->id ?? Auth::user()->linkedStaff()?->id }}";
+
+    $('#leave_type_id, select[name="leave_type_id"]').on('change', function () {
+        const selectedText = $(this).find('option:selected').text().toLowerCase();
+        if (selectedText.includes('annual')) {
+            loadStaffAnnualSlots(currentStaffId);
+        } else {
+            $('#preScheduledBlockContainer').slideUp();
+            $('#scheduled_slot_select').empty().append('<option value="">-- Choose from your scheduled plan --</option>');
+        }
+    });
+
+    function loadStaffAnnualSlots(staffId) {
+        if (!staffId) return;
+        const currentYear = new Date().getFullYear();
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/staff-annual-slots') }}",
+            type: 'GET',
+            data: { staff_id: staffId, year: currentYear },
+            dataType: 'json',
+            success: function (res) {
+                if (res.success && res.slots && res.slots.length > 0) {
+                    let options = '<option value="">-- Choose from your scheduled plan --</option>';
+                    res.slots.forEach(function (slot) {
+                        const disabledAttr = slot.is_disabled ? 'disabled style="color:#9ca3af;"' : '';
+                        options += '<option value="' + slot.id + '" data-start="' + slot.start_date + '" data-end="' + slot.end_date + '" data-days="' + slot.days + '" ' + disabledAttr + '>' + slot.display + '</option>';
+                    });
+                    $('#scheduled_slot_select').html(options);
+                    $('#preScheduledBlockContainer').slideDown();
+                } else {
+                    $('#preScheduledBlockContainer').slideUp();
+                }
+            },
+            error: function () {
+                $('#preScheduledBlockContainer').slideUp();
+            }
+        });
+    }
+
+    $('#scheduled_slot_select').on('change', function () {
+        const selectedOption = $(this).find('option:selected');
+        const startDate = selectedOption.data('start');
+        const endDate   = selectedOption.data('end');
+        const days      = selectedOption.data('days');
+
+        if (startDate) {
+            $('input[name="start_date"], #start_date, #sl_start_date').val(startDate).trigger('change');
+            $('input[name="end_date"], #end_date').val(endDate).trigger('change');
+            $('input[name="requested_days"], #requested_days, #sl_requested_days').val(days).trigger('change');
+            $('input[name="requested_days"], #requested_days, #sl_requested_days').prop('readonly', true);
+        } else {
+            $('input[name="requested_days"], #requested_days, #sl_requested_days').prop('readonly', false);
+        }
+    });
+
+    $('#newLeaveModal, #leaveApplicationModal').on('hidden.bs.modal', function () {
+        $('#preScheduledBlockContainer').hide();
+        $('#scheduled_slot_select').val('');
+        $('input[name="requested_days"], #requested_days, #sl_requested_days').prop('readonly', false);
+    });
+});
+
 $(document).ready(function() {
     let currentTotalDays = 0;
     let requiredDays = 0;
@@ -237,7 +311,6 @@ $(document).ready(function() {
         $('#modalEmployeeName').text(empName);
         $('#slotsContainer').empty();
 
-        // Load existing slots if rescheduling, or open with one empty block
         $.ajax({
             url: "{{ url('/ajax/leave-management/plan-slots') }}/" + planId,
             type: 'GET',
@@ -258,33 +331,26 @@ $(document).ready(function() {
         $('#scheduleModal').modal('show');
     });
 
-    function addSlotRow(startVal = '', endVal = '', daysVal = 0) {
+    function addSlotRow(startVal, endVal, daysVal) {
+        startVal = startVal || '';
+        endVal = endVal || '';
+        daysVal = daysVal || 0;
         let idx = $('#slotsContainer .slot-row').length;
-        let html = `
-            <div class="slot-row border rounded p-2 mb-2 bg-white">
-                <div class="row g-2 align-items-center">
-                    <div class="col-md-4">
-                        <label class="form-label small mb-1">Start Date</label>
-                        <input type="date" class="form-control form-control-sm slot-start" name="slots[${idx}][start_date]" value="${startVal}" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small mb-1">End Date</label>
-                        <input type="date" class="form-control form-control-sm slot-end" name="slots[${idx}][end_date]" value="${endVal}" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Working Days</label>
-                        <input type="text" class="form-control form-control-sm slot-days bg-light" readonly value="${daysVal}">
-                    </div>
-                    <div class="col-md-1 text-end pt-3">
-                        <button type="button" class="btn btn-sm btn-outline-danger remove-slot-btn" style="padding: 2px 6px;">&times;</button>
-                    </div>
-                </div>
-            </div>
-        `;
+        let html = '<div class="slot-row border rounded p-2 mb-2 bg-white">' +
+            '<div class="row g-2 align-items-center">' +
+            '<div class="col-md-4"><label class="form-label small mb-1">Start Date</label>' +
+            '<input type="date" class="form-control form-control-sm slot-start" name="slots[' + idx + '][start_date]" value="' + startVal + '" required></div>' +
+            '<div class="col-md-4"><label class="form-label small mb-1">End Date</label>' +
+            '<input type="date" class="form-control form-control-sm slot-end" name="slots[' + idx + '][end_date]" value="' + endVal + '" required></div>' +
+            '<div class="col-md-3"><label class="form-label small mb-1">Working Days</label>' +
+            '<input type="text" class="form-control form-control-sm slot-days bg-light" readonly value="' + daysVal + '"></div>' +
+            '<div class="col-md-1 text-end pt-3">' +
+            '<button type="button" class="btn btn-sm btn-outline-danger remove-slot-btn" style="padding: 2px 6px;">&times;</button></div>' +
+            '</div></div>';
         $('#slotsContainer').append(html);
     }
 
-    $('#addSlotRowBtn').on('click', () => addSlotRow());
+    $('#addSlotRowBtn').on('click', function() { addSlotRow(); });
 
     $(document).on('click', '.remove-slot-btn', function() {
         if ($('#slotsContainer .slot-row').length > 1) {
@@ -308,7 +374,6 @@ $(document).ready(function() {
                 updateRunningTotal();
                 return;
             }
-
             $.ajax({
                 url: "{{ url('/ajax/leave-management/calculate-slot-days') }}",
                 type: 'POST',
@@ -331,12 +396,9 @@ $(document).ready(function() {
         $('.slot-days').each(function() {
             total += parseFloat($(this).val()) || 0;
         });
-
         currentTotalDays = total;
         let remaining = requiredDays - total;
-
         $('#allocatedDaysBadge').text(total + ' Days');
-
         if (Math.abs(remaining) < 0.001) {
             $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Perfect!)');
             $('#saveScheduleBtn').prop('disabled', false);
@@ -354,9 +416,7 @@ $(document).ready(function() {
             toastr.error('You must allocate exactly ' + requiredDays + ' working days.');
             return;
         }
-
         let formData = $('#scheduleSlotsForm').serialize();
-
         $.ajax({
             url: "{{ url('/ajax/leave-management/save-annual-schedule') }}",
             type: 'POST',
@@ -365,13 +425,13 @@ $(document).ready(function() {
                 if (res.success) {
                     toastr.success(res.message);
                     $('#scheduleModal').modal('hide');
-                    setTimeout(() => location.reload(), 1000);
+                    setTimeout(function() { location.reload(); }, 1000);
                 } else {
                     toastr.error(res.error || 'Failed to save');
                 }
             },
             error: function(xhr) {
-                toastr.error(xhr.responseJSON?.error || 'Failed to save schedule');
+                toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save schedule');
             }
         });
     });
@@ -382,7 +442,6 @@ $(document).ready(function() {
 $(function () {
     var staffId = {{ $staffId }};
 
-    // ── DataTable ────────────────────────────────────────────────────────────
     var leaveTable = $('#myLeaveTable').DataTable({
         processing: true,
         ajax: {
@@ -404,10 +463,29 @@ $(function () {
                 render: function (s) {
                     var map = {
                         1:  '<span class="badge bg-secondary">Pending</span>',
+                        24: '<span class="badge bg-info">Partially Approved</span>',
                         5:  '<span class="badge bg-success">Approved</span>',
-                        28: '<span class="badge bg-danger">Rejected</span>'
+                        41: '<span class="badge bg-danger">Rejected</span>'
                     };
                     return map[s] || '<span class="badge bg-light text-dark">' + s + '</span>';
+                }
+            },
+            {
+                data: null,
+                orderable: false,
+                render: function (data, type, row) {
+                    if (parseInt(row.current_status_id) === 5) {
+                        var url = "{{ url('/hr/leave-management/leave-pass') }}/" + row.encrypted_leave_application_id;
+                        return '<a href="' + url + '" target="_blank" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center" title="Download Leave Pass">' +
+                            '<span class="material-symbols-outlined" style="font-size: 16px;">download</span>' +
+                            '<span class="ms-1">Leave Pass</span>' +
+                            '</a>';
+                    } else {
+                        return '<button type="button" class="btn btn-light btn-sm text-muted d-inline-flex align-items-center" disabled title="Available once approved">' +
+                            '<span class="material-symbols-outlined" style="font-size: 16px;">lock</span>' +
+                            '<span class="ms-1">Leave Pass</span>' +
+                            '</button>';
+                    }
                 }
             }
         ],
@@ -415,7 +493,6 @@ $(function () {
         pageLength: 25
     });
 
-    // ── Load leave types ─────────────────────────────────────────────────────
     $.get("{{ route('ajax.leaveTypes.list') }}", function (res) {
         if (res.success) {
             var opts = '<option value="">Select leave type...</option>';
@@ -426,7 +503,6 @@ $(function () {
         }
     });
 
-    // ── Duration toggle ──────────────────────────────────────────────────────
     $('input[name="leave_duration_type"]').on('change', function () {
         if ($(this).val() === 'full_day') {
             $('#sl_full_days_section').show();
@@ -437,14 +513,12 @@ $(function () {
         }
     });
 
-    // ── Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) ───────────────
     var tierRequest = null;
     function showTierBreakdown() {
         var leaveTypeId = $('#sl_leave_type_id').val();
         $('#sl_tier_alert').addClass('d-none');
         if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
 
-        // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
         if (tierRequest) { tierRequest.abort(); }
         tierRequest = $.ajax({
             url: "{{ url('/ajax/leave-management/evaluate-application') }}",
@@ -475,7 +549,6 @@ $(function () {
     }
     $('#sl_leave_type_id, #sl_start_date, #sl_requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
 
-    // ── Available days ───────────────────────────────────────────────────────
     $('#sl_leave_type_id').on('change', function () {
         var leaveTypeId = $(this).val();
         if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
@@ -484,7 +557,6 @@ $(function () {
         });
     });
 
-    // ── Submit ────────────────────────────────────────────────────────────────
     $('#leaveSubmitBtn').on('click', function () {
         var durationType = $('input[name="leave_duration_type"]:checked').val();
         var data = {
@@ -542,7 +614,6 @@ $(function () {
         });
     });
 
-    // ── Reset modal on close ──────────────────────────────────────────────────
     $('#leaveApplicationModal').on('hidden.bs.modal', function () {
         $('#leaveForm')[0].reset();
         $('#sl_available_days').val('');

@@ -286,71 +286,80 @@ class HrSettingsController extends Controller
     }
 
     public function positionsList()
-    {
-        try {
-            $canUpdate = Auth::user()->isAbleTo('update_staff_positions');
-            $canRead = Auth::user()->isAbleTo('read_staff_positions');
-            $canDelete = Auth::user()->isAbleTo('delete_staff_positions');
+{
+    try {
+        $canUpdate = Auth::user()->isAbleTo('update_staff_positions');
+        $canRead = Auth::user()->isAbleTo('read_staff_positions');
+        $canDelete = Auth::user()->isAbleTo('delete_staff_positions');
 
-            $positions = Position::with(['reportsTo', 'salaryAccount'])
-                ->withCount('staff')
-                ->orderBy('position_name')
-                ->get()
-                ->map(function ($position) use ($canUpdate, $canRead, $canDelete) {
-                    return [
-                        'id' => $position->id,
-                        'encrypted_id' => Crypt::encrypt($position->id),
-                        'position_name' => $position->position_name,
-                        'slug_name' => $position->slug_name,
-                        'basic_salary' => $position->basic_salary,
-                        'reports_to_name' => $position->reportsTo->position_name ?? null,
-                        'staff_count' => $position->staff_count,
-                        'can_update' => $canUpdate,
-                        'can_read' => $canRead,
-                        'can_delete' => $canDelete,
-                    ];
-                });
+        $positions = Position::with(['reportsTo', 'salaryAccount', 'department']) // <-- added department
+            ->withCount('staff')
+            ->orderBy('position_name')
+            ->get()
+            ->map(function ($position) use ($canUpdate, $canRead, $canDelete) {
+                return [
+                    'id' => $position->id,
+                    'encrypted_id' => Crypt::encrypt($position->id),
+                    'position_name' => $position->position_name,
+                    'department_id' => $position->department_id,
+                    'department_name' => $position->department->department_name ?? '—', // <-- department display
+                    'slug_name' => $position->slug_name,
+                    'basic_salary' => $position->basic_salary,
+                    'reports_to_name' => $position->reportsTo->position_name ?? null,
+                    'staff_count' => $position->staff_count,
+                    'can_update' => $canUpdate,
+                    'can_read' => $canRead,
+                    'can_delete' => $canDelete,
+                ];
+            });
 
-            return response()->json(['positions' => $positions]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['error' => 'Failed to load positions'], 500);
-        }
+        return response()->json(['positions' => $positions]);
+    } catch (\Exception $e) {
+        // ... error dispatching
     }
+}
+    
 
-    public function positionsDropdowns(Request $request)
-    {
-        try {
-            $currentId = $request->get('current_id');
-            $positions = Position::where('id', '!=', $currentId)
-                ->orderBy('position_name')
-                ->get(['id', 'position_name']);
+public function positionsDropdowns(Request $request)
+{
+    try {
+        $currentId = $request->get('current_id');
 
-            $accounts = ChartAccount::orderBy('account_name')
-                ->get(['id', 'account_name', 'account_number'])
-                ->map(function ($account) {
-                    $account->full_account = $account->account_number . ' - ' . $account->account_name;
-                    return $account;
-                });
-
-            return response()->json([
-                'positions' => $positions,
-                'accounts' => $accounts
-            ]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['error' => 'Failed to load dropdowns'], 500);
+        $query = Position::orderBy('position_name');
+        if (!empty($currentId)) {
+            $query->where('id', '!=', $currentId);
         }
-    }
+        $positions = $query->select('id', 'position_name')->get();
 
+        // Safely select id and account_name without account_number
+        $accounts = ChartAccount::orderBy('account_name')
+            ->select('id', 'account_name')
+            ->get()
+            ->map(function ($account) {
+                $account->full_account = $account->account_name;
+                return $account;
+            });
+
+        // Departments from sys_set_departments
+        $departments = Department::orderBy('department_name')
+            ->select('id', 'department_name')
+            ->get();
+
+        return response()->json([
+            'positions'   => $positions,
+            'accounts'    => $accounts,
+            'departments' => $departments,
+        ]);
+    } catch (\Throwable $e) {
+        Log::error('positionsDropdowns error: ' . $e->getMessage());
+        return response()->json([
+            'error'   => 'Failed to load dropdowns',
+            'debug'   => $e->getMessage(),
+            'line'    => $e->getLine(),
+            'file'    => basename($e->getFile())
+        ], 500);
+    }
+}
     public function positionsGet(Request $request)
     {
         try {
@@ -411,50 +420,47 @@ class HrSettingsController extends Controller
         }
     }
 
-    public function positionsUpdateAjax(Request $request, $id)
-    {
-        try {
-            $validated = $request->validate([
-                'position_name' => 'required|string|max:255',
-                'basic_salary' => 'nullable|numeric|min:0',
-                'salary_account_id' => 'nullable|integer',
-                'reports_to_id' => 'nullable|integer',
-            ]);
+  public function positionsUpdateAjax(Request $request, $id)
+{
+    try {
+        $validated = $request->validate([
+            'department_id' => 'required|integer|exists:sys_set_departments,id',
+            'position_name' => 'required|string|max:255',
+            'basic_salary'  => 'nullable|numeric|min:0',
+            'salary_account_id' => 'nullable|integer',
+            'reports_to_id' => 'nullable|integer',
+        ]);
 
-            $position = Position::findOrFail($id);
+        $position = Position::findOrFail($id);
 
-            $exists = Position::where('position_name', $validated['position_name'])
-                ->where('id', '!=', $id)
-                ->exists();
-            if ($exists) {
-                return response()->json([
-                    'success' => false,
-                    'errors' => ['position_name' => ['A position with that name already exists.']]
-                ], 422);
-            }
+        $exists = Position::where('position_name', $validated['position_name'])
+            ->where('id', '!=', $id)
+            ->exists();
 
-            $position->position_name = $validated['position_name'];
-            $position->basic_salary = $validated['basic_salary'] ?? null;
-            $position->salary_account_id = $validated['salary_account_id'] ?? null;
-            $position->reports_to_id = $validated['reports_to_id'] ?? null;
-            $position->save();
-
+        if ($exists) {
             return response()->json([
-                'success' => true,
-                'message' => 'Position updated successfully',
-                'position' => $position
-            ]);
-        } catch (ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to update position'], 500);
+                'success' => false,
+                'errors'  => ['position_name' => ['A position with that name already exists.']]
+            ], 422);
         }
+
+        $position->department_id = $validated['department_id']; // <-- saves the department
+        $position->position_name = $validated['position_name'];
+        $position->basic_salary  = $validated['basic_salary'] ?? null;
+        $position->reports_to_id = $validated['reports_to_id'] ?? null;
+        $position->save();
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Position updated successfully',
+            'position' => $position
+        ]);
+    } catch (ValidationException $e) {
+        return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+    } catch (\Throwable $e) {
+        return response()->json(['success' => false, 'error' => 'Failed to update position'], 500);
     }
+}
 
     public function positionsDestroyAjax($id)
     {

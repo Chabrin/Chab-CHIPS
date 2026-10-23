@@ -591,6 +591,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Leave Applications Routes
     Route::get('/hr/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplications'])->name('leave-management.leave-applications');
     Route::get('/hr/leave-management/leave-applications/{encryptedLeaveApplicationId}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsByStaff'])->name('leave-management.leave-applications.by-staff');
+    Route::get('/hr/leave-management/leave-pass/{encryptedLeaveApplicationId}', [\App\Http\Controllers\LeaveManagementController::class, 'downloadLeavePass'])->name('leave-management.download-pass');
     Route::get('/ajax/leave-management/leave-applications/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsList'])->name('ajax.leaveApplications.list');
     Route::post('/ajax/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsStore'])->name('ajax.leaveApplications.store');
     Route::post('/ajax/leave-management/leave-applications/status-update', [\App\Http\Controllers\LeaveManagementController::class, 'updateApplicationStatus']);
@@ -601,7 +602,6 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/publicholidays/list', [\App\Http\Controllers\LeaveManagementController::class, 'publicHolidaysList'])->name('ajax.publicholidays.list');
     Route::get('/ajax/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
     Route::get('/ajax/hr/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
-   
     // Leave Adjustments
     Route::get('/hr/leave-management/leave-adjustments', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustments'])->name('leave.adjustments');
     Route::get('/ajax/leave-management/leave-adjustments/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustmentsList']);
@@ -616,6 +616,16 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         ->name('leave-management.leave-balance-report-data');
     Route::get('/ajax/leave-management/export-leave-balance-report', [\App\Http\Controllers\LeaveManagementController::class, 'exportLeaveBalanceReport'])
         ->name('leave-management.export-leave-balance-report');
+
+        Route::prefix('hr/leave-management')->middleware(['auth'])->group(function () {
+    // Page View
+    Route::get('/pending-approvals', [LeaveManagementController::class, 'pendingApprovalsView'])
+        ->name('hr.leave.pending.approvals');
+
+    // DataTables AJAX list
+    Route::get('/pending-approvals/list', [LeaveManagementController::class, 'pendingApprovalsList'])
+        ->name('ajax.hr.leave.pending.approvals.list');
+});
 
     ####### Leave Management Section End ########
 

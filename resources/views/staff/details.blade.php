@@ -46,13 +46,13 @@ use Illuminate\Support\Facades\Crypt;
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
+
                         <!-- Summary Header -->
                         @php
                             $photoUrl = ($staff->photo && \Illuminate\Support\Facades\Storage::disk('public')->exists($staff->photo))
                                 ? asset('storage/' . $staff->photo)
                                 : null;
 
-                            // Initials: first letter of the first and last name
                             $nameParts = preg_split('/\s+/', trim($staff->full_names ?? ''));
                             $initials = strtoupper(
                                 mb_substr($nameParts[0] ?? '', 0, 1) .
@@ -113,7 +113,7 @@ use Illuminate\Support\Facades\Crypt;
                                     Contacts
                                 </button>
                             </li>
-                              <li class="nav-item" role="presentation">
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab">
                                     <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">folder_open</span>
                                     Documents
@@ -157,7 +157,6 @@ use Illuminate\Support\Facades\Crypt;
                             <!-- Personal Information Tab -->
                             <div class="tab-pane fade show active" id="personal" role="tabpanel" aria-labelledby="personal-tab">
                                 <div class="row g-3">
-                                    <!-- Basic Information Card -->
                                     <div class="col-md-4">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -170,27 +169,20 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Full Names:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->full_names ?? '-' }}</strong></small></div>
-
                                                     <div class="col-5"><small class="text-muted">Staff Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->staff_number ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Gender:</small></div>
                                                     <div class="col-7"><small>{{ $staff->gender ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Date of Birth:</small></div>
                                                     <div class="col-7"><small>{{ $staff->birth_date ? $staff->birth_date->format('d M Y') : '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Birth Place:</small></div>
                                                     <div class="col-7"><small>{{ $staff->birth_place ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">National ID:</small></div>
                                                     <div class="col-7"><small>{{ $staff->national_id ?? '-' }}</small></div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Identity & Status Card -->
                                     <div class="col-md-4">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -203,24 +195,18 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Passport:</small></div>
                                                     <div class="col-7"><small>{{ $staff->passport ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Citizenship:</small></div>
                                                     <div class="col-7"><small>{{ $staff->citizenship ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Marital Status:</small></div>
                                                     <div class="col-7"><small>{{ $staff->marital ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Spouse Name:</small></div>
                                                     <div class="col-7"><small>{{ $staff->spouse_name ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Disability:</small></div>
                                                     <div class="col-7"><small>{{ $staff->disability ?? '-' }}</small></div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Next of Kin Card -->
                                     <div class="col-md-4">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -243,7 +229,6 @@ use Illuminate\Support\Facades\Crypt;
                             <!-- Employment Details Tab -->
                             <div class="tab-pane fade" id="employment" role="tabpanel" aria-labelledby="employment-tab">
                                 <div class="row g-3">
-                                    <!-- Employment Info Card -->
                                     <div class="col-md-4">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -256,21 +241,14 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Department:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->department->department_name ?? '-' }}</strong></small></div>
-
                                                     <div class="col-5"><small class="text-muted">Position:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->position->position_name ?? '-' }}</strong></small></div>
-
                                                     <div class="col-5"><small class="text-muted">Hire Date:</small></div>
                                                     <div class="col-7"><small>{{ $staff->hire_date ? $staff->hire_date->format('d M Y') : '-' }}</small></div>
-
-                                                    <!-- <div class="col-5"><small class="text-muted">Status:</small></div>
-                                                    <div class="col-7"><small><span class="badge bg-success">{{ $staff->current_status_id ?? 'Active' }}</span></small></div> -->
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Location & Access Card -->
                                     <div class="col-md-4">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -284,9 +262,8 @@ use Illuminate\Support\Facades\Crypt;
                                                     <div class="col-5"><small class="text-muted">Branch ID:</small></div>
                                                     <div class="col-7"><small>{{ $staff->branch_id ?? '-' }}</small></div>
 
-                                                    @php
-                                                    $positionSlug = $staff->position->slug_name ?? null;
-                                                    @endphp
+                                                    @php $positionSlug = $staff->position->slug_name ?? null; @endphp
+
                                                     @if($positionSlug === 'field_officer')
                                                     <div class="col-5"><small class="text-muted">Zone:</small></div>
                                                     <div class="col-7"><small>{{ $staff->zone->zone_name ?? '-' }}</small></div>
@@ -312,18 +289,14 @@ use Illuminate\Support\Facades\Crypt;
 
                                                     <div class="col-5"><small class="text-muted">Zone Area:</small></div>
                                                     <div class="col-7"><small>{{ $staff->zoneArea->area_name ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Username:</small></div>
                                                     <div class="col-7"><small>{{ $staff->username ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Permission Group:</small></div>
                                                     <div class="col-7"><small>{{ $staff->permission_group_id ?? '-' }}</small></div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Registration Card -->
                                     <div class="col-md-4">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -346,7 +319,6 @@ use Illuminate\Support\Facades\Crypt;
                             <!-- Banking & Statutory Tab -->
                             <div class="tab-pane fade" id="banking" role="tabpanel" aria-labelledby="banking-tab">
                                 <div class="row g-3">
-                                    <!-- Bank Details Card -->
                                     <div class="col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -359,18 +331,14 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Bank Name:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->bank->bank_name ?? '-' }}</strong></small></div>
-
                                                     <div class="col-5"><small class="text-muted">Account Name:</small></div>
                                                     <div class="col-7"><small>{{ $staff->account_name ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Account Number:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->account_number ?? '-' }}</strong></small></div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Statutory Numbers Card -->
                                     <div class="col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -383,10 +351,8 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">PIN Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->pin_number ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">SHA Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->nhif_number ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">NSSF Number:</small></div>
                                                     <div class="col-7"><small>{{ $staff->nssf_number ?? '-' }}</small></div>
                                                 </div>
@@ -399,7 +365,6 @@ use Illuminate\Support\Facades\Crypt;
                             <!-- Contact & Location Tab -->
                             <div class="tab-pane fade" id="contact" role="tabpanel" aria-labelledby="contact-tab">
                                 <div class="row g-3">
-                                    <!-- Contact Information Card -->
                                     <div class="col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -412,22 +377,16 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Mobile Number:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->mobile_number ?? '-' }}</strong></small></div>
-
                                                     <div class="col-5"><small class="text-muted">Email Address:</small></div>
                                                     <div class="col-7"><small>{{ $staff->email_address ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Personal Email:</small></div>
                                                     <div class="col-7"><small>{{ $staff->personal_email ?? '-' }}</small></div>
-
                                                     <div class="col-12 mt-2"><small class="text-muted">Address:</small></div>
                                                     <div class="col-12"><small>{{ $staff->address ?? '-' }}</small></div>
-
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    <!-- Location Details Card -->
                                     <div class="col-md-6">
                                         <div class="card h-100">
                                             <div class="card-header bg-light py-2">
@@ -440,10 +399,8 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">District:</small></div>
                                                     <div class="col-7"><small>{{ $staff->district ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Location:</small></div>
                                                     <div class="col-7"><small>{{ $staff->location ?? '-' }}</small></div>
-
                                                     <div class="col-5"><small class="text-muted">Sub Location:</small></div>
                                                     <div class="col-7"><small>{{ $staff->sub_location ?? '-' }}</small></div>
                                                 </div>
@@ -452,6 +409,7 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                 </div>
                             </div>
+
                             <!-- Documents Tab -->
                             <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
                                 <div class="card">
@@ -563,7 +521,7 @@ use Illuminate\Support\Facades\Crypt;
                                                     <th>Amount</th>
                                                 </tr>
                                             </thead>
-                                           <tbody>
+                                            <tbody>
                                             @php
                                                 $nssfFormulaId = (int) config('nssf.formula_id');
                                             @endphp
@@ -610,7 +568,7 @@ use Illuminate\Support\Facades\Crypt;
                                                 @endif
                                             @endif
                                             @endforeach
-                                        </tbody>
+                                            </tbody>
                                         </table>
                                         @else
                                         <div class="text-muted">No contract elements found.</div>
@@ -618,7 +576,6 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                 </div>
                                 @else
-                                {{-- No contract at all: offer a direct link to create one for this staff member --}}
                                 <div class="card">
                                     <div class="card-body text-center py-5">
                                         <span class="material-symbols-outlined" style="font-size:48px; color:var(--chabrin-green);">contract</span>
@@ -636,28 +593,19 @@ use Illuminate\Support\Facades\Crypt;
 
                             <!-- Disciplinary Records Tab -->
                             <div class="tab-pane fade" id="discipline" role="tabpanel" aria-labelledby="discipline-tab">
-                                
                                 @php
-                                    // Only show cases that have reached step 7 or beyond (employee is formally notified)
                                     $visibleCases = $staff->disciplineCases->filter(function($case) {
                                         return $case->current_step >= 7;
                                     });
-                            
-                                    // Map internal steps to employee-facing steps
+
                                     function getEmployeeStep($internalStep) {
                                         $stepMapping = [
-                                            7 => 1,  // Show Cause Notice Issued
-                                            8 => 2,  // Employee Response
-                                            9 => 3,  // Disciplinary Hearing
-                                            10 => 4, // Hearing Minutes
-                                            11 => 5, // Outcome Decision
-                                            12 => 6, // Training Assignment (if applicable)
-                                            13 => 7, // History Update
-                                            14 => 8, // Case Closure
+                                            7 => 1, 8 => 2, 9 => 3, 10 => 4,
+                                            11 => 5, 12 => 6, 13 => 7, 14 => 8
                                         ];
                                         return $stepMapping[$internalStep] ?? 1;
                                     }
-                            
+
                                     function getEmployeeStepName($internalStep) {
                                         $stepNames = [
                                             7 => 'Show Cause Notice Received',
@@ -672,8 +620,7 @@ use Illuminate\Support\Facades\Crypt;
                                         return $stepNames[$internalStep] ?? 'In Progress';
                                     }
                                 @endphp
-                                
-                                <!-- Cases Against This Staff -->
+
                                 <div class="card mb-3">
                                     <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
                                         <h6 class="mb-0" style="font-size: 0.9rem;">
@@ -742,82 +689,53 @@ use Illuminate\Support\Facades\Crypt;
                                                         <td>
                                                             @php
                                                                 $pendingActions = [];
-                                                                
-                                                                // Calculate deadline status
                                                                 if($case->showCauseNotice && $case->showCauseNotice->response_deadline) {
                                                                     $originalDeadline = \Carbon\Carbon::parse($case->showCauseNotice->response_deadline);
                                                                     $currentDeadline = $originalDeadline;
-                                                                    
-                                                                    // Check for approved extensions (use collection, not query)
+
                                                                     $latestExtension = $case->deadlineExtensions
                                                                         ->where('request_status', 'Approved')
                                                                         ->whereNotNull('new_deadline')
                                                                         ->sortByDesc('extended_at')
                                                                         ->first();
-                                                                    
+
                                                                     if ($latestExtension) {
                                                                         $currentDeadline = \Carbon\Carbon::parse($latestExtension->new_deadline);
                                                                     }
-                                                                    
+
                                                                     $now = \Carbon\Carbon::now();
                                                                     $deadlineExpired = $now->greaterThan($currentDeadline);
                                                                     $hoursRemaining = $now->diffInHours($currentDeadline, false);
-                                                                    
-                                                                    // Check for pending extension request by this employee (use collection, not query)
+
                                                                     $pendingRequest = $case->deadlineExtensions
-                                                                        // ->where('requested_by', $staff->id)
                                                                         ->where('request_status', 'Pending')
                                                                         ->whereNull('reviewed_at')
                                                                         ->first();
-                                                                    
-                                                                    // Step 7 or 8: Employee Response needed
+
                                                                     if(($case->current_step == 7 || $case->current_step == 8) && !$case->employeeResponse) {
                                                                         if($deadlineExpired) {
-                                                                            // Deadline expired
                                                                             $pendingActions[] = '<div class="mb-2"><span class="badge bg-danger">Deadline Expired: '.$currentDeadline->format('d M Y H:i').'</span></div>';
-                                                                            
                                                                             if($pendingRequest) {
-                                                                                // Show pending request badge
-                                                                                $pendingActions[] = '<div><span class="badge bg-warning text-dark">
-                                                                                    <span class="material-symbols-outlined" style="font-size:12px; vertical-align:middle;">pending</span>
-                                                                                    Extension Request Pending
-                                                                                </span></div>';
+                                                                                $pendingActions[] = '<div><span class="badge bg-warning text-dark"><span class="material-symbols-outlined" style="font-size:12px; vertical-align:middle;">pending</span> Extension Request Pending</span></div>';
                                                                             } else {
-                                                                                // Show request extension button
-                                                                                $pendingActions[] = '<button type="button" class="btn btn-sm btn-info" onclick="openExtensionRequestModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')">
-                                                                                    <span class="material-symbols-outlined" style="font-size:14px;">schedule_send</span>
-                                                                                    Request Extension
-                                                                                </button>';
+                                                                                $pendingActions[] = '<button type="button" class="btn btn-sm btn-info" onclick="openExtensionRequestModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')"><span class="material-symbols-outlined" style="font-size:14px;">schedule_send</span> Request Extension</button>';
                                                                             }
                                                                         } elseif($hoursRemaining > 0 && $hoursRemaining <= 24) {
-                                                                            // Urgent - less than 24 hours
                                                                             $pendingActions[] = '<div class="mb-2"><span class="badge bg-warning text-dark">Urgent: '.round($hoursRemaining).'h remaining</span></div>';
-                                                                            
                                                                             if($pendingRequest) {
                                                                                 $pendingActions[] = '<div class="mb-2"><span class="badge bg-info text-dark" style="font-size:0.7rem;">Extension Request Pending</span></div>';
                                                                             }
-                                                                            
-                                                                            $pendingActions[] = '<button type="button" class="btn btn-sm btn-warning" onclick="openResponseModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')">
-                                                                                <span class="material-symbols-outlined" style="font-size:14px;">edit_note</span>
-                                                                                Respond Now
-                                                                            </button>';
+                                                                            $pendingActions[] = '<button type="button" class="btn btn-sm btn-warning" onclick="openResponseModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')"><span class="material-symbols-outlined" style="font-size:14px;">edit_note</span> Respond Now</button>';
                                                                         } else {
-                                                                            // Normal - deadline not yet expired
                                                                             $pendingActions[] = '<div class="mb-2"><span class="badge bg-info">Due: '.$currentDeadline->format('d M Y H:i').'</span></div>';
-                                                                            
                                                                             if($pendingRequest) {
                                                                                 $pendingActions[] = '<div class="mb-2"><span class="badge bg-info text-dark" style="font-size:0.7rem;">Extension Request Pending</span></div>';
                                                                             }
-                                                                            
-                                                                            $pendingActions[] = '<button type="button" class="btn btn-sm btn-primary d-flex align-items-center" onclick="openResponseModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')">
-                                                                                <span class="material-symbols-outlined" style="font-size:14px;">edit_note</span>
-                                                                                Respond
-                                                                            </button>';
+                                                                            $pendingActions[] = '<button type="button" class="btn btn-sm btn-primary d-flex align-items-center" onclick="openResponseModal(\''.$case->id.'\', \''.$case->case_number.'\', \''.$currentDeadline->format('d M Y H:i').'\')"><span class="material-symbols-outlined" style="font-size:14px;">edit_note</span> Respond</button>';
                                                                         }
                                                                     }
                                                                 }
-                                                                
-                                                                // Step 9-10: Hearing Attendance
+
                                                                 if(in_array($case->current_step, [9, 10]) && $case->hearings->count()) {
                                                                     $hearing = $case->hearings->first();
                                                                     if($hearing) {
@@ -826,6 +744,7 @@ use Illuminate\Support\Facades\Crypt;
                                                                     }
                                                                 }
                                                             @endphp
+
                                                             @if(count($pendingActions))
                                                                 {!! implode(' ', $pendingActions) !!}
                                                             @else
@@ -843,7 +762,6 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                 </div>
 
-                                <!-- Cases Where Staff is Investigator -->
                                 @if($staff->investigationsAssigned && $staff->investigationsAssigned->count())
                                 <div class="card mb-3">
                                     <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
@@ -897,7 +815,6 @@ use Illuminate\Support\Facades\Crypt;
                                 </div>
                                 @endif
 
-                                <!-- Cases Where Staff Reported Incident -->
                                 @if($staff->incidentReports && $staff->incidentReports->count())
                                 <div class="card mb-3">
                                     <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
@@ -935,7 +852,6 @@ use Illuminate\Support\Facades\Crypt;
                                 </div>
                                 @endif
 
-                                <!-- Cases Where Staff is Witness -->
                                 @if($staff->witnessStatements && $staff->witnessStatements->count())
                                 <div class="card mb-3">
                                     <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
@@ -970,7 +886,6 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                 </div>
                                 @endif
-                                <!-- Rest of sections... -->
                             </div>
 
                             <!-- Attendance Records Tab -->
@@ -999,7 +914,7 @@ use Illuminate\Support\Facades\Crypt;
                                             <tbody>
                                                 @foreach($staff->employee_attendances as $i => $attendance)
                                                 @php
-                                                $timed = $attendance->employee_attendance_timed->first();
+                                                    $timed = $attendance->employee_attendance_timed->first();
                                                 @endphp
                                                 <tr>
                                                     <td>{{ $i + 1 }}</td>
@@ -1070,6 +985,7 @@ use Illuminate\Support\Facades\Crypt;
                                                 <th>End Date</th>
                                                 <th>Days</th>
                                                 <th>Status</th>
+                                                <th>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody></tbody>
@@ -1102,6 +1018,22 @@ use Illuminate\Support\Facades\Crypt;
                             <select class="form-select" name="leave_type_id" id="sl_leave_type_id" required>
                                 <option value="">Select leave type...</option>
                             </select>
+
+                            <!-- Pre-Scheduled Annual Leave Block Container (Hidden by default) -->
+                            <div id="preScheduledBlockContainer" class="mt-3" style="display: none;">
+                                <div style="background: #f0f7ff; border: 1px solid #b7d7f0; border-radius: 8px; padding: 12px 14px;">
+                                    <label class="form-label d-flex align-items-center gap-1 text-primary fw-bold" style="font-size: 13px; margin-bottom: 6px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">event_available</span>
+                                        Select Pre-Scheduled Leave Block <span class="text-danger">*</span>
+                                    </label>
+                                    <select id="scheduled_slot_select" class="form-select form-select-sm" style="background-color: #fff;">
+                                        <option value="">-- Choose from your scheduled plan --</option>
+                                    </select>
+                                    <div class="form-text" style="font-size: 11px; color: #6b7280; margin-top: 4px;">
+                                        Dates and working days will automatically populate from your approved annual calendar plan.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-lg-6 mb-3">
                             <label class="form-label">Available Days</label>
@@ -1165,7 +1097,6 @@ use Illuminate\Support\Facades\Crypt;
 </div>
 
 <style>
-    /* Chabrin staff profile: scoped styles so other pages remain unchanged. */
     .staff-details-page {
         --chabrin-green: #477b63;
         --chabrin-green-dark: #315b48;
@@ -1510,7 +1441,82 @@ function openExtensionRequestModal(caseId, caseNumber, currentDeadline) {
     $('#extensionRequestModal').modal('show');
 }
 
-$(document).ready(function() {
+$(document).ready(function () {
+    const currentStaffId = "{{ $staff->id ?? Auth::user()->linkedStaff()?->id }}";
+
+    // 1. Listen for Leave Type changes
+    $('#sl_leave_type_id, select[name="leave_type_id"]').on('change', function () {
+        const selectedText = $(this).find('option:selected').text().toLowerCase();
+
+        if (selectedText.includes('annual')) {
+            loadStaffAnnualSlots(currentStaffId);
+        } else {
+            $('#preScheduledBlockContainer').slideUp();
+            $('#scheduled_slot_select').empty().append('<option value="">-- Choose from your scheduled plan --</option>');
+        }
+    });
+
+    // 2. Fetch Slots from getStaffAnnualSlots
+    function loadStaffAnnualSlots(staffId) {
+        if (!staffId) return;
+
+        const currentYear = new Date().getFullYear();
+
+        $.ajax({
+            url: "{{ url('/ajax/leave-management/staff-annual-slots') }}",
+            type: 'GET',
+            data: {
+                staff_id: staffId,
+                year: currentYear
+            },
+            dataType: 'json',
+            success: function (res) {
+                if (res.success && res.slots && res.slots.length > 0) {
+                    let options = '<option value="">-- Choose from your scheduled plan --</option>';
+
+                    res.slots.forEach(function (slot) {
+                        const disabledAttr = slot.is_disabled ? 'disabled style="color:#9ca3af;"' : '';
+                        options += `<option value="${slot.id}" data-start="${slot.start_date}" data-end="${slot.end_date}" data-days="${slot.days}" ${disabledAttr}>
+                            ${slot.display}
+                        </option>`;
+                    });
+
+                    $('#scheduled_slot_select').html(options);
+                    $('#preScheduledBlockContainer').slideDown();
+                } else {
+                    $('#preScheduledBlockContainer').slideUp();
+                }
+            },
+            error: function () {
+                $('#preScheduledBlockContainer').slideUp();
+            }
+        });
+    }
+
+    // 3. When a block is chosen, auto-fill Start Date, End Date, and Requested Days
+    $('#scheduled_slot_select').on('change', function () {
+        const selectedOption = $(this).find('option:selected');
+        const startDate = selectedOption.data('start');
+        const endDate   = selectedOption.data('end');
+        const days      = selectedOption.data('days');
+
+        if (startDate) {
+            $('input[name="start_date"], #sl_start_date').val(startDate).trigger('change');
+            $('input[name="end_date"]').val(endDate).trigger('change');
+            $('input[name="requested_days"], #sl_requested_days').val(days).trigger('change');
+            $('input[name="requested_days"], #sl_requested_days').prop('readonly', true);
+        } else {
+            $('input[name="requested_days"], #sl_requested_days').prop('readonly', false);
+        }
+    });
+
+    // Reset when modal closes
+    $('#leaveApplicationModal').on('hidden.bs.modal', function () {
+        $('#preScheduledBlockContainer').hide();
+        $('#scheduled_slot_select').val('');
+        $('input[name="requested_days"], #sl_requested_days').prop('readonly', false);
+    });
+
     // Submit Employee Response
     $('#employeeResponseForm').on('submit', function(e) {
         e.preventDefault();
@@ -1621,20 +1627,58 @@ $(document).ready(function() {
                 }
             },
             columns: [
-                { data: null, orderable: false, render: function(d, t, r, m) { return m.row + 1; } },
-                { data: 'leave_type', render: function(d) { return d ? d.type_name : '-'; } },
-                { data: 'start_date', render: function(d) { return d ? d.substring(0, 10) : '-'; } },
-                { data: 'end_date',   render: function(d) { return d ? d.substring(0, 10) : '-'; } },
-                { data: 'display_days' },
+                { 
+                    data: null, 
+                    orderable: false, 
+                    render: function(d, t, r, m) { return m.row + 1; } 
+                },
+                { 
+                    data: 'leave_type', 
+                    render: function(d) { return d ? d.type_name : '-'; } 
+                },
+                { 
+                    data: 'start_date', 
+                    render: function(d) { return d ? d.substring(0, 10) : '-'; } 
+                },
+                { 
+                    data: 'end_date',   
+                    render: function(d) { return d ? d.substring(0, 10) : '-'; } 
+                },
+                { 
+                    data: 'requested_days',
+                    render: function(d, t, row) { 
+                        return row.display_days || (d ? d + ' days' : '-'); 
+                    } 
+                },
                 {
                     data: 'current_status_id',
                     render: function(s) {
                         var map = {
-                            1:  '<span class="badge bg-secondary">Pending</span>',
+                            1:  '<span class="badge bg-secondary">Pending HOD</span>',
+                            24: '<span class="badge bg-info text-dark">Partially Approved</span>',
                             5:  '<span class="badge bg-success">Approved</span>',
-                            28: '<span class="badge bg-danger">Rejected</span>'
+                            41: '<span class="badge bg-danger">Rejected</span>'
                         };
                         return map[s] || '<span class="badge bg-light text-dark">' + s + '</span>';
+                    }
+                },
+                {
+                    data: null,
+                    title: 'Action',
+                    orderable: false,
+                    render: function(data, type, row) {
+                        if (parseInt(row.current_status_id) === 5) {
+                            var url = "{{ url('/hr/leave-management/leave-pass') }}/" + (row.encrypted_leave_application_id || row.id);
+                            return '<a href="' + url + '" target="_blank" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center" title="Download Leave Pass">' +
+                                '<span class="material-symbols-outlined" style="font-size: 16px;">download</span>' +
+                                '<span class="ms-1">Leave Pass</span>' +
+                                '</a>';
+                        } else {
+                            return '<button type="button" class="btn btn-light btn-sm text-muted d-inline-flex align-items-center" disabled title="Available once approved">' +
+                                '<span class="material-symbols-outlined" style="font-size: 16px;">lock</span>' +
+                                '<span class="ms-1">Leave Pass</span>' +
+                                '</button>';
+                        }
                     }
                 }
             ],
@@ -1666,14 +1710,12 @@ $(document).ready(function() {
         }
     });
 
-    // Pay tiers (e.g. Sick Leave: full pay, half pay, no pay) for the days requested
     var tierRequest = null;
     function showTierBreakdown() {
         var leaveTypeId = $('#sl_leave_type_id').val();
         $('#sl_tier_alert').addClass('d-none');
         if (!leaveTypeId || $('input[name="leave_duration_type"]:checked').val() !== 'full_day') { return; }
 
-        // Only the latest request counts: drop an older one so a slow reply can't overwrite a newer one
         if (tierRequest) { tierRequest.abort(); }
         tierRequest = $.ajax({
             url: "{{ url('/ajax/leave-management/evaluate-application') }}",
@@ -1777,5 +1819,4 @@ $(document).ready(function() {
     });
 });
 </script>
-
 @endsection

@@ -42,6 +42,83 @@
     font-size: 16px !important;
 }
 
+/* ── Dark Greeting Banner ────────────────────────── */
+.fo-greeting-banner {
+    background: #0d2847; /* Chabrin Navy Blue matching the director banner */
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 22px 26px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    box-shadow: 0 4px 14px rgba(13, 40, 71, 0.15);
+}
+
+.fo-greeting-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.fo-user-avatar-img {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+
+.fo-user-avatar-initials {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #1b4975;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.fo-greeting-banner h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 4px 0;
+    line-height: 1.2;
+}
+
+.fo-greeting-banner p {
+    font-size: 13px;
+    color: #a4c5e8;
+    margin: 0;
+}
+
+.fo-date-pill {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 8px 16px;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.fo-date-pill .material-symbols-outlined {
+    font-size: 18px !important;
+    color: #a4c5e8 !important;
+}
+
 /* ── Section label ───────────────────────────────── */
 .fo-section-label {
     font-size: 11px;
@@ -236,14 +313,35 @@
         <div class="fo-dashboard">
 
             {{-- Greeting --}}
-            <div class="fo-greeting">
-                <div class="fo-greeting-left">
-                    <h4>{{ now()->hour < 12 ? 'Good morning' : (now()->hour < 17 ? 'Good afternoon' : 'Good evening') }}, {{ Auth::user()->name }}</h4>
-                    <p>Here's a snapshot of your portfolio today.</p>
+            @php
+                $hour = now()->hour;
+                $timeOfDay = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
+                
+                // // Retrieve photo from user's linked staff record or fallback
+                // $staff = Auth::user()->linkedStaff();
+                // $avatarPath = $staff && !empty($staff->photo) ? asset('storage/' . $staff->photo) : null;
+            @endphp
+
+            <div class="fo-greeting-banner">
+                <div class="fo-greeting-content">
+                    {{-- @if($avatarPath)
+                        <img src="{{ $avatarPath }}" alt="{{ Auth::user()->name }}" class="fo-user-avatar-img">
+                    @else
+                        <div class="fo-user-avatar-initials">
+                            {{ strtoupper(substr(Auth::user()->name, 0, 1)) }}
+                        </div>
+                    @endif --}}
+
+                    <div>
+                        <h1>{{ $timeOfDay }}, {{ Auth::user()->name }}</h1>
+                        <p>Here's a snapshot of your portfolio today.</p>
+                    </div>
                 </div>
-                <div class="fo-date-badge">
+
+                <!-- Date Widget -->
+                <div class="fo-date-pill">
                     <span class="material-symbols-outlined">calendar_today</span>
-                    {{ now()->format('l, d F Y') }}
+                    <span>{{ now()->format('l, d F Y') }}</span>
                 </div>
             </div>
 

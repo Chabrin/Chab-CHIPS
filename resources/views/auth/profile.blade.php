@@ -282,17 +282,29 @@
                 <aside class="pf-sidebar-card">
                     <div class="pf-card-cover"></div>
                     <div class="pf-card-body">
-                        @php
-                            $nameParts = explode(' ', trim($user->name));
-                            $initials = strtoupper(
-                                substr($nameParts[0] ?? '', 0, 1) .
-                                substr(end($nameParts), 0, 1)
-                            );
-                        @endphp
-                        <div class="pf-avatar-wrap">{{ $initials }}</div>
+                      @php
+                        $nameParts = explode(' ', trim($user->name));
+                        $initials = strtoupper(
+                            substr($nameParts[0] ?? '', 0, 1) .
+                            substr(end($nameParts), 0, 1)
+                        );
 
-                        <div class="pf-user-name">{{ $user->name }}</div>
-                        <div class="pf-user-tag">{{ '@' . $user->username }}</div>
+                        $staff = method_exists($user, 'linkedStaff') ? $user->linkedStaff() : ($user->staff ?? null);
+                        $avatarPath = null;
+                        if ($staff && !empty($staff->photo)) {
+                            $avatarPath = asset('storage/' . $staff->photo);
+                        } elseif (!empty($user->photo)) {
+                            $avatarPath = asset('storage/' . $user->photo);
+                        }
+                    @endphp
+
+                    <div class="pf-avatar-wrap" @if($avatarPath) style="overflow: hidden; padding: 0;" @endif>
+                        @if($avatarPath)
+                            <img src="{{ $avatarPath }}" alt="{{ $user->name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                        @else
+                            {{ $initials }}
+                        @endif
+                    </div>
 
                         <div>
                             @if($user->is_active)
