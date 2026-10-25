@@ -57,7 +57,7 @@ class RentInvoicingController extends Controller
                 'scope' => 'required|in:all,selected',
                 'tenant_ids' => 'required_if:scope,selected|array',
                 'tenant_ids.*' => 'integer',
-                'date_mode' => 'required|in:lease_start,selected_date',
+                'date_mode' => 'required|in:lease_start,selected_date,full_month',
                 'selected_date' => 'required_if:date_mode,selected_date|nullable|date',
             ]);
 
@@ -159,11 +159,17 @@ class RentInvoicingController extends Controller
      * actually falls inside the target billing month — a lease that started
      * earlier is charged full rent. selected_date mode always prorates from
      * that one date, applied uniformly to every lease in this run.
+     * full_month mode never prorates — every lease is charged the full unit
+     * rent for the month regardless of when the lease actually started.
      *
      * @return array{0: float, 1: ?int} [prorated_amount, proration_days_or_null]
      */
     private function prorateRent(float $rentAmount, int $monthDays, string $dateMode, $leaseDateStart, ?string $selectedDate, string $billingMonth): array
     {
+        if ($dateMode === 'full_month') {
+            return [$rentAmount, null];
+        }
+
         if ($dateMode === 'selected_date') {
             $date = new \DateTime($selectedDate);
             $day = (int) $date->format('j');

@@ -9,6 +9,7 @@ use App\Models\PayrollElement;
 use App\Models\PayrollSummary;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Services\ErrorDispatcher;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -58,6 +59,10 @@ class PayslipsController extends Controller
     public function viewPayslip(Request $request)
     {
         try {
+            if (!Auth::user()->isAbleTo('read_all_payslips')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to view payslips.'], 403);
+            }
+
             $validated = $request->validate([
                 'staff_id' => 'required|integer',
                 'payroll_month' => 'required|date_format:Y-m',
@@ -107,6 +112,13 @@ class PayslipsController extends Controller
      */
     public function downloadPayslip($staffId, $month)
     {
+        // Returned directly (not abort()) — the try/catch below catches
+        // \Exception broadly, which would swallow an aborted HttpException
+        // and mask this 403 behind a generic 500 "Failed to generate payslip".
+        if (!Auth::user()->isAbleTo('read_all_payslips')) {
+            return response('You do not have permission to download payslips.', 403);
+        }
+
         try {
             $payrollSummary = $this->getPayrollSummary($staffId, $month);
 
@@ -135,6 +147,10 @@ class PayslipsController extends Controller
     public function emailPayslip(Request $request)
     {
         try {
+            if (!Auth::user()->isAbleTo('read_all_payslips')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to email payslips.'], 403);
+            }
+
             $validated = $request->validate([
                 'staff_id' => 'required|integer',
                 'payroll_month' => 'required|date_format:Y-m',

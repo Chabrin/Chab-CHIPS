@@ -92,6 +92,7 @@
                             <!-- RIGHT: Payslip Display (col-7) -->
                             <div class="col-md-7" style="border-left:1px solid #dee2e6;">
                                 <h6 class="text-muted mb-2" style="font-size:13px;">Payslip Info</h6>
+                                <div id="payslip-error" style="display:none;"></div>
                                 <div id="payslip-container" style="display:none;">
                                     <div id="payslip-content"></div>
                                 </div>
@@ -140,6 +141,12 @@
 
 
 <script>
+    // Mirrors PayslipsController's read_all_payslips check — lets Email/Download
+    // fail fast client-side with the real message instead of falling through to
+    // unrelated checks (e.g. "Employee email not found") or starting a doomed
+    // download when the user was never going to be allowed to proceed.
+    const canReadAllPayslips = @json(Auth::user()->isAbleTo('read_all_payslips'));
+
     $(document).ready(function() {
         // Search employee button click
         $('#search_employee_btn').on('click', function() {
@@ -216,6 +223,22 @@
             }
         });
 
+        // Shows a closeable danger alert in the right-side payslip panel —
+        // used for both validation failures (success:false, e.g. "not found")
+        // and HTTP-level errors (e.g. 403 permission denied), so either way
+        // the real server message reaches the user instead of a generic one.
+        function showPayslipError(message) {
+            $('#payslip-container').hide();
+            $('#download-pdf').hide();
+            $('#email-pdf').hide();
+            $('#payslip-error').html(
+                '<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                    $('<div>').text(message).html() +
+                    '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>' +
+                '</div>'
+            ).show();
+        }
+
         // Search payslip
         $('#payslip-search-form').on('submit', function(e) {
             e.preventDefault();
@@ -240,6 +263,7 @@
             $btn.prop('disabled', true);
             $icon.addClass('d-none');
             $spinner.removeClass('d-none');
+            $('#payslip-error').hide().empty();
 
             $.ajax({
                 url: '/ajax/payslips/view',
@@ -273,17 +297,12 @@
                         $('#email-pdf').data('employee-name', response.employee_name);
                         $('#email-pdf').data('payroll-month', response.payroll_month);
                     } else {
-                        toastr.error(response.message || 'Payslip not found');
-                        $('#payslip-container').hide();
-                        $('#download-pdf').hide();
-                        $('#email-pdf').hide();
+                        showPayslipError(response.message || 'Payslip not found');
                     }
                 },
-                error: function() {
-                    toastr.error('Failed to load payslip');
-                    $('#payslip-container').hide();
-                    $('#download-pdf').hide();
-                    $('#email-pdf').hide();
+                error: function(xhr) {
+                    const message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to load payslip';
+                    showPayslipError(message);
                 },
                 complete: function() {
                     // Re-enable button, hide spinner, show icon
@@ -296,6 +315,11 @@
 
         // Download PDF
         $('#download-pdf').on('click', function() {
+            if (!canReadAllPayslips) {
+                toastr.error('You do not have permission to download payslips.');
+                return;
+            }
+
             const staffId = $('#employee_select').val();
             const month = $('#payroll_month').val();
 
@@ -332,6 +356,11 @@
 
         // Email Payslip
         $('#email-pdf').on('click', function() {
+            if (!canReadAllPayslips) {
+                toastr.error('You do not have permission to email payslips.');
+                return;
+            }
+
             const employeeEmail = $(this).data('employee-email');
             const employeeName = $(this).data('employee-name');
             const payrollMonth = $(this).data('payroll-month');
@@ -385,8 +414,9 @@
                         toastr.error(response.message || 'Failed to send email');
                     }
                 },
-                error: function() {
-                    toastr.error('Failed to queue email');
+                error: function(xhr) {
+                    const message = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to queue email';
+                    toastr.error(message);
                 },
                 complete: function() {
                     // Re-enable button, hide spinner, show icon

@@ -923,8 +923,12 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                             <input class="form-check-input" type="radio" name="rentInvDateMode" id="rentInvModeSelectedDate" value="selected_date">
                                                             <label class="form-check-label" for="rentInvModeSelectedDate">Selected Date</label>
                                                         </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="radio" name="rentInvDateMode" id="rentInvModeFullMonth" value="full_month">
+                                                            <label class="form-check-label" for="rentInvModeFullMonth">Full Month</label>
+                                                        </div>
                                                         <input type="date" id="rentInvSelectedDate" class="form-control mt-2" style="display:none; max-width:220px;">
-                                                        <p class="text-muted small fst-italic mb-0 mt-2">Rent is prorated from the effective date to the end of the billing month, based on each unit's rent amount.</p>
+                                                        <p class="text-muted small fst-italic mb-0 mt-2">Lease Start / Selected Date prorate rent from the effective date to the end of the billing month. Full Month always charges the full unit rent, regardless of when the lease started.</p>
                                                     </div>
                                                 </div>
                                             </div>

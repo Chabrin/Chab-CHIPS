@@ -4,73 +4,66 @@
     <meta charset="utf-8">
     <title>Payslip - {{ $payroll->staff_number_id }}</title>
     <style>
+        {{-- Plain, colorless payslip — dompdf can't embed remote fonts, so this
+             uses Helvetica (a built-in PDF base font) rather than Inter; the
+             browser-rendered preview (payslip-preview.blade.php) uses real
+             Inter since it doesn't have that constraint. --}}
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-family: Helvetica, Arial, sans-serif;
             font-size: 10px;
-            color: #495057;
+            color: #1c1c1e;
             padding: 24px;
             background: #fff;
         }
 
         /* ── Header ── */
-        .hdr { display: table; width: 100%; border-bottom: 3px solid #3598db; padding-bottom: 10px; margin-bottom: 14px; }
-        .hdr-left  { display: table-cell; vertical-align: middle; }
-        .hdr-right { display: table-cell; vertical-align: middle; text-align: right; }
-        .co-name   { font-size: 18px; font-weight: bold; color: #3598db; letter-spacing: -0.3px; }
-        .co-sub    { font-size: 9px; color: #9ca3af; margin-top: 2px; }
-        .slip-label { font-size: 13px; font-weight: bold; color: #0a0a0a; letter-spacing: 1px; }
-        .slip-period { font-size: 11px; color: #6b7280; margin-top: 3px; }
+        .hdr { display: table; width: 100%; padding-bottom: 14px; margin-bottom: 18px; }
+        .hdr-left  { display: table-cell; vertical-align: bottom; }
+        .hdr-right { display: table-cell; vertical-align: bottom; text-align: right; }
+        .co-name   { font-size: 16px; font-weight: bold; letter-spacing: -0.2px; }
+        .co-sub    { font-size: 9px; color: #6b6b70; margin-top: 2px; }
+        .slip-label { font-size: 15px; letter-spacing: 3px; text-transform: uppercase; }
+        .slip-period { font-size: 10px; color: #6b6b70; margin-top: 3px; }
 
         /* ── Employee Info ── */
-        .info-box { width: 100%; border-collapse: collapse; margin-bottom: 14px;
-                    border: 1px solid #d9ebf7; border-radius: 6px; }
-        .info-box td { padding: 4px 8px; font-size: 10px; border-bottom: 1px solid #f0f7fd; }
-        .info-box tr:last-child td { border-bottom: none; }
-        .info-box tr:nth-child(odd) td  { background: #f5fafd; }
-        .info-box tr:nth-child(even) td { background: #ffffff; }
-        .lbl { color: #6b7280; width: 15%; white-space: nowrap; }
-        .val { color: #0a0a0a; font-weight: 600; width: 35%; }
+        .info-box { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .info-box td { padding: 4px 0; font-size: 10px; }
+        .lbl { color: #6b6b70; width: 15%; white-space: nowrap; text-transform: uppercase; font-size: 8px; letter-spacing: 0.5px; }
+        .val { color: #1c1c1e; width: 35%; padding-left: 6px; }
 
         /* ── Main payslip table ── */
-        .slip-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        .slip-tbl th, .slip-tbl td { border: 1px solid #d9ebf7; }
-
-        .sec-hdr { background: #3598db; color: #fff; font-size: 9px; font-weight: bold;
-                   letter-spacing: 0.6px; padding: 6px 8px; text-transform: uppercase; }
-        .col-hdr { background: #d9ebf7; color: #0a0a0a; font-size: 9px; font-weight: 700;
-                   padding: 5px 8px; }
+        .slip-tbl { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        .sec-hdr { font-size: 9px; font-weight: bold; letter-spacing: 1px; padding-bottom: 8px; text-transform: uppercase; }
+        .col-hdr { color: #6b6b70; font-size: 8px; font-weight: normal; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 0 6px 0; }
         .col-hdr-r { text-align: right; }
 
-        .slip-tbl tbody tr:nth-child(odd)  td { background: #f5fafd; }
-        .slip-tbl tbody tr:nth-child(even) td { background: #ffffff; }
-        .slip-tbl tbody td { padding: 4px 8px; font-size: 10px; }
+        .slip-tbl tbody td { padding: 5px 0; font-size: 10px; }
         .amt { text-align: right; }
 
-        .total-row td { background: #3598db !important; color: #fff !important;
-                        font-weight: 700; font-size: 10px; padding: 6px 8px; }
+        /* Gap between the Earnings and Deductions halves of the shared table */
+        .slip-tbl td:nth-child(2), .slip-tbl th:nth-child(2) { padding-right: 18px; }
+        .slip-tbl td:nth-child(3), .slip-tbl th:nth-child(3) { padding-left: 18px; }
+
+        .total-row td { font-weight: bold; padding-top: 10px; }
 
         /* ── Tax table ── */
-        .tax-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        .tax-hdr td { background: #3598db; color: #fff; font-size: 9px; font-weight: bold;
-                      letter-spacing: 0.6px; padding: 5px 8px; text-transform: uppercase; }
-        .tax-tbl td { border: 1px solid #d9ebf7; padding: 4px 8px; font-size: 10px; }
-        .tax-tbl tr:nth-child(odd)  td { background: #f5fafd; }
-        .tax-tbl tr:nth-child(even) td { background: #fff; }
-        .tax-lbl { color: #6b7280; width: 27%; }
-        .tax-val { text-align: right; font-weight: 600; color: #0a0a0a; width: 23%; }
+        .tax-tbl { width: 100%; border-collapse: collapse; margin-bottom: 16px; background: #f5f5f6; }
+        .tax-hdr td { font-size: 9px; font-weight: bold; letter-spacing: 1px; padding: 10px 10px 4px 10px; text-transform: uppercase; }
+        .tax-tbl td { padding: 4px 10px; font-size: 10px; }
+        .tax-tbl tr:last-child td { padding-bottom: 10px; }
+        .tax-lbl { color: #6b6b70; width: 27%; }
+        .tax-val { text-align: right; width: 23%; }
 
         /* ── Net Pay ── */
-        .net-tbl { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-        .net-tbl td { padding: 8px 10px; }
-        .net-label { background: #3598db; color: #fff; font-size: 11px; font-weight: bold;
-                     width: 70%; letter-spacing: 0.5px; }
-        .net-amount { background: #3598db; color: #fff; font-size: 14px; font-weight: bold;
-                      text-align: right; width: 30%; }
+        .net-tbl { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .net-tbl td { padding: 6px 0; }
+        .net-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; width: 70%; }
+        .net-amount { font-size: 18px; font-weight: bold; text-align: right; width: 30%; }
 
         /* ── Footer ── */
-        .footer { border-top: 1px solid #d9ebf7; padding-top: 8px; margin-top: 4px;
-                  font-size: 8px; color: #9ca3af; text-align: center; }
+        .footer { padding-top: 10px; margin-top: 8px; font-size: 8px; color: #6b6b70; text-align: center; }
     </style>
 </head>
 <body>
@@ -110,7 +103,7 @@
         <div class="co-sub">Currency: Kenya Shillings (KSh)</div>
     </div>
     <div class="hdr-right">
-        <div class="slip-label">PAYSLIP</div>
+        <div class="slip-label">Payslip</div>
         <div class="slip-period">{{ date('F Y', strtotime($payroll->period)) }}</div>
     </div>
 </div>
@@ -179,9 +172,9 @@
         </tr>
         @endfor
         <tr class="total-row">
-            <td>GROSS PAY</td>
+            <td>Gross Pay</td>
             <td class="amt">{{ number_format($grossPay, 2) }}</td>
-            <td>TOTAL DEDUCTIONS</td>
+            <td>Total Deductions</td>
             <td class="amt">{{ number_format($payroll->total_deductions, 2) }}</td>
         </tr>
     </tbody>
@@ -190,7 +183,7 @@
 {{-- PAYE Tax Breakdown --}}
 <table class="tax-tbl">
     <tr class="tax-hdr">
-        <td colspan="4">PAYE Tax Calculation</td>
+        <td colspan="4">Tax Summary</td>
     </tr>
     <tr>
         <td class="tax-lbl">Taxable Earnings</td>
@@ -202,14 +195,14 @@
         <td class="tax-lbl">Personal Relief</td>
         <td class="tax-val">2,400.00</td>
         <td class="tax-lbl">PAYE Payable</td>
-        <td class="tax-val" style="color:#3598db;">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
+        <td class="tax-val">{{ number_format($payroll->tax_payable ?? 0, 2) }}</td>
     </tr>
 </table>
 
 {{-- Net Pay --}}
 <table class="net-tbl">
     <tr>
-        <td class="net-label">NET PAY</td>
+        <td class="net-label">Net Pay</td>
         <td class="net-amount">KSh {{ number_format($payroll->net_pay, 2) }}</td>
     </tr>
 </table>
