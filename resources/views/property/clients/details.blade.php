@@ -821,7 +821,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                             <input class="form-check-input" type="radio" name="oneOffScope" id="oneOffScopeSelected" value="selected">
                                                             <label class="form-check-label" for="oneOffScopeSelected">Selected Tenants</label>
                                                         </div>
-                                                        <div id="oneOffTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
+                                                        <div id="oneOffTenantList" class="mt-2" style="display:none;">
+                                                            <input type="text" class="form-control form-control-sm tenant-search-input mb-1" data-target="oneOffTenantListItems" placeholder="Search tenants...">
+                                                            <div id="oneOffTenantListItems" class="border rounded p-2 custom-scrollbar" style="max-height:150px; overflow-y:auto;"></div>
+                                                        </div>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="form-label">Amount <span class="text-muted small">(optional override)</span></label>
@@ -899,7 +902,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                             <input class="form-check-input" type="radio" name="rentInvScope" id="rentInvScopeSelected" value="selected">
                                                             <label class="form-check-label" for="rentInvScopeSelected">Selected Tenants</label>
                                                         </div>
-                                                        <div id="rentInvTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
+                                                        <div id="rentInvTenantList" class="mt-2" style="display:none;">
+                                                            <input type="text" class="form-control form-control-sm tenant-search-input mb-1" data-target="rentInvTenantListItems" placeholder="Search tenants...">
+                                                            <div id="rentInvTenantListItems" class="border rounded p-2 custom-scrollbar" style="max-height:150px; overflow-y:auto;"></div>
+                                                        </div>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="form-label d-block">Proration Basis</label>
@@ -991,7 +997,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                             <input class="form-check-input" type="radio" name="recurringOtherScope" id="recurringOtherScopeSelected" value="selected">
                                                             <label class="form-check-label" for="recurringOtherScopeSelected">Selected Tenants</label>
                                                         </div>
-                                                        <div id="recurringOtherTenantList" class="border rounded p-2 mt-2 custom-scrollbar" style="max-height:150px; overflow-y:auto; display:none;"></div>
+                                                        <div id="recurringOtherTenantList" class="mt-2" style="display:none;">
+                                                            <input type="text" class="form-control form-control-sm tenant-search-input mb-1" data-target="recurringOtherTenantListItems" placeholder="Search tenants...">
+                                                            <div id="recurringOtherTenantListItems" class="border rounded p-2 custom-scrollbar" style="max-height:150px; overflow-y:auto;"></div>
+                                                        </div>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="form-label">Amount <span class="text-muted small">(optional override)</span></label>
@@ -3226,8 +3235,10 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
         // Renders a checkbox list of a property's tenants into a container
         function loadTenantCheckboxList(propertyId, containerId) {
-            var $container = $('#' + containerId);
-            $container.html('<div class="text-muted small">Loading tenants...</div>');
+            var $search = $('#' + containerId + ' .tenant-search-input');
+            var $items = $('#' + containerId + 'Items');
+            $search.val('');
+            $items.html('<div class="text-muted small">Loading tenants...</div>');
             $.ajax({
                 url: "{{ route('ajax.property.tenants.get') }}",
                 type: 'GET',
@@ -3236,7 +3247,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                 success: function(response) {
                     var rows = response.data || [];
                     if (!rows.length) {
-                        $container.html('<div class="text-muted small">No tenants found for this property.</div>');
+                        $items.html('<div class="text-muted small">No tenants found for this property.</div>');
                         return;
                     }
                     var html = '';
@@ -3245,13 +3256,24 @@ COPY PERMISSIONS (paste when re-enabling checks):
                             '<input class="form-check-input tenant-checkbox" type="checkbox" value="' + t.id + '" id="' + containerId + '-t' + t.id + '">' +
                             '<label class="form-check-label small" for="' + containerId + '-t' + t.id + '">' + t.names + '</label></div>';
                     });
-                    $container.html(html);
+                    $items.html(html);
                 },
                 error: function() {
-                    $container.html('<div class="text-danger small">Failed to load tenants.</div>');
+                    $items.html('<div class="text-danger small">Failed to load tenants.</div>');
                 }
             });
         }
+
+        // Shared by every "Selected Tenants" checkbox list (One Off, Rent,
+        // Recurring > Other Items) — filters the already-loaded rows client
+        // side, no extra AJAX call needed.
+        $(document).on('input', '.tenant-search-input', function() {
+            var term = $(this).val().toLowerCase();
+            $('#' + $(this).data('target')).find('.form-check').each(function() {
+                var label = $(this).find('label').text().toLowerCase();
+                $(this).toggle(label.indexOf(term) !== -1);
+            });
+        });
 
         var invoicingPropertiesLoaded = false;
         $('#invoicing-tab').on('click', function() {
