@@ -397,6 +397,8 @@ class StaffController extends Controller
             ];
             unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password']);
 
+            $validated = $this->applyPositionDepartment($validated);
+
             // Uppercase names
             if (isset($validated['full_names'])) {
                 $validated['full_names'] = strtoupper($validated['full_names']);
@@ -718,6 +720,8 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         // keep uploaded files and flags out of the mass-assigned columns
         unset($validated['photo'], $validated['documents'], $validated['remove_documents']);
 
+        $validated = $this->applyPositionDepartment($validated);
+
         $staff = Staff::findOrFail($id);
 
         // Convert names to uppercase
@@ -755,6 +759,22 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         return redirect()->back()->with('error', 'Failed to update staff member')->withInput();
     }
 }
+
+    /**
+     * Fill in the staff department from the chosen position when no department was picked.
+     * A department the user chose explicitly is never overridden.
+     */
+    private function applyPositionDepartment(array $validated): array
+    {
+        if (empty($validated['department_id']) && !empty($validated['position_id'])) {
+            $positionDepartmentId = Position::where('id', $validated['position_id'])->value('department_id');
+            if ($positionDepartmentId) {
+                $validated['department_id'] = $positionDepartmentId;
+            }
+        }
+
+        return $validated;
+    }
 
     /**
      * Get zone areas by zone ID

@@ -235,7 +235,7 @@ $(document).ready(function () {
 
     $('#leave_type_id, select[name="leave_type_id"]').on('change', function () {
         const selectedText = $(this).find('option:selected').text().toLowerCase();
-        if (selectedText.includes('annual')) {
+        if (selectedText.includes('annual') || selectedText.includes('normal')) {
             loadStaffAnnualSlots(currentStaffId);
         } else {
             $('#preScheduledBlockContainer').slideUp();
@@ -460,10 +460,10 @@ $(function () {
             { data: 'display_days' },
             {
                 data: 'current_status_id',
-                render: function (s) {
+                render: function (s, type, row) {
                     var map = {
-                        1:  '<span class="badge bg-secondary">Pending</span>',
-                        24: '<span class="badge bg-info">Partially Approved</span>',
+                        1:  row.waiting_on === 'hr' ? '<span class="badge bg-info">Pending HR</span>' : '<span class="badge bg-secondary">Pending Supervisor</span>',
+                        24: '<span class="badge bg-info">Pending HR</span>',
                         5:  '<span class="badge bg-success">Approved</span>',
                         41: '<span class="badge bg-danger">Rejected</span>'
                     };
@@ -553,6 +553,11 @@ $(function () {
         var leaveTypeId = $(this).val();
         if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
         $.get('/ajax/hr/leave/available-days/' + staffId + '/' + leaveTypeId, function (res) {
+            if (res.success === false && res.error) {
+                $('#sl_available_days').val('');
+                toastr.warning(res.error);
+                return;
+            }
             $('#sl_available_days').val(res.available_days ?? 0);
         });
     });

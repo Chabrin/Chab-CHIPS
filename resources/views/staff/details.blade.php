@@ -1427,6 +1427,9 @@ use Illuminate\Support\Facades\Crypt;
 </div>
 
 <script>
+// The leave pass can only be downloaded by the employee it belongs to
+const isOwnProfile = {{ (Auth::user()->linkedStaff()?->id === ($staff->id ?? null)) ? 'true' : 'false' }};
+
 function openResponseModal(caseId, caseNumber, deadline) {
     $('#response_case_id').val(caseId);
     $('#response_case_number').text(caseNumber);
@@ -1448,7 +1451,7 @@ $(document).ready(function () {
     $('#sl_leave_type_id, select[name="leave_type_id"]').on('change', function () {
         const selectedText = $(this).find('option:selected').text().toLowerCase();
 
-        if (selectedText.includes('annual')) {
+        if (selectedText.includes('annual') || selectedText.includes('normal')) {
             loadStaffAnnualSlots(currentStaffId);
         } else {
             $('#preScheduledBlockContainer').slideUp();
@@ -1652,10 +1655,10 @@ $(document).ready(function () {
                 },
                 {
                     data: 'current_status_id',
-                    render: function(s) {
+                    render: function(s, type, row) {
                         var map = {
-                            1:  '<span class="badge bg-secondary">Pending HOD</span>',
-                            24: '<span class="badge bg-info text-dark">Partially Approved</span>',
+                            1:  row.waiting_on === 'hr' ? '<span class="badge bg-info text-dark">Pending HR</span>' : '<span class="badge bg-secondary">Pending Supervisor</span>',
+                            24: '<span class="badge bg-info text-dark">Pending HR</span>',
                             5:  '<span class="badge bg-success">Approved</span>',
                             41: '<span class="badge bg-danger">Rejected</span>'
                         };
@@ -1667,7 +1670,7 @@ $(document).ready(function () {
                     title: 'Action',
                     orderable: false,
                     render: function(data, type, row) {
-                        if (parseInt(row.current_status_id) === 5) {
+                        if (parseInt(row.current_status_id) === 5 && isOwnProfile) {
                             var url = "{{ url('/hr/leave-management/leave-pass') }}/" + (row.encrypted_leave_application_id || row.id);
                             return '<a href="' + url + '" target="_blank" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center" title="Download Leave Pass">' +
                                 '<span class="material-symbols-outlined" style="font-size: 16px;">download</span>' +
@@ -1750,6 +1753,11 @@ $(document).ready(function () {
         var leaveTypeId = $(this).val();
         if (!leaveTypeId) { $('#sl_available_days').val(''); return; }
         $.get('/ajax/hr/leave/available-days/{{ $staff->id }}/' + leaveTypeId, function(res) {
+            if (res.success === false && res.error) {
+                $('#sl_available_days').val('');
+                toastr.warning(res.error);
+                return;
+            }
             $('#sl_available_days').val(res.available_days ?? 0);
         });
     });

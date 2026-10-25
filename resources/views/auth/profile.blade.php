@@ -306,6 +306,9 @@
                         @endif
                     </div>
 
+                        <div class="pf-user-name">{{ $user->name }}</div>
+                        <div class="pf-user-tag">{{ '@' . $user->username }}</div>
+
                         <div>
                             @if($user->is_active)
                                 <span class="pf-status-badge active">

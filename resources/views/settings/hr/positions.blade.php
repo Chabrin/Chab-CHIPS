@@ -72,13 +72,13 @@
                         <input type="number" step="0.01" class="form-control" id="add_basic_salary" name="basic_salary">
                         <div class="invalid-feedback"></div>
                     </div>
-                    {{-- <div class="mb-3">
+                    <div class="mb-3">
                         <label for="add_reports_to_id" class="form-label">Reports To</label>
                         <select class="form-select" id="add_reports_to_id" name="reports_to_id">
                             <option value="">— None (Top Level) —</option>
                         </select>
                         <div class="invalid-feedback"></div>
-                    </div> --}}
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
@@ -128,13 +128,13 @@
                         <input type="number" step="0.01" class="form-control" id="edit_basic_salary" name="basic_salary">
                         <div class="invalid-feedback"></div>
                     </div>
-                    {{-- <div class="mb-3">
+                    <div class="mb-3">
                         <label for="edit_reports_to_id" class="form-label">Reports To</label>
                         <select class="form-select" id="edit_reports_to_id" name="reports_to_id">
                             <option value="">— None (Top Level) —</option>
                         </select>
                         <div class="invalid-feedback"></div>
-                    </div> --}}
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
@@ -304,6 +304,8 @@
             if (currentId) {
                 $('#edit_reports_to_id').html(reportsOptions);
                 $('#edit_department_id').html(deptOptions);
+                // Update stays locked until the current Reports To value is loaded, so an early save cannot wipe it.
+                $('#editPositionSaveBtn').prop('disabled', false);
             } else {
                 $('#add_reports_to_id').html(reportsOptions);
                 $('#add_department_id').html(deptOptions);
@@ -323,6 +325,7 @@
             $('#edit_slug_name').val(p.slug_name);
             $('#edit_basic_salary').val(p.basic_salary);
 
+            $('#editPositionSaveBtn').prop('disabled', true);
             loadDropdowns(p.id, p.reports_to_id, p.department_id);
             $('#editPositionModal').modal('show');
         });

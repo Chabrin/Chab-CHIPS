@@ -113,21 +113,21 @@
                         <div class="d-flex align-items-center profile-trigger-btn">
                             {{-- Circular Avatar with Initials --}}
                             @php
-                                $staff = Auth::user()->linkedStaff();
+                                $staff = Auth::user()?->linkedStaff();
                                 $avatar = $staff && !empty($staff->photo) ? asset('storage/' . $staff->photo) : null;
-                                $userInitial = strtoupper(substr(Auth::user()->name ?? 'U', 0, 1));
+                                $userInitial = strtoupper(substr(Auth::user()?->name ?? 'U', 0, 1));
                             @endphp
                          {{-- Top Bar Avatar Circle --}}
                             <div style="width: 36px; height: 36px; min-width: 36px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #0f2744; color: #ffffff; font-weight: 700; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                             @if($avatar)
-                                <img src="{{ $avatar }}" alt="{{ Auth::user()->name }}" style="width: 100%; height: 100%; object-fit: cover;">
+                                <img src="{{ $avatar }}" alt="{{ Auth::user()?->name }}" style="width: 100%; height: 100%; object-fit: cover;">
                             @else
                                 <span>{{ $userInitial }}</span>
                             @endif
                         </div>
                             
                             <div class="profile-meta d-none d-md-block text-start">
-                                <span class="profile-name">{{ Auth::user()->name }}</span>
+                                <span class="profile-name">{{ Auth::user()?->name }}</span>
                                 <span class="profile-role">Director</span>
                             </div>
                             <span class="material-symbols-outlined profile-caret">expand_more</span>
@@ -139,14 +139,14 @@
                             <div class="profile-menu-header">
                                 <div class="header-avatar-circle lg" style="overflow: hidden; padding: 0;">
                                     @if($avatar)
-                                        <img src="{{ $avatar }}" alt="{{ Auth::user()->name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                        <img src="{{ $avatar }}" alt="{{ Auth::user()?->name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
                                     @else
                                         {{ $userInitial }}
                                     @endif
                                 </div>
                                 <div class="profile-menu-info">
-                                    <h6>{{ Auth::user()->name }}</h6>
-                                    <p>{{ Auth::user()->email ?? 'Active Session' }}</p>
+                                    <h6>{{ Auth::user()?->name }}</h6>
+                                    <p>{{ Auth::user()?->email ?? 'Active Session' }}</p>
                                 </div>
                             </div>
 

@@ -613,23 +613,36 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 
         // Reset and disable if no department is picked
         if (!departmentId) {
-            $positionSelect.html('<option value="">Select Position</option>').prop('disabled', true);
+            $positionSelect.html('<option value="">Select Position</option>').prop('disabled', true).trigger('change');
             return;
         }
 
         $positionSelect.empty().prop('disabled', false);$positionSelect.append('<option value="">Select Position</option>');
 
-        // Filter options by matching data-department
-        allPositionOptions.each(function() {
-            var $opt =$(this);
-            var optDept = $opt.data('department');
-            var optVal = $opt.val();
-
-            if (optVal && optDept == departmentId) {
-                var isSelected = (currentSelected && optVal == currentSelected) ? 'selected' : '';
-                $positionSelect.append(`<option value="${optVal}" data-department="${optDept}" ${isSelected}>${$opt.text()}</option>`);
-            }
+        // Positions of the chosen department, plus positions not assigned to any department yet (so they stay
+        // selectable until HR places them); if that leaves nothing (e.g. the hierarchy is not loaded), fall back
+        // to every position so onboarding is not blocked.
+        var realOptions = allPositionOptions.filter(function() {
+            return $(this).val();
         });
+        var matchingOptions = realOptions.filter(function() {
+            var optDept = $(this).attr('data-department');
+            return !optDept || optDept == departmentId;
+        });
+        var visibleOptions = matchingOptions.length ? matchingOptions : realOptions;
+
+        visibleOptions.each(function() {
+            var $opt =$(this);
+            var optVal = $opt.val();
+            var $newOpt =$('<option>').val(optVal).attr('data-department', $opt.attr('data-department')).text($opt.text().trim());
+            if (currentSelected && optVal == currentSelected) {
+                $newOpt.prop('selected', true);
+            }
+            $positionSelect.append($newOpt);
+        });
+
+        // Let dependent UI (zone fields) re-evaluate against the rebuilt list
+        $positionSelect.trigger('change');
     }
 
     // Trigger on department dropdown change

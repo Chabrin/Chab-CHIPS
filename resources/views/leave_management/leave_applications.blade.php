@@ -323,51 +323,6 @@ $(document).ready(function() {
         }
     });
 
-    // Handle Status Updates (HOD Partial Approval 24, HR Final Approval 5, Rejection 41)
-    $(document).on('click', '.btn-quick-status', function() {
-        let $btn = $(this);
-        let targetStatus = parseInt($btn.data('status'));
-        let actionLabel = $btn.data('action-label') || 'update';
-        let applicationId = $btn.data('id');
-
-        if (!confirm(`Are you sure you want to ${actionLabel} this leave application?`)) {
-            return;
-        }
-
-        $btn.prop('disabled', true);
-
-        $.ajax({
-            url: "{{ url('/ajax/leave-management/leave-applications/status-update') }}",
-            type: 'POST',
-            data: {
-                id: applicationId,
-                status: targetStatus,
-                _token: '{{ csrf_token() }}'
-            },
-            success: function(res) {
-                if (res.success) {
-                    toastr.success(res.message || 'Status updated successfully');
-                    if (typeof table !== 'undefined') {
-                        table.ajax.reload(null, false);
-                    }
-                } else {
-                    toastr.error(res.error || 'Failed to update leave application');
-                    $btn.prop('disabled', false);
-                }
-            },
-            error: function(xhr) {
-                $btn.prop('disabled', false);
-                let msg = 'Error updating status';
-                if (xhr.responseJSON && xhr.responseJSON.error) {
-                    msg = xhr.responseJSON.error;
-                } else if (xhr.responseJSON && xhr.responseJSON.message) {
-                    msg = xhr.responseJSON.message;
-                }
-                toastr.error(msg);
-            }
-        });
-    });
-
     // Calculate hours for hours-only section
     $('#start_time_only, #end_time_only').on('change', function() {
         let startTime = $('#start_time_only').val();
@@ -436,11 +391,13 @@ $(document).ready(function() {
             {
                 data: 'current_status_id',
                 title: 'Current Status',
-                render: function(data) {
+                render: function(data, type, row) {
                     if (data == 1) {
-                        return '<span class="badge bg-warning text-dark">Pending HOD</span>';
+                        return row.waiting_on === 'hr'
+                            ? '<span class="badge bg-info text-dark">Pending HR</span>'
+                            : '<span class="badge bg-warning text-dark">Pending Supervisor</span>';
                     } else if (data == 24) {
-                        return '<span class="badge bg-info text-dark">Partially Approved</span>';
+                        return '<span class="badge bg-info text-dark">Pending HR</span>';
                     } else if (data == 5) {
                         return '<span class="badge bg-success">Approved</span>';
                     } else if (data == 41) {
@@ -462,50 +419,6 @@ $(document).ready(function() {
                             <a href="{{ url('/hr/leave-management/leave-applications/') }}/${row.encrypted_leave_application_id}" class="btn btn-xs btn-light" style="padding:1px 2px;" title="View Application">
                                 <span class="material-symbols-outlined" style="font-size:18px;">visibility</span>
                             </a>`;
-                    }
-
-                    // Stage 1: Pending HOD Approval (Status 1) -> moves to Status 24
-                    if (row.can_update && row.current_status_id == 1) {
-                        buttons += `
-                            <button class="btn btn-xs btn-outline-primary btn-quick-status" 
-                                data-id="${row.id}" 
-                                data-status="24" 
-                                data-action-label="partially approve / recommend (HOD)" 
-                                title="HOD Recommend / Partial Approval" 
-                                style="padding:1px 4px;">
-                                <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">thumb_up</span>
-                            </button>
-                            <button class="btn btn-xs btn-outline-danger btn-quick-status" 
-                                data-id="${row.id}" 
-                                data-status="41" 
-                                data-action-label="reject" 
-                                title="Reject Leave" 
-                                style="padding:1px 4px;">
-                                <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">cancel</span>
-                            </button>
-                        `;
-                    }
-
-                    // Stage 2: Pending HR Final Approval (Status 24) -> moves to Status 5
-                    if (row.can_update && row.current_status_id == 24) {
-                        buttons += `
-                            <button class="btn btn-xs btn-outline-success btn-quick-status" 
-                                data-id="${row.id}" 
-                                data-status="5" 
-                                data-action-label="grant final HR approval for" 
-                                title="HR Final Approve" 
-                                style="padding:1px 4px;">
-                                <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">check_circle</span>
-                            </button>
-                            <button class="btn btn-xs btn-outline-danger btn-quick-status" 
-                                data-id="${row.id}" 
-                                data-status="41" 
-                                data-action-label="reject" 
-                                title="Reject Leave" 
-                                style="padding:1px 4px;">
-                                <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">cancel</span>
-                            </button>
-                        `;
                     }
 
                     if (row.can_update) {

@@ -42,6 +42,7 @@ class LeaveQuickApprovalTest extends TestCase
             $t->dateTime('end_date');
             $t->integer('current_status_id')->default(1);
             $t->decimal('used_days', 8, 2)->nullable();
+            $t->integer('status_changed_by')->nullable();
         });
         Schema::create('sys_hr_leave_requests_234_repeat', function (Blueprint $t) {
             $t->id();

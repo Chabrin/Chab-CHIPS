@@ -62,7 +62,7 @@
         </tr>
         <tr>
             <th>Approval Date:</th>
-            <td>{{ \Carbon\Carbon::parse($leave->date_time)->format('d M Y H:i') }}</td>
+            <td>{{ \Carbon\Carbon::parse($approvedAt ?? $leave->date_time)->format('d M Y H:i') }}</td>
         </tr>
     </table>
 

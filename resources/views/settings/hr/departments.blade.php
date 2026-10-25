@@ -192,6 +192,7 @@
         $(document).on('click', '.edit-department', function() {
             $('#departmentId').val($(this).data('id'));
             $('#department_name').val($(this).data('department_name'));
+            $('#addDepartmentModalLabel').text('Edit Department');
             $('#addDepartmentModal').modal('show');
         });
 
@@ -242,6 +243,7 @@
         $('#addDepartmentModal').on('hidden.bs.modal', function() {
             $('#departmentForm')[0].reset();
             $('#departmentId').val('');
+            $('#addDepartmentModalLabel').text('Add Department');
         });
     });
 </script>
