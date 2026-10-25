@@ -23,6 +23,7 @@
                                     <tr>
                                         <th>#</th>
                                         <th>Position Name</th>
+                                        <th>Department</th>
                                         <th>Slug</th>
                                         <th>Basic Salary</th>
                                         <th>Reports To</th>
@@ -51,6 +52,13 @@
             <form id="addPositionForm">
                 <div class="modal-body">
                     <div class="mb-3">
+                        <label for="add_department_id" class="form-label">Department <span class="text-danger">*</span></label>
+                        <select class="form-select" id="add_department_id" name="department_id" required>
+                            <option value="">— Select Department —</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
                         <label for="add_position_name" class="form-label">Position Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="add_position_name" name="position_name" required>
                         <div class="invalid-feedback"></div>
@@ -62,6 +70,13 @@
                     <div class="mb-3">
                         <label for="add_basic_salary" class="form-label">Basic Salary</label>
                         <input type="number" step="0.01" class="form-control" id="add_basic_salary" name="basic_salary">
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="add_reports_to_id" class="form-label">Reports To</label>
+                        <select class="form-select" id="add_reports_to_id" name="reports_to_id">
+                            <option value="">— None (Top Level) —</option>
+                        </select>
                         <div class="invalid-feedback"></div>
                     </div>
                 </div>
@@ -93,6 +108,13 @@
                 <div class="modal-body">
                     <input type="hidden" id="edit_position_id" name="position_id">
                     <div class="mb-3">
+                        <label for="edit_department_id" class="form-label">Department <span class="text-danger">*</span></label>
+                        <select class="form-select" id="edit_department_id" name="department_id" required>
+                            <option value="">— Select Department —</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
                         <label for="edit_position_name" class="form-label">Position Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="edit_position_name" name="position_name" required>
                         <div class="invalid-feedback"></div>
@@ -104,6 +126,13 @@
                     <div class="mb-3">
                         <label for="edit_basic_salary" class="form-label">Basic Salary</label>
                         <input type="number" step="0.01" class="form-control" id="edit_basic_salary" name="basic_salary">
+                        <div class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_reports_to_id" class="form-label">Reports To</label>
+                        <select class="form-select" id="edit_reports_to_id" name="reports_to_id">
+                            <option value="">— None (Top Level) —</option>
+                        </select>
                         <div class="invalid-feedback"></div>
                     </div>
                 </div>
@@ -135,6 +164,7 @@
         $('#addPositionBtn').on('click', function(e) {
             e.preventDefault();
             resetAddForm();
+            loadDropdowns();
             $('#addPositionModal').modal('show');
         });
 
@@ -143,7 +173,6 @@
             e.preventDefault();
             var positionId = $(this).data('id');
             loadPositionData(positionId);
-            $('#editPositionModal').modal('show');
         });
 
         // Add form submission
@@ -158,9 +187,12 @@
             saveEditPosition();
         });
 
-        // Live slug preview (add only — edit keeps the original slug fixed)
+        // Live slug preview
         $('#add_position_name').on('input', function() {
             $('#add_slug_name').val(slugify($(this).val()));
+        });
+        $('#edit_position_name').on('input', function() {
+            $('#edit_slug_name').val(slugify($(this).val()));
         });
 
         // Delete position
@@ -187,7 +219,8 @@
                 url: '/ajax/hr/positions/list',
                 dataSrc: 'positions'
             },
-            columns: [{
+            columns: [
+                {
                     data: null,
                     render: function(data, type, row, meta) {
                         return meta.row + 1;
@@ -201,6 +234,10 @@
                         }
                         return data;
                     }
+                },
+                {
+                    data: 'department_name',
+                    defaultContent: '-'
                 },
                 {
                     data: 'slug_name',
@@ -224,6 +261,8 @@
                 },
                 {
                     data: null,
+                    orderable: false,
+                    searchable: false,
                     render: function(data, type, row) {
                         var actions = '<div class="d-flex flex-row gap-1">';
                         if (row.can_read) {
@@ -243,22 +282,53 @@
             paging: true,
             info: true,
             lengthChange: true,
-            order: [
-                [1, 'asc']
-            ]
+            order: [[1, 'asc']]
+        });
+    }
+
+    // Load Reports To and Departments dropdowns
+    function loadDropdowns(currentId = null, selectedReportsTo = null, selectedDept = null) {
+        $.get('/ajax/hr/positions/dropdowns', { current_id: currentId }, function(res) {
+            var reportsOptions = '<option value="">— None (Top Level) —</option>';
+            (res.positions || []).forEach(function(pos) {
+                var selected = (selectedReportsTo && selectedReportsTo == pos.id) ? 'selected' : '';
+                reportsOptions += `<option value="${pos.id}" ${selected}>${pos.position_name}</option>`;
+            });
+
+            var deptOptions = '<option value="">— Select Department —</option>';
+            (res.departments || []).forEach(function(dept) {
+                var selected = (selectedDept && selectedDept == dept.id) ? 'selected' : '';
+                deptOptions += `<option value="${dept.id}" ${selected}>${dept.department_name}</option>`;
+            });
+
+            if (currentId) {
+                $('#edit_reports_to_id').html(reportsOptions);
+                $('#edit_department_id').html(deptOptions);
+                // Update stays locked until the current Reports To value is loaded, so an early save cannot wipe it.
+                $('#editPositionSaveBtn').prop('disabled', false);
+            } else {
+                $('#add_reports_to_id').html(reportsOptions);
+                $('#add_department_id').html(deptOptions);
+            }
+        }).fail(function(xhr) {
+            console.error('Dropdowns failed', xhr.responseJSON || xhr.statusText);
+            toastr.error('Could not load dropdown options');
         });
     }
 
     function loadPositionData(positionId) {
-        $.get('/ajax/hr/positions/get', {
-                id: positionId
-            },
-            function(data) {
-                $('#edit_position_id').val(data.position.id);
-                $('#edit_position_name').val(data.position.position_name);
-                $('#edit_slug_name').val(data.position.slug_name);
-                $('#edit_basic_salary').val(data.position.basic_salary);
-            });
+        $.get('/ajax/hr/positions/get', { id: positionId }, function(data) {
+            var p = data.position;
+
+            $('#edit_position_id').val(p.id);
+            $('#edit_position_name').val(p.position_name);
+            $('#edit_slug_name').val(p.slug_name);
+            $('#edit_basic_salary').val(p.basic_salary);
+
+            $('#editPositionSaveBtn').prop('disabled', true);
+            loadDropdowns(p.id, p.reports_to_id, p.department_id);
+            $('#editPositionModal').modal('show');
+        });
     }
 
     function deletePosition(positionId, positionName) {
@@ -272,24 +342,18 @@
             confirmButtonText: 'Yes, delete it',
             cancelButtonText: 'Cancel'
         }).then(function(result) {
-            if (!result.isConfirmed) {
-                return;
-            }
+            if (!result.isConfirmed) return;
 
             Swal.fire({
                 title: 'Deleting...',
                 allowOutsideClick: false,
-                didOpen: function() {
-                    Swal.showLoading();
-                }
+                didOpen: function() { Swal.showLoading(); }
             });
 
             $.ajax({
                 url: '/ajax/hr/positions/' + positionId,
                 method: 'DELETE',
-                data: {
-                    _token: '{{ csrf_token() }}'
-                },
+                data: { _token: '{{ csrf_token() }}' },
                 success: function(response) {
                     if (response.success) {
                         Swal.fire({
@@ -322,21 +386,21 @@
     }
 
     function saveAddPosition() {
-        var $btn = $('#addPositionSaveBtn');
-        var $spinner = $('#addSaveSpinner');
-        var $icon = $('#addSaveIcon');
-        var $btnText = $('#addSaveBtnText');
+        var $btn =$('#addPositionSaveBtn');
+        var $spinner =$('#addSaveSpinner');
+        var $icon =$('#addSaveIcon');
+        var $btnText =$('#addSaveBtnText');
 
         $btn.prop('disabled', true);
-        $icon.addClass('d-none');
-        $spinner.removeClass('d-none');
-        $btnText.text('Saving...');
-        $('#addPositionForm .is-invalid').removeClass('is-invalid');
+        $icon.addClass('d-none');$spinner.removeClass('d-none');
+        $btnText.text('Saving...');$('#addPositionForm .is-invalid').removeClass('is-invalid');
         $('#addPositionForm .invalid-feedback').text('');
 
         var formData = {
+            department_id: $('#add_department_id').val(),
             position_name: $('#add_position_name').val(),
-            basic_salary: $('#add_basic_salary').val(),
+            basic_salary: $('#add_basic_salary').val() || null,
+            reports_to_id: $('#add_reports_to_id').val() || null,
             _token: '{{ csrf_token() }}'
         };
 
@@ -355,42 +419,39 @@
             },
             error: function(xhr) {
                 if (xhr.status === 422) {
-                    var errors = xhr.responseJSON.errors;
+                    var errors = xhr.responseJSON.errors || {};
                     $.each(errors, function(field, messages) {
-                        var $field = $('#add_' + field);
-                        $field.addClass('is-invalid');
-                        $field.next('.invalid-feedback').text(messages[0]);
+                        var $field =$('#add_' + field);
+                        $field.addClass('is-invalid');$field.next('.invalid-feedback').text(messages[0]);
                     });
                 } else {
                     toastr.error('An error occurred while saving');
                 }
             },
             complete: function() {
-                $btn.prop('disabled', false);
-                $spinner.addClass('d-none');
-                $icon.removeClass('d-none');
-                $btnText.text('Save');
+                $btn.prop('disabled', false);$spinner.addClass('d-none');
+                $icon.removeClass('d-none');$btnText.text('Save');
             }
         });
     }
 
     function saveEditPosition() {
-        var $btn = $('#editPositionSaveBtn');
-        var $spinner = $('#editSaveSpinner');
-        var $icon = $('#editSaveIcon');
-        var $btnText = $('#editSaveBtnText');
+        var $btn =$('#editPositionSaveBtn');
+        var $spinner =$('#editSaveSpinner');
+        var $icon =$('#editSaveIcon');
+        var $btnText =$('#editSaveBtnText');
         var positionId = $('#edit_position_id').val();
 
         $btn.prop('disabled', true);
-        $icon.addClass('d-none');
-        $spinner.removeClass('d-none');
-        $btnText.text('Updating...');
-        $('#editPositionForm .is-invalid').removeClass('is-invalid');
+        $icon.addClass('d-none');$spinner.removeClass('d-none');
+        $btnText.text('Updating...');$('#editPositionForm .is-invalid').removeClass('is-invalid');
         $('#editPositionForm .invalid-feedback').text('');
 
         var formData = {
+            department_id: $('#edit_department_id').val(),
             position_name: $('#edit_position_name').val(),
-            basic_salary: $('#edit_basic_salary').val(),
+            basic_salary: $('#edit_basic_salary').val() || null,
+            reports_to_id: $('#edit_reports_to_id').val() || null,
             _token: '{{ csrf_token() }}'
         };
 
@@ -409,21 +470,18 @@
             },
             error: function(xhr) {
                 if (xhr.status === 422) {
-                    var errors = xhr.responseJSON.errors;
+                    var errors = xhr.responseJSON.errors || {};
                     $.each(errors, function(field, messages) {
-                        var $field = $('#edit_' + field);
-                        $field.addClass('is-invalid');
-                        $field.next('.invalid-feedback').text(messages[0]);
+                        var $field =$('#edit_' + field);
+                        $field.addClass('is-invalid');$field.next('.invalid-feedback').text(messages[0]);
                     });
                 } else {
                     toastr.error('An error occurred while updating');
                 }
             },
             complete: function() {
-                $btn.prop('disabled', false);
-                $spinner.addClass('d-none');
-                $icon.removeClass('d-none');
-                $btnText.text('Update');
+                $btn.prop('disabled', false);$spinner.addClass('d-none');
+                $icon.removeClass('d-none');$btnText.text('Update');
             }
         });
     }
@@ -432,6 +490,8 @@
         $('#addPositionForm')[0].reset();
         $('#addPositionForm .is-invalid').removeClass('is-invalid');
         $('#addPositionForm .invalid-feedback').text('');
+        $('#add_slug_name').val('');
+        $('#add_department_id').val('');
     }
 </script>
 @endsection

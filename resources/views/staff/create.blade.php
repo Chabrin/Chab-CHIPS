@@ -289,12 +289,15 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+
                                         <div class="col-md-4 mb-3">
                                             <label for="position_id" class="form-label">Position</label>
-                                            <select class="form-select @error('position_id') is-invalid @enderror" id="position_id" name="position_id">
+                                            <select class="form-select @error('position_id') is-invalid @enderror" id="position_id" name="position_id" {{ old('department_id') ? '' : 'disabled' }}>
                                                 <option value="">Select Position</option>
                                                 @foreach($positions as $position)
-                                                <option value="{{ $position->id }}" {{ old('position_id') == $position->id ? 'selected' : '' }}>
+                                                <option value="{{ $position->id }}" 
+                                                        data-department="{{ $position->department_id }}"
+                                                        {{ old('position_id') == $position->id ? 'selected' : '' }}>
                                                     {{ $position->position_name }}
                                                 </option>
                                                 @endforeach
@@ -303,6 +306,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+
                                         <div class="col-md-4 mb-3">
                                             <label for="hire_date" class="form-label">Hire Date</label>
                                             <input type="date" class="form-control @error('hire_date') is-invalid @enderror" id="hire_date" name="hire_date" value="{{ old('hire_date') }}">
@@ -310,6 +314,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+
                                         <div class="row col-md-12 mb-3">
                                             <div class="col-md-4 mb-3 zone-role-field" id="zone_field_group" style="display:none;">
                                                 <label for="zone_id" class="form-label">Zone</label>
@@ -326,6 +331,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                                 @enderror
                                             </div>
+
                                             <div class="col-md-4 mb-3 zone-role-field" id="zone_managed_group" style="display:none;">
                                                 <label for="managed_zone_ids" class="form-label">Zones Managed</label>
                                                 <select class="form-select @error('managed_zone_ids') is-invalid @enderror @error('managed_zone_ids.*') is-invalid @enderror" id="managed_zone_ids" name="managed_zone_ids[]" multiple>
@@ -343,6 +349,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                                                 @enderror
                                             </div>
+
                                             <div class="col-md-4 mb-3 zone-role-field" id="zone_supervised_group" style="display:none;">
                                                 <label for="supervised_zone_ids" class="form-label">Zones Supervised</label>
                                                 <select class="form-select @error('supervised_zone_ids') is-invalid @enderror @error('supervised_zone_ids.*') is-invalid @enderror" id="supervised_zone_ids" name="supervised_zone_ids[]" multiple>
@@ -594,6 +601,60 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
     </div>
 </div>
 <script>
+    $(document).ready(function() {
+    var $departmentSelect =$('#department_id');
+    var $positionSelect =$('#position_id');
+
+    // Cache all position options on page load
+    var allPositionOptions = $positionSelect.find('option').clone();
+
+    function filterPositions(departmentId, preserveValue = false) {
+        var currentSelected = preserveValue ? $positionSelect.val() : '';
+
+        // Reset and disable if no department is picked
+        if (!departmentId) {
+            $positionSelect.html('<option value="">Select Position</option>').prop('disabled', true).trigger('change');
+            return;
+        }
+
+        $positionSelect.empty().prop('disabled', false);$positionSelect.append('<option value="">Select Position</option>');
+
+        // Positions of the chosen department, plus positions not assigned to any department yet (so they stay
+        // selectable until HR places them); if that leaves nothing (e.g. the hierarchy is not loaded), fall back
+        // to every position so onboarding is not blocked.
+        var realOptions = allPositionOptions.filter(function() {
+            return $(this).val();
+        });
+        var matchingOptions = realOptions.filter(function() {
+            var optDept = $(this).attr('data-department');
+            return !optDept || optDept == departmentId;
+        });
+        var visibleOptions = matchingOptions.length ? matchingOptions : realOptions;
+
+        visibleOptions.each(function() {
+            var $opt =$(this);
+            var optVal = $opt.val();
+            var $newOpt =$('<option>').val(optVal).attr('data-department', $opt.attr('data-department')).text($opt.text().trim());
+            if (currentSelected && optVal == currentSelected) {
+                $newOpt.prop('selected', true);
+            }
+            $positionSelect.append($newOpt);
+        });
+
+        // Let dependent UI (zone fields) re-evaluate against the rebuilt list
+        $positionSelect.trigger('change');
+    }
+
+    // Trigger on department dropdown change
+    $departmentSelect.on('change', function() {
+        filterPositions($(this).val(), false);
+    });
+
+    // Run on initial load to handle page reloads or validation redirects
+    if ($departmentSelect.val()) {
+        filterPositions($departmentSelect.val(), true);
+    }
+});
     $(document).ready(function() {
         // Show only the zone field relevant to the selected position. Select2 is initialized
         // lazily, the first time each group becomes visible — initializing it while the group

@@ -4,23 +4,29 @@ namespace App\Http\Controllers;
 
 use App\Models\Staff;
 use App\Models\WorkDay;
+use Carbon\Carbon;
 use App\Models\PublicHoliday;
 use App\Models\LeaveType;
 use Illuminate\Support\Facades\DB;
+use App\Models\ConfirmationLog;
 use App\Models\LeaveRequest;
 use Illuminate\Http\Request;
 use App\Models\LeaveCalendarPlan;
 use App\Services\ErrorDispatcher;
+use App\Services\Leave\LeaveApprovalRouter;
 use App\Services\Leave\LeaveApprovalService;
 use App\Services\Leave\LeaveCalendarService;
+use App\Services\Leave\LeavePlanService;
 use App\Services\Leave\LeaveTierService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Barryvdh\DomPDF\Facade\Pdf;
+
 
 class LeaveManagementController extends Controller
 {
-    public function __construct(private LeaveCalendarService $calendar, private LeaveApprovalService $approvals, private LeaveTierService $tiers) {
+    public function __construct(private LeaveCalendarService $calendar, private LeaveApprovalService $approvals, private LeaveTierService $tiers, private LeavePlanService $plans, private LeaveApprovalRouter $router) {
     }
 
     public function leaveCalendarPlan()
@@ -56,6 +62,7 @@ class LeaveManagementController extends Controller
      * Fetch existing scheduled slots for a given plan.
      * Accessible by the employee who owns the plan or HR/Admins.
      */
+
     public function getPlanSlots($planId)
     {
         try {
@@ -65,24 +72,42 @@ class LeaveManagementController extends Controller
                 return response()->json(['success' => false, 'error' => 'Unauthorized access.'], 403);
             }
 
-            $slots = $plan->slots->map(function ($slot) {
+            $planYear = (int) \Carbon\Carbon::parse($plan->start_date)->year;
+
+            // Every public holiday day in the plan's year (multi-day and recurring holidays included)
+            $holidayDates = [];
+            for ($day = \Carbon\Carbon::create($planYear, 1, 1); $day->year === $planYear; $day->addDay()) {
+                if ($this->calendar->holidayOn($day->copy())) {
+                    $holidayDates[] = $day->format('Y-m-d');
+                }
+            }
+
+            $slots = $plan->slots->map(function ($slot) use ($plan) {
+                $start = \Carbon\Carbon::parse($slot->start_date)->startOfDay();
+                $end   = \Carbon\Carbon::parse($slot->end_date)->startOfDay();
+
+                // Counted with the same rules saveAnnualSchedule uses (recurring holidays, working-day overrides, Saturday half day).
+                // This is a read: the stored days_count is only changed when the schedule is saved.
+                $calculatedDays = $this->calendar->countDeductibleDays($start->format('Y-m-d'), $end->format('Y-m-d'), (int) $plan->leave_type_id);
+
                 return [
                     'id'         => $slot->id,
-                    'start_date' => \Carbon\Carbon::parse($slot->start_date)->format('Y-m-d'),
-                    'end_date'   => \Carbon\Carbon::parse($slot->end_date)->format('Y-m-d'),
-                    'days_count' => $slot->days_count,
+                    'start_date' => $start->format('Y-m-d'),
+                    'end_date'   => $end->format('Y-m-d'),
+                    'days_count' => $calculatedDays,
                     'notes'      => $slot->notes,
                     'status'     => $slot->current_status_id,
                 ];
             });
 
             return response()->json([
-                'success'       => true,
-                'plan_id'       => $plan->id,
-                'employee_name' => $plan->employee->full_names ?? $plan->employee->name ?? 'Staff',
-                'entitled_days' => $plan->entitled_days,
-                'leave_type_id' => $plan->leave_type_id,
-                'slots'         => $slots,
+                'success'         => true,
+                'plan_id'         => $plan->id,
+                'employee_name'   => $plan->employee->full_names ?? $plan->employee->name ?? 'Staff',
+                'entitled_days'   => $plan->entitled_days,
+                'leave_type_id'   => $plan->leave_type_id,
+                'public_holidays' => $holidayDates,
+                'slots'           => $slots,
             ]);
         } catch (\Throwable $e) {
             Log::error('getPlanSlots error: ' . $e->getMessage());
@@ -262,8 +287,6 @@ class LeaveManagementController extends Controller
         }
     }
 
-    
-
     /**
      * Initialize the year's annual leave plans: sync the public holidays entered in the modal, then queue plan
      * generation for all active staff (annual leave only, pro-rated for mid-year hires).
@@ -298,24 +321,27 @@ class LeaveManagementController extends Controller
                 return response()->json(['success' => false, 'error' => 'Annual leave type not configured in HR settings.'], 400);
             }
 
-            $existingPlans = LeaveCalendarPlan::whereYear('start_date', $year)->whereIn('leave_type_id', $annualTypeIds);
+            // Without 'override' this only creates the plans that are missing; existing plans are left exactly as they are
+            $existingPlansCount = LeaveCalendarPlan::whereYear('start_date', $year)->whereIn('leave_type_id', $annualTypeIds)->count();
 
-            $existingPlansCount = $existingPlans->count();
-            if ($existingPlansCount > 0 && !$override) {
-                return response()->json([
-                    'success' => false,
-                    'error' => "Found {$existingPlansCount} existing leave plan(s) for {$year}. Please check 'Override existing plans' to refresh them.",
-                ], 422);
-            }
-
-            $this->syncPublicHolidays($validated['holidays'] ?? []);
+            $this->syncPublicHolidays($validated['holidays'] ?? [], $year);
 
             \App\Jobs\GenerateAnnualLeaveCalendarPlans::dispatch($year, $leaveTypeIds, $override, Auth::id());
 
-            return response()->json([
-                'success' => true,
-                'message' => "Annual leave plan generation for {$year} started in the background for {$activeStaffCount} staff member(s).",
-            ]);
+            // Staff with no hire date can't be pro-rated, so the generator gives them the full year
+            $noHireDate = Staff::where('current_status_id', 1)->get()
+                ->filter(fn ($staff) => !$this->calendar->parseHireDate($staff->getRawOriginal('hire_date')))
+                ->count();
+
+            $message = "Annual leave plan generation for {$year} started in the background for {$activeStaffCount} staff member(s).";
+            if ($existingPlansCount > 0 && !$override) {
+                $message .= " {$existingPlansCount} existing plan(s) are left untouched; only missing plans are created.";
+            }
+            if ($noHireDate > 0) {
+                $message .= " {$noHireDate} staff member(s) have no hire date and get the full year's days.";
+            }
+
+            return response()->json(['success' => true, 'message' => $message]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -324,35 +350,52 @@ class LeaveManagementController extends Controller
         }
     }
 
-    /**
-     * Create or refresh the one-off public holidays entered when initializing a year.
-     */
-    private function syncPublicHolidays(array $holidays): void {
-        foreach ($holidays as $h) {
-            if (empty($h['name']) || empty($h['date'])) {
+  /**
+ * Create or refresh the public holidays entered when initializing a year,
+ * removing any holidays for that year that were omitted.
+ */
+private function syncPublicHolidays(array $holidays, int $year): void {
+    $syncedDates = [];
+
+    foreach ($holidays as $h) {
+        if (empty($h['name']) || empty($h['date'])) {
+            continue;
+        }
+
+        $date = trim($h['date']);
+        if (str_contains($date, '/')) {
+            try {
+                $date = \Carbon\Carbon::createFromFormat('d/m/Y', explode(' ', $date)[0])->format('Y-m-d');
+            } catch (\Throwable $e) {
                 continue;
             }
-
-            $date = trim($h['date']);
-            if (str_contains($date, '/')) {
-                try {
-                    $date = \Carbon\Carbon::createFromFormat('d/m/Y', explode(' ', $date)[0])->format('Y-m-d');
-                } catch (\Throwable $e) {
-                    continue;
-                }
-            }
-
-            PublicHoliday::updateOrCreate(
-                ['start_date' => $date . ' 00:00:00'],
-                [
-                    'title' => $h['name'],
-                    'end_date' => $date . ' 23:59:59',
-                    'current_status_id' => 5,
-                    'date_time' => now(),
-                ]
-            );
         }
+
+        $startDateTime = $date . ' 00:00:00';
+        $syncedDates[] = $startDateTime;
+
+        PublicHoliday::updateOrCreate(
+            ['start_date' => $startDateTime],
+            [
+                'title'             => $h['name'],
+                'end_date'          => $date . ' 23:59:59',
+                'current_status_id' => 5,
+                'date_time'         => now(),
+            ]
+        );
     }
+
+    // An empty list (e.g. the holiday load failed) must not wipe the year: only prune when holidays were submitted
+    if (empty($syncedDates)) {
+        return;
+    }
+
+    // Prune removed holidays for the given year, one by one so each deletion is audited
+    PublicHoliday::whereYear('start_date', $year)
+        ->whereNotIn('start_date', $syncedDates)
+        ->get()
+        ->each->delete();
+}
 
     /**
      * Whether the logged-in user may view or change a leave calendar plan: its owner, or HR with plan permission.
@@ -400,28 +443,87 @@ class LeaveManagementController extends Controller
     }
 
     /**
-     * Quick approve (5) or reject (41) a pending/partially approved leave application in one step.
+     * Whether the logged-in user may file, edit, read or delete leave for this staff member: their own, or
+     * anyone's when they hold the given permission (HR acting on someone's behalf).
+     *
+     * @param int $staffId
+     * @param string $permission
+     * @return bool
      */
-    public function updateApplicationStatus(Request $request) {
-        if (!Auth::user()->isAbleTo('update_leave_applications')) {
-            return response()->json(['success' => false, 'error' => 'You do not have permission to approve leave applications.'], 403);
+    private function canManageLeaveOf(int $staffId, string $permission): bool {
+        $user = Auth::user();
+
+        return $user->isAbleTo($permission) || $user->linkedStaff()?->id === $staffId;
+    }
+
+    /**
+     * Work out what a request is measured against and refuse it when it can't be covered. Annual leave needs the
+     * year's plan, which is created now if this is the first time (an existing plan is always used as it is);
+     * every leave type without pay tiers (sick leave has them) must fit in the days still available. People who
+     * may file leave for others (HR) can go over the balance and get a warning instead.
+     *
+     * @param LeaveRequest $requestModel
+     * @param Staff $staff
+     * @param LeaveType|null $leaveType
+     * @param int $year
+     * @return array{error: \Illuminate\Http\JsonResponse|null, warning: string|null}
+     */
+    private function applyBalance(LeaveRequest $requestModel, Staff $staff, ?LeaveType $leaveType, int $year): array {
+        $refuse = fn (string $message) => ['error' => response()->json(['success' => false, 'error' => $message], 422), 'warning' => null];
+
+        if (!$leaveType) {
+            return $refuse('Leave type not found.');
         }
 
-        $validated = $request->validate([
-            'id' => 'required|integer|exists:sys_hr_leave_requests,id',
-            'status' => 'required|in:5,41',
-        ]);
-
-        $leaveRequest = LeaveRequest::findOrFail($validated['id']);
-        $result = (int) $validated['status'] === 5
-            ? $this->approvals->quickApprove($leaveRequest, Auth::id())
-            : $this->approvals->quickReject($leaveRequest, Auth::id());
-
-        if (!$result['success']) {
-            return response()->json($result, 422);
+        if ($this->plans->isPlanned($leaveType)) {
+            $ensured = $this->plans->ensurePlan($staff, $leaveType, $year, Auth::id());
+            if ($ensured['error']) {
+                return $refuse($ensured['error']);
+            }
         }
 
-        return response()->json(['success' => true, 'message' => 'Status updated successfully.']);
+        $figures = $this->plans->availableDays($staff, $leaveType, $year, $requestModel->id);
+        if ($figures['error']) {
+            return $refuse($figures['error']);
+        }
+
+        $requested = (float) $requestModel->requested_days;
+        $warning = null;
+
+        if (!$this->tiers->hasTiers((int) $leaveType->id) && $requested > $figures['available'] + 0.001) {
+            $message = 'You asked for ' . rtrim(rtrim(number_format($requested, 2), '0'), '.') . ' day(s) but only '
+                . rtrim(rtrim(number_format($figures['available'], 2), '0'), '.') . ' are available.';
+
+            if (!Auth::user()->isAbleTo('create_leave_applications')) {
+                return $refuse($message);
+            }
+
+            $warning = $message;
+        }
+
+        $requestModel->entitled_days = $figures['entitled'];
+        $requestModel->days_balance = $figures['balance'] - $requested;
+
+        return ['error' => null, 'warning' => $warning];
+    }
+
+    /**
+     * Whether the staff member already has a pending, partially approved or approved leave request that overlaps
+     * the given period (compared down to the time, so two partial-day requests on one day can still sit side by side).
+     *
+     * @param int $staffId
+     * @param mixed $start
+     * @param mixed $end
+     * @param int|null $ignoreId a request being edited, which doesn't count against itself
+     * @return bool
+     */
+    private function overlapsActiveLeave(int $staffId, $start, $end, ?int $ignoreId = null): bool {
+        return LeaveRequest::where('staff_id', $staffId)
+            ->whereIn('current_status_id', [1, 5, 24])
+            ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
+            ->where('start_date', '<', \Carbon\Carbon::parse($end))
+            ->where('end_date', '>', \Carbon\Carbon::parse($start))
+            ->exists();
     }
 
     /**
@@ -483,7 +585,7 @@ class LeaveManagementController extends Controller
             $plan->end_date          = $end_date;
             $plan->entitled_days     = $validated['entitled_days'];
             $plan->balance           = $balance;
-            $plan->current_status_id = 1;
+            $plan->current_status_id = 5; // HR sets plans up directly, as the year generator does; there is no approval screen for them
             $plan->created_by        = Auth::id();
             $plan->date_time         = now();
             $plan->save();
@@ -522,7 +624,7 @@ class LeaveManagementController extends Controller
             $plan->end_date          = $end_date;
             $plan->entitled_days     = $validated['entitled_days'];
             $plan->balance           = $balance;
-            $plan->current_status_id = 1;
+            $plan->current_status_id = 5; // HR sets plans up directly, as the year generator does; there is no approval screen for them
             $plan->save();
     
             return response()->json(['success' => true, 'leave_calendar_plan' => $plan]);
@@ -636,7 +738,12 @@ class LeaveManagementController extends Controller
     public function leaveApplicationsList()
     {
         try {
+            // Everyone's requests for those who can read them; everyone else only sees their own
+            $canReadAll = Auth::user()->isAbleTo('read_leave_applications');
+            $ownStaffId = Auth::user()->linkedStaff()?->id;
+
             $requests = LeaveRequest::with('createdBy', 'employee', 'leaveType', 'position')
+                ->when(!$canReadAll, fn ($query) => $query->where('staff_id', $ownStaffId ?? 0))
                 ->orderBy('date_time', 'desc')
                 ->get()
                 ->map(function ($request) {
@@ -659,6 +766,7 @@ class LeaveManagementController extends Controller
                         'requested_days'                 => $request->requested_days,
                         'amount'                         => $request->amount,
                         'current_status_id'              => $request->current_status_id,
+                        'waiting_on'                     => $this->router->waitingOn($request),
                         'allowance_type_id'              => $request->allowance_type_id,
                         'created_by'                     => $request->createdBy ? [
                             'id'   => $request->createdBy->id,
@@ -702,6 +810,12 @@ class LeaveManagementController extends Controller
                 ->orderBy('date_time', 'desc')
                 ->get();
 
+            foreach ($requests as $request) {
+                if (!$this->canManageLeaveOf((int) $request->staff_id, 'read_leave_applications')) {
+                    return response('You are not allowed to view this leave application.', 403);
+                }
+            }
+
             return view('leave_management.leave_application_details', ['leave_applications' => $requests]);
         } catch (\Exception $e) {
             try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
@@ -734,7 +848,15 @@ class LeaveManagementController extends Controller
             }
             
             $validated = $request->validate($rules);
+
+            if (!$this->canManageLeaveOf((int) $validated['staff_id'], 'create_leave_applications')) {
+                return response()->json(['success' => false, 'error' => 'You can only apply for leave for yourself.'], 403);
+            }
+
             $staff = Staff::find($validated['staff_id']);
+            if (!$staff) {
+                return response()->json(['success' => false, 'error' => 'Staff member not found.'], 422);
+            }
             
             $requestModel = new LeaveRequest();
             $requestModel->staff_id    = $validated['staff_id'];
@@ -770,36 +892,22 @@ class LeaveManagementController extends Controller
 
             $currentYear = (int) date('Y', strtotime($validated['start_date']));
 
-            // Only annual leave is planned; sick, compassionate etc. have no calendar plan
             $targetLeaveType = LeaveType::find($validated['leave_type_id']);
-            $staff_leave_plan = null;
 
-            if ($this->calendar->isAnnualLeaveType($targetLeaveType?->type_name)) {
-                // 1. Direct matching plan (pending or approved), else any annual/normal plan for the year
-                $staff_leave_plan = LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
-                    ->where('leave_type_id', $validated['leave_type_id'])
-                    ->whereYear('start_date', $currentYear)
-                    ->first()
-                    ?? LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
-                        ->whereYear('start_date', $currentYear)
-                        ->whereHas('leaveType', function ($q) {
-                            $q->where('type_name', 'ILIKE', '%annual%')
-                              ->orWhere('type_name', 'ILIKE', '%normal%');
-                        })
-                        ->first();
+            // Prevent overlapping applications for the employee
+            if ($this->overlapsActiveLeave((int) $validated['staff_id'], $requestModel->start_date, $requestModel->end_date)) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'An active leave application already overlaps these dates.'
+                ], 422);
             }
 
-            // 2. No plan: annual leave is pro-rated from the hire date, other types use their configured days
-            if (!$staff_leave_plan) {
-                $entitledDays = $this->entitlementWithoutPlan((int) $validated['staff_id'], $targetLeaveType, $currentYear);
-                $balanceDays  = max(0, $entitledDays - (float) $requestModel->requested_days);
-            } else {
-                $entitledDays = (float) $staff_leave_plan->entitled_days;
-                $balanceDays  = (float) $staff_leave_plan->balance - (float) $requestModel->requested_days;
+            // Annual leave needs the year's plan (created now if it is the first time), and the days must fit the balance
+            ['error' => $balanceError, 'warning' => $balanceWarning] = $this->applyBalance($requestModel, $staff, $targetLeaveType, $currentYear);
+            if ($balanceError) {
+                return $balanceError;
             }
 
-            $requestModel->entitled_days     = $entitledDays;
-            $requestModel->days_balance      = $balanceDays;
             $requestModel->used_days         = 0;
             $requestModel->amount            = $validated['amount'] ?? 0;
             $requestModel->allowance_type_id = $validated['allowance_type'] ?? null;
@@ -808,7 +916,10 @@ class LeaveManagementController extends Controller
             $requestModel->date_time         = now();
             $requestModel->save();
 
-            return response()->json(['success' => true, 'leave_application' => $requestModel]);
+            // Decide who approves it: the supervisor, straight to HR, or automatic for the HR approver
+            $routing = $this->approvals->submit($requestModel, (int) Auth::id());
+
+            return response()->json(['success' => true, 'leave_application' => $requestModel->fresh(), 'routing' => $routing, 'warning' => $balanceWarning]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -842,9 +953,24 @@ class LeaveManagementController extends Controller
             }
             
             $validated = $request->validate($rules);
-            $staff = Staff::find($validated['staff_id']);
-            
+
             $requestModel = LeaveRequest::findOrFail($id);
+
+            // Both the person the request belongs to now and the one it is being changed to must be allowed
+            if (!$this->canManageLeaveOf((int) $requestModel->staff_id, 'update_leave_applications') || !$this->canManageLeaveOf((int) $validated['staff_id'], 'update_leave_applications')) {
+                return response()->json(['success' => false, 'error' => 'You can only edit your own leave application.'], 403);
+            }
+
+            $staff = Staff::find($validated['staff_id']);
+            if (!$staff) {
+                return response()->json(['success' => false, 'error' => 'Staff member not found.'], 422);
+            }
+            
+            // Only a request still waiting for approval can be edited; editing resets it to the start of the approval route
+            if (!in_array((int) $requestModel->current_status_id, [1, 24], true)) {
+                return response()->json(['success' => false, 'error' => 'Only a pending leave application can be edited.'], 422);
+            }
+
             $requestModel->staff_id      = $validated['staff_id'];
             $requestModel->leave_type_id = $validated['leave_type_id'];
             $requestModel->position_id   = $staff->position_id;
@@ -876,31 +1002,31 @@ class LeaveManagementController extends Controller
                 $requestModel->requested_days = $days;
             }
     
-            $start_date_only = date('Y-m-d', strtotime($validated['start_date'])) . ' 00:00:00';
-            $staff_leave_plan = LeaveCalendarPlan::where('employee_id', $validated['staff_id'])
-                ->where('leave_type_id', $validated['leave_type_id'])
-                ->where('start_date', $start_date_only)
-                ->where('current_status_id', 5)
-                ->first();
-    
-            if (!$staff_leave_plan) {
+            if ($this->overlapsActiveLeave((int) $validated['staff_id'], $requestModel->start_date, $requestModel->end_date, (int) $requestModel->id)) {
                 return response()->json([
                     'success' => false,
-                    'error'   => 'No active leave plan found for this employee and leave type starting on the specified date'
-                ], 404);
+                    'error'   => 'An active leave application already overlaps these dates.'
+                ], 422);
             }
-    
-            $requestModel->entitled_days     = $staff_leave_plan->entitled_days;
-            $requestModel->days_balance      = $staff_leave_plan->entitled_days - $requestModel->requested_days;
+
+            // Same rule as filing: the year's plan (created on first use) and the days must fit the balance
+            ['error' => $balanceError, 'warning' => $balanceWarning] = $this->applyBalance($requestModel, $staff, LeaveType::find($validated['leave_type_id']), (int) date('Y', strtotime($validated['start_date'])));
+            if ($balanceError) {
+                return $balanceError;
+            }
+
             $requestModel->used_days         = 0;
             $requestModel->amount            = $validated['amount'] ?? 0;
             $requestModel->allowance_type_id = $validated['allowance_type'] ?? null;
             $requestModel->current_status_id = 1;
+            $requestModel->status_changed_by = null;
             $requestModel->created_by_id     = Auth::id();
             $requestModel->date_time         = now();
             $requestModel->save();
-    
-            return response()->json(['success' => true, 'leave_application' => $requestModel]);
+
+            $routing = $this->approvals->submit($requestModel, (int) Auth::id());
+
+            return response()->json(['success' => true, 'leave_application' => $requestModel->fresh(), 'routing' => $routing, 'warning' => $balanceWarning]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -915,8 +1041,20 @@ class LeaveManagementController extends Controller
     {
         try {
             $requestModel = LeaveRequest::findOrFail($id);
+
+            if (!$this->canManageLeaveOf((int) $requestModel->staff_id, 'delete_leave_applications')) {
+                return response()->json(['success' => false, 'error' => 'You can only delete your own leave application.'], 403);
+            }
+
+            // Approved leave has days deducted from the balance, so it can't just be deleted: it is adjusted instead
+            if (!in_array((int) $requestModel->current_status_id, [1, 24, 41], true)) {
+                return response()->json(['success' => false, 'error' => 'Approved leave cannot be deleted. Use Leave Adjustments to return the days.'], 422);
+            }
+
             $requestModel->delete();
             return response()->json(['success' => true]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Leave application not found'], 404);
         } catch (\Exception $e) {
             try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
@@ -945,61 +1083,35 @@ class LeaveManagementController extends Controller
             $currentYear = (int) date('Y');
 
             $leaveType = LeaveType::find($leaveTypeId);
-
-            // Only annual leave is planned; find its plan for the current year, else the latest one
-            $plan = null;
-            if ($this->calendar->isAnnualLeaveType($leaveType?->type_name)) {
-                $plan = LeaveCalendarPlan::where('employee_id', $staffId)
-                    ->where('leave_type_id', $leaveTypeId)
-                    ->whereYear('start_date', $currentYear)
-                    ->orderBy('id', 'desc')
-                    ->first()
-                    ?? LeaveCalendarPlan::where('employee_id', $staffId)
-                        ->where('leave_type_id', $leaveTypeId)
-                        ->orderBy('id', 'desc')
-                        ->first();
+            $staff = Staff::find($staffId);
+            if (!$leaveType || !$staff) {
+                return response()->json(['success' => false, 'error' => 'Leave type not found'], 404);
             }
 
-            if ($plan) {
-                $startDate = $plan->start_date ? \Carbon\Carbon::parse($plan->start_date)->format('Y-m-d') : "{$currentYear}-01-01";
-                $endDate   = $plan->end_date ? \Carbon\Carbon::parse($plan->end_date)->format('Y-m-d') : "{$currentYear}-12-31";
-                
-                return response()->json([
-                    'success'        => true, 
-                    'available_days' => (float) $plan->balance, 
-                    'start_date'     => $startDate, 
-                    'end_date'       => $endDate,
-                ]);
+            // Everyone else may only look at their own balance
+            if (!$this->canManageLeaveOf((int) $staff->id, 'read_leave_applications')) {
+                return response()->json(['success' => false, 'error' => 'You can only see your own leave balance.'], 403);
             }
 
-            // No plan: non-annual types (Compassionate, Sick) never have one, and annual leave is pro-rated from the hire date
-            if ($leaveType) {
-                $usedDays = LeaveRequest::where('staff_id', $staffId)
-                    ->where('leave_type_id', $leaveTypeId)
-                    ->whereYear('start_date', $currentYear)
-                    ->whereIn('current_status_id', [5, 49])
-                    ->sum('days');
-
-                $entitled = $this->entitlementWithoutPlan((int) $staffId, $leaveType, $currentYear);
-                $available = max(0, $entitled - (float) $usedDays);
-
-                return response()->json([
-                    'success'        => true,
-                    'available_days' => $available,
-                    'start_date'     => "{$currentYear}-01-01",
-                    'end_date'       => "{$currentYear}-12-31",
-                ]);
+            $figures = $this->plans->availableDays($staff, $leaveType, $currentYear);
+            if ($figures['error']) {
+                return response()->json(['success' => false, 'error' => $figures['error']]);
             }
 
-            return response()->json(['success' => false, 'error' => 'Leave type not found'], 404);
+            $plan = $figures['plan'];
+
+            return response()->json([
+                'success'        => true,
+                'available_days' => $figures['available'],
+                'start_date'     => $plan && $plan->start_date ? \Carbon\Carbon::parse($plan->start_date)->format('Y-m-d') : "{$currentYear}-01-01",
+                'end_date'       => $plan && $plan->end_date ? \Carbon\Carbon::parse($plan->end_date)->format('Y-m-d') : "{$currentYear}-12-31",
+            ]);
         } catch (\Throwable $e) {
             Log::error('availableLeaveDays error: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to fetch available leave days'], 500);
         }
     }
-    /**
-     * Fetch available scheduled annual leave slots for an employee in the current year.
-     */
+
     public function getStaffAnnualSlots(Request $request)
     {
         try {
@@ -1030,18 +1142,34 @@ class LeaveManagementController extends Controller
             // 2. Fetch slots via Eloquent relationship safely
             $slots = $plan->slots()->orderBy('start_date', 'asc')->get();
 
-            $formattedSlots = $slots->map(function ($slot) {
+            // 3. Find dates of existing active requests for this staff member
+            // (1 = Pending, 24 = Partially Approved, 5 = Approved)
+            $activeRequestStartDates = LeaveRequest::where('staff_id', $staffId)
+                ->whereIn('current_status_id', [1, 5, 24])
+                ->pluck('start_date')
+                ->map(fn($date) => \Carbon\Carbon::parse($date)->format('Y-m-d'))
+                ->toArray();
+
+            $formattedSlots = $slots->map(function ($slot) use ($activeRequestStartDates) {
                 $start = \Carbon\Carbon::parse($slot->start_date)->format('Y-m-d');
                 $end   = \Carbon\Carbon::parse($slot->end_date)->format('Y-m-d');
                 $displayStart = \Carbon\Carbon::parse($slot->start_date)->format('d M Y');
                 $displayEnd   = \Carbon\Carbon::parse($slot->end_date)->format('d M Y');
 
+                // Check if this slot has already been applied for
+                $isBooked = in_array($start, $activeRequestStartDates);
+                $label = "{$displayStart} to {$displayEnd} ({$slot->days_count} Working Days)";
+                if ($isBooked) {
+                    $label .= ' — [Already Applied]';
+                }
+
                 return [
-                    'id'         => $slot->id,
-                    'start_date' => $start,
-                    'end_date'   => $end,
-                    'display'    => "{$displayStart} to {$displayEnd} ({$slot->days_count} Working Days)",
-                    'days'       => (float) $slot->days_count,
+                    'id'          => $slot->id,
+                    'start_date'  => $start,
+                    'end_date'    => $end,
+                    'display'     => $label,
+                    'days'        => (float) $slot->days_count,
+                    'is_disabled' => $isBooked,
                 ];
             });
 
@@ -1058,6 +1186,52 @@ class LeaveManagementController extends Controller
                 'error'   => $e->getMessage(),
                 'slots'   => []
             ], 500);
+        }
+    }
+
+    public function downloadLeavePass($encryptedLeaveApplicationId)
+    {
+        try {
+            $leaveApplicationId = Crypt::decrypt($encryptedLeaveApplicationId);
+
+            $leaveRequest = LeaveRequest::with(['employee.department', 'employee.position', 'leaveType', 'createdBy'])
+                ->findOrFail($leaveApplicationId);
+
+            // Only the employee the leave belongs to can download their own pass
+            if (Auth::user()->linkedStaff()?->id !== (int) $leaveRequest->staff_id) {
+                return response()->json(['success' => false, 'error' => 'You can only download your own leave pass.'], 403);
+            }
+
+            // Gate access: allow download only when approved (status 5)
+            if ((int) $leaveRequest->current_status_id !== 5) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'Leave pass is only available for approved leave applications.'
+                ], 403);
+            }
+
+            // When the HR (final) approval was given, from the approvals log
+            $approvedAt = ConfirmationLog::where('section', 'Leave Application')
+                ->where('approval_stage', 2)
+                ->whereJsonContains('ids', $leaveRequest->id)
+                ->orderByDesc('confirmed_at')
+                ->value('confirmed_at');
+
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('leave_management.pdf.leave_pass', [
+                'leave' => $leaveRequest,
+                'staff' => $leaveRequest->employee,
+                'approvedAt' => $approvedAt,
+            ])->setPaper('a5', 'portrait');
+
+            $fileName = 'Leave_Pass_' . ($leaveRequest->employee->staff_number ?? $leaveRequest->id) . '.pdf';
+
+            return $pdf->download($fileName);
+
+        } catch (\Illuminate\Contracts\Encryption\DecryptException | \Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Leave pass not found.'], 404);
+        } catch (\Throwable $e) {
+            Log::error('downloadLeavePass error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            return response()->json(['success' => false, 'error' => 'Failed to generate leave pass'], 500);
         }
     }
 

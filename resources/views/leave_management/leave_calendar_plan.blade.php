@@ -107,6 +107,7 @@
                             <label class="form-check-label" for="override_existing">
                                 Override existing plans for this year
                             </label>
+                            <div class="form-text">Leave unticked to create only the plans that are missing. Ticking it resets everyone's plan for the year.</div>
                         </div>
                     </div>
                 </div>

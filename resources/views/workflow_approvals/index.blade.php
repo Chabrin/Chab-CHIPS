@@ -13,9 +13,7 @@
                     <select class="form-select" id="approval-section" data-allow-clear="true">
                         <option value="">-- Select Approval Section --</option>
                         @foreach($approvalSections as $section)
-                            @permission($section['permission'])
-                                <option value="{{ $section['label'] }}">{{ $section['label'] }}</option>
-                            @endpermission
+                            <option value="{{ $section['label'] }}">{{ $section['label'] }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -47,39 +45,12 @@
     </div>
 </div>
 
-<!-- Leave Application Days Modal (Stage 1 - Set Days) -->
-<div class="modal fade" id="leaveDaysModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Set Actual Leave Days Taken</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="leave-days-content">
-                    <!-- Content loaded dynamically -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
-                    <span class="material-symbols-outlined">close</span>
-                    <span class="ms-1">Cancel</span>
-                </button>
-                <button type="button" class="btn btn-primary d-flex align-items-center" id="confirm-leave-days">
-                    <span class="material-symbols-outlined">check</span>
-                    <span class="ms-1">Confirm Days</span>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Leave Application Confirmation Modal (Stage 2 - Confirm Days) -->
+<!-- Leave Application Approval Modal (preview of the days that will be charged) -->
 <div class="modal fade" id="leaveConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Confirm Leave Days Taken</h5>
+                <h5 class="modal-title">Approve Leave</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -105,9 +76,7 @@
 $(document).ready(function() {
     let currentLeaveId = null;
     let currentSection = '';
-    let isPartialDayLeave = false;
-    let leaveDurationType = 'full_day';
-    
+
     let table = $('#workflow-approvals-table').DataTable({
         processing: true,
         serverSide: false,
@@ -125,7 +94,7 @@ $(document).ready(function() {
                 orderable: false,
                 searchable: false,
                 render: function(id, type, row) {
-                    return `<input type="checkbox" class="select-row" value="${id}" data-stage="${row.approval_stage || 0}">`;
+                    return `<input type="checkbox" class="select-row" value="${id}">`;
                 }
             },
             { data: null, orderable: false, searchable: false, render: (data, type, row, meta) => meta.row + 1 },
@@ -142,15 +111,9 @@ $(document).ready(function() {
                     let approveBtn = '';
                     
                     if (section === 'Leave Application') {
-                        if (row.approval_stage === 1) {
-                            approveBtn = `<button class="btn btn-xs btn-primary approve-leave-stage1" data-id="${row.id}" data-section="${section}" style="padding:2px 6px;">
-                                <span class="material-symbols-outlined me-1" style="font-size:16px;">edit_calendar</span> Set Days
-                            </button>`;
-                        } else if (row.approval_stage === 2) {
-                            approveBtn = `<button class="btn btn-xs btn-success approve-leave-stage2" data-id="${row.id}" data-section="${section}" style="padding:2px 6px;">
-                                <span class="material-symbols-outlined me-1" style="font-size:16px;">check_circle</span> Confirm
-                            </button>`;
-                        }
+                        approveBtn = `<button class="btn btn-xs btn-success approve-leave" data-id="${row.id}" data-section="${section}" style="padding:2px 6px;">
+                            <span class="material-symbols-outlined me-1" style="font-size:16px;">check_circle</span> Approve
+                        </button>`;
                     } else {
                         approveBtn = `<button class="btn btn-xs btn-light approve-btn d-flex align-items-center" data-id="${row.id}" data-section="${section}" style="padding:1px 2px;">
                             <span class="material-symbols-outlined me-2" style="font-size:18px;">check</span> Approve
@@ -204,16 +167,9 @@ $(document).ready(function() {
     $(document).on('change', '.select-row', function(e) {
         e.stopPropagation();
         let id = $(this).val();
-        let stage = $(this).data('stage');
-        
-        if ($(this).is(':checked')) {
-            // For Leave Application Stage 1, don't allow selection (can't bulk approve)
-            if ($('#approval-section').val() === 'Leave Application' && stage === 1) {
-                $(this).prop('checked', false);
-                toastr.warning('Stage 1 leave applications cannot be bulk approved');
-                return;
-            }
+        let section = $('#approval-section').val();
 
+        if ($(this).is(':checked')) {
             // For Communication Templates, don't allow selection (can't bulk approve)
             if (section === 'Communication Templates') {
                 $(this).prop('checked', false);
@@ -241,11 +197,6 @@ $(document).ready(function() {
         }
         
         $('.select-row').each(function() {
-            let stage = $(this).data('stage');
-            // Don't select Stage 1 leave applications
-            if (section === 'Leave Application' && stage === 1) {
-                return;
-            }
             // Don't select Communication Templates (redundant but safe)
             if (section === 'Communication Templates') {
                 return;
@@ -412,319 +363,86 @@ $(document).ready(function() {
         }
     }
     
-    // Stage 1: Set Leave Days
-    $(document).on('click', '.approve-leave-stage1', function(e) {
+    // Leave: show the days that will be charged, then approve
+    $(document).on('click', '.approve-leave', function(e) {
         e.stopPropagation();
-        let id = $(this).data('id');
-        currentLeaveId = id;
+        currentLeaveId = $(this).data('id');
         currentSection = $(this).data('section');
-        
-        // Get suggested days
-        $.get(`/ajax/workflow-approvals/leave-application-days/${id}`, function(res) {
-            if (res.success && res.days) {
-                isPartialDayLeave = res.is_partial_day || false;
-                leaveDurationType = res.leave_duration_type || 'full_day';
-                leaveDurationType = res.leave_duration_type || 'full_day';
-                let content = '';
-                
-                if (leaveDurationType === 'partial_day') {
-                    // Hours only - same day with specific times
-                    let day = res.days[0];
-                    let holidayBadge = day.is_public_holiday ? `<span class="badge bg-danger ms-2"><i class="fa fa-calendar-times"></i> ${day.holiday_title}</span>` : '';
-                    
-                    content = `
-                        <div class="alert alert-info">
-                            <strong>Leave Type:</strong> Hours Only (Partial Day)<br>
-                            <strong>Total Hours:</strong> ${day.hours || 0} hours
-                        </div>
-                        ${day.is_public_holiday ? `<div class="alert alert-warning"><i class="fa fa-exclamation-triangle"></i> <strong>Note:</strong> This date is a public holiday: ${day.holiday_title}</div>` : ''}
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Date ${holidayBadge}</label>
-                                <input type="text" class="form-control ${day.is_public_holiday ? 'border-danger' : ''}" value="${day.date}" readonly>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Day</label>
-                                <input type="text" class="form-control" value="${day.day_name}" readonly>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Start Time</label>
-                                <input type="time" class="form-control" id="partial_start_time" value="${day.start_time || ''}" readonly>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">End Time</label>
-                                <input type="time" class="form-control" id="partial_end_time" value="${day.end_time || ''}" readonly>
-                            </div>
-                            <div class="col-md-12 mb-3">
-                                <label class="form-label">Day Type</label>
-                                <select class="form-select" id="partial_day_type">
-                                    <option value="1" ${day.type == 1 ? 'selected' : ''}>Weekday</option>
-                                    <option value="2" ${day.type == 2 ? 'selected' : ''}>Saturday</option>
-                                    <option value="3" ${day.type == 3 ? 'selected' : ''}>Sunday</option>
-                                </select>
-                            </div>
-                            <input type="hidden" id="partial_date" value="${day.date}">
-                        </div>`;
-                        
-                } else if (leaveDurationType === 'days_and_hours') {
-                    // Days + Hours - multiple days with specific start/end times
-                    content = `
-                        <div class="alert alert-info">
-                            <strong>Leave Type:</strong> Days + Hours<br>
-                            <strong>Total Hours:</strong> ${res.total_hours || 0} hours<br>
-                            <strong>Equivalent Days:</strong> ${Math.floor(res.total_hours / 8)} full days + ${(res.total_hours % 8).toFixed(2)} hours
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-bordered">
-                                <thead>
-                                    <tr>
-                                        <th>Select</th>
-                                        <th>Date</th>
-                                        <th>Day</th>
-                                        <th>Start Time</th>
-                                        <th>End Time</th>
-                                        <th>Type</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="leave-days-list">`;
-                    
-                    res.days.forEach(function(day, index) {
-                        // Don't pre-check if it's a public holiday or Sunday
-                        let shouldCheck = !day.is_public_holiday && day.type != 3;
-                        let rowClass = day.is_public_holiday ? 'table-danger' : '';
-                        let holidayBadge = day.is_public_holiday ? `<br><small class="text-danger"><i class="fa fa-calendar-times"></i> ${day.holiday_title}</small>` : '';
-                        
-                        content += `
-                                    <tr class="${rowClass}">
-                                        <td><input type="checkbox" class="day-checkbox" ${shouldCheck ? 'checked' : ''} data-index="${index}"></td>
-                                        <td>${day.date}${holidayBadge}</td>
-                                        <td>${day.day_name}</td>
-                                        <td>${day.has_start_time ? '<span class="badge bg-primary">' + day.start_time + '</span>' : '-'}</td>
-                                        <td>${day.has_end_time ? '<span class="badge bg-primary">' + day.end_time + '</span>' : '-'}</td>
-                                        <td>
-                                            <select class="form-select form-select-sm day-type-select" data-index="${index}">
-                                                <option value="1" ${day.type == 1 ? 'selected' : ''}>Weekday</option>
-                                                <option value="2" ${day.type == 2 ? 'selected' : ''}>Saturday</option>
-                                                <option value="3" ${day.type == 3 ? 'selected' : ''}>Sunday</option>
-                                            </select>
-                                            <input type="hidden" class="day-date" value="${day.date}" data-index="${index}">
-                                        </td>
-                                    </tr>`;
-                    });
-                    
-                    content += `
-                                </tbody>
-                            </table>
-                        </div>`;
-                        
-                } else {
-                    // Full day(s) - traditional day-based leave
-                    let publicHolidaysCount = res.days.filter(d => d.is_public_holiday).length;
-                    let sundaysCount = res.days.filter(d => d.type == 3).length;
-                    let excludedCount = publicHolidaysCount + sundaysCount;
-                    let holidayWarning = excludedCount > 0 ? `
-                        <div class="alert alert-warning">
-                            <i class="fa fa-exclamation-triangle"></i> <strong>Warning:</strong> 
-                            ${publicHolidaysCount > 0 ? publicHolidaysCount + ' public holiday' + (publicHolidaysCount > 1 ? 's' : '') : ''}
-                            ${publicHolidaysCount > 0 && sundaysCount > 0 ? ' and ' : ''}
-                            ${sundaysCount > 0 ? sundaysCount + ' Sunday' + (sundaysCount > 1 ? 's' : '') : ''}
-                            detected in this leave period (unchecked by default).
-                        </div>` : '';
-                    
-                    content = `
-                        <div class="alert alert-info">
-                            <strong>Leave Type:</strong> Full Day(s)<br>
-                            <strong>Instructions:</strong> Select the actual days the employee took leave.
-                        </div>
-                        ${holidayWarning}
-                        <div class="table-responsive">
-                            <table class="table table-bordered">
-                                <thead>
-                                    <tr>
-                                        <th>Select</th>
-                                        <th>Date</th>
-                                        <th>Day</th>
-                                        <th>Type</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="leave-days-list">`;
-                    
-                    res.days.forEach(function(day, index) {
-                        // Don't pre-check if it's a public holiday or Sunday
-                        let shouldCheck = !day.is_public_holiday && day.type != 3;
-                        let rowClass = day.is_public_holiday ? 'table-danger' : (day.type == 3 ? 'table-warning' : '');
-                        let holidayBadge = day.is_public_holiday ? `<br><small class="text-danger"><i class="fa fa-calendar-times"></i> ${day.holiday_title}</small>` : '';
-                        
-                        content += `
-                                    <tr class="${rowClass}">
-                                        <td><input type="checkbox" class="day-checkbox" ${shouldCheck ? 'checked' : ''} data-index="${index}"></td>
-                                        <td>${day.date}${holidayBadge}</td>
-                                        <td>${day.day_name}</td>
-                                        <td>
-                                            <select class="form-select form-select-sm day-type-select" data-index="${index}">
-                                                <option value="1" ${day.type == 1 ? 'selected' : ''}>Weekday</option>
-                                                <option value="2" ${day.type == 2 ? 'selected' : ''}>Saturday</option>
-                                                <option value="3" ${day.type == 3 ? 'selected' : ''}>Sunday</option>
-                                            </select>
-                                            <input type="hidden" class="day-date" value="${day.date}" data-index="${index}">
-                                        </td>
-                                    </tr>`;
-                    });
-                    
-                    content += `
-                                </tbody>
-                            </table>
-                        </div>`;
-                }
-                
-                $('#leave-days-content').html(content);
-                $('#leaveDaysModal').modal('show');
-            } else {
-                toastr.error('Failed to load leave days');
-            }
-        }).fail(function(xhr) {
-            toastr.error('Failed to load leave days');
-        });
 
+        $.get(`/ajax/workflow-approvals/leave-application-days/${currentLeaveId}`, function(res) {
+            if (!(res.success && res.days)) {
+                toastr.error(res.error || 'Failed to load the leave days');
+                return;
+            }
 
-    });
-    
-    // Confirm Leave Days (Stage 1)
-    $('#confirm-leave-days').on('click', function() {
-        let days = [];
-        
-        if (isPartialDayLeave) {
-            // For partial day, just confirm the single day
-            days.push({
-                date: $('#partial_date').val(),
-                type: $('#partial_day_type').val()
-            });
-        } else {
-            // For full days, get all checked days
-            $('.day-checkbox:checked').each(function() {
-                let index = $(this).data('index');
-                days.push({
-                    date: $(`.day-date[data-index="${index}"]`).val(),
-                    type: $(`.day-type-select[data-index="${index}"]`).val()
-                });
-            });
-        }
-        
-        if (days.length === 0) {
-            toastr.error('Please select at least one day');
-            return;
-        }
-        
-        let $btn = $(this);
-        setButtonLoading($btn, true);
-        
-        $.post(`/ajax/workflow/approval/${currentLeaveId}/approve`, {
-            _token: $('meta[name="csrf-token"]').attr('content'),
-            section: currentSection,
-            days_taken: days
-        }, function(res) {
-            if (res.success) {
-                toastr.success('Days set successfully. Waiting for second approval.');
-                $('#leaveDaysModal').modal('hide');
-                table.ajax.reload();
-            } else {
-                toastr.error(res.error || 'Failed to set days');
-            }
-        }).fail(function(xhr) {
-            let msg = 'Failed to set days';
-            if (xhr.responseJSON && xhr.responseJSON.error) {
-                msg = xhr.responseJSON.error;
-            }
-            toastr.error(msg);
-        }).always(function() {
-            setButtonLoading($btn, false);
-        });
-    });
-    
-    // Stage 2: Confirm Leave Days - remains the same
-    $(document).on('click', '.approve-leave-stage2', function(e) {
-        e.stopPropagation();
-        let id = $(this).data('id');
-        currentLeaveId = id;
-        currentSection = $(this).data('section');
-        
-        // Get days to confirm
-        $.get(`/ajax/workflow-approvals/leave-application-days/${id}`, function(res) {
-            if (res.success && res.days) {
-                let content = `
-                    <div class="alert alert-warning">
-                        <strong>Review:</strong> Please confirm the days set by the first approver.
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Day</th>
-                                    <th>Type</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                
-                res.days.forEach(function(day) {
-                    content += `
-                                <tr>
-                                    <td>${day.date}</td>
-                                    <td>${day.day_name}</td>
-                                    <td>
-                                        ${day.type == 1 ? '<span class="badge bg-primary">Weekday</span>' : 
-                                          day.type == 2 ? '<span class="badge bg-info">Saturday</span>' : 
-                                          '<span class="badge bg-warning">Sunday</span>'}
-                                    </td>
-                                </tr>`;
-                });
-                
+            let content = `
+                <div class="alert alert-info">
+                    These are the days that will be charged to the employee's leave balance${res.is_partial_day ? ' (' + res.total_hours + ' hours)' : ''}.
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Day</th>
+                                <th>Type</th>
+                                <th>Charged</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            res.days.forEach(function(day) {
                 content += `
-                            </tbody>
-                        </table>
-                        <div class="text-end">
-                            <strong>Total Days: ${res.days.reduce((sum, d) => sum + (parseFloat(d.day_fraction) || 1), 0)}</strong>
-                        </div>
-                    </div>`;
-                
-                $('#leave-confirm-content').html(content);
-                $('#leaveConfirmModal').modal('show');
-            } else {
-                toastr.error('Failed to load days for confirmation');
-            }
+                            <tr>
+                                <td>${day.date}</td>
+                                <td>${day.day_name}</td>
+                                <td>
+                                    ${day.type == 1 ? '<span class="badge bg-primary">Weekday</span>' :
+                                      day.type == 2 ? '<span class="badge bg-info">Saturday</span>' :
+                                      '<span class="badge bg-warning">Sunday</span>'}
+                                </td>
+                                <td>${parseFloat(day.day_fraction)}</td>
+                            </tr>`;
+            });
+
+            content += `
+                        </tbody>
+                    </table>
+                    <div class="text-end">
+                        <strong>Total Days: ${res.total_days}</strong>
+                    </div>
+                </div>`;
+
+            $('#leave-confirm-content').html(content);
+            $('#leaveConfirmModal').modal('show');
         }).fail(function(xhr) {
-            toastr.error('Failed to load days for confirmation');
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load the leave days');
         });
     });
-    
-    // Final Confirm Leave (Stage 2)
+
+    // Leave: approve (supervisor stage or HR final stage, the server decides which)
     $('#final-confirm-leave').on('click', function() {
         let $btn = $(this);
         setButtonLoading($btn, true);
-        
+
         $.post(`/ajax/workflow/approval/${currentLeaveId}/approve`, {
             _token: $('meta[name="csrf-token"]').attr('content'),
-            section: currentSection,
-            confirm_days: true
+            section: currentSection
         }, function(res) {
             if (res.success) {
-                toastr.success('Leave application fully approved');
+                toastr.success('Leave application approved');
                 $('#leaveConfirmModal').modal('hide');
                 table.ajax.reload();
             } else {
-                toastr.error(res.error || 'Failed to confirm');
+                toastr.error(res.error || 'Failed to approve');
             }
         }).fail(function(xhr) {
-            let msg = 'Failed to confirm';
-            if (xhr.responseJSON && xhr.responseJSON.error) {
-                msg = xhr.responseJSON.error;
-            }
-            toastr.error(msg);
+            toastr.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to approve');
         }).always(function() {
             setButtonLoading($btn, false);
         });
     });
-    
+
     // Approve single (non-leave applications)
     $(document).on('click', '.approve-btn', function(e) {
         e.stopPropagation();

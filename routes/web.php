@@ -90,8 +90,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // HR Departments AJAX CRUD
     Route::get('/ajax/hr/department/list', [HrSettingsController::class, 'departmentList'])->name('ajax.hr.department.list');
     Route::post('/ajax/hr/department', [HrSettingsController::class, 'departmentStore'])->name('ajax.hr.department.store');
-    Route::post('/ajax/hr/department/{id}', [HrSettingsController::class, 'departmentUpdate'])->name('ajax.hr.department.update');
-    Route::delete('/ajax/hr/department/{id}', [HrSettingsController::class, 'departmentDelete'])->name('ajax.hr.department.delete');
+    Route::post('/ajax/hr/department/{id}', [HrSettingsController::class, 'departmentUpdate'])->name('ajax.hr.department.update')->whereNumber('id');
+    Route::delete('/ajax/hr/department/{id}', [HrSettingsController::class, 'departmentDelete'])->name('ajax.hr.department.delete')->whereNumber('id');
 
     // HR Settings - Leave Types
     Route::get('/hrsettings/leavetypes', [HrSettingsController::class, 'leaveTypeIndex'])->name('settings.hr.leave_types');
@@ -109,8 +109,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/positions/dropdowns', [HrSettingsController::class, 'positionsDropdowns'])->name('ajax.hr.positions.dropdowns');
     Route::get('/ajax/hr/positions/get', [HrSettingsController::class, 'positionsGet'])->name('ajax.hr.positions.get');
     Route::post('/ajax/hr/positions', [HrSettingsController::class, 'positionsStoreAjax'])->name('ajax.hr.positions.store');
-    Route::post('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsUpdateAjax'])->name('ajax.hr.positions.update');
-    Route::delete('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsDestroyAjax'])->name('ajax.hr.positions.destroy');
+    Route::post('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsUpdateAjax'])->name('ajax.hr.positions.update')->whereNumber('id');
+    Route::delete('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsDestroyAjax'])->name('ajax.hr.positions.destroy')->whereNumber('id');
 
     // Payroll Settings - Tax Bands
     Route::get('/payroll/tax-bands', [PayrollController::class, 'taxBandsIndex'])->name('payroll.tax_bands');
@@ -591,17 +591,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Leave Applications Routes
     Route::get('/hr/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplications'])->name('leave-management.leave-applications');
     Route::get('/hr/leave-management/leave-applications/{encryptedLeaveApplicationId}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsByStaff'])->name('leave-management.leave-applications.by-staff');
+    Route::get('/hr/leave-management/leave-pass/{encryptedLeaveApplicationId}', [\App\Http\Controllers\LeaveManagementController::class, 'downloadLeavePass'])->name('leave-management.download-pass');
     Route::get('/ajax/leave-management/leave-applications/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsList'])->name('ajax.leaveApplications.list');
     Route::post('/ajax/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsStore'])->name('ajax.leaveApplications.store');
-    Route::post('/ajax/leave-management/leave-applications/status-update', [\App\Http\Controllers\LeaveManagementController::class, 'updateApplicationStatus']);
-    Route::post('/ajax/hr/leave-management/leave-applications/status-update', [\App\Http\Controllers\LeaveManagementController::class, 'updateApplicationStatus']);
-    Route::post('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsUpdate'])->name('ajax.leaveApplications.update');
-    Route::delete('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsDelete'])->name('ajax.leaveApplications.delete');
+    Route::post('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsUpdate'])->name('ajax.leaveApplications.update')->whereNumber('id');
+    Route::delete('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsDelete'])->name('ajax.leaveApplications.delete')->whereNumber('id');
     Route::get('/ajax/hr/leave/available-days/{staffId}/{leaveTypeId}', [\App\Http\Controllers\LeaveManagementController::class, 'availableLeaveDays'])->name('ajax.leave.available-days');
     Route::get('/ajax/hr/publicholidays/list', [\App\Http\Controllers\LeaveManagementController::class, 'publicHolidaysList'])->name('ajax.publicholidays.list');
     Route::get('/ajax/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
     Route::get('/ajax/hr/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
-   
     // Leave Adjustments
     Route::get('/hr/leave-management/leave-adjustments', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustments'])->name('leave.adjustments');
     Route::get('/ajax/leave-management/leave-adjustments/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustmentsList']);
@@ -624,8 +622,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/workflow-approvals/leave-application-days/{id}', [WorkflowApprovalController::class, 'getLeaveApplicationDays']);
 
     // Single Approve/Reject
-    Route::post('/ajax/workflow/approval/{id}/approve', [WorkflowApprovalController::class, 'approve'])->name('ajax.workflow.approval.approve');
-    Route::post('/ajax/workflow/approval/{id}/reject', [WorkflowApprovalController::class, 'reject'])->name('ajax.workflow.approval.reject');
+    Route::post('/ajax/workflow/approval/{id}/approve', [WorkflowApprovalController::class, 'approve'])->name('ajax.workflow.approval.approve')->whereNumber('id');
+    Route::post('/ajax/workflow/approval/{id}/reject', [WorkflowApprovalController::class, 'reject'])->name('ajax.workflow.approval.reject')->whereNumber('id');
 
     // Bulk Approve/Reject
     Route::post('/ajax/workflow/approval/bulk/approve', [WorkflowApprovalController::class, 'bulkApprove'])->name('ajax.workflow.approval.bulk.approve');
