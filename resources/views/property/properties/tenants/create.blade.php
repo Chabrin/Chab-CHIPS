@@ -569,7 +569,7 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3 individual-only">
-                                            <label for="passport_number" class="form-label">Passport Number</label>
+                                            <label for="passport_number" class="form-label">Passport Number <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('passport_number') is-invalid @enderror"
                                                    id="passport_number" name="passport_number"
                                                    value="{{ old('passport_number') }}">
@@ -580,7 +580,7 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3 individual-only">
-                                            <label for="national_id" class="form-label">National ID</label>
+                                            <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('national_id') is-invalid @enderror"
                                                    id="national_id" name="national_id"
                                                    value="{{ old('national_id') }}">
@@ -946,6 +946,7 @@
                 if ($tabButton) {
                     bootstrap.Tab.getOrCreateInstance($tabButton).show();
                 }
+                $('#national_id, #passport_number').addClass('is-invalid');
                 toastr.error('National ID or Passport Number is required.');
                 $('#national_id').focus();
                 return;
@@ -971,6 +972,10 @@
                     return;
                 }
             }
+        });
+
+        $('#national_id, #passport_number').on('input', function() {
+            $('#national_id, #passport_number').removeClass('is-invalid');
         });
 
         // Move-in inspection state management

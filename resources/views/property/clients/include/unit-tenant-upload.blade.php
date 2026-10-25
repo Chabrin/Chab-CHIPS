@@ -265,12 +265,12 @@
             $('#utuCounts').text(utuCurrent.units.length + ' unit(s) · ' + utuCurrent.tenants.length + ' tenant(s)');
             utuBuildPairs();
 
-            var h = '<thead><tr><th>Row</th><th>Unit No</th><th>Unit Name</th><th>Topology</th><th>Rent</th><th>Tenant</th><th>Type</th><th>Mobile</th><th>Lease start</th><th>Lease end</th><th>Status</th></tr></thead><tbody>';
+            var h = '<thead><tr><th>Row</th><th>Unit No</th><th>Unit Code</th><th>Topology</th><th>Rent</th><th>Tenant</th><th>Type</th><th>Mobile</th><th>Lease start</th><th>Lease end</th><th>Status</th></tr></thead><tbody>';
             $.each(utuPairs, function(i, pair) {
                 var u = pair.unit || {};
                 var t = pair.tenant || {};
                 var type = pair.tenant ? (t.tenant_type || (t.sheet === 'corporate' ? 'COMPANY' : 'INDIVIDUAL')) : '';
-                h += '<tr class="utu-row" data-index="' + i + '" style="cursor:pointer;"><td>' + (u.row_no || t.row_no) + '</td><td>' + esc(u.unit_number || t.unit_number) + '</td><td>' + esc(u.unit_name) + '</td><td>' + esc(u.topology) + '</td><td>' + esc(u.rent_amount) + '</td><td>' + (pair.tenant ? esc(t.names || t.company_name) : '<span class="text-muted">Vacant</span>') + '</td><td>' + esc(type) + '</td><td>' + esc(t.mobile_no) + '</td><td>' + esc(t.lease_start_date) + '</td><td>' + (pair.tenant ? (t.lease_end_date ? esc(t.lease_end_date) : '<span class="text-muted">Open-ended</span>') : '') + '</td><td>' + utuState(utuPairState(pair)) + '</td></tr>';
+                h += '<tr class="utu-row" data-index="' + i + '" style="cursor:pointer;"><td>' + (u.row_no || t.row_no) + '</td><td>' + esc(u.unit_number || t.unit_number) + '</td><td>' + esc(u.unit_code) + '</td><td>' + esc(u.topology) + '</td><td>' + esc(u.rent_amount) + '</td><td>' + (pair.tenant ? esc(t.names || t.company_name) : '<span class="text-muted">Vacant</span>') + '</td><td>' + esc(type) + '</td><td>' + esc(t.mobile_no) + '</td><td>' + esc(t.lease_start_date) + '</td><td>' + (pair.tenant ? (t.lease_end_date ? esc(t.lease_end_date) : '<span class="text-muted">Open-ended</span>') : '') + '</td><td>' + utuState(utuPairState(pair)) + '</td></tr>';
             });
             $('#utuRowsTable').html(h + '</tbody>');
 

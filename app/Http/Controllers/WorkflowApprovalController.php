@@ -10,6 +10,13 @@ use App\Jobs\SendApprovalNotification;
 
 class WorkflowApprovalController extends Controller
 {
+    public function __construct(private \App\Services\Leave\LeaveCalendarService $calendar,
+        private \App\Services\Leave\LeaveTierService $tiers,
+        private \App\Services\Leave\LeaveApprovalService $approvals,
+        private \App\Services\Leave\LeaveApprovalRouter $router)
+    {
+    }
+
     private $workflowStatuses = [
         1 => 'Pending',
         2 => 'Paid',
@@ -92,6 +99,15 @@ class WorkflowApprovalController extends Controller
             // ['permission' => 'update_leave_calendar_plans', 'label' => 'Leave Calendar'],
             ['permission' => 'update_leave_adjustments', 'label' => 'Leave Adjustments']
         ];
+
+        // Leave is shown to anyone who can approve it (HR, or a holder of a supervisor position); every other
+        // section still follows its permission
+        $user = Auth::user();
+        $approvalSections = array_values(array_filter($approvalSections, function ($section) use ($user) {
+            return $section['label'] === 'Leave Application'
+                ? $this->router->isApprover($user)
+                : $user->isAbleTo($section['permission']);
+        }));
 
         return view('workflow_approvals.index', compact('approvalSections'));
     }
@@ -194,79 +210,46 @@ class WorkflowApprovalController extends Controller
                 });
                 break;
             case 'Leave Application':
-                // Get items in both approval stages
-                $items = \App\Models\LeaveRequest::whereIn('current_status_id', [1, 24])->get();
+                // Only the requests this user may act on: supervisors see their team's stage-1 requests, HR sees the rest
+                $items = $this->router->actionableFor(Auth::user());
                 $records = $items->map(function ($item) {
-                    $statusCode = $item->current_status_id;
-                    $approvalStage = null;
-                    $stageLabel = '';
-                    $daysTaken = [];
+                    $statusCode = (int) $item->current_status_id;
+                    $approvalStage = $statusCode === 24 ? 2 : 1;
                     $stageOneConfirmedBy = null;
-                    
-                    if ($statusCode == 1) {
-                        $approvalStage = 1;
-                        $stageLabel = 'Stage 1 (Set Days Taken)';
-                    } elseif ($statusCode == 24) {
-                        $approvalStage = 2;
-                        $stageLabel = 'Stage 2 (Confirm Days)';
-                        // Get the days taken that need confirmation
-                        $daysTaken = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
-                            ->orderBy('leave_date')
-                            ->get()
-                            ->map(function($day) {
-                                $dayTypes = [1 => 'Weekday', 2 => 'Saturday', 3 => 'Sunday'];
-                                return [
-                                    'date' => date('Y-m-d', strtotime($day->leave_date)),
-                                    'type' => $dayTypes[$day->day_type_id] ?? 'Unknown',
-                                    'type_id' => $day->day_type_id
-                                ];
-                            })
-                            ->toArray();
 
-                        $stageOneConfirmedBy = ConfirmationLog::with('confirmedBy')
-                            ->where('section', 'Leave Application')
-                            ->where('model', \App\Models\LeaveRequest::class)
-                            ->where('approval_stage', 1)
-                            ->get()
-                            ->first(function($log) use ($item) {
-                                return in_array($item->id, $log->ids);
-                            });
+                    if ($statusCode === 24 && $item->status_changed_by) {
+                        $stageOneConfirmedBy = \App\Models\User::whereKey($item->status_changed_by)->value('name');
                     }
-                    
+
                     // Determine leave duration type and calculate hours properly
                     $durationType = 'Full Day(s)';
                     $durationDetails = '';
-                    
-                    // Calculate hours correctly
+
                     $startTime = strtotime($item->start_date);
                     $endTime = strtotime($item->end_date);
-                    $hoursRequested = abs(($endTime - $startTime) / 3600);
-                    $hoursRequested = round($hoursRequested, 2);
-                    
-                    // Check if same date
+                    $hoursRequested = round(abs(($endTime - $startTime) / 3600), 2);
+
                     $isSameDate = date('Y-m-d', $startTime) === date('Y-m-d', $endTime);
-                    
-                    // Check if has custom times
                     $startTimeOnly = date('H:i', $startTime);
                     $endTimeOnly = date('H:i', $endTime);
                     $hasCustomTimes = !($startTimeOnly === '08:00' && $endTimeOnly === '17:00');
-                    
+
                     if ($isSameDate && $hasCustomTimes) {
                         // Hours Only (Partial Day)
                         $durationType = 'Hours Only';
-                        $durationDetails = ' | Hours: ' . $hoursRequested . ' hrs | Time: ' . 
+                        $durationDetails = ' | Hours: ' . $hoursRequested . ' hrs | Time: ' .
                                         $startTimeOnly . ' - ' . $endTimeOnly;
                     } elseif (!$isSameDate && $hasCustomTimes) {
                         // Days + Hours
                         $durationType = 'Days + Hours';
-                        $durationDetails = ' | Total Hours: ' . $hoursRequested . ' hrs | Start: ' . 
-                                        date('Y-m-d H:i', $startTime) . ' | End: ' . 
+                        $durationDetails = ' | Total Hours: ' . $hoursRequested . ' hrs | Start: ' .
+                                        date('Y-m-d H:i', $startTime) . ' | End: ' .
                                         date('Y-m-d H:i', $endTime);
                     } else {
                         // Full Day(s)
                         $durationDetails = ' | Days: ' . $item->days;
                     }
-                    
+
                     return [
                         'id' => $item->id,
                         'type' => 'Leave Application',
@@ -274,6 +257,7 @@ class WorkflowApprovalController extends Controller
                         'requested_at' => $item->date_time,
                         'details' => implode(' | ', [
                             'Employee: ' . ($item->employee->full_names ?? '-'),
+                            'Position: ' . ($item->employee->position->position_name ?? '-'),
                             'Leave Type: ' . ($item->leaveType->type_name ?? '-'),
                             'Duration Type: ' . $durationType,
                             'Start: ' . ($item->start_date ? date('Y-m-d', strtotime($item->start_date)) : '-'),
@@ -282,13 +266,13 @@ class WorkflowApprovalController extends Controller
                             'Balance: ' . ($item->days_balance ?? '-'),
                         ]) . $durationDetails,
                         'status_code' => $statusCode,
-                        'status' => $stageLabel,
-                        'stage_one_confirmed_by' => $stageOneConfirmedBy->confirmedBy->name ?? null,
+                        'status' => $this->router->stageLabel($item),
+                        'stage_one_confirmed_by' => $stageOneConfirmedBy,
                         'approval_stage' => $approvalStage,
-                        'days_taken' => $daysTaken,
+                        'days_taken' => [],
                         'duration_type' => $durationType,
                     ];
-                });
+                })->values();
                 break;
             case 'Leave Calendar':
                 $items = \App\Models\LeaveCalendarPlan::where('current_status_id', 1)->get();
@@ -471,169 +455,41 @@ class WorkflowApprovalController extends Controller
         return $days;
     }
 
+    /**
+     * The days that approving a pending leave request will charge, for the approver to review. Only available to
+     * a user who is allowed to act on the request.
+     */
     public function getLeaveApplicationDays($id)
     {
         try {
             $item = \App\Models\LeaveRequest::findOrFail($id);
-            
-            // Get all active public holidays once
-            $publicHolidays = \App\Models\PublicHoliday::where('current_status_id', 5)->get();
-            
-            if ($item->current_status_id == 1) {
-                // Stage 1: Generate suggested days based on start and end date
-                
-                // Calculate hours correctly using timestamps
-                $startTime = strtotime($item->start_date);
-                $endTime = strtotime($item->end_date);
-                $hoursRequested = abs(($endTime - $startTime) / 3600);
-                $hoursRequested = round($hoursRequested, 2);
-                
-                // Check if same date
-                $isSameDate = date('Y-m-d', $startTime) === date('Y-m-d', $endTime);
-                
-                // Check if has custom times
-                $startTimeOnly = date('H:i', $startTime);
-                $endTimeOnly = date('H:i', $endTime);
-                $hasCustomTimes = !($startTimeOnly === '08:00' && $endTimeOnly === '17:00');
-                
-                $isPartialDay = $isSameDate && $hasCustomTimes;
-                
-                if ($isPartialDay) {
-                    // For partial day, only show the single day with time info
-                    $dayOfWeek = date('N', $startTime); // 1=Monday, 7=Sunday
-                    $dayTypeId = 1; // Weekday
-                    if ($dayOfWeek == 6) $dayTypeId = 2; // Saturday
-                    if ($dayOfWeek == 7) $dayTypeId = 3; // Sunday
-                    
-                    // Check if it's a public holiday
-                    $currentMonth = (int) date('m', $startTime);
-                    $currentDay = (int) date('d', $startTime);
-                    $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                    
-                    $days = [[
-                        'date' => date('Y-m-d', $startTime),
-                        'type' => $dayTypeId,
-                        'day_name' => date('l', $startTime),
-                        'start_time' => $startTimeOnly,
-                        'end_time' => $endTimeOnly,
-                        'hours' => $hoursRequested,
-                        'is_partial' => true,
-                        'is_public_holiday' => $isPublicHoliday ? true : false,
-                        'holiday_title' => $isPublicHoliday ? $isPublicHoliday->title : null,
-                    ]];
-                } else {
-                    // Full day or multi-day leave
-                    $days = $this->generateDaysBetweenDates($item->start_date, $item->end_date);
-                    
-                    // Mark public holidays in the days array
-                    foreach ($days as &$day) {
-                        $dayTime = strtotime($day['date']);
-                        $currentMonth = (int) date('m', $dayTime);
-                        $currentDay = (int) date('d', $dayTime);
-                        $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                        
-                        $day['is_public_holiday'] = $isPublicHoliday ? true : false;
-                        $day['holiday_title'] = $isPublicHoliday ? $isPublicHoliday->title : null;
-                    }
-                    
-                    if ($hasCustomTimes) {
-                        // Add time information to first and last day
-                        if (count($days) > 0) {
-                            $days[0]['start_time'] = $startTimeOnly;
-                            $days[0]['has_start_time'] = true;
-                            
-                            $lastIndex = count($days) - 1;
-                            $days[$lastIndex]['end_time'] = $endTimeOnly;
-                            $days[$lastIndex]['has_end_time'] = true;
-                        }
-                        
-                        // Add total hours info
-                        foreach ($days as &$day) {
-                            $day['total_hours'] = $hoursRequested;
-                        }
-                    }
-                }
-                
-                return response()->json([
-                    'success' => true, 
-                    'days' => $days, 
-                    'is_partial_day' => $isPartialDay,
-                    'leave_duration_type' => $isPartialDay ? 'partial_day' : 
-                        ($hasCustomTimes ? 'days_and_hours' : 'full_day'),
-                    'total_hours' => $hoursRequested
-                ]);
-                
-            } elseif ($item->current_status_id == 24) {
-                // Stage 2: Show days that were set by first approver
-                $days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
-                    ->orderBy('leave_date')
-                    ->get()
-                    ->map(function($day) use ($publicHolidays) {
-                        $dayTime = strtotime($day->leave_date);
-                        $currentMonth = (int) date('m', $dayTime);
-                        $currentDay = (int) date('d', $dayTime);
-                        $isPublicHoliday = $this->checkIfPublicHoliday($currentMonth, $currentDay, $publicHolidays);
-                        
-                        return [
-                            'date' => date('Y-m-d', strtotime($day->leave_date)),
-                            'type' => $day->day_type_id,
-                            'day_name' => date('l', strtotime($day->leave_date)),
-                            'is_public_holiday' => $isPublicHoliday ? true : false,
-                            'holiday_title' => $isPublicHoliday ? $isPublicHoliday->title : null,
-                        ];
-                    });
-                
-                return response()->json([
-                    'success' => true, 
-                    'days' => $days, 
-                    'is_partial_day' => false,
-                    'leave_duration_type' => 'full_day'
-                ]);
+
+            if ($error = $this->router->canAct(Auth::user(), $item)) {
+                return response()->json(['success' => false, 'error' => $error], 403);
             }
-            
-            return response()->json(['success' => false, 'error' => 'Invalid status'], 400);
+
+            $preview = $this->approvals->previewDays($item);
+
+            return response()->json([
+                'success' => true,
+                'days' => $preview['days'],
+                'total_days' => $preview['total'],
+                'is_partial_day' => $preview['is_partial_day'],
+                'total_hours' => $preview['hours'],
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Leave application not found'], 404);
         } catch (\Exception $e) {
             Log::error('Error getting leave application days: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to get days'], 500);
         }
     }
-    
-    // Helper method to check if a date is a public holiday (year-agnostic)
-    private function checkIfPublicHoliday($month, $day, $publicHolidays)
-    {
-        return $publicHolidays->first(function($holiday) use ($month, $day) {
-            $holidayStartMonth = (int) date('m', strtotime($holiday->start_date));
-            $holidayStartDay = (int) date('d', strtotime($holiday->start_date));
-            $holidayEndMonth = (int) date('m', strtotime($holiday->end_date));
-            $holidayEndDay = (int) date('d', strtotime($holiday->end_date));
-            
-            // Same month holiday (e.g., Dec 25 to Dec 25, or Dec 25 to Dec 26)
-            if ($holidayStartMonth == $holidayEndMonth) {
-                return $month == $holidayStartMonth && 
-                       $day >= $holidayStartDay && 
-                       $day <= $holidayEndDay;
-            }
-            
-            // Multi-month holiday (e.g., Dec 31 to Jan 2)
-            // Check if date falls in start month from start day onwards
-            if ($month == $holidayStartMonth && $day >= $holidayStartDay) {
-                return true;
-            }
-            
-            // Check if date falls in end month up to end day
-            if ($month == $holidayEndMonth && $day <= $holidayEndDay) {
-                return true;
-            }
-            
-            // Check if month is between start and end months
-            if ($holidayStartMonth < $holidayEndMonth) {
-                // Normal case: e.g., Nov to Dec
-                return $month > $holidayStartMonth && $month < $holidayEndMonth;
-            } else {
-                // Year-spanning case: e.g., Dec to Jan
-                return $month > $holidayStartMonth || $month < $holidayEndMonth;
-            }
-        });
+
+    /**
+     * Find the public holiday (if any) falling on the given date, honouring each holiday's recurrent flag.
+     */
+    private function checkIfPublicHoliday($date) {
+        return $this->calendar->holidayOn(\Carbon\Carbon::parse($date));
     }
 
     /**
@@ -706,7 +562,19 @@ class WorkflowApprovalController extends Controller
         })->pluck('id')->toArray();
     }
 
+    /**
+     * Approve one item of the chosen section; a record that doesn't exist is a 404, not a server error.
+     */
     public function approve(Request $request, $id)
+    {
+        try {
+            return $this->approveItem($request, $id);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Record not found'], 404);
+        }
+    }
+
+    private function approveItem(Request $request, $id)
     {
         $section = $request->input('section');
         switch ($section) {
@@ -756,159 +624,10 @@ class WorkflowApprovalController extends Controller
                 SendApprovalNotification::dispatch($section, $id, Auth::id());
                 break;
             case 'Leave Application':
-                $item = \App\Models\LeaveRequest::findOrFail($id);
+                // Routing, permission, maker-checker and logging all live in the approval service
+                $result = $this->approvals->approve(\App\Models\LeaveRequest::findOrFail($id), Auth::user());
 
-                if ($error = $this->assertStaffValid($item->staff_id)) {
-                    return $error;
-                }
-
-                if ($item->current_status_id == 1) {
-                    // Stage 1: First approver sets up the actual days taken
-                    $days_taken = $request->input('days_taken', []);
-                    
-                    if (empty($days_taken)) {
-                        return response()->json(['success' => false, 'error' => 'Please specify the actual days taken'], 422);
-                    }
-                    
-                    // Check if it's a partial day leave (hours only)
-                    $startTime = strtotime($item->start_date);
-                    $endTime = strtotime($item->end_date);
-                    $isSameDate = date('Y-m-d', $startTime) === date('Y-m-d', $endTime);
-                    $startTimeOnly = date('H:i', $startTime);
-                    $endTimeOnly = date('H:i', $endTime);
-                    $hasCustomTimes = !($startTimeOnly === '08:00' && $endTimeOnly === '17:00');
-                    $isPartialDay = $isSameDate && $hasCustomTimes;
-                    
-                    // Delete any existing days taken entries (in case of re-approval)
-                    \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)->delete();
-                    
-                    // For partial day (hours only), we only store ONE day entry with start time
-                    if ($isPartialDay) {
-                        // Only take the first day from the array and use the actual start time
-                        $day = $days_taken[0];
-                        \App\Models\LeaveRequestDaysTaken::create([
-                            'parent_id' => $item->id,
-                            'current_status_id' => 1, // Pending confirmation
-                            'leave_date' => $item->start_date, // Use full datetime from original request
-                            'day_type_id' => $day['type'],
-                        ]);
-                    } else {
-                        // For full days or multi-day, store all unique days (date only at midnight)
-                        $uniqueDays = [];
-                        foreach ($days_taken as $day) {
-                            $dateKey = $day['date'];
-                            if (!isset($uniqueDays[$dateKey])) {
-                                $uniqueDays[$dateKey] = $day;
-                            }
-                        }
-                        
-                        foreach ($uniqueDays as $day) {
-                            \App\Models\LeaveRequestDaysTaken::create([
-                                'parent_id' => $item->id,
-                                'current_status_id' => 1, // Pending confirmation
-                                'leave_date' => $day['date'] . ' 00:00:00',
-                                'day_type_id' => $day['type'],
-                            ]);
-                        }
-                    }
-                    
-                    $item->current_status_id = 24; // Partially Approved
-                    $item->save();
-                    
-                    // Log Stage 1 approval
-                    $this->logConfirmation($section, 'approve', $id, 1, [
-                        'days_taken' => $isPartialDay ? [$days_taken[0]] : array_values($uniqueDays ?? $days_taken),
-                        'employee_id' => $item->staff_id,
-                        'leave_type_id' => $item->leave_type_id,
-                        'requested_days' => $item->requested_days,
-                        'is_partial_day' => $isPartialDay,
-                    ]);
-                    
-                } elseif ($item->current_status_id == 24) {
-                    // Stage 2: Second approver confirms the days taken
-                    // Get first approver from logs
-                    $firstApproval = ConfirmationLog::where('section', 'Leave Application')
-                        ->whereJsonContains('ids', $id)
-                        ->where('approval_stage', 1)
-                        ->orderBy('confirmed_at', 'desc')
-                        ->first();
-                    
-                    // Check if same person trying to approve again
-                    if ($firstApproval && $firstApproval->confirmed_by == Auth::id()) {
-                        return response()->json([
-                            'success' => false,
-                            'error' => 'You cannot approve the same leave application twice. A different approver is required for the second stage.'
-                        ], 422);
-                    }
-                    
-                    $confirm_days = $request->input('confirm_days', false);
-                    
-                    if (!$confirm_days) {
-                        return response()->json(['success' => false, 'error' => 'Please confirm the days taken'], 422);
-                    }
-                    
-                    // Check if it's a partial day leave
-                    $startTime = strtotime($item->start_date);
-                    $endTime = strtotime($item->end_date);
-                    $isSameDate = date('Y-m-d', $startTime) === date('Y-m-d', $endTime);
-                    $startTimeOnly = date('H:i', $startTime);
-                    $endTimeOnly = date('H:i', $endTime);
-                    $hasCustomTimes = !($startTimeOnly === '08:00' && $endTimeOnly === '17:00');
-                    $isPartialDay = $isSameDate && $hasCustomTimes;
-                    
-                    // Confirm all the days taken
-                    \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
-                        ->update(['current_status_id' => 5]); // Approved
-                    
-                    // Calculate actual used days
-                    if ($isPartialDay) {
-                        // For partial day, calculate hours and convert to days
-                        $hoursRequested = abs(($endTime - $startTime) / 3600);
-                        $used_days = round($hoursRequested / 8, 2); // Convert hours to days
-                    } else {
-                        // For full days, count the actual days
-                        $used_days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
-                            ->where('current_status_id', 5)
-                            ->count();
-                    }
-                    
-                    $item->used_days = $used_days;
-                    $item->current_status_id = 5; // Approved
-                    $item->save();
-                    
-                    // Update the leave calendar plan balance
-                    $start_date_only = date('Y-m-d', strtotime($item->start_date)) . ' 00:00:00';
-                    $plan = \App\Models\LeaveCalendarPlan::where('employee_id', $item->staff_id)
-                        ->where('leave_type_id', $item->leave_type_id)
-                        ->where('start_date', $start_date_only)
-                        ->where('current_status_id', 5)
-                        ->first();
-                    
-                    if ($plan) {
-                        $plan->balance = $plan->balance - $used_days;
-                        $plan->save();
-                    }
-                    
-                    // Log Stage 2 approval
-                    $this->logConfirmation($section, 'approve', $id, 2, [
-                        'used_days' => $used_days,
-                        'hours' => $isPartialDay ? abs(($endTime - $startTime) / 3600) : null,
-                        'is_partial_day' => $isPartialDay,
-                        'employee_id' => $item->staff_id,
-                        'leave_type_id' => $item->leave_type_id,
-                        'first_approver_id' => $firstApproval ? $firstApproval->confirmed_by : null,
-                        'first_approved_at' => $firstApproval ? $firstApproval->confirmed_at : null,
-                        'plan_id' => $plan ? $plan->id : null,
-                        'plan_balance_before' => $plan ? ($plan->balance + $used_days) : null,
-                        'plan_balance_after' => $plan ? $plan->balance : null,
-                    ]);
-
-                    // Send notification
-                    SendApprovalNotification::dispatch($section, $id, Auth::id());
-                } else {
-                    return response()->json(['success' => false, 'error' => 'This record is no longer pending and cannot be actioned.'], 422);
-                }
-                break;
+                return response()->json($result, $result['success'] ? 200 : ($result['status'] ?? 422));
             case 'Leave Calendar':
                 $item = \App\Models\LeaveCalendarPlan::findOrFail($id);
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
@@ -995,6 +714,7 @@ class WorkflowApprovalController extends Controller
                     // Mark days as refunded
                     \App\Models\LeaveRequestDaysTaken::whereIn('id', $adjustment->day_ids)
                         ->update(['current_status_id' => 41]); // Refunded
+                        $this->tiers->retagForRequest($leaveRequest);
                     
                     // Update leave request used_days
                     $leaveRequest = $adjustment->leaveRequest;
@@ -1039,7 +759,19 @@ class WorkflowApprovalController extends Controller
         return response()->json(['success' => true]);
     }
     
+    /**
+     * Reject one item of the chosen section; a record that doesn't exist is a 404, not a server error.
+     */
     public function reject(Request $request, $id)
+    {
+        try {
+            return $this->rejectItem($request, $id);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Record not found'], 404);
+        }
+    }
+
+    private function rejectItem(Request $request, $id)
     {
         $section = $request->input('section');
         switch ($section) {
@@ -1068,13 +800,9 @@ class WorkflowApprovalController extends Controller
                 $item->save();
                 break;
             case 'Leave Application':
-                $item = \App\Models\LeaveRequest::findOrFail($id);
-                if ($error = $this->assertActionableStatus($item->current_status_id, [1, 24])) {
-                    return $error;
-                }
-                $item->current_status_id = 41;
-                $item->save();
-                break;
+                $result = $this->approvals->reject(\App\Models\LeaveRequest::findOrFail($id), Auth::user());
+
+                return response()->json($result, $result['success'] ? 200 : ($result['status'] ?? 422));
             case 'Leave Calendar':
                 $item = \App\Models\LeaveCalendarPlan::findOrFail($id);
                 if ($error = $this->assertActionableStatus($item->current_status_id)) {
@@ -1169,81 +897,28 @@ class WorkflowApprovalController extends Controller
                     ->update(['current_status_id' => 5]);
                 break;
             case 'Leave Application':
-                $items = \App\Models\LeaveRequest::whereIn('id', $ids)->get();
                 $errors = [];
-                $approvedIds = [];
+                $approvedCount = 0;
 
-                foreach ($items as $item) {
-                    if ($item->current_status_id == 24) {
-                        if ($this->assertStaffValid($item->staff_id)) {
-                            $errors[] = "Cannot approve leave ID {$item->id} - referenced staff member is invalid";
-                            continue;
-                        }
+                foreach (\App\Models\LeaveRequest::whereIn('id', $ids)->get() as $item) {
+                    $result = $this->approvals->approve($item, Auth::user());
 
-                        // Get first approver
-                        $firstApproval = ConfirmationLog::where('section', 'Leave Application')
-                            ->where('ids', 'like', '%"' . $item->id . '"%')
-                            ->where('approval_stage', 1)
-                            ->orderBy('confirmed_at', 'desc')
-                            ->first();
-                        
-                        // Check if same person
-                        if ($firstApproval && $firstApproval->confirmed_by == Auth::id()) {
-                            $errors[] = "Cannot approve leave ID {$item->id} - same approver";
-                            continue;
-                        }
-                        
-                        // Only bulk approve stage 2 (confirmations)
-                        \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
-                            ->update(['current_status_id' => 5]);
-                        
-                        $used_days = \App\Models\LeaveRequestDaysTaken::where('parent_id', $item->id)
-                            ->where('current_status_id', 5)
-                            ->count();
-                        
-                        $item->used_days = $used_days;
-                        $item->current_status_id = 5;
-                        $item->save();
-                        
-                        // Update leave calendar plan
-                        $plan = \App\Models\LeaveCalendarPlan::where('employee_id', $item->staff_id)
-                            ->where('leave_type_id', $item->leave_type_id)
-                            ->where('start_date', date('Y-m-d', strtotime($item->start_date)) . ' 00:00:00')
-                            ->where('current_status_id', 5)
-                            ->first();
-
-                        \App\Models\Staff::where('id', $item->staff_id)->update(['current_status_id' => 4]); // On Leave
-                        
-                        if ($plan) {
-                            $plan->balance = $plan->balance - $used_days;
-                            $plan->save();
-                        }
-                        
-                        $approvedIds[] = $item->id;
-                        
-                        // Log each approval
-                        $this->logConfirmation($section, 'bulk approve', $item->id, 2, [
-                            'used_days' => $used_days,
-                            'employee_id' => $item->staff_id,
-                            'leave_type_id' => $item->leave_type_id,
-                            'first_approver_id' => $firstApproval ? $firstApproval->confirmed_by : null,
-                            'first_approved_at' => $firstApproval ? $firstApproval->confirmed_at : null,
-                            'is_bulk_approval' => true,
-                        ]);
-
-                        // Send notification for each approved leave
-                        SendApprovalNotification::dispatch($section, $item->id, Auth::id());
+                    if ($result['success']) {
+                        $approvedCount++;
+                    } else {
+                        $errors[] = "Leave ID {$item->id}: " . $result['error'];
                     }
                 }
-                
+
                 if (!empty($errors)) {
                     return response()->json([
-                        'success' => false, 
+                        'success' => false,
                         'error' => implode(', ', $errors),
-                        'approved_count' => count($approvedIds)
+                        'approved_count' => $approvedCount,
                     ], 422);
                 }
-                break;
+
+                return response()->json(['success' => true, 'approved_count' => $approvedCount]);
             case 'Leave Calendar':
                 $validStaffIds = $this->validStaffIds([2, 3]);
                 \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->whereIn('employee_id', $validStaffIds)->update(['current_status_id' => 5]);
@@ -1292,8 +967,21 @@ class WorkflowApprovalController extends Controller
                 \App\Models\ZoneAssignment::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;
             case 'Leave Application':
-                \App\Models\LeaveRequest::whereIn('id', $ids)->whereIn('current_status_id', [1, 24])->update(['current_status_id' => 41]);
-                break;
+                $errors = [];
+
+                foreach (\App\Models\LeaveRequest::whereIn('id', $ids)->get() as $item) {
+                    $result = $this->approvals->reject($item, Auth::user());
+
+                    if (!$result['success']) {
+                        $errors[] = "Leave ID {$item->id}: " . $result['error'];
+                    }
+                }
+
+                if (!empty($errors)) {
+                    return response()->json(['success' => false, 'error' => implode(', ', $errors)], 422);
+                }
+
+                return response()->json(['success' => true]);
             case 'Leave Calendar':
                 \App\Models\LeaveCalendarPlan::whereIn('id', $ids)->where('current_status_id', 1)->update(['current_status_id' => 41]);
                 break;

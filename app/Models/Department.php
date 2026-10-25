@@ -20,4 +20,8 @@ class Department extends Model
         'date_time',
         'department_name',
     ];
+    public function positions()
+{
+    return $this->hasMany(Position::class, 'department_id');
+}
 }

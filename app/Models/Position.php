@@ -18,6 +18,7 @@ class Position extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'department_id',
         'date_time',
         'position_name',
         'slug_name',
@@ -60,4 +61,8 @@ class Position extends Model
     {
         return $this->belongsTo(ChartAccount::class, 'salary_account_id');
     }
+    public function department()
+{
+    return $this->belongsTo(Department::class, 'department_id');
+}
 }

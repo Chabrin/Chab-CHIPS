@@ -34,7 +34,7 @@
                         @endif
 
 
-                        <form action="{{ route('contract.store') }}" method="POST" id="staffContractCreateForm">
+                        <form action="{{ route('contract.store') }}" method="POST" id="staffContractCreateForm" enctype="multipart/form-data">
                             @csrf
 
                             <h3 class="mb-3">Staff Contracts</h3>
@@ -66,6 +66,14 @@
                                     <label for="basic_salary" class="form-label">Basic Salary</label>
                                     <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0">
                                 </div>
+                                <div class="mb-3 col-12">
+                                    <label for="signed_contract" class="form-label">Signed Contract (PDF)</label>
+                                    <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf">
+                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB).</small>
+                                    @error('signed_contract')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
                             </div>
 
                             <div class="mt-4">
@@ -94,6 +102,7 @@
                                         <div class="mb-3 col-2 d-flex align-items-end">
                                             <button type="button" class="btn btn-light btn-sm d-flex align-items-center remove-element-row"><span class="material-symbols-outlined me-2">remove</span> Remove</button>
                                         </div>
+                                        <div class="col-12 tier-breakdown mb-3"></div>
                                     </div>
                                 </div>
                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addElementRow"><span class="material-symbols-outlined">add</span> Add Element</button>
@@ -109,6 +118,7 @@
 <script>
     $(document).ready(function() {
 
+        // ── Staff dropdown ───────────────────────────────────────────────────
         $.ajax({
             url: "{{ url('/ajax/hr/staff/list') }}",
             type: 'GET',
@@ -131,11 +141,17 @@
                     });
                 }
 
+                // Preselect staff when coming from the staff profile "Add Contract" link
+                var preselectedStaff = "{{ request('staff_id') }}";
+                if (preselectedStaff) {
+                    $staff_id.val(preselectedStaff);
+                }
+
                 // Check if Select2 is already initialized and destroy it
                 if ($staff_id.hasClass("select2-hidden-accessible")) {
                     $staff_id.select2('destroy');
                 }
-                
+
                 // Initialize Select2
                 $staff_id.select2({
                     placeholder: 'Select Staff',
@@ -147,6 +163,7 @@
             }
         });
 
+        // ── Positions dropdown ───────────────────────────────────────────────
         $.ajax({
             url: "{{ url('/ajax/payroll/elements/staff_positions/list') }}",
             type: 'GET',
@@ -169,11 +186,17 @@
                     });
                 }
 
+                // Preselect position from the link
+                var preselectedPosition = "{{ request('position_id') }}";
+                if (preselectedPosition) {
+                    $staff_positions.val(preselectedPosition);
+                }
+
                 // Check if Select2 is already initialized and destroy it
                 if ($staff_positions.hasClass("select2-hidden-accessible")) {
                     $staff_positions.select2('destroy');
                 }
-                
+
                 // Initialize Select2
                 $staff_positions.select2({
                     placeholder: 'Select Position',
@@ -286,8 +309,8 @@
                         <label class="form-label">Entry Type</label>
                         <select class="form-select entry-type-select" name="elements[${index}][entry_type]">
                             <option value="" disabled selected>Select entry type</option>
-                            <option value="1">Allowance</option>
-                            <option value="2">Deduction</option>
+                            <option value="2">Allowance</option>
+                            <option value="1">Deduction</option>
                         </select>
                     </div>
                     <div class="mb-3 col-10">
@@ -297,6 +320,7 @@
                     <div class="mb-3 col-2 d-flex align-items-end">
                         <button type="button" class="btn btn-light btn-sm d-flex align-items-center remove-element-row"><span class="material-symbols-outlined me-2">remove</span> Remove</button>
                     </div>
+                    <div class="col-12 tier-breakdown mb-3"></div>
                 </div>
             `);
             $('#elementsRepeater').append($newRow);
@@ -308,6 +332,71 @@
             $(this).closest('.element-row').remove();
             // Optionally, re-index names if needed for backend
         });
+
+        const breakdownUrl = "{{ url('/ajax/payroll/elements') }}/";
+        let breakdownTimer;
+
+        function currentGross() {
+            let gross = parseFloat($('#basic_salary').val()) || 0;
+            $('.element-row').each(function () {
+                const $row = $(this);
+                if ($row.data('tiered')) return; // skip the NSSF row itself
+                if ($row.find('.entry-type-select').val() === '2') {
+                    gross += parseFloat($row.find('input[name$="[amount]"]').val()) || 0;
+                }
+            });
+            return gross;
+        }
+
+        function loadBreakdown($row, gross) {
+            const elementId = $row.find('.element-select').val();
+            if (!elementId || $row.data('tiered') === false) return;
+
+            const $box    = $row.find('.tier-breakdown');
+            const $amount = $row.find('input[name$="[amount]"]');
+            const $type   = $row.find('.entry-type-select');
+
+            $.getJSON(breakdownUrl + elementId + '/breakdown', { gross: gross })
+                .done(function (res) {
+                    if (!res.tiers || !res.tiers.length) {
+                        $row.data('tiered', false);
+                        $box.empty();
+                        $amount.prop('readonly', false);
+                        return;
+                    }
+                    $row.data('tiered', true);
+                    const fmt = n => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    let html = '<table class="table table-sm mb-0"><tbody>';
+                    res.tiers.forEach(t => {
+                        html += `<tr><td>${t.name}</td><td class="text-end">${fmt(t.amount)}</td></tr>`;
+                    });
+                    html += `<tr class="fw-bold"><td>Total deduction</td><td class="text-end">${fmt(res.total)}</td></tr></tbody></table>`;
+                    $box.html(html);
+                    $amount.val(res.total).prop('readonly', true);
+                    if ($type.val() !== '1') {
+                        $type.val('1').trigger('change.select2'); // NSSF is always a deduction
+                    }
+                });
+        }
+
+        function refreshBreakdowns() {
+            clearTimeout(breakdownTimer);
+            breakdownTimer = setTimeout(function () {
+                const gross = currentGross();
+                $('.element-row').each(function () { loadBreakdown($(this), gross); });
+            }, 300);
+        }
+
+        $(document).on('change', '.element-select', function () {
+            const $row = $(this).closest('.element-row');
+            $row.removeData('tiered');
+            $row.find('.tier-breakdown').empty();
+            $row.find('input[name$="[amount]"]').prop('readonly', false);
+            refreshBreakdowns();
+        });
+
+        $(document).on('input change', '#basic_salary, .entry-type-select, input[name$="[amount]"]', refreshBreakdowns);
+        $(document).on('click', '.remove-element-row', refreshBreakdowns);
 
         // Handle form submission
         $('#staffContractCreateForm').on('submit', function() {

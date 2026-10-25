@@ -158,7 +158,7 @@ class UnitTenantUploadValidator
     private function unitErrors(array $row, array $context, array $existing): array
     {
         $errors = [];
-        $missing = $this->missing($row, ['unit_number', 'unit_name', 'topology', 'rent_amount', 'initial_water_reading']);
+        $missing = $this->missing($row, ['unit_number', 'topology', 'rent_amount', 'initial_water_reading']);
         if ($missing) {
             $errors[] = implode(', ', $missing) . ' required';
         }

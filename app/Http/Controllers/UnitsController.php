@@ -8,6 +8,7 @@ use App\Models\Property;
 use App\Models\UnitDocument;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\ServiceAgreementApprovalService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,16 @@ use Illuminate\Support\Facades\Storage;
 
 class UnitsController extends Controller
 {
+    private ServiceAgreementApprovalService $slaApprovals;
+
+    /**
+     * Inject the SLA approval service, used to approve new units under an already-approved SLA.
+     */
+    public function __construct(ServiceAgreementApprovalService $slaApprovals)
+    {
+        $this->slaApprovals = $slaApprovals;
+    }
+
     // In PropertyController or appropriate controller
     public function getUnits($propertyId)
     {
@@ -136,7 +147,6 @@ class UnitsController extends Controller
                 'unit_type_id' => 'required|integer',
                 'usage_type_id' => 'required|integer',
                 'unit_condition_id' => 'required|string|max:255',
-                'unit_name' => 'nullable|string|max:255',
                 'topology_id' => 'nullable|integer',
                 'category_id' => 'nullable|integer',
                 'vat_able' => 'nullable',
@@ -157,7 +167,6 @@ class UnitsController extends Controller
                 'unit_type_id' => $validated['unit_type_id'],
                 'usage_type_id' => $validated['usage_type_id'],
                 'unit_condition_id' => $validated['unit_condition_id'],
-                'unit_name' => $validated['unit_name'] ?? null,
                 'topology_id' => $validated['topology_id'] ?? null,
                 'category_id' => $validated['category_id'] ?? null,
                 'vat_able' => $validated['vat_able'] ?? 0,
@@ -165,7 +174,6 @@ class UnitsController extends Controller
                 'description' => $validated['description'] ?? null,
                 'initial_water_meter_reading' => $validated['initial_water_meter_reading'] ?? 0,
                 'occupancy_status_id' => $validated['occupancy_status_id'] ?? $unit->occupancy_status_id,
-                'current_status_id' => $validated['occupancy_status_id'] ?? $unit->current_status_id,
             ]);
 
             DB::commit();
@@ -204,7 +212,6 @@ class UnitsController extends Controller
                 'unit_type_id' => 'required|integer',
                 'usage_type_id' => 'required|integer',
                 'unit_condition_id' => 'required|string|max:255',
-                'unit_name' => 'nullable|string|max:255',
                 'topology_id' => 'nullable|integer',
                 'category_id' => 'nullable|integer',
                 'vat_able' => 'nullable',
@@ -228,7 +235,7 @@ class UnitsController extends Controller
                 'unit_type_id' => $validated['unit_type_id'],
                 'usage_type_id' => $validated['usage_type_id'],
                 'unit_condition_id' => $validated['unit_condition_id'],
-                'unit_name' => $validated['unit_name'] ?? null,
+                'unit_name' => $unitCode,
                 'topology_id' => $validated['topology_id'] ?? null,
                 'category_id' => $validated['category_id'] ?? null,
                 'vat_able' => $validated['vat_able'] ?? 0,
@@ -240,6 +247,9 @@ class UnitsController extends Controller
                 'occupancy_status_id' => $validated['occupancy_status_id'] ?? 31, // Default to vacant
                 'current_status_id' => 1, // Pending — awaiting maker-checker approval
             ]);
+
+            // Pending unless the property's SLA is already approved.
+            $this->slaApprovals->approveNewUnits($unit->property_id, [$unit->id], Auth::id(), 'add_unit_form');
 
             DB::commit();
 

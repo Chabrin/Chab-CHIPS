@@ -35,23 +35,32 @@ class SelfServiceController extends Controller
         }
     }
 
-    public function myLeave()
-    {
+    /**
+     * Show the logged-in user's leave page, with their annual leave schedule for the year.
+     */
+    public function myLeave() {
         try {
-            $link = auth()->user()->staffLink;
+            $staff = auth()->user()->linkedStaff();
+            $currentYear = date('Y');
 
-            if (!$link) {
-                return view('self-service.my-leave', [
-                    'staffLinked' => false,
-                    'staffId'     => null,
-                    'staffName'   => null,
-                ]);
-            }
+            $annualPlan = $staff
+                ? \App\Models\LeaveCalendarPlan::with(['leaveType', 'slots'])
+                    ->where('employee_id', $staff->id)
+                    ->whereYear('start_date', $currentYear)
+                    ->whereHas('leaveType', function ($q) {
+                        $q->where('type_name', 'ILIKE', '%annual%')
+                            ->orWhere('type_name', 'ILIKE', '%normal%');
+                    })
+                    ->first()
+                : null;
 
             return view('self-service.my-leave', [
-                'staffLinked' => true,
-                'staffId'     => $link->staff_id,
-                'staffName'   => $link->staff->full_names ?? auth()->user()->name,
+                'staff' => $staff,
+                'staffLinked' => (bool) $staff,
+                'staffId' => $staff?->id,
+                'staffName' => $staff?->full_names ?? auth()->user()->name,
+                'annualPlan' => $annualPlan,
+                'currentYear' => $currentYear,
             ]);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);

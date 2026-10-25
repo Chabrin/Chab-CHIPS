@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Crypt;
         <div class="row">
             <div class="col-sm-12">
                 <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Leave Applications</h5>
+                   <div class="card-header card-no-border d-flex align-items-center">
+                        <h5 class="mb-0">Leave Application Details</h5>
                         <div class="ms-auto d-flex gap-2">
                             <a href="{{ route('leave-management.leave-applications') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Crypt;
                         @if($leave_applications && $leave_applications->count())
                             @foreach($leave_applications as $application)
                             <div class="card mb-3">
-                                <div class="card-header bg-light py-2">
+                                <div class="card-header bg-light py-2 d-flex align-items-center">
                                     <h6 class="mb-0" style="font-size: 0.9rem;">
                                         <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">event_available</span>
                                         Leave Application - {{ $application->leaveType->type_name ?? '-' }}
@@ -47,7 +47,7 @@ use Illuminate\Support\Facades\Crypt;
                                                 @if($application->current_status_id == 1)
                                                     <span class="badge bg-warning">Pending</span>
                                                 @elseif($application->current_status_id == 24)
-                                                    <span class="badge bg-info">Partially Approved</span>
+                                                    <span class="badge bg-info">Pending HR</span>
                                                 @elseif($application->current_status_id == 5)
                                                     <span class="badge bg-success">Approved</span>
                                                 @elseif($application->current_status_id == 41)
@@ -108,6 +108,7 @@ use Illuminate\Support\Facades\Crypt;
         </div>
     </div>
 </div>
+
 
 <style>
     .card-header {

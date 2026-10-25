@@ -13,6 +13,7 @@ use App\Models\TenantNextOfKin;
 use App\Models\TenantOtherContact;
 use App\Models\TenantRecord;
 use App\Models\Unit;
+use App\Services\ServiceAgreementApprovalService;
 use App\Traits\LeaseCreationTrait;
 use App\Traits\TenantRecordHelperTrait;
 use DomainException;
@@ -29,15 +30,18 @@ class UnitTenantSubmitService
 
     private UnitTenantUploadBatchService $batches;
     private UnitTenantUploadLookups $lookups;
+    private ServiceAgreementApprovalService $slaApprovals;
 
     /**
      * @param UnitTenantUploadBatchService $batches
      * @param UnitTenantUploadLookups $lookups
+     * @param ServiceAgreementApprovalService $slaApprovals
      */
-    public function __construct(UnitTenantUploadBatchService $batches, UnitTenantUploadLookups $lookups)
+    public function __construct(UnitTenantUploadBatchService $batches, UnitTenantUploadLookups $lookups, ServiceAgreementApprovalService $slaApprovals)
     {
         $this->batches = $batches;
         $this->lookups = $lookups;
+        $this->slaApprovals = $slaApprovals;
     }
 
     /**
@@ -195,6 +199,10 @@ class UnitTenantSubmitService
         $this->assertStillFree($unitRow, $tenantRow, $property);
 
         $unit = $this->createUnit($unitRow, $property, $userId);
+
+        // Pending unless the property's SLA is already approved.
+        $this->slaApprovals->approveNewUnits($property->id, [$unit->id], $userId, 'unit_tenant_upload');
+
         $unitRow->update(['submitted_at' => now(), 'unit_id' => $unit->id, 'error' => null]);
 
         if (!$tenantRow) {
@@ -285,13 +293,15 @@ class UnitTenantSubmitService
     {
         $unitTypeId = $this->lookups->id('unit_types', $row->unit_type) ?? $this->lookups->id('unit_types', 'Normal');
 
+        $unitCode = Unit::generateUnitCode($property, $row->unit_number);
+
         return Unit::create([
-            'unit_code' => Unit::generateUnitCode($property, $row->unit_number),
+            'unit_code' => $unitCode,
             'property_id' => $property->id,
             'client_id' => $property->client_id,
             'zone_id' => $property->zone_id,
             'unit_number' => $row->unit_number,
-            'unit_name' => $row->unit_name,
+            'unit_name' => $unitCode,
             'unit_type_id' => (string) $unitTypeId,
             'usage_type_id' => $this->lookups->id('usage_types', $row->usage_type),
             'topology_id' => $this->lookups->id('topologies', $row->topology),

@@ -40,7 +40,29 @@ class LeaveRequest extends Model
         'date_time' => 'datetime',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
+        'days' => 'float',
+        'requested_days' => 'float',
     ];
+
+    public const STATUS_PENDING = 1;
+    public const STATUS_PARTIAL = 24;
+    public const STATUS_APPROVED = 5;
+    public const STATUS_REJECTED = 41;
+
+    public function scopePendingHod($query)
+    {
+        return $query->where('current_status_id', self::STATUS_PENDING);
+    }
+
+    public function scopePendingHr($query)
+    {
+        return $query->where('current_status_id', self::STATUS_PARTIAL);
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('current_status_id', self::STATUS_APPROVED);
+    }
 
     public function employee()
     {

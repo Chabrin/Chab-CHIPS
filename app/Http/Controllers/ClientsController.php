@@ -17,6 +17,8 @@ use App\Models\ReturnsMergeBatch;
 use App\Models\ReturnsMergeBatchItem;
 use App\Models\TenantRecord;
 use App\Services\ErrorDispatcher;
+use App\Services\ClientDraftRequirements;
+use App\Services\NextOfKinContactGuard;
 use App\Models\ClientOtherContact;
 use App\Models\PropertyBankDetail;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +32,18 @@ use App\Traits\HasZoneAccessScope;
 class ClientsController extends Controller
 {
     use HasZoneAccessScope;
+
+    protected NextOfKinContactGuard $kinGuard;
+
+    protected ClientDraftRequirements $draftRequirements;
+
+    /**
+     * Inject the next-of-kin contact guard and the required-records check.
+     */
+    public function __construct(NextOfKinContactGuard $kinGuard, ClientDraftRequirements $draftRequirements) {
+        $this->kinGuard = $kinGuard;
+        $this->draftRequirements = $draftRequirements;
+    }
 
     /**
      * Display a listing of clients
@@ -396,7 +410,9 @@ class ClientsController extends Controller
             $client = Client::with(['otherContacts', 'nextOfKins', 'partners', 'bankAccounts.bank'])->findOrFail($id);
             $unitTopologies = \App\Models\UnitTopology::orderBy('topology_name')->get();
             $unitCategories = \App\Models\UnitCategory::orderBy('category_name')->get();
-            return view('property.clients.details', compact('client', 'unitTopologies', 'unitCategories'));
+            // The Statement button only makes sense once the landlord has an account with entries
+            $hasLedger = $client->isClient() && \App\Models\LandlordAccount::where('client_id', $client->id)->exists();
+            return view('property.clients.details', compact('client', 'unitTopologies', 'unitCategories', 'hasLedger'));
         } catch (\Exception $e) {
             Log::error('Error loading client details: ' . $e->getMessage());
             return redirect()->route('property.clients.index')->with('error', 'Client not found');
@@ -1654,7 +1670,17 @@ class ClientsController extends Controller
         DB::beginTransaction();
         try {
             $validated = $this->validateClientRequest($request);
-            $this->validateIndividualOrCompanyFields($validated);
+            $this->validateIndividualOrCompanyFields($validated, null, true);
+
+            $draftToken = $request->input('draft_token');
+            $draftErrors = array_merge(
+                $this->draftRequirements->missing($draftToken, (int) $validated['client_type_id']),
+                $this->kinGuard->draftErrors($draftToken, $validated['email_address'] ?? null, $validated['mobile_number'] ?? null)
+            );
+            if ($draftErrors) {
+                throw \Illuminate\Validation\ValidationException::withMessages($draftErrors);
+            }
+
             Log::info('Validated client data: ' . json_encode($validated));
 
             $referenceNumber = $this->generateClientReferenceNumber();
@@ -1738,7 +1764,7 @@ class ClientsController extends Controller
      * and update() — $excludeClientId lets update() skip the record being
      * edited when checking for duplicates of itself.
      */
-    private function validateIndividualOrCompanyFields(array $validated, ?int $excludeClientId = null): void
+    private function validateIndividualOrCompanyFields(array $validated, ?int $excludeClientId = null, bool $requireIdentity = false): void
     {
         $clientTypeId = (int) $validated['client_type_id'];
 
@@ -1776,6 +1802,9 @@ class ClientsController extends Controller
             }
             if (empty($validated['gender'])) {
                 $missing['gender'] = ['Gender is required for an Individual client.'];
+            }
+            if ($requireIdentity && empty($validated['national_id']) && empty($validated['passport_number'])) {
+                $missing['national_id'] = ['National ID or Passport Number is required for an Individual client.'];
             }
             if (!empty($missing)) {
                 throw \Illuminate\Validation\ValidationException::withMessages($missing);
@@ -2035,6 +2064,12 @@ class ClientsController extends Controller
 
             $validated = $this->validateClientRequest($request);
             $this->validateIndividualOrCompanyFields($validated, $id);
+
+            $kinErrors = $this->kinGuard->savedErrors((int) $id, $validated['email_address'] ?? null, $validated['mobile_number'] ?? null);
+            if ($kinErrors) {
+                throw \Illuminate\Validation\ValidationException::withMessages($kinErrors);
+            }
+
             Log::info('Validated client update data for ID: ' . $id);
 
             // Handle photo upload

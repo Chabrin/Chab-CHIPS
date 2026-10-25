@@ -55,6 +55,56 @@ class LeaseAgreement extends Model
         'tenant_verified_at' => 'datetime',
     ];
 
+    /**
+     * The service agreement linked directly on this lease, if any.
+     */
+    public function serviceAgreement() {
+        return $this->belongsTo(ServiceAgreement::class, 'sla_id');
+    }
+
+    /**
+     * The service agreement this lease depends on: the one linked on the lease, otherwise the
+     * property's most recent one (latest start date), the same rule used across the app.
+     */
+    public function resolvedServiceAgreement(): ?ServiceAgreement {
+        $own = $this->sla_id ? ServiceAgreement::find($this->sla_id) : null;
+        if ($own) {
+            return $own;
+        }
+
+        return $this->property_id
+            ? ServiceAgreement::where('property_id', $this->property_id)->orderByRaw('date_start DESC NULLS LAST')->orderByDesc('id')->first()
+            : null;
+    }
+
+    /**
+     * Whether this lease has a service agreement and it is approved.
+     */
+    public function hasApprovedServiceAgreement(): bool {
+        $sla = $this->resolvedServiceAgreement();
+
+        return $sla !== null && $sla->isApproved();
+    }
+
+    /**
+     * Why this lease cannot be approved yet, or null when it can. Pass an already-resolved
+     * service agreement to avoid looking it up again.
+     *
+     * @param ServiceAgreement|null $sla
+     */
+    public function approvalBlockReason(?ServiceAgreement $sla = null): ?string {
+        $sla = $sla ?? $this->resolvedServiceAgreement();
+
+        if (!$sla) {
+            return 'No service agreement exists for this lease. Create and approve one first.';
+        }
+        if (!$sla->isApproved()) {
+            return 'Service agreement ' . ($sla->reference_number ?? '') . ' is not approved yet. Approve the SLA first.';
+        }
+
+        return null;
+    }
+
     public function tenant()
     {
         return $this->belongsTo(Client::class, 'tenant_id');

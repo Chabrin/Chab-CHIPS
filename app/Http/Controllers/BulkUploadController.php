@@ -13,6 +13,7 @@ use App\Models\UnitCategory;
 use App\Models\ClientBankAccount;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\ServiceAgreementApprovalService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -23,6 +24,16 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class BulkUploadController extends Controller
 {
+    private ServiceAgreementApprovalService $slaApprovals;
+
+    /**
+     * Inject the SLA approval service, used to approve new units under an already-approved SLA.
+     */
+    public function __construct(ServiceAgreementApprovalService $slaApprovals)
+    {
+        $this->slaApprovals = $slaApprovals;
+    }
+
     /**
      * Download sample file for bulk upload
      */
@@ -488,27 +499,32 @@ class BulkUploadController extends Controller
                 $usageTypeMap = ['commercial' => 1, 'residential' => 2, 'hybrid' => 3];
                 $usageType = $usageTypeMap[strtolower(trim($row[3] ?? ''))] ?? 1;
 
-                Unit::create([
-                    'unit_code' => $unitCode,
-                    'property_id' => $property->id,
-                    'client_id' => $clientId,
-                    'zone_id' => $property->zone_id,
-                    'unit_number' => $row[1],
-                    'unit_name' => $row[2] ?? null,
-                    'unit_type_id' => 1, // Normal
-                    'usage_type_id' => $usageType,
-                    'unit_condition_id' => $row[4] ?? 'Good',
-                    'topology_id' => $topologyId,
-                    'category_id' => $categoryId,
-                    'rent_amount' => $row[7] ?? 0,
-                    'description' => $row[8] ?? null,
-                    'vat_able' => $this->normalizeVatAble($row[9] ?? null),
-                    'initial_water_meter_reading' => $row[10] ?? 0,
-                    'date_time' => now(),
-                    'created_by_id' => Auth::id(),
-                    'occupancy_status_id' => 31, // Vacant
-                    'current_status_id' => 1, // Pending — awaiting maker-checker approval, same as manual creation
-                ]);
+                // Create and (if the SLA is already approved) approve the unit together, or neither.
+                DB::transaction(function () use ($unitCode, $property, $clientId, $row, $usageType, $topologyId, $categoryId) {
+                    $unit = Unit::create([
+                        'unit_code' => $unitCode,
+                        'property_id' => $property->id,
+                        'client_id' => $clientId,
+                        'zone_id' => $property->zone_id,
+                        'unit_number' => $row[1],
+                        'unit_name' => $row[2] ?? null,
+                        'unit_type_id' => 1, // Normal
+                        'usage_type_id' => $usageType,
+                        'unit_condition_id' => $row[4] ?? 'Good',
+                        'topology_id' => $topologyId,
+                        'category_id' => $categoryId,
+                        'rent_amount' => $row[7] ?? 0,
+                        'description' => $row[8] ?? null,
+                        'vat_able' => $this->normalizeVatAble($row[9] ?? null),
+                        'initial_water_meter_reading' => $row[10] ?? 0,
+                        'date_time' => now(),
+                        'created_by_id' => Auth::id(),
+                        'occupancy_status_id' => 31, // Vacant
+                        'current_status_id' => 1, // Pending — awaiting maker-checker approval, same as manual creation
+                    ]);
+
+                    $this->slaApprovals->approveNewUnits($property->id, [$unit->id], Auth::id(), 'bulk_upload_units');
+                });
 
                 $success++;
             } catch (\Exception $e) {

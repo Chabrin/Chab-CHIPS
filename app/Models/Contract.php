@@ -50,6 +50,14 @@ class Contract extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * The uploaded signed (PDF) copy of this contract, if any.
+     */
+    public function signedDocument()
+    {
+        return $this->hasOne(EmployeeDocument::class, 'contract_id')->latestOfMany();
+    }
+
     public function elements()
     {
         return $this->hasMany(ContractElement::class, 'parent_id', 'id');

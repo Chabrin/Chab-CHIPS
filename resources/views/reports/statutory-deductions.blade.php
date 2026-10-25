@@ -63,23 +63,20 @@
                                             <th>Staff Number</th>
                                             <th>Full Names</th>
                                             <th>National ID</th>
+                                            <th>Tier I (NSSF) (KSh)</th>
+                                            <th>Tier II (KSh)</th>
                                             <th>Amount (KSh)</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <!-- DataTable will populate this -->
                                     </tbody>
-                                    <tfoot>
-                                        <tr>
-                                            <th colspan="4" class="text-end">Total:</th>
-                                            <th class="text-end" id="totalAmount">0.00</th>
-                                        </tr>
-                                        <tr>
-                                            <th colspan="4" class="text-end">Total Records:</th>
-                                            <th class="text-end" id="totalCount">0</th>
-                                        </tr>
-                                    </tfoot>
                                 </table>
+                            </div>
+                            <div class="d-flex flex-wrap justify-content-end gap-4 mt-3 fw-bold">
+                                <span id="tierTotals" class="d-none">Tier I: <span id="totalTier1">0.00</span> &nbsp;|&nbsp; Tier II: <span id="totalTier2">0.00</span></span>
+                                <span>Total: <span id="totalAmount">0.00</span></span>
+                                <span>Total Records: <span id="totalCount">0</span></span>
                             </div>
                         </div>
                     </div>
@@ -132,12 +129,24 @@
                     width: '20%'
                 },
                 {
+                    data: 'tier1',
+                    width: '12%',
+                    className: 'text-end'
+                },
+                {
+                    data: 'tier2',
+                    width: '12%',
+                    className: 'text-end'
+                },
+                {
                     data: 'amount',
                     width: '15%',
                     className: 'text-end'
                 }
             ]
         });
+        // Tier I / Tier II only apply to NSSF
+        dataTable.columns([4, 5]).visible(false);
 
         // Form submission
         $('#reportFilterForm').on('submit', function(e) {
@@ -210,7 +219,12 @@
         $('#reportTitle').text(deductionType + ' Deductions Report');
         $('#reportSubtitle').text('Period: ' + periodText + ' | Total Records: ' + response.count);
 
-        // Update totals
+        // Update totals; Tier I / Tier II columns only show for NSSF
+        const isNssf = deductionType === 'NSSF';
+        dataTable.columns([4, 5]).visible(isNssf);
+        $('#tierTotals').toggleClass('d-none', !isNssf);
+        $('#totalTier1').text(response.total_tier1);
+        $('#totalTier2').text(response.total_tier2);
         $('#totalAmount').text(response.total);
         $('#totalCount').text(response.count);
 

@@ -120,7 +120,7 @@ $(document).ready(function () {
             },
             {
                 data: 'account',
-                render: d => `<span class="fw-semibold">${d}</span>`
+                render: d => `<span class="fw-semibold">${$('<div>').text(d).html()}</span>`
             },
             {
                 data: 'debit', className: 'text-end',

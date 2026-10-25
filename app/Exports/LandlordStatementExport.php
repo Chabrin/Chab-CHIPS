@@ -61,6 +61,15 @@ class LandlordStatementExport implements FromCollection, WithHeadings, WithStyle
         $sheet->setCellValue('A3', 'Property: ' . $this->landlordInfo['property_name']);
         $sheet->mergeCells('A3:F3');
 
+        // Notes about entries left out of the statement, when there are any
+        if (!empty($this->landlordInfo['note'])) {
+            $sheet->setCellValue('A4', $this->landlordInfo['note']);
+            $sheet->mergeCells('A4:F4');
+            $sheet->getStyle('A4')->getFont()->setItalic(true)->setSize(9);
+            $sheet->getStyle('A4')->getAlignment()->setWrapText(true);
+            $sheet->getRowDimension(4)->setRowHeight(30);
+        }
+
         $sheet->getColumnDimension('A')->setWidth(15);
         $sheet->getColumnDimension('B')->setWidth(18);
         $sheet->getColumnDimension('C')->setWidth(35);

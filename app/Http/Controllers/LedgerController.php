@@ -657,6 +657,23 @@ class LedgerController extends Controller
         return view('ledger.transactions');
     }
 
+    /**
+     * Label each GL account id as "code name" (for example "1022 Clients Account") so the
+     * journal lines read as accounts instead of internal ids. An id with no chart account
+     * is left out and the caller shows the raw id.
+     */
+    private function glAccountLabels(array $accountIds): array
+    {
+        $ids = collect($accountIds)->filter(fn($id) => is_numeric($id))->map(fn($id) => (int) $id)->unique()->values()->all();
+        if (!$ids) {
+            return [];
+        }
+
+        return ChartAccount::whereIn('id', $ids)->get(['id', 'account_code', 'account_name'])
+            ->mapWithKeys(fn($a) => [(string) $a->id => trim($a->account_code . ' ' . $a->account_name)])
+            ->all();
+    }
+
     public function getGlTransactions(Request $request)
     {
         try {
@@ -696,20 +713,22 @@ class LedgerController extends Controller
                 )
                 ->orderBy('d.parent_id')
                 ->orderBy('d.id')
-                ->get()
-                ->map(function ($row) {
+                ->get();
+
+            $accountLabels = $this->glAccountLabels($lines->pluck('account_id')->all());
+
+            $lines = $lines
+                ->map(function ($row) use ($accountLabels) {
                     $isDebit = $row->entry_type === 'Debit';
                     $amount  = abs((float) ($row->amount ?? 0));
                     return [
                         'parent_id' => $row->parent_id,
-                        'date'      => $row->journal_date
-                                        ? Carbon::parse($row->journal_date)->format('d/m/Y')
-                                        : '-',
+                        'date' => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
                         'reference' => $row->reference ?? '-',
-                        'account'   => $row->account_id ?? '-',
+                        'account' => $accountLabels[$row->account_id] ?? ($row->account_id ?? '-'),
                         'narration' => $row->narration ?? '-',
-                        'debit'     => $isDebit ? number_format($amount, 2) : '',
-                        'credit'    => !$isDebit ? number_format($amount, 2) : '',
+                        'debit' => $isDebit ? number_format($amount, 2) : '',
+                        'credit' => !$isDebit ? number_format($amount, 2) : '',
                     ];
                 });
 
@@ -756,18 +775,22 @@ class LedgerController extends Controller
                 ->select('d.parent_id', 'h.journal_date', 'h.reference', 'd.account_id', 'd.narration', 'd.entry_type', 'd.amount')
                 ->orderBy('d.parent_id')
                 ->orderBy('d.id')
-                ->get()
-                ->map(function ($row) {
+                ->get();
+
+            $accountLabels = $this->glAccountLabels($rows->pluck('account_id')->all());
+
+            $rows = $rows
+                ->map(function ($row) use ($accountLabels) {
                     $isDebit = $row->entry_type === 'Debit';
                     $amount  = abs((float) ($row->amount ?? 0));
                     return [
                         'parent_id' => $row->parent_id,
-                        'date'      => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
+                        'date' => $row->journal_date ? Carbon::parse($row->journal_date)->format('d/m/Y') : '-',
                         'reference' => $row->reference ?? '-',
-                        'account'   => $row->account_id ?? '-',
+                        'account' => $accountLabels[$row->account_id] ?? ($row->account_id ?? '-'),
                         'narration' => $row->narration ?? '-',
-                        'debit'     => $isDebit ? number_format($amount, 2) : '',
-                        'credit'    => !$isDebit ? number_format($amount, 2) : '',
+                        'debit' => $isDebit ? number_format($amount, 2) : '',
+                        'credit' => !$isDebit ? number_format($amount, 2) : '',
                     ];
                 })
                 ->toArray();

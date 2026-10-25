@@ -107,6 +107,8 @@ class HrSettingsController extends Controller
             return response()->json(['success' => true, 'department' => $department]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Department not found'], 404);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -132,7 +134,7 @@ class HrSettingsController extends Controller
             return response()->json(['success' => false, 'error' => 'Failed to delete department'], 500);
         }
     }
-
+// leave type edits
     // Leave Types CRUD
     public function leaveTypeIndex()
     {
@@ -142,11 +144,27 @@ class HrSettingsController extends Controller
     public function leaveTypeList()
     {
         try {
-            $leaveTypes = HrLeaveType::all()->map(function ($leaveType) {
-                $leaveType->can_update = Auth::user()->isAbleTo('update_leave_types');
-                $leaveType->can_delete = Auth::user()->isAbleTo('delete_leave_types');
-                return $leaveType;
+            $user = Auth::user();
+            
+            // Check permissions safely
+            $canUpdate = $user ? $user->isAbleTo('update_leave_types') : true;
+            $canDelete = $user ? $user->isAbleTo('delete_leave_types') : true;
+
+            $leaveTypes = HrLeaveType::all()->map(function ($leaveType) use ($canUpdate, $canDelete) {
+                return [
+                    'id'                     => $leaveType->id,
+                    'type_name'              => $leaveType->type_name,
+                    'current_status_id'      => $leaveType->current_status_id,
+                    'entitled_days'          => $leaveType->entitled_days,
+                    'salary_rate'            => $leaveType->salary_rate,
+                    'leave_type_id'          => $leaveType->leave_type_id,
+                    'counts_weekends'        => (bool) $leaveType->counts_weekends,
+                    'counts_public_holidays' => (bool) $leaveType->counts_public_holidays,
+                    'can_update'             => $canUpdate,
+                    'can_delete'             => $canDelete,
+                ];
             });
+
             return response()->json(['leave_types' => $leaveTypes]);
         } catch (\Exception $e) {
             try {
@@ -154,18 +172,37 @@ class HrSettingsController extends Controller
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
+            Log::error('Error loading leave types: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load leave types'], 500);
         }
     }
 
-    public function leaveTypeStore(Request $request)
+    public function leaveTypeDelete($id)
+    {
+        try {
+            $leaveType = HrLeaveType::findOrFail($id);
+            $leaveType->delete();
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            try {
+                ErrorDispatcher::dispatch($e);
+            } catch (\Exception $ex) {
+                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
+            }
+            return response()->json(['success' => false, 'error' => 'Failed to delete leave type'], 500);
+        }
+    }
+
+   public function leaveTypeStore(Request $request)
     {
         try {
             $validated = $request->validate([
-                'type_name' => 'required|string|max:255',
-                'entitled_days' => 'required|integer|min:0',
-                'salary_rate' => 'required|numeric|min:0|max:100',
-                'leave_type_id' => 'nullable|integer',
+                'type_name'               => 'required|string|max:255',
+                'entitled_days'           => 'required|integer|min:0',
+                'salary_rate'             => 'required|numeric|min:0|max:100',
+                'leave_type_id'           => 'nullable|integer',
+                'counts_weekends'         => 'nullable|boolean',
+                'counts_public_holidays'  => 'nullable|boolean',
             ]);
 
             $exists = HrLeaveType::where('type_name', $validated['type_name'])->exists();
@@ -180,6 +217,9 @@ class HrSettingsController extends Controller
             $leaveType->salary_rate = $validated['salary_rate'];
             $leaveType->leave_type_id = null;
             $leaveType->date_time = now();
+            // Save the counting rules flags
+            $leaveType->counts_weekends = $request->boolean('counts_weekends');
+            $leaveType->counts_public_holidays = $request->boolean('counts_public_holidays');
             $leaveType->save();
 
             return response()->json(['success' => true, 'leave_type' => $leaveType]);
@@ -200,11 +240,13 @@ class HrSettingsController extends Controller
     {
         try {
             $validated = $request->validate([
-                'type_name' => 'required|string|max:255',
-                'current_status_id' => 'nullable|integer',
-                'entitled_days' => 'required|integer|min:0',
-                'salary_rate' => 'required|numeric|min:0|max:100',
-                'leave_type_id' => 'nullable|integer',
+                'type_name'               => 'required|string|max:255',
+                'current_status_id'       => 'nullable|integer',
+                'entitled_days'           => 'required|integer|min:0',
+                'salary_rate'             => 'required|numeric|min:0|max:100',
+                'leave_type_id'           => 'nullable|integer',
+                'counts_weekends'         => 'nullable|boolean',
+                'counts_public_holidays'  => 'nullable|boolean',
             ]);
 
             $leaveType = HrLeaveType::findOrFail($id);
@@ -222,6 +264,9 @@ class HrSettingsController extends Controller
             $leaveType->salary_rate = $validated['salary_rate'];
             $leaveType->leave_type_id = null;
             $leaveType->date_time = now();
+            // Update the counting rules flags
+            $leaveType->counts_weekends = $request->boolean('counts_weekends');
+            $leaveType->counts_public_holidays = $request->boolean('counts_public_holidays');
             $leaveType->save();
 
             return response()->json(['success' => true, 'leave_type' => $leaveType]);
@@ -236,23 +281,6 @@ class HrSettingsController extends Controller
             return response()->json(['success' => false, 'error' => 'Failed to update leave type'], 500);
         }
     }
-
-    public function leaveTypeDelete($id)
-    {
-        try {
-            $leaveType = HrLeaveType::findOrFail($id);
-            $leaveType->delete();
-            return response()->json(['success' => true]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to delete leave type'], 500);
-        }
-    }
-
     // Staff Positions CRUD
     public function positionsIndex()
     {
@@ -260,71 +288,80 @@ class HrSettingsController extends Controller
     }
 
     public function positionsList()
-    {
+{
+    try {
+        $canUpdate = Auth::user()->isAbleTo('update_staff_positions');
+        $canRead = Auth::user()->isAbleTo('read_staff_positions');
+        $canDelete = Auth::user()->isAbleTo('delete_staff_positions');
+
+        $positions = Position::with(['reportsTo', 'salaryAccount', 'department']) // <-- added department
+            ->withCount('staff')
+            ->orderBy('position_name')
+            ->get()
+            ->map(function ($position) use ($canUpdate, $canRead, $canDelete) {
+                return [
+                    'id' => $position->id,
+                    'encrypted_id' => Crypt::encrypt($position->id),
+                    'position_name' => $position->position_name,
+                    'department_id' => $position->department_id,
+                    'department_name' => $position->department->department_name ?? '—', // <-- department display
+                    'slug_name' => $position->slug_name,
+                    'basic_salary' => $position->basic_salary,
+                    'reports_to_name' => $position->reportsTo->position_name ?? null,
+                    'staff_count' => $position->staff_count,
+                    'can_update' => $canUpdate,
+                    'can_read' => $canRead,
+                    'can_delete' => $canDelete,
+                ];
+            });
+
+        return response()->json(['positions' => $positions]);
+    } catch (\Exception $e) {
         try {
-            $canUpdate = Auth::user()->isAbleTo('update_staff_positions');
-            $canRead = Auth::user()->isAbleTo('read_staff_positions');
-            $canDelete = Auth::user()->isAbleTo('delete_staff_positions');
-
-            $positions = Position::with(['reportsTo', 'salaryAccount'])
-                ->withCount('staff')
-                ->orderBy('position_name')
-                ->get()
-                ->map(function ($position) use ($canUpdate, $canRead, $canDelete) {
-                    return [
-                        'id' => $position->id,
-                        'encrypted_id' => Crypt::encrypt($position->id),
-                        'position_name' => $position->position_name,
-                        'slug_name' => $position->slug_name,
-                        'basic_salary' => $position->basic_salary,
-                        'reports_to_name' => $position->reportsTo->position_name ?? null,
-                        'staff_count' => $position->staff_count,
-                        'can_update' => $canUpdate,
-                        'can_read' => $canRead,
-                        'can_delete' => $canDelete,
-                    ];
-                });
-
-            return response()->json(['positions' => $positions]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['error' => 'Failed to load positions'], 500);
+            ErrorDispatcher::dispatch($e);
+        } catch (\Exception $ex) {
+            Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
         }
+        return response()->json(['error' => 'Failed to load positions'], 500);
     }
+}
+    
 
-    public function positionsDropdowns(Request $request)
-    {
-        try {
-            $currentId = $request->get('current_id');
-            $positions = Position::where('id', '!=', $currentId)
-                ->orderBy('position_name')
-                ->get(['id', 'position_name']);
+public function positionsDropdowns(Request $request)
+{
+    try {
+        $currentId = $request->get('current_id');
 
-            $accounts = ChartAccount::orderBy('account_name')
-                ->get(['id', 'account_name', 'account_number'])
-                ->map(function ($account) {
-                    $account->full_account = $account->account_number . ' - ' . $account->account_name;
-                    return $account;
-                });
-
-            return response()->json([
-                'positions' => $positions,
-                'accounts' => $accounts
-            ]);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['error' => 'Failed to load dropdowns'], 500);
+        $query = Position::orderBy('position_name');
+        if (!empty($currentId)) {
+            $query->where('id', '!=', $currentId);
         }
-    }
+        $positions = $query->select('id', 'position_name')->get();
 
+        // Safely select id and account_name without account_number
+        $accounts = ChartAccount::orderBy('account_name')
+            ->select('id', 'account_name')
+            ->get()
+            ->map(function ($account) {
+                $account->full_account = $account->account_name;
+                return $account;
+            });
+
+        // Departments from sys_set_departments
+        $departments = Department::orderBy('department_name')
+            ->select('id', 'department_name')
+            ->get();
+
+        return response()->json([
+            'positions'   => $positions,
+            'accounts'    => $accounts,
+            'departments' => $departments,
+        ]);
+    } catch (\Throwable $e) {
+        Log::error('positionsDropdowns error: ' . $e->getMessage());
+        return response()->json(['error' => 'Failed to load dropdowns'], 500);
+    }
+}
     public function positionsGet(Request $request)
     {
         try {
@@ -344,13 +381,14 @@ class HrSettingsController extends Controller
     {
         try {
             $validated = $request->validate([
+                'department_id' => 'required|integer|exists:sys_set_departments,id',
                 'position_name' => 'required|string|max:255',
                 'basic_salary' => 'nullable|numeric|min:0',
                 'salary_account_id' => 'nullable|integer',
-                'reports_to_id' => 'nullable|integer',
+                'reports_to_id' => 'nullable|integer|exists:sys_set_staff_positions,id',
             ]);
 
-            $exists = Position::where('position_name', $validated['position_name'])->exists();
+            $exists = Position::whereRaw('LOWER(position_name) = ?', [mb_strtolower(trim($validated['position_name']))])->exists();
             if ($exists) {
                 return response()->json([
                     'success' => false,
@@ -359,6 +397,7 @@ class HrSettingsController extends Controller
             }
 
             $position = new Position();
+            $position->department_id = $validated['department_id'];
             $position->position_name = $validated['position_name'];
             $position->slug_name = Str::slug($validated['position_name'], '_');
             $position->basic_salary = $validated['basic_salary'] ?? null;
@@ -385,49 +424,77 @@ class HrSettingsController extends Controller
         }
     }
 
-    public function positionsUpdateAjax(Request $request, $id)
-    {
-        try {
-            $validated = $request->validate([
-                'position_name' => 'required|string|max:255',
-                'basic_salary' => 'nullable|numeric|min:0',
-                'salary_account_id' => 'nullable|integer',
-                'reports_to_id' => 'nullable|integer',
-            ]);
+  public function positionsUpdateAjax(Request $request, $id)
+{
+    try {
+        $validated = $request->validate([
+            'department_id' => 'required|integer|exists:sys_set_departments,id',
+            'position_name' => 'required|string|max:255',
+            'basic_salary'  => 'nullable|numeric|min:0',
+            'salary_account_id' => 'nullable|integer',
+            'reports_to_id' => 'nullable|integer|exists:sys_set_staff_positions,id',
+        ]);
 
-            $position = Position::findOrFail($id);
+        $position = Position::findOrFail($id);
 
-            $exists = Position::where('position_name', $validated['position_name'])
-                ->where('id', '!=', $id)
-                ->exists();
-            if ($exists) {
-                return response()->json([
-                    'success' => false,
-                    'errors' => ['position_name' => ['A position with that name already exists.']]
-                ], 422);
-            }
-
-            $position->position_name = $validated['position_name'];
-            $position->basic_salary = $validated['basic_salary'] ?? null;
-            $position->salary_account_id = $validated['salary_account_id'] ?? null;
-            $position->reports_to_id = $validated['reports_to_id'] ?? null;
-            $position->save();
-
+        if (!empty($validated['reports_to_id']) && $this->reportsToCreatesCycle($position->id, $validated['reports_to_id'])) {
             return response()->json([
-                'success' => true,
-                'message' => 'Position updated successfully',
-                'position' => $position
-            ]);
-        } catch (ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Exception $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            return response()->json(['success' => false, 'error' => 'Failed to update position'], 500);
+                'success' => false,
+                'errors'  => ['reports_to_id' => ['A position cannot report to itself or to a position that reports back to it.']]
+            ], 422);
         }
+
+        $exists = Position::whereRaw('LOWER(position_name) = ?', [mb_strtolower(trim($validated['position_name']))])
+            ->where('id', '!=', $id)
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'errors'  => ['position_name' => ['A position with that name already exists.']]
+            ], 422);
+        }
+
+        $position->department_id = $validated['department_id']; // <-- saves the department
+        $position->position_name = $validated['position_name'];
+        $position->basic_salary  = $validated['basic_salary'] ?? null;
+        if ($request->has('reports_to_id')) {
+            $position->reports_to_id = $validated['reports_to_id'] ?? null;
+        }
+        $position->save();
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Position updated successfully',
+            'position' => $position
+        ]);
+    } catch (ValidationException $e) {
+        return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json(['success' => false, 'error' => 'Position not found'], 404);
+    } catch (\Throwable $e) {
+        return response()->json(['success' => false, 'error' => 'Failed to update position'], 500);
+    }
+}
+
+    /**
+     * Whether making $reportsToId the boss of $positionId would create a reporting loop, found by
+     * walking up the chain from the proposed boss and checking whether it reaches the position itself.
+     */
+    private function reportsToCreatesCycle($positionId, $reportsToId): bool
+    {
+        $visited = [];
+        $current = (int) $reportsToId;
+
+        while ($current && !in_array($current, $visited, true)) {
+            if ($current === (int) $positionId) {
+                return true;
+            }
+            $visited[] = $current;
+            $current = (int) Position::where('id', $current)->value('reports_to_id');
+        }
+
+        return false;
     }
 
     public function positionsDestroyAjax($id)
@@ -457,6 +524,8 @@ class HrSettingsController extends Controller
                 'success' => true,
                 'message' => 'Position deleted successfully'
             ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Position not found'], 404);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
@@ -738,7 +807,7 @@ class HrSettingsController extends Controller
         }
     }
 
-    public function publicHolidaysUpdate(Request $request, $id)
+       public function publicHolidaysUpdate(Request $request, $id)
     {
         try {
             $validated = $request->validate([
@@ -746,13 +815,13 @@ class HrSettingsController extends Controller
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'pay_rate' => 'required|numeric|min:0|max:100',
-                'recurrent' => 'required|in:yes,no',
+                'recurrent' => 'required|in:1,2',
             ]);
 
             $holiday = PublicHoliday::findOrFail($id);
             $holiday->title = $validated['title'];
-            $holiday->start_date = $validated['start_date'];
-            $holiday->end_date = $validated['end_date'];
+            $holiday->start_date = $validated['start_date'] . ' 00:00:00';
+            $holiday->end_date = $validated['end_date'] . ' 00:00:00';
             $holiday->pay_rate = $validated['pay_rate'];
             $holiday->recurrent = $validated['recurrent'];
             $holiday->save();

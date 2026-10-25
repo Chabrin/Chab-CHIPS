@@ -7,6 +7,7 @@ use App\Models\ServiceAgreement;
 use App\Models\TempBatchTenant;
 use App\Models\TempBatchUnit;
 use App\Models\TempUploadBatch;
+use App\Models\Unit;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -305,10 +306,12 @@ class UnitTenantUploadBatchService
     public function details(TempUploadBatch $batch): array
     {
         $present = fn($row) => $row->toArray() + ['state' => $row->submitted_at ? 'submitted' : ($row->error ? 'error' : 'ready')];
+        $property = $batch->property;
+        $withCode = fn($row) => $present($row) + ['unit_code' => $property ? Unit::generateUnitCode($property, $row->unit_number) : $row->unit_number];
 
         return [
             'batch' => $batch->only(['id', 'file_name', 'status', 'total_units', 'total_tenants']),
-            'units' => $batch->units()->get()->map($present)->all(),
+            'units' => $batch->units()->get()->map($withCode)->all(),
             'tenants' => $batch->tenants()->get()->map($present)->all(),
             'columns' => [
                 'units' => UnitTenantUploadColumns::UNITS,

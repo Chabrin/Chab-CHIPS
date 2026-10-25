@@ -84,7 +84,7 @@
                                 <option value="3">Percent of gross payment</option>
                                 <option value="4">Use NSSF settings</option>
                                 <option value="5">Use PAYE settings</option>
-                                <option value="6">Use NHIF settings</option>
+                                <option value="6">Use SHA settings</option>
                                 <option value="7">Use prorated deductions settings</option>
                                 <option value="8">HELB Settings</option>
                             </select>
