@@ -398,25 +398,30 @@ $(document).ready(function() {
                 title: 'End Date',
                 render: data => data ? data : '-'
             },
-            {
-                data: 'current_status_id',
-                title: 'Current Status',
-                render: function(data, type, row) {
-                    if (data == 1) {
-                        return row.waiting_on === 'hr'
-                            ? '<span class="badge bg-info text-dark">Pending HR</span>'
-                            : '<span class="badge bg-warning text-dark">Pending Supervisor</span>';
-                    } else if (data == 24) {
-                        return '<span class="badge bg-info text-dark">Pending HR</span>';
-                    } else if (data == 5) {
-                        return '<span class="badge bg-success">Approved</span>';
-                    } else if (data == 41) {
-                        return '<span class="badge bg-danger">Rejected</span>';
-                    } else {
-                        return '<span class="badge bg-secondary">Unknown</span>';
-                    }
-                }
-            },
+            
+               {
+    data: 'current_status_id',
+    title: 'Current Status',
+    render: function(data, type, row) {
+        data = parseInt(data);
+
+        if (data === 1) {
+            return '<span class="badge bg-warning text-dark">Pending Supervisor</span>';
+        } else if (data === 2) {
+            return '<span class="badge bg-secondary">Pending Approval</span>';
+        } else if (data === 3) {
+            return '<span class="badge bg-success">Approved</span>';
+        } else if (data === 24) {
+            return '<span class="badge bg-info text-dark">HOD Recommended / Pending HR</span>';
+        } else if (data === 5) {
+            return '<span class="badge bg-success">Approved</span>';
+        } else if (data === 41) {
+            return '<span class="badge bg-danger">Rejected</span>';
+        } else {
+            return '<span class="badge bg-secondary">Unknown (' + data + ')</span>';
+        }
+    }
+},
             {
                 data: 'id',
                 orderable: false,

@@ -172,12 +172,14 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                 </span>
                             </div>
 
-                            {{-- Status Filter --}}
+                           {{-- Status Filter --}}
                             <div class="col-sm-3 col-md-2">
                                 <select id="filter-status" class="form-select form-select-sm">
                                     <option value="">All Statuses</option>
                                     @foreach(\App\Models\Staff::STATUSES as $id => $label)
-                                        <option value="{{ $label }}">{{ $label }}</option>
+                                        <option value="{{ $label }}" {{ strtolower($label) === 'active' ? 'selected' : '' }}>
+                                            {{ $label }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -461,7 +463,14 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             initComplete: function() {
                 $('#staff-preloader').hide();
                 $('#staff-table').css('visibility', 'visible');
+
+                // Default filter: Active
+                var defaultStatus = 'Active';
+                $('#filter-status').val(defaultStatus);
+                var regex = '^.*\\b' + $.fn.dataTable.util.escapeRegex(defaultStatus) + '\\b.*$';
+                table.column(8).search(regex, true, false).draw();
             }
+            
         });
 
         // 2. Status Filter (Column 8: Status)

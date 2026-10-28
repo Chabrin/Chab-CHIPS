@@ -144,4 +144,17 @@ class LeaveRequest extends Model
         return $this->days . ' days';
     }
 
+
+public function getStatusLabelAttribute(): string
+{
+    return match ((int) $this->current_status_id) {
+        1  => 'Pending HOD Approval',
+        24 => 'Pending HR Approval',
+        5  => 'Approved',
+        41 => 'Rejected',
+        // add any other statuses you have
+        default => 'Unknown Status (' . $this->current_status_id . ')',
+    };
+}
+
 }

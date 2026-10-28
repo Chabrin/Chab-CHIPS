@@ -148,6 +148,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
     Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
     Route::delete('/hr/employees/{id}', [StaffController::class, 'destroy'])->name('staff.destroy');
+    Route::get('/staff/get-staff-number', [StaffController::class, 'getStaffNumber'])->name('staff.get-staff-number');
 
     Route::post('/ajax/hr/uploads/check-duplicates', [EmployeeDocumentController::class, 'checkDuplicates'])->name('hr.uploads.check-duplicates');
 
@@ -301,14 +302,17 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/hr/payroll/calendar/{id}', [PayrollController::class, 'calendarUpdate'])->name('ajax.payrollCalendar.update');
     Route::delete('/ajax/hr/payroll/calendar/{id}', [PayrollController::class, 'calendarDelete'])->name('ajax.payrollCalendar.delete');
 
-    // HR Settings - Training Materials & Compliance
-    Route::get('/hrsettings/training-materials', [TrainingMaterialController::class, 'index'])->name('settings.hr.training_materials');
-    Route::post('/hrsettings/training-materials/store', [TrainingMaterialController::class, 'store'])->name('settings.hr.training_materials.store');
-    Route::get('/hrsettings/training-materials/stream/{id}', [TrainingMaterialController::class, 'stream'])->name('settings.hr.training_materials.stream');
-    Route::post('/hrsettings/training-materials/acknowledge/{id}', [TrainingMaterialController::class, 'acknowledge'])->name('settings.hr.training_materials.acknowledge');
-    Route::get('/hrsettings/training-materials/compliance', [TrainingMaterialController::class, 'complianceReport'])->name('settings.hr.training_materials.compliance');
-
-    // Payroll Periods
+    // HR - Training Materials & Compliance
+    
+    Route::get('/hr/training-materials', [TrainingMaterialController::class, 'index'])->name('hr.training.index');
+    Route::post('/hr/training-materials/store', [TrainingMaterialController::class, 'store'])->name('hr.training.store');
+    Route::get('/hr/training-materials/stream/{id}', [TrainingMaterialController::class, 'stream'])->name('hr.training.stream');
+    Route::post('/hr/training-materials/acknowledge/{id}', [TrainingMaterialController::class, 'acknowledge'])->name('hr.training.acknowledge');
+    Route::get('/hr/training-materials/compliance', [TrainingMaterialController::class, 'complianceReport'])->name('hr.training.compliance');
+    Route::get('/training-materials/{id}/edit', [TrainingMaterialController::class, 'edit'])->name('hr.training.edit');
+    Route::put('/training-materials/{id}', [TrainingMaterialController::class, 'update'])->name('hr.training.update');
+    Route::delete('/training-materials/{id}', [TrainingMaterialController::class, 'destroy'])->name('hr.training.destroy');
+        // Payroll Periods
     Route::get('/ajax/hr/payroll/calendar/{calendarId}/periods', [PayrollController::class, 'periodsList'])->name('ajax.payrollPeriods.list');
     Route::post('/ajax/hr/payroll/calendar/{calendarId}/periods', [PayrollController::class, 'periodsStore'])->name('ajax.payrollPeriods.store');
     Route::post('/ajax/hr/payroll/calendar/{calendarId}/periods/{periodId}', [PayrollController::class, 'periodsUpdate'])->name('ajax.payrollPeriods.update');
@@ -602,6 +606,22 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/hr/publicholidays/list', [\App\Http\Controllers\LeaveManagementController::class, 'publicHolidaysList'])->name('ajax.publicholidays.list');
     Route::get('/ajax/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
     Route::get('/ajax/hr/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
+    
+     // Pending Approvals (3-tier workflow)
+    Route::post('/ajax/leave-management/leave-applications/approve', [LeaveManagementController::class, 'approveApplication'])
+    ->name('ajax.hr.leave.applications.approve');
+    Route::post('/ajax/leave-management/leave-applications/reject', [LeaveManagementController::class, 'rejectApplication'])
+    ->name('ajax.hr.leave.applications.reject');
+
+    Route::get('/hr/leave-management/pending-approvals', [LeaveManagementController::class, 'pendingApprovalsView'])
+    ->name('hr.leave.pending.approvals');
+
+    Route::get('/ajax/leave-management/pending-approvals/list', [LeaveManagementController::class, 'pendingApprovalsList'])
+    ->name('ajax.hr.leave.pending.approvals.list');
+
+    // Leave Application Status Update (Approval workflow action)
+    Route::post('/ajax/leave-management/leave-applications/status-update', [LeaveManagementController::class, 'updateApplicationStatus'])
+        ->name('ajax.hr.leave.applications.status.update');    
     // Leave Adjustments
     Route::get('/hr/leave-management/leave-adjustments', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustments'])->name('leave.adjustments');
     Route::get('/ajax/leave-management/leave-adjustments/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustmentsList']);
@@ -616,6 +636,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         ->name('leave-management.leave-balance-report-data');
     Route::get('/ajax/leave-management/export-leave-balance-report', [\App\Http\Controllers\LeaveManagementController::class, 'exportLeaveBalanceReport'])
         ->name('leave-management.export-leave-balance-report');
+
+
 
     ####### Leave Management Section End ########
 
