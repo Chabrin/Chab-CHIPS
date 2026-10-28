@@ -310,9 +310,9 @@ class StaffController extends Controller
    
 
     /**
-     * Show the form for creating new staff
+     * Show the form for creating new staff updated on 27th 
      */
-    public function create()
+   public function create()
     {
         $departments = Department::orderBy('department_name')->get();
         $banks = Bank::orderBy('bank_name')->get();
@@ -320,11 +320,26 @@ class StaffController extends Controller
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
         $roles = Role::orderBy('display_name')->get();
-        $nextStaffNumber = Staff::nextStaffNumber();
-
         
+        // Default to Permanent on initial load
+        $defaultCategory = 'Permanent';
+        $nextStaffNumber = Staff::nextStaffNumber($defaultCategory);
 
         return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles', 'nextStaffNumber'));
+    }
+
+    /**
+     * Get the next category-specific staff number via AJAX updated on 27th
+     */
+    public function getStaffNumber(Request $request)
+    {
+        $category = $request->input('category', 'Permanent');
+        $staffNumber = Staff::nextStaffNumber($category);
+
+        return response()->json([
+            'success' => true,
+            'staff_number' => $staffNumber
+        ]);
     }
     
 
@@ -332,15 +347,16 @@ class StaffController extends Controller
      * Store a newly created staff member, optionally creating a linked system-user login
      * when the requester has the create_users permission and fills in the password field.
      */
-    public function store(Request $request)
+   public function store(Request $request)
     {
         try {
             if (!auth()->user()->hasPermission('create_users')) {
-                return redirect()->back()->with('error', 'You need the create users permission to add staff, because every staff member gets a system login.')->withInput();
+                return redirect()->back()->with('error', 'You need the create users permission to add staff, because permanent and temporary staff members get a system login.')->withInput();
             }
 
             $validated = $request->validate([
                 'full_names' => 'required|string|max:255',
+                'employment_type' => 'required|string|in:Permanent,Temporary,Casual', //edited on 27th
                 'mobile_number' => 'nullable|string|max:255',
                 'email_address' => 'required|email|max:255|unique:sys_staff,email_address',
                 'national_id' => 'required|string|max:255|unique:sys_staff,national_id',
@@ -379,10 +395,13 @@ class StaffController extends Controller
                 'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
                 'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
                 'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
-                'login_email' => 'required|email|max:255',
-                'role_id' => 'required|integer|exists:cb_roles,id',
+                // Make login details required ONLY if not Casual
+                'login_email' => 'required_unless:employment_type,Casual|nullable|email|max:255',
+                'role_id' => 'required_unless:employment_type,Casual|nullable|integer|exists:cb_roles,id',
                 'password' => 'nullable|string|min:8|max:255',
             ], [], self::STATUTORY_ATTRIBUTES);
+
+            $isCasual = $validated['employment_type'] === 'Casual';
 
             $managedZoneIds = $validated['managed_zone_ids'] ?? [];
             $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
@@ -391,8 +410,8 @@ class StaffController extends Controller
 
             // Uploaded files and the system-login fields are handled separately below, not mass-assigned to the staff record
             $userValidated = [
-                'email' => $validated['login_email'],
-                'role_id' => $validated['role_id'],
+                'email' => $validated['login_email'] ?? null,
+                'role_id' => $validated['role_id'] ?? null,
                 'password' => $validated['password'] ?? null,
             ];
             unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password']);
@@ -407,24 +426,27 @@ class StaffController extends Controller
                 $validated['spouse_name'] = strtoupper($validated['spouse_name']);
             }
 
-            // Every staff member gets a system login. A random password is generated (and shown once) when left blank.
+            // Permanent and Temporary staff get a system login. A random password is generated when left blank.
             $generatedPassword = null;
-            if (empty($userValidated['password'])) {
-                $generatedPassword = Str::password(12);
-                $userValidated['password'] = $generatedPassword;
+            if (!$isCasual) {
+                if (empty($userValidated['password'])) {
+                    $generatedPassword = Str::password(12);
+                    $userValidated['password'] = $generatedPassword;
+                }
+
+                if (User::where('email', $userValidated['email'])->exists()) {
+                    throw ValidationException::withMessages([
+                        'login_email' => ['This email is already registered as a system user login.'],
+                    ]);
+                }
             }
 
-            if (User::where('email', $userValidated['email'])->exists()) {
-                throw ValidationException::withMessages([
-                    'login_email' => ['This email is already registered as a system user login.'],
-                ]);
-            }
-
-            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword) {
+            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword, $isCasual) {
                 $staff = new Staff();
                 $staff->fill($validated);
                 $staff->date_time = now();
-                $staff->staff_number = Staff::nextStaffNumber();
+                // Pass employment_type to generate category-specific staff numbers (PER, TMP, CAS)
+                $staff->staff_number = Staff::nextStaffNumber($validated['employment_type']);
                 $staff->uid = uniqid('staff_', true);
                 $staff->current_status_id = 1;
                 $staff->save();
@@ -440,34 +462,37 @@ class StaffController extends Controller
 
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
-                $username = $this->buildUniqueUsername($userValidated['email'], $staff);
+                // ONLY create a system user if the staff member is NOT Casual
+                if (!$isCasual) {
+                    $username = $this->buildUniqueUsername($userValidated['email'], $staff);
 
-                $user = User::create([
-                    'name' => $staff->full_names,
-                    'username' => $username,
-                    'email' => $userValidated['email'],
-                    'password' => $userValidated['password'],
-                    'block' => 0,
-                    'sendEmail' => 0,
-                    'registerDate' => now(),
-                    'activation' => '',
-                    'params' => '',
-                    'resetCount' => 0,
-                    'otpKey' => '',
-                    'otep' => '',
-                    'requireReset' => $generatedPassword ? 1 : 0,
-                    'staff_id' => $staff->id,
-                ]);
+                    $user = User::create([
+                        'name' => $staff->full_names,
+                        'username' => $username,
+                        'email' => $userValidated['email'],
+                        'password' => $userValidated['password'],
+                        'block' => 0,
+                        'sendEmail' => 0,
+                        'registerDate' => now(),
+                        'activation' => '',
+                        'params' => '',
+                        'resetCount' => 0,
+                        'otpKey' => '',
+                        'otep' => '',
+                        'requireReset' => $generatedPassword ? 1 : 0,
+                        'staff_id' => $staff->id,
+                    ]);
 
-                DB::table('cb_role_user')->insert([
-                    'user_id' => $user->id,
-                    'role_id' => $userValidated['role_id'],
-                ]);
+                    DB::table('cb_role_user')->insert([
+                        'user_id' => $user->id,
+                        'role_id' => $userValidated['role_id'],
+                    ]);
 
-                UserStaffLink::create([
-                    'user_id' => $user->id,
-                    'staff_id' => $staff->id,
-                ]);
+                    UserStaffLink::create([
+                        'user_id' => $user->id,
+                        'staff_id' => $staff->id,
+                    ]);
+                }
 
                 return $staff;
             });

@@ -22,6 +22,7 @@ class Staff extends Model
         'date_time',
         'photo',
         'full_names',
+        'employment_type',
         'gender',
         'address',
         'mobile_number',
@@ -185,14 +186,26 @@ class Staff extends Model
 {
     return $this->hasMany(\App\Models\EmployeeDocument::class, 'employee_id');
 }
-public static function nextStaffNumber(): int
-{
-    // Strip any non-digits, ignore blanks, then take the highest number.
-    // Works for "3", "007" and "STF-012" alike, and won't crash on odd values.
-    $max = static::query()
-        ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\D', '', 'g'), '')::bigint) as max_no")
-        ->value('max_no');
+public static function nextStaffNumber($employmentType = 'Permanent'): string
+    {
+        // Define prefixes per category
+        $prefixMap = [
+            'Permanent' => 'PER',
+            'Temporary' => 'TMP',
+            'Casual'    => 'CAS',
+        ];
 
-    return ((int) $max) + 1;
-}
+        $prefix = $prefixMap[$employmentType] ?? 'PER';
+
+        // Find the highest number for this specific prefix
+        $max = static::query()
+            ->where('employment_type', $employmentType)
+            ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\D', '', 'g'), '')::bigint) as max_no")
+            ->value('max_no');
+
+        $nextNo = ((int) $max) + 1;
+
+        // Returns e.g. PER-001, TMP-001, CAS-001 (or just sequential numbers if preferred)
+        return sprintf('%s-%03d', $prefix, $nextNo);
+    }
 }

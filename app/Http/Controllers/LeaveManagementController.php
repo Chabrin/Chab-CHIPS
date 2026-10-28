@@ -601,6 +601,110 @@ private function syncPublicHolidays(array $holidays, int $year): void {
         }
     }
     
+    public function pendingApprovalsView()
+    {
+        return view('leave_management.pending_approvals');
+    }
+
+    public function pendingApprovalsList()
+    {
+        $user = Auth::user();
+        
+        $isDirector = $user->hasRole(['directors', 'superadministrator']);
+        $isHR = $user->hasRole(['hr_manager']);
+        
+        $staff = $user->linkedStaff();
+        $departmentId = $staff?->department_id;
+
+        $query = LeaveRequest::with(['employee.department', 'leaveType', 'position'])
+            ->whereIn('current_status_id', [1, 24]);
+
+        // If not Director or HR, scope by the manager's department or linked permissions
+        if (!$isDirector && !$isHR) {
+            if ($departmentId) {
+                $query->whereHas('employee', function ($q) use ($departmentId) {
+                    $q->where('department_id', $departmentId);
+                });
+            } else {
+                return response()->json(['leave_applications' => []]);
+            }
+        }
+
+        $applications = $query->orderBy('id', 'desc')->get();
+
+        return response()->json([
+            'leave_applications' => $applications->map(function ($app) use ($isDirector, $isHR) {
+                return [
+                    'id' => $app->id,
+                    'encrypted_leave_application_id' => \Illuminate\Support\Facades\Crypt::encrypt($app->id),
+                    'employee' => $app->employee,
+                    'department' => $app->employee?->department?->department_name ?? '-',
+                    'position' => $app->position ?? $app->employee?->position,
+                    'leave_type' => $app->leaveType,
+                    'start_date' => $app->start_date ? \Carbon\Carbon::parse($app->start_date)->format('Y-m-d') : '-',
+                    'end_date' => $app->end_date ? \Carbon\Carbon::parse($app->end_date)->format('Y-m-d') : '-',
+                    'requested_days' => $app->requested_days ?? $app->days ?? 0,
+                    'current_status_id' => (int) $app->current_status_id,
+                    'status_label' => $app->status_label,
+                    'can_approve_hod' => (int) $app->current_status_id === 1,
+                    'can_approve_hr' => (int) $app->current_status_id === 24 && ($isHR || $isDirector),
+                    'can_reject' => true,
+                ];
+            })
+        ]);
+    }
+
+public function updateApplicationStatus(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'id'     => 'required|integer|exists:sys_hr_leave_requests,id',
+                'status' => 'required|integer',
+            ]);
+
+            $leaveRequest = LeaveRequest::findOrFail($validated['id']);
+            $newStatus = (int) $validated['status'];
+            $user = Auth::user();
+
+            $isDirector = $user->hasRole(['directors', 'superadministrator']);
+            $isHR = $user->hasRole(['hr_manager']);
+
+            // Authorization checks based on stage transition
+            if ($newStatus === 24) {
+                if ((int) $leaveRequest->current_status_id !== 1) {
+                    return response()->json(['success' => false, 'error' => 'Application is not at the supervisor review stage.'], 422);
+                }
+            } elseif ($newStatus === 5) {
+                if (!$isHR && !$isDirector) {
+                    return response()->json(['success' => false, 'error' => 'Unauthorized. Only HR or Directors can grant final approval.'], 403);
+                }
+                if ((int) $leaveRequest->current_status_id !== 24) {
+                    return response()->json(['success' => false, 'error' => 'Application must be recommended by HOD before final approval.'], 422);
+                }
+            } elseif ($newStatus === 41) {
+                if ((int) $leaveRequest->current_status_id === 5) {
+                    return response()->json(['success' => false, 'error' => 'Approved leave cannot be rejected.'], 422);
+                }
+            }
+
+            // Update the status and log who changed it
+            $leaveRequest->current_status_id = $newStatus;
+            $leaveRequest->status_changed_by = $user->id;
+            $leaveRequest->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Leave application status updated successfully.',
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+        } catch (\Throwable $e) {
+            Log::error('updateApplicationStatus error: ' . $e->getMessage());
+            return response()->json(['success' => false, 'error' => 'Failed to update application status: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function leaveCalendarPlanUpdate(Request $request, $id)
     {
         try {
@@ -929,6 +1033,64 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             return response()->json(['success' => false, 'error' => 'Failed to create leave application'], 500);
         }
     }
+
+
+public function approveApplication(Request $request)
+{
+    try {
+        $applicationId = $request->input('id');
+
+        $application = DB::table('sys_hr_leave_requests')->where('id', $applicationId)->first();
+
+        if (!$application) {
+            return response()->json(['success' => false, 'message' => 'Leave application not found.'], 404);
+        }
+
+        // If it's currently at Stage 1 (status 1), advance it to HR Final (status 24)
+        $nextStatus = $application->current_status_id == 1 ? 24 : 3; 
+
+        DB::table('sys_hr_leave_requests')
+            ->where('id', $applicationId)
+            ->update([
+                'current_status_id' => $nextStatus,
+                'status_changed_by' => Auth::id()
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Leave application successfully recommended/approved.'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+public function rejectApplication(Request $request)
+{
+    try {
+        $applicationId = $request->input('id');
+
+        DB::table('sys_hr_leave_requests')
+            ->where('id', $applicationId)
+            ->update([
+                'current_status_id' => 0, // Set to your rejected status ID
+                'status_changed_by' => Auth::id()
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Leave application rejected.'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
+    }
+}
     
     public function leaveApplicationsUpdate(Request $request, $id)
     {
