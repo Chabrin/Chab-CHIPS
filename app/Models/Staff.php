@@ -131,9 +131,9 @@ class Staff extends Model
     }
 
     public function employee_attendances()
-    {
-        return $this->hasMany(EmployeeAttendance::class, 'employee_id', 'staff_number');
-    }
+{
+    return $this->hasMany(EmployeeAttendance::class, 'employee_id', 'id');
+}
 
     // Discipline Tracker Relationships
     
@@ -186,26 +186,29 @@ class Staff extends Model
 {
     return $this->hasMany(\App\Models\EmployeeDocument::class, 'employee_id');
 }
-public static function nextStaffNumber($employmentType = 'Permanent'): string
-    {
-        // Define prefixes per category
-        $prefixMap = [
-            'Permanent' => 'PER',
-            'Temporary' => 'TMP',
-            'Casual'    => 'CAS',
-        ];
+public static function nextStaffNumber(string $employmentType = 'Permanent'): string
+{
+    $prefixMap = [
+        'Permanent' => 'PER',
+        'Temporary' => 'TMP',
+        'Casual'    => 'CAS',
+    ];
 
-        $prefix = $prefixMap[$employmentType] ?? 'PER';
+    $prefix = $prefixMap[$employmentType] ?? 'PER';
 
-        // Find the highest number for this specific prefix
-        $max = static::query()
-            ->where('employment_type', $employmentType)
-            ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\D', '', 'g'), '')::bigint) as max_no")
-            ->value('max_no');
+    // Get the highest number for this category (MySQL-compatible)
+    $last = static::query()
+        ->where('employment_type', $employmentType)
+        ->where('staff_number', 'like', $prefix . '-%')
+        ->orderByRaw('CAST(SUBSTRING_INDEX(staff_number, "-", -1) AS UNSIGNED) DESC')
+        ->value('staff_number');
 
-        $nextNo = ((int) $max) + 1;
-
-        // Returns e.g. PER-001, TMP-001, CAS-001 (or just sequential numbers if preferred)
-        return sprintf('%s-%03d', $prefix, $nextNo);
+    $nextNo = 1;
+    if ($last) {
+        $parts = explode('-', $last);
+        $nextNo = ((int) end($parts)) + 1;
     }
+
+    return sprintf('%s-%03d', $prefix, $nextNo);
+}
 }

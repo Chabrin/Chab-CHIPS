@@ -164,7 +164,10 @@ class LeaveManagementController extends Controller
 
         // Validate allocation matches the staff member's entitled days (pro-rata support). Saturdays count half,
         // so schedules are made in half days and a fractional entitlement (5.25) is scheduled down to the half day (5).
-        $requiredDays = floor((float) $plan->entitled_days * 2) / 2;
+        // $requiredDays = floor((float) $plan->entitled_days , 2);
+        // $requiredDays = (float) $plan->entitled_days;
+        // Nearest lower half-day
+$requiredDays = floor((float) $plan->entitled_days * 2) / 2;
         if (abs($totalDays - $requiredDays) > 0.001) {
             return response()->json([
                 'success' => false,

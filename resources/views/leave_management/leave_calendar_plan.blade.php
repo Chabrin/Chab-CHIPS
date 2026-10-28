@@ -233,7 +233,7 @@ $(document).ready(function() {
 
         // Saturdays count half, so schedules are made in half days (5.25 entitled = schedule 5)
         requiredPlanDays = Math.floor(parseFloat($(this).data('entitled-days')) * 2) / 2;
-        if (isNaN(requiredPlanDays)) { requiredPlanDays = 21; }
+    if (isNaN(requiredPlanDays)) { requiredPlanDays = 21; }
 
         $('#modalPlanId').val(planId);
         $('#modalLeaveTypeId').val(leaveTypeId);
@@ -344,27 +344,31 @@ $(document).ready(function() {
         });
 
         currentTotalDays = total;
-        let remaining = requiredPlanDays - total;
+       let remaining = requiredPlanDays - total;
 
-        $('#allocatedDaysBadge').text(total + ' Days');
-        
-        if (Math.abs(remaining) < 0.001) {
-            $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Requirement Met!)');
-            $('#saveScheduleBtn').prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
-        } else if (remaining < 0) {
-            $('#remainingDaysBadge').removeClass('bg-warning bg-success').addClass('bg-danger text-white').text(Math.abs(remaining) + ' Days Exceeded');
-            $('#saveScheduleBtn').prop('disabled', true);
-        } else {
-            $('#remainingDaysBadge').removeClass('bg-success bg-danger text-white').addClass('bg-warning text-dark').text(remaining + ' Days Remaining');
-            $('#saveScheduleBtn').prop('disabled', true);
-        }
+// Use .toFixed(2) or custom formatting if decimals are present to prevent dropping .25, .5, etc.
+let formattedTotal = Number.isInteger(total) ? total : total.toFixed(2);
+$('#allocatedDaysBadge').text(formattedTotal + ' Days');
+
+if (Math.abs(remaining) < 0.001) {
+    $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Requirement Met!)');
+    $('#saveScheduleBtn').prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
+} else if (remaining < 0) {
+    let formattedExceeded = Number.isInteger(Math.abs(remaining)) ? Math.abs(remaining) : Math.abs(remaining).toFixed(2);
+    $('#remainingDaysBadge').removeClass('bg-warning bg-success').addClass('bg-danger text-white').text(formattedExceeded + ' Days Exceeded');
+    $('#saveScheduleBtn').prop('disabled', true);
+} else {
+    let formattedRemaining = Number.isInteger(remaining) ? remaining : remaining.toFixed(2);
+    $('#remainingDaysBadge').removeClass('bg-success bg-danger text-white').addClass('bg-warning text-dark').text(formattedRemaining + ' Days Remaining');
+    $('#saveScheduleBtn').prop('disabled', true);
+}
     }
 
     $('#saveScheduleBtn').on('click', function() {
-        if (currentTotalDays !== requiredPlanDays) {
-            toastr.error(`You must allocate exactly ${requiredPlanDays} working days.`);
-            return;
-        }
+    if (Math.abs(currentTotalDays - requiredPlanDays) > 0.001) {
+        toastr.error(`You must allocate exactly ${requiredPlanDays} working days. Current total: ${currentTotalDays}`);
+        return;
+    }
 
         let formData = $('#scheduleSlotsForm').serialize();
 
