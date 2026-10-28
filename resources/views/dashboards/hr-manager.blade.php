@@ -388,6 +388,8 @@
             </div>
             {{-- End Charts --}}
 
+            @include('dashboards.leave-overview')
+
         </div>
     </div>
 </div>

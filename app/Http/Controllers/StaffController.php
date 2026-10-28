@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use App\Models\PayrollElement;
 use App\Services\NssfCalculator;
+use App\Services\EmployeeUploadGuard;
+use App\Services\EmployeeContractExpiry;
 use App\Models\User;
 use App\Models\Contract;
 use App\Models\Incident;
@@ -384,6 +386,8 @@ class StaffController extends Controller
                 'password' => 'nullable|string|min:8|max:255',
             ], [], self::STATUTORY_ATTRIBUTES);
 
+            $this->validateStaffUploads($request);
+
             $managedZoneIds = $validated['managed_zone_ids'] ?? [];
             $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
             unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
@@ -494,6 +498,15 @@ class StaffController extends Controller
     /**
      * Save the documents uploaded on the create-staff form (REQ-01).
      */
+    private function validateStaffUploads(Request $request): void
+    {
+        $files = ['photo' => $request->file('photo')];
+        foreach (array_keys(self::DOCUMENT_MAP) as $key) {
+            $files["documents.$key"] = $request->file("documents.$key");
+        }
+        app(EmployeeUploadGuard::class)->validate($files);
+    }
+
     private function storeStaffDocuments(Request $request, Staff $staff): void {
         $types = DocumentType::pluck('id', 'name');
 
@@ -514,6 +527,8 @@ class StaffController extends Controller
      * Attach the physically signed contract (PDF) to a contract, replacing any earlier upload for that contract.
      */
     private function saveSignedContract(Contract $contract, UploadedFile $file): void {
+        app(EmployeeUploadGuard::class)->validate(['signed_contract' => $file]);
+
         $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
         if (!$typeId) {
             throw new \RuntimeException('Document type missing: Signed Employment Contract');
@@ -712,6 +727,8 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             'remove_documents.*'    => 'in:' . implode(',', array_keys(self::DOCUMENT_MAP)),
         ], [], self::STATUTORY_ATTRIBUTES);
 
+        $this->validateStaffUploads($request);
+
         $managedZoneIds = $validated['managed_zone_ids'] ?? [];
         $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
         unset($validated['managed_zone_ids'], $validated['supervised_zone_ids']);
@@ -855,6 +872,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                     'date_end' => $contract->date_end ? date('Y-m-d', strtotime($contract->date_end)) : null,
                     'basic_salary' => $contract->basic_salary,
                     'current_status_id' => $contract->current_status_id,
+                    'expiry' => app(EmployeeContractExpiry::class)->tracking($contract),
                     'created_by' => $contract->createdBy ? [
                         'id' => $contract->createdBy->id,
                         'name' => $contract->createdBy->name,

@@ -149,6 +149,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
     Route::delete('/hr/employees/{id}', [StaffController::class, 'destroy'])->name('staff.destroy');
 
+    Route::post('/ajax/hr/uploads/check-duplicates', [EmployeeDocumentController::class, 'checkDuplicates'])->name('hr.uploads.check-duplicates');
+
     // AJAX Routes for Staff
     Route::get('/ajax/zone-areas/{zoneId}', [StaffController::class, 'getZoneAreas'])->name('ajax.zone_areas');
 
@@ -1494,6 +1496,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/dashboard', [HomeController::class, 'Dashboard'])->name('dashboard');
 
     Route::get('/search', [SearchController::class, 'index'])->name('search');
+
+    Route::get('/dashboard/leave-overview', [\App\Http\Controllers\LeaveOverviewController::class, 'show'])->name('dashboard.leave-overview');
 
     // Dashboard AJAX endpoints
     Route::get('/dashboard/field-officer/stats', [HomeController::class, 'getFieldOfficerStats'])->name('dashboard.field-officer.stats');

@@ -109,6 +109,7 @@
                         </li>
 
 
+                        @include('layouts.contract-notifications')
                         <li class="profile-nav onhover-dropdown pe-0 py-0">
                         <div class="d-flex align-items-center profile-trigger-btn">
                             {{-- Circular Avatar with Initials --}}

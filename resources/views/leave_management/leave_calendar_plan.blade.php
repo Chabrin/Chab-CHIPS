@@ -8,6 +8,12 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Annual Leave Calendar Planning (Mandatory 21 Days)</h5>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('read_leave_calendar_plans')
+                                <button type="button" id="export-leave-plans" class="btn btn-outline-success btn-sm d-flex align-items-center" disabled title="Export the current plan list search across all pages">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">download</span>
+                                    <span class="ms-1">Export CSV</span>
+                                </button>
+                            @endpermission
                             @permission('create_leave_calendar_plans')
                                 <button class="btn btn-success btn-sm d-flex align-items-center" id="generateAnnualPlansBtn">
                                     <span class="material-symbols-outlined">autorenew</span>
@@ -17,6 +23,9 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        @permission('read_leave_calendar_plans')
+                        <div id="leave-plans-export-status" class="small text-muted mb-2" role="status" aria-live="polite"></div>
+                        @endpermission
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="leave-calendar-plan-table" style="width:100%;">
                                 <thead>
@@ -147,6 +156,7 @@
     </div>
 </div>
 
+<script src="{{ asset('assets/js/hr-leave-export.js') }}?v={{ filemtime(public_path('assets/js/hr-leave-export.js')) }}"></script>
 <script>
 $(document).ready(function() {
     let currentTotalDays = 0;
@@ -168,6 +178,8 @@ $(document).ready(function() {
                             plan_id: lt.id,
                             leave_type_id: lt.leave_type_id,
                             leave_type_name: lt.leave_type ? lt.leave_type.type_name : 'Annual Leave',
+                            start_date: lt.start_date,
+                            end_date: lt.end_date,
                             entitled_days: lt.entitled_days,
                             balance: lt.balance,
                             status: lt.current_status_id
@@ -210,6 +222,8 @@ $(document).ready(function() {
     });
 
     // -------------------------------------------------------------
+    window.LeaveCsvExport.bind(table, 'plans', 'export-leave-plans', 'leave-plans-export-status');
+
     // Staff Scheduling / Rescheduling Modal
     // -------------------------------------------------------------
     $(document).on('click', '.open-schedule-modal', function() {

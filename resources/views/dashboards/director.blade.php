@@ -546,6 +546,7 @@
 
             </div>
 
+            @include('dashboards.leave-overview')
         </div>
     </div>
 </div>

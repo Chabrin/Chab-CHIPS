@@ -12,6 +12,12 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Leave Applications</h5>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('read_leave_applications')
+                            <button type="button" id="export-leave-applications" class="btn btn-outline-success btn-sm d-flex align-items-center" disabled title="Export the Applications List search across all pages; calendar dates do not filter this export">
+                                <span class="material-symbols-outlined" style="font-size:18px;">download</span>
+                                <span class="ms-1">Export CSV</span>
+                            </button>
+                            @endpermission
                             @permission('create_leave_applications')
                             <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addLeaveApplicationModal">
                                 <span class="material-symbols-outlined">add_circle</span>
@@ -21,6 +27,9 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        @permission('read_leave_applications')
+                        <div id="leave-applications-export-status" class="small text-muted mb-2" role="status" aria-live="polite"></div>
+                        @endpermission
                         <!-- Tabs Navigation -->
                         <ul class="nav nav-tabs mb-4" id="leaveTabs" role="tablist">
                             <li class="nav-item" role="presentation">
@@ -300,6 +309,7 @@
     }
 </style>
 
+<script src="{{ asset('assets/js/hr-leave-export.js') }}?v={{ filemtime(public_path('assets/js/hr-leave-export.js')) }}"></script>
 <script>
 $(document).ready(function() {
     // Toggle between leave duration types
@@ -464,6 +474,8 @@ $(document).ready(function() {
         info: true,
         lengthChange: true
     });
+
+    window.LeaveCsvExport.bind(table, 'applications', 'export-leave-applications', 'leave-applications-export-status');
 
     // Initialize FullCalendar
     let calendar;
