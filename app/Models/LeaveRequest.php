@@ -34,9 +34,12 @@ class LeaveRequest extends Model
         'requested_days',
         'allowance_type_id',
         'amount',
+        'handover_staff_id',
+        'handover_notes',
     ];
 
     protected $casts = [
+        'handover_staff_id' => 'integer',
         'date_time' => 'datetime',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
@@ -67,6 +70,11 @@ class LeaveRequest extends Model
     public function employee()
     {
         return $this->belongsTo(Staff::class, 'staff_id', 'id');
+    }
+
+    public function handoverEmployee()
+    {
+        return $this->belongsTo(Staff::class, 'handover_staff_id');
     }
 
     public function createdBy()

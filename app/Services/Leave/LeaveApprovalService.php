@@ -52,6 +52,7 @@ class LeaveApprovalService
         $outcome = ['route' => $route['route'], 'reason' => $route['reason'], 'status' => self::STATUS_PENDING, 'auto_approved' => false];
 
         if ($route['route'] === LeaveApprovalRouter::ROUTE_SUPERVISOR) {
+            app(LeaveApplicationNotifications::class)->submitted($request, $route['route']);
             return $outcome;
         }
 
@@ -68,6 +69,10 @@ class LeaveApprovalService
             } else {
                 $outcome['error'] = $result['error'];
             }
+        }
+
+        if ($route['route'] === LeaveApprovalRouter::ROUTE_HR || $outcome['auto_approved']) {
+            app(LeaveApplicationNotifications::class)->submitted($request, $route['route']);
         }
 
         return $outcome;
@@ -460,6 +465,7 @@ class LeaveApprovalService
                 'leave_type_id' => $request->leave_type_id,
             ]);
 
+            app(LeaveApplicationNotifications::class)->readyForHr($request);
             return true;
         });
 

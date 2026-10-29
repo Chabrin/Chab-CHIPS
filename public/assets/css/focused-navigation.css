@@ -1,0 +1,46 @@
+:root { --sidebar-width: 254px; }
+/* Keep the navigation scrollbar quiet against the navy surface. */
+.sidebar-wrapper {
+    scrollbar-width: thin;
+    scrollbar-color: #40566c #0b1e32;
+}
+.sidebar-wrapper:hover,
+.sidebar-wrapper:focus-within {
+    scrollbar-color: #718ba3 #0b1e32;
+}
+@supports selector(::-webkit-scrollbar) {
+    .sidebar-wrapper {
+        scrollbar-width: auto;
+        scrollbar-color: auto;
+    }
+    .sidebar-wrapper::-webkit-scrollbar { width: 6px; }
+    .sidebar-wrapper::-webkit-scrollbar-track { background: #0b1e32; }
+    .sidebar-wrapper::-webkit-scrollbar-thumb {
+        background: #40566c;
+        border-radius: 999px;
+    }
+    .sidebar-wrapper:hover::-webkit-scrollbar-thumb,
+    .sidebar-wrapper:focus-within::-webkit-scrollbar-thumb { background: #718ba3; }
+    .sidebar-wrapper::-webkit-scrollbar-thumb:hover { background: #9ab3ca; }
+    .sidebar-wrapper::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+    .sidebar-wrapper::-webkit-scrollbar-corner { background: #0b1e32; }
+}
+#focused-navigation { padding: 18px 12px; color: #d7e3ef; }
+#focused-navigation [hidden] { display: none !important; }
+#focused-navigation .fn-row { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:10px; margin:2px 0; border:0; border-radius:7px; background:transparent; color:#d7e3ef; text-align:left; text-decoration:none; font:inherit; font-size:13px; cursor:pointer; }
+#focused-navigation .fn-row:hover,#focused-navigation .fn-page:hover { background:#1b354e; color:white; }
+#focused-navigation .material-symbols-outlined { font-size:19px!important; font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 20; flex-shrink:0; }
+#focused-navigation .fn-chevron { margin-left:auto; font-size:16px!important; }
+#focused-navigation .fn-search { display:flex; align-items:center; gap:8px; padding:10px; margin:14px 0 22px; border:1px solid #41556b; border-radius:8px; background:#192f46; }
+#focused-navigation input { width:100%; min-width:0; border:0; background:transparent; color:white; font-size:13px; }
+#focused-navigation input::placeholder { color:#b6c7d9; }
+#focused-navigation .fn-caption { color:#9fb3c8; font-size:11px; letter-spacing:.1em; padding:0 10px; }
+#focused-navigation h2 { font-size:16px; color:#edf4fc; margin:18px 10px; }
+#focused-navigation .fn-back { font-size:12px; color:#b7d4ed; }
+#focused-navigation .fn-pages { margin:4px 0 12px 19px; padding-left:10px; border-left:1px solid #40566c; }
+#focused-navigation .fn-page { display:block; padding:10px; border-radius:6px; font-size:13px; color:#c6d5e4; text-decoration:none; overflow-wrap:anywhere; }
+#focused-navigation [aria-current="page"] { background:#294d6d; color:white; box-shadow:inset 3px 0 #9acdf3; }
+#focused-navigation .fn-module-toggle[aria-expanded="true"] { background:#203c56; color:white; }
+#focused-navigation .fn-result-path { display:block; color:#a9bfd4; font-size:11px; margin-top:4px; }
+#focused-navigation :focus-visible { outline:2px solid #9acdf3; outline-offset:2px; }
+@media(pointer:coarse) { #focused-navigation input { font-size:16px; } }

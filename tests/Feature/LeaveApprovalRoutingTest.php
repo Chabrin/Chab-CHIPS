@@ -47,6 +47,7 @@ class LeaveApprovalRoutingTest extends TestCase
         Model::unsetEventDispatcher(); // skip the audit-log observers; they need their own tables
 
         $this->createTables();
+        (require database_path('migrations/2026_10_28_140000_add_handover_to_leave_requests.php'))->up();
         $this->seedOrg();
     }
 
@@ -70,6 +71,7 @@ class LeaveApprovalRoutingTest extends TestCase
             $t->id();
             $t->string('name')->nullable();
             $t->integer('block')->default(0);
+            $t->integer('activation')->default(1);
             $t->integer('staff_id')->nullable();
             $t->rememberToken();
         });
@@ -231,16 +233,19 @@ class LeaveApprovalRoutingTest extends TestCase
         ]);
 
         // System users linked to staff 20, 30, 60 and 80, plus an unlinked-by-staff field officer user for staff 10
-        foreach ([10, 20, 30, 60, 80] as $staffId) {
+        foreach ([10, 11, 20, 30, 60, 80] as $staffId) {
             DB::table('josya_users')->insert(['id' => 1000 + $staffId, 'name' => "User {$staffId}", 'staff_id' => $staffId]);
             DB::table('sys_user_staff_links')->insert(['user_id' => 1000 + $staffId, 'staff_id' => $staffId]);
         }
 
-        DB::table('cb_roles')->insert([['id' => 1, 'name' => 'hr_manager'], ['id' => 2, 'name' => 'directors']]);
+        DB::table('cb_roles')->insert([['id' => 1, 'name' => 'hr_manager'], ['id' => 2, 'name' => 'directors'], ['id' => 3, 'name' => 'staff']]);
         DB::table('cb_role_user')->insert([
             ['role_id' => 1, 'user_id' => 1060, 'user_type' => User::class],
             ['role_id' => 2, 'user_id' => 1080, 'user_type' => User::class],
         ]);
+        foreach ([10, 11, 20, 30] as $staffId) {
+            DB::table('cb_role_user')->insert(['role_id' => 3, 'user_id' => 1000 + $staffId, 'user_type' => User::class]);
+        }
 
         // Directors hold the leave-application permissions, as in the real data
         foreach (['read', 'create', 'update', 'delete'] as $i => $action) {
@@ -607,8 +612,8 @@ class LeaveApprovalRoutingTest extends TestCase
         $this->assertSame('ajax.workflow.approval.bulk.approve', $bulk->getName());
         $this->assertSame('ajax.workflow.approval.approve', $single->getName());
 
-        $this->expectException(\Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class);
-        $routes->match(Request::create('/ajax/leave-management/leave-applications/status-update', 'POST'));
+        $status = $routes->match(Request::create('/ajax/leave-management/leave-applications/status-update', 'POST'));
+        $this->assertSame('ajax.hr.leave.applications.status.update', $status->getName());
     }
 
     public function test_the_days_preview_for_a_missing_request_is_a_404(): void
@@ -962,6 +967,345 @@ class LeaveApprovalRoutingTest extends TestCase
 
         $approved = $this->leave(10, 5);
         $this->assertSame(422, $this->service()->approve($approved, $this->user(60))['status']);
+    }
+
+    public function test_submission_notifies_the_reporting_supervisor_and_hr_once_without_charging_leave(): void
+    {
+        $request = $this->leave(10);
+        $this->service()->submit($request, 1010);
+        $this->service()->submit($request->fresh(), 1010);
+
+        $this->assertSame([1020, 1060, 1080], Notification::where('type', 'LeaveApplicationSubmitted')
+            ->orderBy('notifiable_id')->pluck('notifiable_id')->all());
+        $this->assertSame(1, $request->fresh()->current_status_id);
+        $this->assertSame(0, LeaveRequestDaysTaken::count());
+        $this->assertStringContainsString('supervisor approval', Notification::where('notifiable_id', 1060)->first()->message);
+        $this->assertStringContainsString('/hr/leave-management/leave-applications/', Notification::first()->action_url);
+    }
+
+    public function test_blocked_hr_does_not_receive_alerts_and_an_overlapping_role_receives_only_one(): void
+    {
+        DB::table('josya_users')->where('id', 1080)->update(['block' => 1]);
+        DB::table('cb_role_user')->insert(['role_id' => 1, 'user_id' => 1020, 'user_type' => User::class]);
+        $this->service()->submit($this->leave(10), 1010);
+
+        $this->assertSame([1020, 1060], Notification::orderBy('notifiable_id')->pluck('notifiable_id')->all());
+    }
+
+    public function test_supervisor_approval_notifies_hr_only_once_and_leaves_the_final_stage_pending(): void
+    {
+        $request = $this->leave(10);
+        $this->assertTrue($this->service()->approve($request, $this->user(20))['success']);
+        $this->assertFalse($this->service()->approve($request->fresh(), $this->user(20))['success']);
+        $this->assertSame([1060, 1080], Notification::where('type', 'LeaveReadyForHrApproval')
+            ->orderBy('notifiable_id')->pluck('notifiable_id')->all());
+        $this->assertSame(24, $request->fresh()->current_status_id);
+        $this->assertSame(0, LeaveRequestDaysTaken::count());
+    }
+
+    public function test_handover_is_saved_and_an_edit_notifies_reviewers_of_the_new_submission(): void
+    {
+        $this->actingAs($this->user(10));
+        $filing = $this->filing(10, '2026-12-07', 2);
+        $filing->merge(['handover_staff_id' => 11, 'handover_notes' => "Complete inspections.\nReturn the keys."]);
+        $response = $this->file($filing);
+        $this->assertSame(200, $response->getStatusCode());
+        $application = LeaveRequest::first();
+        $this->assertSame(11, (int) $application->handover_staff_id);
+        $this->assertSame("Complete inspections.\nReturn the keys.", $application->handover_notes);
+        $this->assertSame(3, Notification::where('type', 'LeaveApplicationSubmitted')->count());
+
+        $filing->merge(['handover_notes' => 'Also prepare the report.']);
+        $updated = app(LeaveManagementController::class)->leaveApplicationsUpdate($filing, $application->id);
+        $this->assertSame(200, $updated->getStatusCode());
+        $this->assertSame('Also prepare the report.', $application->fresh()->handover_notes);
+        $this->assertSame(6, Notification::where('type', 'LeaveApplicationSubmitted')->count());
+    }
+
+    public function test_a_handover_requires_another_active_employee_and_both_fields(): void
+    {
+        $this->actingAs($this->user(10));
+        DB::table('sys_staff')->where('id', 11)->update(['current_status_id' => 2]);
+        foreach ([
+            ['handover_notes' => 'Finish the report'],
+            ['handover_staff_id' => 20],
+            ['handover_staff_id' => 10, 'handover_notes' => 'Cannot hand over to myself'],
+            ['handover_staff_id' => 11, 'handover_notes' => 'Inactive colleague'],
+            ['handover_staff_id' => 999, 'handover_notes' => 'Unknown colleague'],
+            ['handover_staff_id' => 20, 'handover_notes' => str_repeat('x', 5001)],
+        ] as $invalid) {
+            $filing = $this->filing(10, '2026-12-07', 2);
+            $filing->merge($invalid);
+            $this->assertSame(422, $this->file($filing)->getStatusCode());
+        }
+        $this->assertSame(0, LeaveRequest::count());
+        $this->assertSame(0, Notification::count());
+    }
+
+    public function test_an_application_without_work_to_hand_over_can_still_be_submitted(): void
+    {
+        $this->actingAs($this->user(10));
+        $this->assertSame(200, $this->file($this->filing(10, '2026-12-07', 2))->getStatusCode());
+        $this->assertNull(LeaveRequest::first()->handover_staff_id);
+        $this->assertNull(LeaveRequest::first()->handover_notes);
+    }
+
+    public function test_the_pending_page_endpoint_uses_the_same_approval_rules_as_the_shared_service(): void
+    {
+        $application = $this->leave(10);
+        $controller = app(LeaveManagementController::class);
+        $payload = Request::create('/', 'POST', ['id' => $application->id]);
+        $this->actingAs($this->user(30));
+        $this->assertSame(403, $controller->approveApplication($payload)->getStatusCode());
+        $this->actingAs($this->user(60));
+        $this->assertSame(403, $controller->approveApplication($payload)->getStatusCode());
+        $this->actingAs($this->user(20));
+        $this->assertSame(200, $controller->approveApplication($payload)->getStatusCode());
+        $this->assertSame(24, $application->fresh()->current_status_id);
+        $this->actingAs($this->user(60));
+        $this->assertSame(200, $controller->approveApplication($payload)->getStatusCode());
+        $this->assertSame(5, $application->fresh()->current_status_id);
+        $this->assertEquals(3, $application->fresh()->used_days);
+    }
+
+    public function test_a_bell_link_can_be_reviewed_by_the_supervisor_and_hr_but_not_another_employee(): void
+    {
+        $application = $this->leave(10);
+        $controller = app(LeaveManagementController::class);
+        $id = Crypt::encrypt($application->id);
+        $this->actingAs($this->user(20));
+        $view = $controller->leaveApplicationsByStaff($id);
+        $this->assertInstanceOf(\Illuminate\View\View::class, $view);
+        $this->assertSame([$application->id], $view->getData()['actionableIds']);
+        $this->actingAs($this->user(60));
+        $view = $controller->leaveApplicationsByStaff($id);
+        $this->assertInstanceOf(\Illuminate\View\View::class, $view);
+        $this->assertSame([], $view->getData()['actionableIds']); // HR waits for the supervisor.
+        $this->actingAs($this->user(30));
+        $this->assertSame(403, $controller->leaveApplicationsByStaff($id)->getStatusCode());
+    }
+
+    public function test_pending_approvals_only_returns_the_current_reviewers_team_with_handover_details(): void
+    {
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Finish the inspection.']);
+        $this->leave(20);
+        $controller = app(LeaveManagementController::class);
+        $this->actingAs($this->user(20));
+        $rows = $controller->pendingApprovalsList()->getData(true)['leave_applications'];
+        $this->assertSame([$application->id], array_column($rows, 'id'));
+        $this->assertSame('Field Officer Two', $rows[0]['handover_employee_name']);
+        $this->assertSame('Finish the inspection.', $rows[0]['handover_notes']);
+        $this->actingAs($this->user(10));
+        $this->assertSame([], $controller->pendingApprovalsList()->getData(true)['leave_applications']);
+    }
+
+    public function test_hr_alert_failure_does_not_leave_a_supervisor_approval_half_saved(): void
+    {
+        $application = $this->leave(10);
+        $mock = \Mockery::mock(\App\Services\Leave\LeaveApplicationNotifications::class);
+        $mock->shouldReceive('readyForHr')->once()->andThrow(new \RuntimeException('Storage unavailable'));
+        $this->app->instance(\App\Services\Leave\LeaveApplicationNotifications::class, $mock);
+        try {
+            $this->service()->approve($application, $this->user(20));
+            $this->fail('The failed transaction must surface an error.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Storage unavailable', $exception->getMessage());
+        }
+        $this->assertSame(1, $application->fresh()->current_status_id);
+        $this->assertNull($application->fresh()->status_changed_by);
+        $this->assertSame(0, ConfirmationLog::where('action', 'partial_approve')->count());
+    }
+
+    public function test_status_update_cannot_bypass_the_supervisor_and_supports_legacy_hr_only_requests(): void
+    {
+        $application = $this->leave(10);
+        $controller = app(LeaveManagementController::class);
+        $this->actingAs($this->user(60));
+        $skip = Request::create('/', 'POST', ['id' => $application->id, 'status' => 5]);
+        $this->assertSame(422, $controller->updateApplicationStatus($skip)->getStatusCode());
+        $this->actingAs($this->user(30));
+        $partial = Request::create('/', 'POST', ['id' => $application->id, 'status' => 24]);
+        $this->assertSame(403, $controller->updateApplicationStatus($partial)->getStatusCode());
+        $this->assertSame(1, $application->fresh()->current_status_id);
+
+        $legacy = $this->leave(50); // No position, so this pending record only requires HR.
+        $this->actingAs($this->user(60));
+        $final = Request::create('/', 'POST', ['id' => $legacy->id, 'status' => 5]);
+        $this->assertSame(200, $controller->updateApplicationStatus($final)->getStatusCode());
+        $this->assertSame(5, $legacy->fresh()->current_status_id);
+    }
+
+    public function test_partial_handover_edits_cannot_leave_a_saved_handover_without_its_other_field(): void
+    {
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Finish the inspection.']);
+        $this->actingAs($this->user(10));
+        $edit = $this->filing(10, '2026-12-07', 2);
+        $edit->merge(['handover_notes' => null]);
+        $response = app(LeaveManagementController::class)->leaveApplicationsUpdate($edit, $application->id);
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame('Finish the inspection.', $application->fresh()->handover_notes);
+
+        $edit->merge(['handover_staff_id' => null, 'handover_notes' => null]);
+        $response = app(LeaveManagementController::class)->leaveApplicationsUpdate($edit, $application->id);
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertNull($application->fresh()->handover_staff_id);
+        $this->assertNull($application->fresh()->handover_notes);
+    }
+
+    public function test_submission_and_its_notifications_roll_back_together_if_notification_storage_fails(): void
+    {
+        $this->actingAs($this->user(10));
+        $mock = \Mockery::mock(\App\Services\Leave\LeaveApplicationNotifications::class);
+        $mock->shouldReceive('submitted')->once()->andThrow(new \RuntimeException('Storage unavailable'));
+        $this->app->instance(\App\Services\Leave\LeaveApplicationNotifications::class, $mock);
+        // Bus::fake() above also prevents external error-report delivery.
+        $response = $this->file($this->filing(10, '2026-12-07', 2));
+        $this->assertSame(500, $response->getStatusCode());
+        $this->assertSame(0, LeaveRequest::count());
+        $this->assertSame(0, Notification::count());
+    }
+
+    public function test_the_handover_colleague_is_notified_once_with_a_private_notes_link(): void
+    {
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Return the site keys.']);
+        $this->service()->submit($application, 1010);
+        $this->service()->submit($application->fresh(), 1010);
+
+        $alerts = Notification::where('type', 'LeaveHandoverAssigned')->get();
+        $this->assertCount(1, $alerts);
+        $this->assertSame(1011, (int) $alerts[0]->notifiable_id);
+        $this->assertSame(route('self-service.leave-handover', $application->id), $alerts[0]->action_url);
+        $this->assertStringContainsString('still awaiting approval', $alerts[0]->message);
+        $this->assertStringNotContainsString('Return the site keys.', $alerts[0]->message);
+        $this->assertSame([1020, 1060, 1080], Notification::where('type', 'LeaveApplicationSubmitted')
+            ->orderBy('notifiable_id')->pluck('notifiable_id')->all());
+    }
+
+    public function test_only_the_current_handover_recipient_can_open_the_private_notes_page(): void
+    {
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Return the site keys.', 'amount' => 999]);
+        $controller = app(LeaveManagementController::class);
+        $this->actingAs($this->user(11));
+        $view = $controller->handoverDetails($application->id);
+        $this->assertSame('self-service.leave-handover', $view->name());
+        $handover = $view->getData()['handover'];
+        $this->assertSame('Return the site keys.', $handover['notes']);
+        $this->assertSame('Field Officer One', $handover['employee_name']);
+        foreach (['amount', 'days_balance', 'entitled_days', 'leave_type_id', 'actionableIds'] as $private) {
+            $this->assertArrayNotHasKey($private, $handover);
+        }
+        // Receiving the handover does not grant full leave access or approval rights.
+        $this->assertSame(403, $controller->leaveApplicationsByStaff(Crypt::encrypt($application->id))->getStatusCode());
+        $this->assertSame(403, $controller->approveApplication(Request::create('/', 'POST', ['id' => $application->id]))->getStatusCode());
+
+        $application->update(['handover_staff_id' => 20]);
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $controller->handoverDetails($application->id);
+    }
+
+    public function test_updated_handover_notes_notify_the_current_colleague_and_not_the_previous_one(): void
+    {
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Initial work.']);
+        $this->service()->submit($application, 1010);
+        $application->update(['handover_notes' => 'Updated work.']);
+        $this->service()->submit($application->fresh(), 1010);
+        $this->assertSame(2, Notification::where('type', 'LeaveHandoverAssigned')->where('notifiable_id', 1011)->count());
+
+        $application->update(['handover_staff_id' => 20, 'handover_notes' => 'Reassigned work.']);
+        $this->service()->submit($application->fresh(), 1010);
+        $this->assertSame(2, Notification::where('type', 'LeaveHandoverAssigned')->where('notifiable_id', 1011)->count());
+        $this->assertSame(1, Notification::where('type', 'LeaveHandoverAssigned')->where('notifiable_id', 1020)->count());
+    }
+
+    public function test_handover_picker_and_validation_require_a_usable_linked_account(): void
+    {
+        $service = app(\App\Services\Leave\LeaveApplicationNotifications::class);
+        DB::table('josya_users')->where('id', 1011)->update(['block' => 1]);
+        $this->assertFalse($service->handoverStaff()->contains('id', 11));
+        $this->assertFalse($service->handoverStaff()->contains('id', 40)); // Staff with no system account.
+        $this->actingAs($this->user(10));
+        $filing = $this->filing(10, '2026-12-07', 2);
+        $filing->merge(['handover_staff_id' => 11, 'handover_notes' => 'Cannot notify a blocked account.']);
+        $this->assertSame(422, $this->file($filing)->getStatusCode());
+        $this->assertSame(0, Notification::count());
+
+        // A valid legacy staff_id link also works; no new link is silently created.
+        DB::table('josya_users')->where('id', 1011)->update(['block' => 0]);
+        DB::table('sys_user_staff_links')->where('user_id', 1011)->delete();
+        $this->assertTrue($service->handoverStaff()->contains('id', 11));
+        $this->assertSame(200, $this->file($filing)->getStatusCode());
+        $this->assertSame(1, Notification::where('type', 'LeaveHandoverAssigned')->where('notifiable_id', 1011)->count());
+    }
+
+    public function test_roleless_and_deactivated_accounts_are_not_offered_or_notified_for_handovers(): void
+    {
+        $service = app(\App\Services\Leave\LeaveApplicationNotifications::class);
+        DB::table('cb_role_user')->where('user_id', 1011)->delete();
+        $this->assertFalse($service->handoverStaff()->contains('id', 11));
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Existing handover.']);
+        $service->submitted($application, 'supervisor');
+        $this->assertSame(0, Notification::where('type', 'LeaveHandoverAssigned')->count());
+
+        DB::table('cb_role_user')->insert(['role_id' => 3, 'user_id' => 1011, 'user_type' => User::class]);
+        DB::table('josya_users')->where('id', 1011)->update(['activation' => 0]);
+        $this->assertFalse($service->handoverStaff()->contains('id', 11));
+        $service->submitted($application->fresh(), 'supervisor');
+        $this->assertSame(0, Notification::where('type', 'LeaveHandoverAssigned')->count());
+    }
+
+    public function test_the_real_handover_route_allows_the_eligible_recipient_through_the_role_middleware(): void
+    {
+        $this->withoutMiddleware(\Barryvdh\Debugbar\Middleware\InjectDebugbar::class);
+        Schema::create('cb_sub_modules', function (Blueprint $table) {
+            $table->id();
+            $table->string('sub_module_url');
+        });
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Return the site keys.']);
+        // Isolate unrelated shared-header database queries while exercising the real route/middleware/controller.
+        $notesView = \Mockery::mock(\Illuminate\Contracts\View\View::class);
+        $notesView->shouldReceive('render')->andReturn('Handover visible');
+        $notesView->shouldReceive('__toString')->andReturn('Handover visible');
+        \Illuminate\Support\Facades\View::shouldReceive('share')->andReturnNull();
+        \Illuminate\Support\Facades\View::shouldReceive('make')->once()
+            ->with('self-service.leave-handover', \Mockery::on(fn ($data) => $data['handover']['notes'] === 'Return the site keys.'), [])
+            ->andReturn($notesView);
+        $this->actingAs($this->user(11));
+        $this->getJson(route('self-service.leave-handover', $application->id))->assertOk()->assertSee('Handover visible');
+        $this->actingAs($this->user(30));
+        $this->getJson(route('self-service.leave-handover', $application->id))->assertForbidden();
+    }
+
+    public function test_hr_auto_approved_leave_still_notifies_its_handover_colleague(): void
+    {
+        $application = $this->leave(60);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Please prepare the weekly report.']);
+        $outcome = $this->service()->submit($application, 1060);
+        $this->assertTrue($outcome['auto_approved']);
+        $alert = Notification::where('type', 'LeaveHandoverAssigned')->where('notifiable_id', 1011)->sole();
+        $this->assertStringContainsString('leave has been approved', $alert->message);
+        $this->assertSame(1, Notification::where('type', 'LeaveAutoApproved')->where('notifiable_id', 1080)->count());
+    }
+
+    public function test_an_unrelated_employee_cannot_read_a_handover_or_receive_its_alert(): void
+    {
+        $application = $this->leave(10);
+        $application->update(['handover_staff_id' => 11, 'handover_notes' => 'Return the site keys.']);
+        $this->service()->submit($application, 1010);
+        $this->assertSame(0, Notification::where('notifiable_id', 1030)->count());
+        $this->actingAs($this->user(30));
+        try {
+            app(LeaveManagementController::class)->handoverDetails($application->id);
+            $this->fail('An unrelated user must not see the notes.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
     }
 
     public function test_approving_or_rejecting_a_record_that_does_not_exist_is_a_404(): void

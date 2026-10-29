@@ -242,6 +242,7 @@
                             <input type="number" class="form-control" name="amount" id="amount" min="0" step="0.01">
                         </div>
                     </div>
+                    @include('leave_management.partials.handover-fields', ['prefix' => 'hr'])
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
                             <span class="material-symbols-outlined">close</span>
@@ -312,6 +313,17 @@
 <script src="{{ asset('assets/js/hr-leave-export.js') }}?v={{ filemtime(public_path('assets/js/hr-leave-export.js')) }}"></script>
 <script>
 $(document).ready(function() {
+    $('#staff_id').on('change', function () {
+        const staffId = String($(this).val() || '');
+        $('#hr_handover_staff_id option').each(function () {
+            this.disabled = Boolean(this.value && this.value === staffId);
+        });
+        if (String($('#hr_handover_staff_id').val() || '') === staffId) {
+            $('#hr_handover_staff_id').val('');
+        }
+        $('#hr_handover_staff_id').trigger('change');
+    });
+
     // Toggle between leave duration types
     $('input[name="leave_duration_type"]').on('change', function() {
         const durationType = $(this).val();
@@ -603,8 +615,15 @@ $(document).ready(function() {
         }, resetPaging);
     };
 
+    $('#addLeaveApplicationModal').on('hidden.bs.modal', function () {
+        $('#leaveApplicationForm')[0].reset();
+        $('#leaveApplicationId').val('');
+        $('#hr_handover_staff_id option').prop('disabled', false);
+    });
+
     // Populate selects on modal show
     $('#addLeaveApplicationModal').on('show.bs.modal', function() {
+        if ($('#leaveApplicationId').val()) return; // The edit handler loads the saved selections.
         $.ajax({
             url: "{{ url('/ajax/hr/staff/list') }}",
             type: 'GET',
@@ -822,8 +841,12 @@ $(document).ready(function() {
 
     $('#leaveApplicationForm').on('submit', function(e) {
         e.preventDefault();
+        const handoverSearch = document.getElementById('hr_handover_employee_search');
+        if (handoverSearch && !handoverSearch.reportValidity()) return;
 
         let formData = new FormData();
+        formData.append('handover_staff_id', $('#hr_handover_staff_id').val() || '');
+        formData.append('handover_notes', $('#hr_handover_notes').val() || '');
         let durationType = $('input[name="leave_duration_type"]:checked').val();
         let id = $('#leaveApplicationId').val();
 
@@ -926,6 +949,9 @@ $(document).ready(function() {
         let $btn = $(this);
 
         $('#leaveApplicationId').val($btn.data('id'));
+        const leaveRow = table.row($btn.closest('tr')).data();
+        $('#hr_handover_staff_id').val(leaveRow.handover_staff_id || '').trigger('change');
+        $('#hr_handover_notes').val(leaveRow.handover_notes || '');
         $('#amount').val($btn.data('amount'));
         $('#allowance_type').val($btn.data('allowance_type_id')).trigger('change');
 

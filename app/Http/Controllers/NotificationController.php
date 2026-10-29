@@ -9,8 +9,32 @@ use Illuminate\Support\Facades\Auth;
 class NotificationController extends Controller
 {
     /**
-     * Get all notifications for the authenticated user
+     * Poll unread arrivals for this user. The first request establishes a baseline
+     * so signing in does not replay every historical notification as a new toast.
      */
+    public function feed(Request $request)
+    {
+        $validated = $request->validate(['after_id' => 'nullable|integer|min:0']);
+        $user = $request->user();
+        $query = Notification::where('notifiable_type', get_class($user))->where('notifiable_id', $user->id);
+        $latest = (int) (clone $query)->max('id');
+        $items = collect();
+        if (isset($validated['after_id'])) {
+            $items = (clone $query)->unread()->where('id', '>', $validated['after_id'])
+                ->orderBy('id')->limit(51)->get(['id', 'title', 'message', 'action_url', 'read_at']);
+        }
+        $hasMore = $items->count() > 50;
+        $items = $items->take(50)->values();
+
+        return response()->json([
+            'notifications' => $items,
+            'unread_count' => (clone $query)->unread()->count(),
+            'cursor' => $hasMore ? (int) $items->last()->id : max($latest, (int) ($items->last()?->id ?? 0), (int) ($validated['after_id'] ?? 0)),
+            'has_more' => $hasMore,
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    /** Get the authenticated user's notification history. */
     public function index(Request $request)
     {
         $user = Auth::user();

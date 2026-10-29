@@ -75,6 +75,7 @@ use App\Http\Controllers\LeaveManagementController;
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Notifications
+    Route::get('/notifications/feed', [App\Http\Controllers\NotificationController::class, 'feed'])->name('notifications.feed');
     Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/unread-count', [App\Http\Controllers\NotificationController::class, 'getUnreadCount'])->name('notifications.unread-count');
     Route::get('/notifications/{id}', [App\Http\Controllers\NotificationController::class, 'show'])->name('notifications.show');
@@ -1630,6 +1631,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Self Service
     Route::get('/self-service/my-payslip', [SelfServiceController::class, 'myPayslip'])->name('self-service.my-payslip');
     Route::get('/self-service/my-leave',   [SelfServiceController::class, 'myLeave'])->name('self-service.my-leave');
+    Route::get('/self-service/leave-handovers/{id}', [LeaveManagementController::class, 'handoverDetails'])
+        ->whereNumber('id')->name('self-service.leave-handover');
     Route::get('/self-service/my-disciplinary-cases', [SelfServiceController::class, 'showSelf'])->name('self-service.my-disciplinary-cases');
 
     // Cheque Books

@@ -114,11 +114,25 @@ class LeaveApprovalRouter
     }
 
     /**
-     * Whether the user can approve leave at all: an HR approver, or a holder of a supervisor position.
-     *
-     * @param User $user
-     * @return bool
+     * A notification may open an application for its owner, their supervisor, or HR.
+     * Viewing does not grant approval rights or bypass the current approval stage.
      */
+    public function canReview(User $user, LeaveRequest $request): bool {
+        if ($this->isHrApprover($user)) {
+            return true;
+        }
+        $staffId = $user->linkedStaff()?->id;
+        if (!$staffId) {
+            return false;
+        }
+        if ((int) $staffId === (int) $request->staff_id) {
+            return true;
+        }
+        $requester = $request->employee;
+        return $requester && $this->supervisorStaffIds($requester)->contains($staffId);
+    }
+
+    /** Whether the user can approve leave at all. */
     public function isApprover(User $user): bool {
         if ($this->isHrApprover($user)) {
             return true;
@@ -215,7 +229,7 @@ class LeaveApprovalRouter
      * @return Collection
      */
     public function actionableFor(User $user): Collection {
-        $query = LeaveRequest::with(['employee.position', 'leaveType'])
+        $query = LeaveRequest::with(['employee.position', 'leaveType', 'handoverEmployee:id,full_names'])
             ->whereIn('current_status_id', [self::STATUS_PENDING, self::STATUS_PARTIAL]);
 
         if (!$this->isHrApprover($user)) {

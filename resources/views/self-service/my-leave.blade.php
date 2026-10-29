@@ -143,6 +143,7 @@
                             </div>
                         </div>
                     </div>
+                    @include('leave_management.partials.handover-fields', ['prefix' => 'sl'])
                 </form>
             </div>
             <div class="modal-footer">
@@ -576,9 +577,13 @@ $(function () {
     });
 
     $('#leaveSubmitBtn').on('click', function () {
+        const handoverSearch = document.getElementById('sl_handover_employee_search');
+        if (handoverSearch && !handoverSearch.reportValidity()) return;
         var durationType = $('input[name="leave_duration_type"]:checked').val();
         var data = {
             staff_id: staffId,
+            handover_staff_id: $('#sl_handover_staff_id').val(),
+            handover_notes: $('#sl_handover_notes').val(),
             leave_type_id: $('#sl_leave_type_id').val(),
             available_days: $('#sl_available_days').val() || 0,
             leave_duration_type: durationType,

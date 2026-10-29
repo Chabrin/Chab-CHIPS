@@ -21,6 +21,7 @@
                                         <th>Start Date</th>
                                         <th>End Date</th>
                                         <th>Days</th>
+                                        <th>Handover</th>
                                         <th>Current Stage</th>
                                         <th>Action</th>
                                     </tr>
@@ -79,6 +80,13 @@ $(document).ready(function() {
             { 
                 data: 'requested_days',
                 render: d => d !== null && d !== undefined ? d : '-'
+            },
+            {
+                data: 'handover_notes',
+                render: function(notes, type, row) {
+                    const text = row.handover_employee_name ? row.handover_employee_name + ': ' + (notes || '') : 'No handover recorded';
+                    return $.fn.dataTable.render.text().display(text);
+                }
             },
             {
                 data: 'current_status_id',

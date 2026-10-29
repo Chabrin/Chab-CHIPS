@@ -96,6 +96,19 @@ use Illuminate\Support\Facades\Crypt;
                                             <strong>{{ $application->date_time ? \Carbon\Carbon::parse($application->date_time)->format('d M Y H:i') : '-' }}</strong>
                                         </div>
                                     </div>
+                                    <div class="border-top mt-3 pt-3">
+                                        <h6>Work handover</h6>
+                                        <p class="mb-1"><strong>Hand over to:</strong> {{ $application->handoverEmployee?->full_names ?? 'Not recorded' }}</p>
+                                        <p style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ $application->handover_notes ?? 'No handover notes recorded.' }}</p>
+                                    </div>
+                                    @if(in_array($application->id, $actionableIds ?? []))
+                                        <div class="d-flex gap-2 mt-3">
+                                            <button type="button" class="btn btn-primary btn-sm" data-leave-decision="approve" data-id="{{ $application->id }}">
+                                                {{ (int) $application->current_status_id === 1 ? 'Approve as supervisor' : 'Give final HR approval' }}
+                                            </button>
+                                            <button type="button" class="btn btn-outline-danger btn-sm" data-leave-decision="reject" data-id="{{ $application->id }}">Reject</button>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                             @endforeach
@@ -110,6 +123,31 @@ use Illuminate\Support\Facades\Crypt;
 </div>
 
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-leave-decision]').forEach(button => {
+        button.addEventListener('click', async function () {
+            const approve = button.dataset.leaveDecision === 'approve';
+            if (!window.confirm(approve ? 'Approve this leave application at the current stage?' : 'Reject this leave application?')) return;
+            const buttons = document.querySelectorAll('[data-leave-decision]');
+            buttons.forEach(item => { item.disabled = true; });
+            try {
+                const response = await fetch(approve ? @json(route('ajax.hr.leave.applications.approve')) : @json(route('ajax.hr.leave.applications.reject')), {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ id: button.dataset.id })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Unable to update the application.');
+                window.location.reload();
+            } catch (error) {
+                window.alert(error.message);
+                buttons.forEach(item => { item.disabled = false; });
+            }
+        });
+    });
+});
+</script>
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;

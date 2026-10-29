@@ -253,6 +253,8 @@ class WorkflowApprovalController extends Controller
                     return [
                         'id' => $item->id,
                         'type' => 'Leave Application',
+                        'handover_employee_name' => $item->handoverEmployee?->full_names,
+                        'handover_notes' => $item->handover_notes,
                         'requested_by' => $item->createdBy->name ?? '-',
                         'requested_at' => $item->date_time,
                         'details' => implode(' | ', [

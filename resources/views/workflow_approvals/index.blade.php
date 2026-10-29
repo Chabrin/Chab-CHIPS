@@ -270,6 +270,14 @@ $(document).ready(function() {
                     </div>
                 </div>`;
         
+        if (data.type === 'Leave Application') {
+            const colleague = $('<div>').text(data.handover_employee_name || 'Not recorded').html();
+            const notes = $('<div>').text(data.handover_notes || 'No handover notes recorded.').html();
+            detailsContent += `<div class="col-12 mt-3"><strong>Work handover</strong>
+                <p class="mb-1">Hand over to: ${colleague}</p>
+                <div class="border rounded p-2" style="white-space:pre-wrap;overflow-wrap:anywhere;">${notes}</div></div>`;
+        }
+
         if (data.days_taken && data.days_taken.length > 0) {
             detailsContent += `
                 <div class="col-12 mt-3">
