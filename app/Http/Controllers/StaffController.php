@@ -358,7 +358,7 @@ class StaffController extends Controller
 
             $validated = $request->validate([
                 'full_names' => 'required|string|max:255',
-                'employment_type' => 'required|string|in:Permanent,Temporary,Casual', //edited on 27th
+                'employment_type' => 'required|string|in:Permanent,Temporary,Casual,Intern', //edited on 27th
                 'mobile_number' => 'nullable|string|max:255',
                 'email_address' => 'required|email|max:255|unique:sys_staff,email_address',
                 'national_id' => 'required|string|max:255|unique:sys_staff,national_id',

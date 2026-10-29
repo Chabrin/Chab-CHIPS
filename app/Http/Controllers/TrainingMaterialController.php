@@ -10,6 +10,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use App\Models\TrainingSession;
+use App\Models\TrainingSessionAttendee;
+
+
 class TrainingMaterialController extends Controller
 {
     /**
@@ -30,6 +34,7 @@ class TrainingMaterialController extends Controller
             'myRecords' => $myRecords,
             'staffLinked' => (bool) $staff,
             'canManage' => $user->hasPermission('update_staff'),
+            'user' => $user,
         ]);
     }
 
@@ -287,4 +292,159 @@ class TrainingMaterialController extends Controller
 
     return view('hr.training.compliance', compact('records', 'materials'));
 }
+
+/**
+     * Show: Display the training material inside a scrollable reader interface.
+     */
+    public function show($id)
+    {
+        $material = TrainingMaterial::findOrFail($id);
+        
+        $user = Auth::user();
+        $staff = $user->linkedStaff();
+        
+        $record = $staff 
+            ? StaffTrainingRecord::where('staff_id', $staff->id)
+                ->where('training_material_id', $material->id)
+                ->first()
+            : null;
+
+        $done = $record && $record->completed_at && $record->version_acknowledged === $material->version;
+
+        // Optional: If you want to load text/HTML content for txt files or parsed docs
+        $fileContent = '';
+        if ($material->file_type === 'txt' && Storage::disk('local')->exists($material->file_path)) {
+            $fileContent = nl2br(e(Storage::disk('local')->get($material->file_path)));
+        }
+
+        return view('hr.training.show', compact('material', 'done', 'fileContent'));
+    }
+
+    /**
+     * Display list of scheduled training sessions.
+     */
+    public function sessionsIndex()
+    {
+        $user = Auth::user();
+        $sessions = TrainingSession::withCount('attendees')->latest('scheduled_at')->get();
+        $staff = $user->linkedStaff();
+
+        $myAttendances = $staff 
+            ? TrainingSessionAttendee::where('staff_id', $staff->id)->get()->keyBy('training_session_id')
+            : collect();
+
+        return view('hr.training.sessions.index', compact('sessions', 'myAttendances', 'user'));
+    }
+
+    /**
+     * Store a new scheduled training session & auto-invite active staff.
+     */
+    public function storeSession(Request $request)
+    {
+        abort_unless(Auth::user()->hasPermission('update_staff'), 403);
+
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'scheduled_at' => 'required|date',
+            'duration_minutes' => 'required|integer|min:15',
+        ]);
+
+        $session = TrainingSession::create($request->only([
+            'title', 'description', 'trainer', 'location_or_link', 'scheduled_at', 'duration_minutes', 'is_mandatory'
+        ]));
+
+        $activeStaffIds = Staff::where('current_status_id', 1)->pluck('id');
+        $invites = $activeStaffIds->map(fn($id) => [
+            'training_session_id' => $session->id,
+            'staff_id' => $id,
+            'status' => 'invited',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ])->all();
+
+        TrainingSessionAttendee::insertOrIgnore($invites);
+
+        return redirect()->back()->with('success', 'Training session scheduled and staff invited successfully.');
+    }
+
+    /**
+     * Staff marks attendance / submits feedback for a session.
+     */
+    public function attendSession(Request $request, $id)
+    {
+        $staff = Auth::user()->linkedStaff();
+        if (!$staff) {
+            return redirect()->back()->with('error', 'Your login is not linked to a staff record.');
+        }
+
+        $session = TrainingSession::findOrFail($id);
+
+        TrainingSessionAttendee::updateOrCreate([
+            'training_session_id' => $session->id,
+            'staff_id' => $staff->id,
+        ], [
+            'status' => 'attended',
+            'attended_at' => now(),
+            'rating' => $request->input('rating'),
+            'feedback' => $request->input('feedback'),
+        ]);
+
+        return redirect()->back()->with('success', 'Session attendance recorded successfully.');
+    }
+
+    /**
+     * HR Sessions Compliance & Attendance Report.
+     */
+    public function sessionsReport(Request $request)
+    {
+        abort_unless(Auth::user()->hasPermission('read_staff'), 403);
+
+        $query = TrainingSessionAttendee::with(['staff', 'session'])->latest();
+
+        if ($request->filled('session_id')) {
+            $query->where('training_session_id', $request->input('session_id'));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $reports = $query->get();
+        $sessions = TrainingSession::all();
+
+        // Handle CSV Export matching your compliance report style
+        if ($request->has('export') && $request->input('export') === 'csv') {
+            $filename = 'session_attendance_report_' . date('Y-m-d') . '.csv';
+            $headers = [
+                "Content-type" => "text/csv",
+                "Content-Disposition" => "attachment; filename=$filename",
+                "Pragma" => "no-cache",
+                "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+                "Expires" => "0"
+            ];
+
+            $callback = function() use ($reports) {
+                $file = fopen('php://output', 'w');
+                fputcsv($file, ['Session Title', 'Trainer', 'Scheduled Date', 'Staff Name', 'Email', 'Status', 'Attended At', 'Rating']);
+
+                foreach ($reports as $r) {
+                    fputcsv($file, [
+                        $r->session->title ?? 'N/A',
+                        $r->session->trainer ?? 'N/A',
+                        $r->session->scheduled_at?->format('d M Y H:i'),
+                        $r->staff->name ?? 'N/A',
+                        $r->staff->email ?? 'N/A',
+                        ucfirst($r->status),
+                        $r->attended_at?->format('d M Y H:i') ?? 'N/A',
+                        $r->rating ? $r->rating . '/5' : 'N/A',
+                    ]);
+                }
+                fclose($file);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        }
+
+        return view('hr.training.sessions.report', compact('reports', 'sessions'));
+    }
 }

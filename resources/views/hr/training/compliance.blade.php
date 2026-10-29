@@ -6,7 +6,13 @@
             <div class="col-sm-12">
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center justify-content-between flex-wrap gap-2">
-                        <h5 class="mb-0">Training Compliance Report</h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="{{ route('hr.training.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span>
+                                <span class="ms-1">Back</span>
+                            </a>
+                            <h5 class="mb-0">Training Compliance Report</h5>
+                        </div>
                         
                         <!-- Filter and Export Actions -->
                         <form method="GET" action="{{ route('hr.training.compliance') }}" class="d-flex align-items-center gap-2 flex-wrap ms-auto">

@@ -189,26 +189,28 @@ class Staff extends Model
 public static function nextStaffNumber(string $employmentType = 'Permanent'): string
 {
     $prefixMap = [
-        'Permanent' => 'PER',
-        'Temporary' => 'TMP',
-        'Casual'    => 'CAS',
+        'Permanent' => '',
+        'Temporary' => 'T',
+        'Casual'    => 'C',
+        'Intern'    => 'I',
     ];
 
-    $prefix = $prefixMap[$employmentType] ?? 'PER';
+    $prefix = $prefixMap[$employmentType] ?? '';
 
-    // Get the highest number for this category (MySQL-compatible)
-    $last = static::query()
+    // Get the highest numeric part for this category
+    $max = static::query()
         ->where('employment_type', $employmentType)
-        ->where('staff_number', 'like', $prefix . '-%')
-        ->orderByRaw('CAST(SUBSTRING_INDEX(staff_number, "-", -1) AS UNSIGNED) DESC')
-        ->value('staff_number');
+        ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\\D', '', 'g'), '')::bigint) as max_no")
+        ->value('max_no');
 
-    $nextNo = 1;
-    if ($last) {
-        $parts = explode('-', $last);
-        $nextNo = ((int) end($parts)) + 1;
+    $nextNo = ((int) $max) + 1;
+
+    // Permanent → plain number
+    if ($prefix === '') {
+        return (string) $nextNo;
     }
 
+    // Others → PREFIX-001 (3 digits with leading zeros)
     return sprintf('%s-%03d', $prefix, $nextNo);
 }
 }
