@@ -155,6 +155,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <option value="Permanent" {{ old('employment_type', 'Permanent') == 'Permanent' ? 'selected' : '' }}>Permanent</option>
                                             <option value="Temporary" {{ old('employment_type') == 'Temporary' ? 'selected' : '' }}>Temporary</option>
                                             <option value="Casual" {{ old('employment_type') == 'Casual' ? 'selected' : '' }}>Casual</option>
+                                            <option value="Intern" {{ old('employment_type') == 'Intern' ? 'selected' : '' }}>Intern</option>
                                         </select>
                                         @error('employment_type')
                                             <div class="invalid-feedback">{{ $message }}</div>

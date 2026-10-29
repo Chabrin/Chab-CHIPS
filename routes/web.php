@@ -313,7 +313,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/training-materials/{id}/edit', [TrainingMaterialController::class, 'edit'])->name('hr.training.edit');
     Route::put('/training-materials/{id}', [TrainingMaterialController::class, 'update'])->name('hr.training.update');
     Route::delete('/training-materials/{id}', [TrainingMaterialController::class, 'destroy'])->name('hr.training.destroy');
-        // Payroll Periods
+    Route::get('training/{id}/read', [TrainingMaterialController::class, 'show'])->name('hr.training.show');
+    Route::get('training/sessions', [TrainingMaterialController::class, 'sessionsIndex'])->name('hr.training.sessions.index');
+    Route::post('training/sessions', [TrainingMaterialController::class, 'storeSession'])->name('hr.training.sessions.store');
+    Route::post('training/sessions/{id}/attend', [TrainingMaterialController::class, 'attendSession'])->name('hr.training.sessions.attend');
+    Route::get('training/sessions/report', [TrainingMaterialController::class, 'sessionsReport'])->name('hr.training.sessions.report');
+   
+    // Payroll Periods
     Route::get('/ajax/hr/payroll/calendar/{calendarId}/periods', [PayrollController::class, 'periodsList'])->name('ajax.payrollPeriods.list');
     Route::post('/ajax/hr/payroll/calendar/{calendarId}/periods', [PayrollController::class, 'periodsStore'])->name('ajax.payrollPeriods.store');
     Route::post('/ajax/hr/payroll/calendar/{calendarId}/periods/{periodId}', [PayrollController::class, 'periodsUpdate'])->name('ajax.payrollPeriods.update');

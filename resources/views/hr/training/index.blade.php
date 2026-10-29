@@ -7,7 +7,23 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Training Materials</h5>
-                        <div class="ms-auto d-flex gap-2">
+                        <div class="ms-auto d-flex gap-2 align-items-center">
+                            
+                            <!-- Live Sessions Button (Visible to everyone) -->
+                            <a href="{{ route('hr.training.sessions.index') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">event</span>
+                                <span class="ms-1">Live Sessions</span>
+                            </a>
+
+                            <!-- Attendance Report Button (Visible if they have permission to read reports) -->
+                            @if(isset($user) && $user->hasPermission('read_staff'))
+                            <a href="{{ route('hr.training.sessions.report') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined">fact_check</span>
+                                <span class="ms-1">Attendance Report</span>
+                            </a>
+                            @endif
+
+                            <!-- Management Buttons (Visible only if they can manage / update staff) -->
                             @if($canManage)
                             <a href="{{ route('hr.training.compliance') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">fact_check</span>
@@ -17,7 +33,12 @@
                                 <span class="material-symbols-outlined">upload_file</span>
                                 <span class="ms-1">Upload Material</span>
                             </button>
+                            {{-- <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#createSessionModal">
+                                <span class="material-symbols-outlined">event_upcoming</span>
+                                <span class="ms-1">Schedule Session</span>
+                            </button> --}}
                             @endif
+
                         </div>
                     </div>
                     <div class="card-body">
@@ -74,8 +95,7 @@
                                         </td>
                                         <td class="text-end">
                                             <div class="d-flex align-items-center justify-content-end gap-1 flex-wrap">
-                                                <a href="{{ route('hr.training.stream', $material->id) }}" target="_blank" class="btn btn-light btn-sm">View</a>
-
+                                               <a href="{{ route('hr.training.show', $material->id) }}" class="btn btn-light btn-sm">View &amp; Read</a>
                                                 @if($canManage)
                                                     <a href="{{ route('hr.training.edit', $material->id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
                                                     <form action="{{ route('hr.training.destroy', $material->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this training material?');">
