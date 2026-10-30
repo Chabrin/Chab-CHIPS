@@ -297,10 +297,11 @@ class ClientReturnsController extends Controller
                 ->orderBy('return_type')
                 ->get(['id', 'return_code', 'return_type']);
 
+            // The DR 'COMMISSION' line repeats the commission and VAT already on the rent lines, so it stays out of the debits.
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -334,7 +335,7 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -1715,7 +1716,7 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -1749,7 +1750,7 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
