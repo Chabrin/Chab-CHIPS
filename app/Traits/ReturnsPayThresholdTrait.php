@@ -33,6 +33,12 @@ trait ReturnsPayThresholdTrait
     ): void {
         $propertyFilter = $propertyId ? "AND rc2.property_id = ?" : "";
 
+        // The rule looks at the tenant's earlier RENT invoices only: an unpaid deposit or service charge must not hold
+        // back the rent. Legacy invoices have no item_type_id, so the item is matched by its stored name as well.
+        $rentItemId = "(SELECT id FROM sys_set_invoiceable_items WHERE billing_code = '0024')";
+        $rentOlder = \App\Services\InvoiceBillingService::sameItemCondition('older', $rentItemId, "'RENT'");
+        $rentPrev = \App\Services\InvoiceBillingService::sameItemCondition('pi2', $rentItemId, "'RENT'");
+
         $bindings = [
             $monthStart,
             $monthStart,
@@ -74,6 +80,7 @@ trait ReturnsPayThresholdTrait
                               AND older.date_due < ?::date
                               AND older.current_status_id = 1
                               AND older.debtor_type_id = '2'
+                              AND {$rentOlder}
                         ) THEN 100.00
                         ELSE 0.00
                     END AS pct_num,
@@ -91,6 +98,7 @@ trait ReturnsPayThresholdTrait
                               AND older.date_due < ?::date
                               AND older.current_status_id = 1
                               AND older.debtor_type_id = '2'
+                              AND {$rentOlder}
                         ) THEN '100'
                         ELSE '0'
                     END AS pct,
@@ -105,6 +113,7 @@ trait ReturnsPayThresholdTrait
                               AND older.date_due < ?::date
                               AND older.current_status_id = 1
                               AND older.debtor_type_id = '2'
+                              AND {$rentOlder}
                         ) THEN 1
                         ELSE 0
                     END AS pay_status
@@ -116,6 +125,7 @@ trait ReturnsPayThresholdTrait
                       AND pi2.date_due < ?::date
                       AND pi2.current_status_id = 1
                       AND pi2.debtor_type_id = '2'
+                      AND {$rentPrev}
                     ORDER BY pi2.date_due DESC, pi2.id DESC LIMIT 1
                 ) pi ON true
                 WHERE rc2.return_period = ?

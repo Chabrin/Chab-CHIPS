@@ -17,6 +17,7 @@ use App\Models\ServiceAgreement;
 use App\Models\TenantAccountTransaction;
 use App\Models\Unit;
 use App\Services\ErrorDispatcher;
+use App\Services\InvoiceJournalService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 use Illuminate\Http\Request;
@@ -30,6 +31,13 @@ use Maatwebsite\Excel\Facades\Excel;
 class InvoicingController extends Controller
 {
     use \App\Traits\InvoiceCreationTrait;
+
+    /**
+     * Inject the service that posts invoices to the GL.
+     */
+    public function __construct(InvoiceJournalService $invoiceJournals) {
+        $this->invoiceJournals = $invoiceJournals;
+    }
 
     /**
      * Display tenant invoices page
@@ -1639,6 +1647,13 @@ class InvoicingController extends Controller
 
             $vatOnCommRate = $vatOnCommission->vat_on_commission ?? 0;
 
+            // A rejected lease keeps lease_status Active, so it is excluded by its approval status
+            // (legacy leases are Active with status 1, so this cannot filter on "approved").
+            $rejectedLease = \App\Services\LeaseAgreementApprovalService::STATUS_REJECTED;
+
+            // The duplicate guard also recognises legacy invoices, which have no item_type_id (see the service).
+            $itemMatch = \App\Services\InvoiceBillingService::sameItemCondition('existing', 'src.item_id', 'src.item_name');
+
             // PostgreSQL invoice generation query
             $sql = "
                 INSERT INTO sys_pm_debtors_invoices(
@@ -1680,7 +1695,7 @@ class InvoicingController extends Controller
                     created_at
                 )
                 SELECT
-                    NOW() AS date_time,
+                    ?::date AS date_time,
                     ?::date AS date_due,
                     ?::date AS returns_period,
                     src.zone_id,
@@ -1715,7 +1730,7 @@ class InvoicingController extends Controller
                             CASE
                                 WHEN src.vat_able = 'Yes' THEN
                                     ROUND(
-                                        (src.base_amount - ROUND(src.base_amount * 0.16, 2))
+                                        (src.base_amount - ROUND(src.base_amount * 16 / 116, 2))
                                         * (src.commission_percentage / 100),
                                         2
                                     )
@@ -1730,7 +1745,7 @@ class InvoicingController extends Controller
                     END AS comm_per,
                     CASE
                         WHEN src.vat_able = 'Yes' THEN
-                            ROUND(src.base_amount * 0.16, 2)
+                            ROUND(src.base_amount * 16 / 116, 2)
                         ELSE 0.00
                     END AS vat_ammount,
                     16.00 AS vat_per,
@@ -1738,7 +1753,7 @@ class InvoicingController extends Controller
                         WHEN src.commissionable = 'Yes' THEN
                             CASE
                                 WHEN src.vat_able = 'Yes' THEN
-                                    src.base_amount - ROUND(src.base_amount * 0.16, 2)
+                                    src.base_amount - ROUND(src.base_amount * 16 / 116, 2)
                                 ELSE
                                     src.base_amount
                             END
@@ -1751,7 +1766,7 @@ class InvoicingController extends Controller
                                     ROUND(
                                         src.base_amount -
                                         ROUND(
-                                            (src.base_amount - ROUND(src.base_amount * 0.16, 2))
+                                            (src.base_amount - ROUND(src.base_amount * 16 / 116, 2))
                                             * (src.commission_percentage / 100),
                                             2
                                         ),
@@ -1764,7 +1779,7 @@ class InvoicingController extends Controller
                     END AS payable_amount,
                     src.item_id AS item_type_id,
                     src.item_name AS return_type_id,
-                    2 AS cycle_id,
+                    1 AS cycle_id,
                     src.base_amount AS current_balance,
                     src.occupancy_status_id,
                     src.field_officer_id,
@@ -1776,7 +1791,7 @@ class InvoicingController extends Controller
                                 CASE
                                     WHEN src.vat_able = 'Yes' THEN
                                         ROUND(
-                                            (src.base_amount - ROUND(src.base_amount * 0.16, 2))
+                                            (src.base_amount - ROUND(src.base_amount * 16 / 116, 2))
                                             * (src.commission_percentage / 100),
                                             2
                                         ) * (? / 100)
@@ -1794,19 +1809,27 @@ class InvoicingController extends Controller
                     -- RENT — one per active lease with a rent amount set
                     SELECT
                         l.zone_id, l.property_id, l.unit_id, l.id AS lease_id, l.tenant_id, l.client_id, l.sla_id,
-                        u.unit_code, i.item_name, i.id AS item_id, i.commissionable,
+                        u.unit_code, i.item_name, i.id AS item_id, 'Yes' AS commissionable, -- rent is always commissionable
                         u.rent_amount AS base_amount,
                         u.vat_able,
-                        sla.commission_percentage,
+                        COALESCE(sla.commission_percentage, 0) AS commission_percentage, -- no SLA (or no percentage) means no commission, never NULL
                         u.occupancy_status_id, p.field_officer_id, p.zone_supervisor_id, p.zone_manager_id
                     FROM sys_pm_lease_agreements l
                     INNER JOIN sys_pm_units u ON u.id = l.unit_id
                     INNER JOIN sys_pm_properties p ON p.id = l.property_id
-                    LEFT JOIN sys_pm_service_agreements sla ON sla.id = l.sla_id
+                    LEFT JOIN sys_pm_service_agreements sla
+                        ON sla.id = (
+                            SELECT sla2.id
+                            FROM sys_pm_service_agreements sla2
+                            WHERE sla2.property_id = l.property_id
+                            ORDER BY sla2.date_start DESC NULLS LAST, sla2.id DESC
+                            LIMIT 1
+                        )
                     CROSS JOIN sys_set_invoiceable_items i
                     WHERE
                         i.billing_code = '0024'
                         AND l.lease_status = 'Active'
+                        AND (l.current_status_id IS NULL OR l.current_status_id <> {$rejectedLease})
                         AND u.rent_amount > 0
 
                     UNION ALL
@@ -1821,8 +1844,8 @@ class InvoicingController extends Controller
                         l.zone_id, l.property_id, l.unit_id, l.id AS lease_id, l.tenant_id, l.client_id, l.sla_id,
                         u.unit_code, i.item_name, i.id AS item_id, i.commissionable,
                         COALESCE(l.service_charges_amount, sla.service_charges_cost) AS base_amount,
-                        u.vat_able,
-                        sla.commission_percentage,
+                        'No' AS vat_able, -- only rent carries VAT
+                        COALESCE(sla.commission_percentage, 0) AS commission_percentage, -- no SLA (or no percentage) means no commission, never NULL
                         u.occupancy_status_id, p.field_officer_id, p.zone_supervisor_id, p.zone_manager_id
                     FROM sys_pm_lease_agreements l
                     INNER JOIN sys_pm_units u ON u.id = l.unit_id
@@ -1832,13 +1855,14 @@ class InvoicingController extends Controller
                             SELECT sla2.id
                             FROM sys_pm_service_agreements sla2
                             WHERE sla2.property_id = l.property_id
-                            ORDER BY sla2.date_start DESC NULLS LAST
+                            ORDER BY sla2.date_start DESC NULLS LAST, sla2.id DESC
                             LIMIT 1
                         )
                     CROSS JOIN sys_set_invoiceable_items i
                     WHERE
                         i.billing_code = '2001'
                         AND l.lease_status = 'Active'
+                        AND (l.current_status_id IS NULL OR l.current_status_id <> {$rejectedLease})
                         AND (
                             (l.service_charges_amount IS NOT NULL AND l.service_charges_amount > 0)
                             OR (
@@ -1853,7 +1877,7 @@ class InvoicingController extends Controller
                     SELECT 1
                     FROM sys_pm_debtors_invoices existing
                     WHERE existing.lease_id = src.lease_id
-                      AND existing.item_type_id = src.item_id
+                      AND {$itemMatch}
                       AND existing.returns_period = ?::date
                 )
                 ORDER BY src.lease_id
@@ -1893,6 +1917,7 @@ class InvoicingController extends Controller
 
                 // Execute the invoice generation query
                 $insertedRows = DB::insert($sql, [
+                    $billingDateFormatted,              // date_time: dated the 1st of the billing month, like legacy (it was the generation time)
                     $billingDateFormatted,              // date_due
                     $billingDateFormatted,              // returns_period (same billing month as date_due)
                     Auth::id(),                          // created_by
@@ -1959,6 +1984,9 @@ class InvoicingController extends Controller
                 ";
 
                 DB::statement($drSql, [$batchNumber]);
+
+                // One GL journal per property for the whole run, in the same transaction (off until the accountant agrees the timing).
+                $this->invoiceJournals->postBatch($batchNumber, (int) Auth::id());
 
                 // Get count of inserted records — exact match on batch_number now,
                 // not a fuzzy created_by + time-window guess.

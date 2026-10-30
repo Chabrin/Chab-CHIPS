@@ -900,8 +900,8 @@ class PropertyConfirmationController extends Controller
 
             // Carry forward the balance — only if flagged. Re-link the tenant's own
             // not-yet-cleared invoices from the old lease onto the new one, rather than
-            // fabricating a brand-new invoice on top of them: TenantBalanceService sums
-            // a tenant's invoices tenant-wide (not lease-scoped), so a new invoice for
+            // fabricating a brand-new invoice on top of them: TenantBalanceService reads
+            // the tenant's ledger tenant-wide (not lease-scoped), so a new invoice for
             // the same arrears amount would double-count it while the old invoices sat
             // there untouched. Already-Cleared (9) invoices are left on the old lease so
             // historical reporting for that lease stays accurate.

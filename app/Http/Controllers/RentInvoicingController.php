@@ -11,6 +11,7 @@ use App\Models\ServiceAgreement;
 use App\Models\SlaInvoiceableItem;
 use App\Models\TempGeneratedInvoice;
 use App\Models\Unit;
+use App\Services\InvoiceJournalService;
 use App\Traits\InvoiceCreationTrait;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
@@ -43,6 +44,13 @@ class RentInvoicingController extends Controller
     use InvoiceCreationTrait;
 
     /**
+     * Inject the service that posts invoices to the GL.
+     */
+    public function __construct(InvoiceJournalService $invoiceJournals) {
+        $this->invoiceJournals = $invoiceJournals;
+    }
+
+    /**
      * Stage prorated (or full) rent invoices for a property/month. A lease is
      * skipped (not staged, reported separately) if it already has an
      * unpushed staged row or a real RENT invoice for that month.
@@ -71,7 +79,7 @@ class RentInvoicingController extends Controller
             $query = LeaseAgreement::query()
                 ->join('sys_pm_units', 'sys_pm_units.id', '=', 'sys_pm_lease_agreements.unit_id')
                 ->where('sys_pm_lease_agreements.property_id', $property->id)
-                ->where('sys_pm_lease_agreements.lease_status', 'Active')
+                ->billable()
                 ->where('sys_pm_units.rent_amount', '>', 0)
                 ->select('sys_pm_lease_agreements.*', 'sys_pm_units.rent_amount as unit_rent_amount', 'sys_pm_units.unit_code as unit_code_col');
 
@@ -102,9 +110,10 @@ class RentInvoicingController extends Controller
                 }
 
                 if ($rentItemId) {
+                    // Legacy invoices have no item_type_id, so rent is also matched by name (see InvoiceBillingService).
                     $alreadyInvoiced = DB::table('sys_pm_debtors_invoices')
                         ->where('lease_id', $lease->id)
-                        ->where('item_type_id', $rentItemId)
+                        ->whereRaw(\App\Services\InvoiceBillingService::sameItemCondition('sys_pm_debtors_invoices', (string) (int) $rentItemId, "'RENT'"))
                         ->whereYear('returns_period', $monthStart->format('Y'))
                         ->whereMonth('returns_period', $monthStart->format('m'))
                         ->exists();
@@ -464,7 +473,7 @@ class RentInvoicingController extends Controller
             throw new \RuntimeException('This item is not configured on the property\'s service agreement.');
         }
 
-        $leasesQuery = LeaseAgreement::where('property_id', $property->id)->where('lease_status', 'Active');
+        $leasesQuery = LeaseAgreement::where('property_id', $property->id)->billable();
         if (!empty($leaseWhere['tenant_ids'])) {
             $leasesQuery->whereIn('tenant_id', $leaseWhere['tenant_ids']);
         }
