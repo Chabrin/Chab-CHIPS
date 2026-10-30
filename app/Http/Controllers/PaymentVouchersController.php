@@ -564,6 +564,7 @@ class PaymentVouchersController extends Controller
                 ->where('cb_returns_summary.approved_status', 1)
                 ->where('cb_returns_summary.paid_status', 0)
                 ->where('cb_returns_summary.voucher_generated', 0)
+                ->where('cb_returns_summary.net_balance', '>', 0)
                 ->where('cb_returns_summary.year', $year)
                 ->where('cb_returns_summary.month', $month)
                 ->orderBy('cb_returns_summary.landlord_code')
@@ -634,6 +635,22 @@ class PaymentVouchersController extends Controller
 
             DB::beginTransaction();
 
+            // The voucher pays the return's own net balance, once: the amount is not taken from the screen
+            $return = ReturnSummary::whereKey($validated['return_summary_id'])->lockForUpdate()->first();
+            $netBalance = round((float) ($return->net_balance ?? 0), 2);
+
+            if (!$return || (int) $return->approved_status !== 1 || (int) $return->paid_status !== 0 || (int) $return->voucher_generated !== 0) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => 'This return is not approved, or it already has a payment voucher.'], 422);
+            }
+
+            $splitTotal = round((float) collect($validated['split_entries'] ?? [])->sum('amount'), 2);
+
+            if ($netBalance <= 0 || abs((float) $validated['net_balance'] - $netBalance) > 0.005 || ($splitTotal > 0 && abs($splitTotal - $netBalance) > 0.005)) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => 'The voucher must pay the return\'s net balance of ' . number_format($netBalance, 2) . '.'], 422);
+            }
+
             // Get next voucher sequence
             $maxSeq = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
             $nextSeq = $maxSeq + 1;
@@ -661,7 +678,6 @@ class PaymentVouchersController extends Controller
             ]);
 
             // Determine line items
-            $netBalance = $validated['net_balance'];
             $lineItems = [];
             
             if (isset($validated['split_entries']) && is_array($validated['split_entries']) && count($validated['split_entries']) > 0) {
@@ -681,14 +697,14 @@ class PaymentVouchersController extends Controller
                 }
             } else {
                 // Fallback to single entry (should not happen if amount > 1M due to frontend validation)
-                $sourceAccount = CompanyBankAccount::with('bank')->find($validated['source_account_id']);
+                $sourceAccount = CompanyBankAccount::with('bank')->find($validated['source_account_id'] ?? null);
                 $lineItems[] = [
                     'line_number' => 1,
                     'amount' => $netBalance,
-                    'source_account_id' => $validated['source_account_id'],
+                    'source_account_id' => $validated['source_account_id'] ?? null,
                     'source_account_name' => $sourceAccount ? $sourceAccount->account_name : null,
                     'source_bank_name' => $sourceAccount && $sourceAccount->bank ? $sourceAccount->bank->bank_name : null,
-                    'cheque_number' => $validated['cheque_number'],
+                    'cheque_number' => $validated['cheque_number'] ?? null,
                     'cheque_leaf_id' => $validated['cheque_leaf_id'] ?? null,
                     'cheque_lock_token' => $validated['cheque_lock_token'] ?? null,
                 ];

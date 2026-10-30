@@ -19,8 +19,13 @@ use Illuminate\Support\Facades\Log;
 trait ReturnsDeductionsTrait
 {
     /**
-     * Insert Advance Payments from Landlord Account as DR lines.
-     * These are expenses paid by agent on landlord's behalf to be recovered.
+     * Propose the deductions of a return: the client's unrecovered debits (advances, registration fee and the other
+     * deduction types) as DR lines, oldest first, up to what the return owes the client after commission and VAT.
+     *
+     * A debit is taken if it is from the return's month, or from an earlier month and is an advance or the registration
+     * fee, so what did not fit one month's return rolls forward. Nothing is recovered here: the debits are only reserved
+     * for this return (return_code is set, is_recovered stays 0) and are recovered when the return gets its final
+     * approval (ReturnPostingService). Regenerating the return frees them again.
      *
      * @param string $returnPeriod YYYYMM format
      * @param string $transactionDate Display date (DD-Mon-YYYY)
@@ -38,19 +43,66 @@ trait ReturnsDeductionsTrait
         int $returnMonth,
         ?int $propertyId = null
     ): int {
-        $propertyFilter = $propertyId ? "AND rc_base.property_id = ?" : "";
+        $propertyFilter = $propertyId ? "WHERE property_id = ?" : "";
 
-        // Bindings: 1) return_period integer, 2) transaction_date, 3) user_id, 
-        // 4) return_period for subquery, 5) returnYear, 6) returnMonth, 7) optional property_id
-        $bindings = [$returnPeriod, $transactionDate, $generatedBy, $returnPeriod, $returnYear, $returnMonth];
+        // Bindings in the order the placeholders appear: return period, optional property, month, month, month index,
+        // return period (integer column), transaction date, user
+        $bindings = [$returnPeriod];
         if ($propertyId) {
             $bindings[] = $propertyId;
         }
+        array_push($bindings, $returnYear, $returnMonth, $returnYear * 100 + $returnMonth, $returnPeriod, $transactionDate, $generatedBy);
 
-        // Recoverable entry type codes from sys_set_invoiceable_items
-        // Filter by specific year and month being computed
         // EXCLUDE clients in active merge batches - those get deductions on MASTERRETURN instead
         $advancesInserted = DB::affectingStatement("
+            WITH first_lines AS (
+                SELECT DISTINCT ON (client_id)
+                       return_code, return_id, property_code, property_id, client_id,
+                       zone_id, field_officer_id, zone_supervisor_id, zone_manager_id
+                FROM cb_returns_clients
+                WHERE return_period = ?
+                  AND return_code LIKE 'R1%'
+                ORDER BY client_id, id
+            ), base AS (
+                SELECT * FROM first_lines {$propertyFilter}
+            ), available AS (
+                SELECT b.client_id,
+                       SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
+                         - SUM(COALESCE(rc.commission_amount, 0)) - SUM(COALESCE(rc.vat_amount, 0)) AS amount
+                FROM base b
+                JOIN cb_returns_clients rc ON rc.return_code = b.return_code
+                GROUP BY b.client_id
+            ), candidates AS (
+                SELECT la.id, la.client_id,
+                       SUM(la.debit_amount) OVER (PARTITION BY la.client_id ORDER BY la.id) AS running
+                FROM cb_landlord_account la
+                WHERE la.client_id IN (SELECT client_id FROM base)
+                  AND la.debit_amount > 0
+                  AND COALESCE(la.is_recovered, 0) != 1
+                  AND la.return_code IS NULL
+                  AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
+                  AND (
+                        (la.year = ? AND la.month = ?)
+                        OR (la.year * 100 + la.month < ? AND (la.advance_id IS NOT NULL OR la.entry_type_code = '0023'))
+                      )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM cb_returns_merge_batches mb
+                      WHERE mb.landlord_id = la.client_id
+                  )
+            ), chosen AS (
+                SELECT c.id
+                FROM candidates c
+                JOIN available a ON a.client_id = c.client_id
+                WHERE c.running <= a.amount
+            ), reserved AS (
+                UPDATE cb_landlord_account la
+                SET return_code = b.return_code
+                FROM chosen ch, base b
+                WHERE la.id = ch.id
+                  AND b.client_id = la.client_id
+                RETURNING la.id AS la_id, la.transaction_number, la.debit_amount, la.entry_type_code,
+                          la.entry_description, la.entry_particulars, la.client_id
+            )
             INSERT INTO cb_returns_clients (
                 return_code, return_period, transaction_number, transaction_date,
                 entry_description, entry_type, dr_cr,
@@ -60,89 +112,36 @@ trait ReturnsDeductionsTrait
                 return_id, deduction_point_2, is_commissionable, transaction_source,
                 server_time, user_id
             )
-            SELECT DISTINCT ON (la.id)
-                rc_base.return_code,
+            SELECT DISTINCT ON (r.la_id)
+                b.return_code,
                 ?::integer,
-                la.transaction_number,
+                r.transaction_number,
                 ?,
-                COALESCE(ii.item_name, la.entry_description),
+                COALESCE(ii.item_name, r.entry_description),
                 COALESCE(ii.item_name, 'Landlord Account Deduction'),
                 'DR',
-                rc_base.property_code,
-                la.debit_amount,
-                COALESCE(la.entry_particulars, la.entry_description),
-                rc_base.property_id,
-                la.client_id,
-                rc_base.zone_id,
-                rc_base.field_officer_id,
-                rc_base.zone_supervisor_id,
-                rc_base.zone_manager_id,
-                rc_base.return_id,
+                b.property_code,
+                r.debit_amount,
+                COALESCE(r.entry_particulars, r.entry_description),
+                b.property_id,
+                r.client_id,
+                b.zone_id,
+                b.field_officer_id,
+                b.zone_supervisor_id,
+                b.zone_manager_id,
+                b.return_id,
                 NULL,
                 'No',
                 'LANDLORD ACCOUNT',
                 NOW(),
                 ?
-            FROM cb_landlord_account la
-            LEFT JOIN sys_set_invoiceable_items ii ON ii.billing_code = la.entry_type_code
-            JOIN (
-                SELECT DISTINCT ON (client_id)
-                       return_code, return_id, property_code, property_id, client_id,
-                       zone_id, field_officer_id, zone_supervisor_id, zone_manager_id
-                FROM cb_returns_clients
-                WHERE return_period = ?
-                  AND return_code LIKE 'R1%'
-                ORDER BY client_id, id
-            ) rc_base ON rc_base.client_id = la.client_id
-            WHERE la.debit_amount > 0
-              AND COALESCE(la.is_recovered, 0) != 1
-              AND la.year = ?
-              AND la.month = ?
-              AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
-              -- Exclude landlords in merge batches (deductions go to MASTERRETURN)
-              AND NOT EXISTS (
-                  SELECT 1 FROM cb_returns_merge_batches mb
-                  WHERE mb.landlord_id = la.client_id
-              )
-              {$propertyFilter}
-            ORDER BY la.id
+            FROM reserved r
+            JOIN base b ON b.client_id = r.client_id
+            LEFT JOIN sys_set_invoiceable_items ii ON ii.billing_code = r.entry_type_code
+            ORDER BY r.la_id
         ", $bindings);
 
-        // Mark the recovered entries in cb_landlord_account (only for the specific year/month)
-        // Exclude merge batch landlords - those are handled by MASTERRETURN generation
-        if ($advancesInserted > 0) {
-            $recoveredIds = array_column(DB::select("
-                UPDATE cb_landlord_account la
-                SET is_recovered = 1,
-                    recovery_year = ?,
-                    recovery_month = ?,
-                    return_code = rc.return_code,
-                    recovery_server_time = NOW()
-                FROM (
-                    SELECT DISTINCT ON (client_id)
-                           return_code, client_id
-                    FROM cb_returns_clients
-                    WHERE return_period = ?
-                      AND return_code LIKE 'R1%'
-                    ORDER BY client_id, id
-                ) rc
-                WHERE rc.client_id = la.client_id
-                  AND la.debit_amount > 0
-                  AND COALESCE(la.is_recovered, 0) != 1
-                  AND la.year = ?
-                  AND la.month = ?
-                  AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
-                  AND NOT EXISTS (
-                      SELECT 1 FROM cb_returns_merge_batches mb
-                      WHERE mb.landlord_id = la.client_id
-                  )
-                RETURNING la.id
-            ", [$returnYear, $returnMonth, $returnPeriod, $returnYear, $returnMonth]), 'id');
-
-            $this->syncAdvanceRecoveryStatus($recoveredIds);
-        }
-
-        Log::info("ReturnsDeductionsTrait: Advance payment DR lines inserted", [
+        Log::info("ReturnsDeductionsTrait: Advance payment DR lines proposed", [
             'count' => $advancesInserted,
             'property_id' => $propertyId
         ]);

@@ -11,10 +11,9 @@ use App\Models\GlAccountSetup;
 use App\Models\LandlordAccount;
 use App\Models\PaymentVoucherHeader;
 use App\Models\PaymentVoucherLine;
-use App\Models\TransactionType;
 use App\Models\User;
-use App\Traits\GlPostingTrait;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -32,7 +31,16 @@ use Illuminate\Support\Facades\Log;
  */
 class ClientAdvanceService
 {
-    use GlPostingTrait;
+    protected GlJournalPoster $poster;
+
+    /**
+     * Inject the shared GL journal poster.
+     *
+     * @param GlJournalPoster $poster
+     */
+    public function __construct(GlJournalPoster $poster) {
+        $this->poster = $poster;
+    }
 
     const ENTRY_CODE = '0009';
     const TRANSACTION_TYPE = '2017';
@@ -313,19 +321,7 @@ class ClientAdvanceService
      * @param int|null $sourceAccountId the company bank account the voucher is paid from
      */
     public function bankGlAccountId(?int $sourceAccountId): int {
-        $own = $sourceAccountId ? CompanyBankAccount::whereKey($sourceAccountId)->value('gl_account_id') : null;
-
-        if ($own && !ChartAccount::whereKey($own)->exists()) {
-            throw new ClientAccountException('The GL account set on the bank account (id ' . $own . ') is not in the chart of accounts.');
-        }
-
-        $id = $own ?: (GlAccountSetup::first()->business_bank_account_id ?? null);
-
-        if (!$id || !ChartAccount::whereKey($id)->exists()) {
-            throw new ClientAccountException('The bank account has no GL account, and the GL setup has no business bank account, so the payment cannot be posted.');
-        }
-
-        return (int) $id;
+        return $this->poster->bankGlAccountId($sourceAccountId);
     }
 
     /**
@@ -471,22 +467,120 @@ class ClientAdvanceService
      * @param int $userId
      */
     protected function journal(string $reference, string $narration, string $details, array $lines, int $userId): int {
-        $headerId = $this->postGlEntry([
-            'type' => 'generic',
-            'lines' => $lines,
-            'date' => now()->toDateString(),
-            'reference' => $reference,
-            'narration' => mb_substr($narration, 0, 250),
-            'trans_details' => $details,
-            'trans_type_id' => TransactionType::where('item_code', self::TRANSACTION_TYPE)->value('id'),
-            'entered_by' => $userId,
-        ]);
+        return $this->poster->journal($reference, $narration, $details, $lines, $userId, self::TRANSACTION_TYPE);
+    }
 
-        if (!$headerId) {
-            throw new ClientAccountException('The GL journal for ' . $reference . ' could not be posted.');
+    /**
+     * Apply the advance rows a return has recovered: lower each advance's balance (it is cleared only when fully repaid),
+     * clear the instalments that were paid, and post one journal that moves the recovered principal and interest off the
+     * receivables (debit Clients Account, credit Loans & Advances Receivable and Loans Interests Receivable).
+     *
+     * @param Collection $rows the cb_landlord_account rows the return recovered (id, advance_id, schedule_id, transaction_number, debit_amount)
+     * @param string $returnCode the return that recovered them
+     * @param int $userId
+     * @return array ['principal' => float, 'interest' => float] what was moved off the receivables
+     */
+    public function recoverFromReturn(Collection $rows, string $returnCode, int $userId): array {
+        $principal = 0.0;
+        $interest = 0.0;
+
+        foreach ($rows->whereNotNull('advance_id')->groupBy('advance_id') as $advanceId => $advanceRows) {
+            $advance = ClientAdvance::whereKey($advanceId)->lockForUpdate()->first();
+
+            if (!$advance) {
+                throw new ClientAccountException('Advance ' . $advanceId . ' recovered by return ' . $returnCode . ' could not be found.');
+            }
+
+            $schedules = $advance->schedule()->whereIn('id', $advanceRows->pluck('schedule_id')->filter()->unique())->get()->keyBy('id');
+            $recovered = 0.0;
+
+            foreach ($advanceRows as $row) {
+                $schedule = $row->schedule_id ? ($schedules[$row->schedule_id] ?? null) : null;
+                [$rowPrincipal, $rowInterest] = self::splitRecovery((float) $row->debit_amount, (string) $row->transaction_number, $schedule ? (float) $schedule->principal_amount : null, (float) $advance->amount);
+
+                $principal += $rowPrincipal;
+                $interest += $rowInterest;
+                $recovered += (float) $row->debit_amount;
+            }
+
+            $balance = max(0, round((float) $advance->current_balance - $recovered, 2));
+            $advance->current_balance = $balance;
+            if ($balance <= 0.0) {
+                $advance->current_status_id = 2; // Cleared
+            }
+            $advance->save();
+
+            if ($schedules->isNotEmpty()) {
+                $advance->schedule()->whereIn('id', $schedules->keys())->update(['current_status_id' => 2]);
+            }
         }
 
-        return $headerId;
+        $principal = round($principal, 2);
+        $interest = round($interest, 2);
+        $details = 'return:' . $returnCode . ':advance-recovery';
+
+        if (($principal + $interest) > 0 && !$this->poster->exists($details)) {
+            $accounts = $this->recoveryAccounts();
+            $lines = [['account_id' => $accounts['clients_id'], 'type' => 'Debit', 'amount' => round($principal + $interest, 2)]];
+
+            if ($principal > 0) {
+                $lines[] = ['account_id' => $accounts['receivable_id'], 'type' => 'Credit', 'amount' => $principal];
+            }
+            if ($interest > 0) {
+                $lines[] = ['account_id' => $accounts['interest_receivable_id'], 'type' => 'Credit', 'amount' => $interest];
+            }
+
+            $this->journal($returnCode . '/ADV', 'Advances recovered from return ' . $returnCode, $details, $lines, $userId);
+        }
+
+        return ['principal' => $principal, 'interest' => $interest];
+    }
+
+    /**
+     * How much of a recovered advance row is principal and how much is interest and charge. An instalment row holds its
+     * schedule's principal, the separate charge row (/CHG) is all charge, and a one-off advance row holds the advance's
+     * principal. The rest of each row is interest or charge.
+     *
+     * @param float $debit the ledger row's debit amount
+     * @param string $transactionNumber the ledger row's reference, which ends /CHG on the charge row
+     * @param float|null $schedulePrincipal the instalment's principal, or null when the row is not an instalment
+     * @param float $advancePrincipal the advance's principal
+     * @return array [principal, interest]
+     */
+    public static function splitRecovery(float $debit, string $transactionNumber, ?float $schedulePrincipal, float $advancePrincipal): array {
+        if (str_ends_with($transactionNumber, '/CHG')) {
+            return [0.0, round($debit, 2)];
+        }
+
+        $principal = round(min($schedulePrincipal ?? $advancePrincipal, $debit), 2);
+
+        return [$principal, round($debit - $principal, 2)];
+    }
+
+    /**
+     * The GL accounts an advance recovery posts to, from the GL setup. A missing one stops the posting with a message
+     * saying which.
+     */
+    protected function recoveryAccounts(): array {
+        $setup = GlAccountSetup::first();
+        $needed = [
+            'clients' => ['clients_account_id', 'Clients Account'],
+            'receivable' => ['loans_receivable_account_id', 'Loans & Advances Receivable'],
+            'interest_receivable' => ['interests_receivable_account_id', 'Loans Interests Receivable'],
+        ];
+        $accounts = [];
+
+        foreach ($needed as $key => [$column, $label]) {
+            $id = $setup->{$column} ?? null;
+
+            if (!$id) {
+                throw new ClientAccountException('The GL setup is missing the ' . $label . ' account.');
+            }
+
+            $accounts[$key . '_id'] = (int) $id;
+        }
+
+        return $accounts;
     }
 
     /**
