@@ -464,21 +464,10 @@ $(function () {
         render: function (s, type, row) {
             s = parseInt(s);
 
-            var map = {
-                // Newer workflow
-                1:  row.waiting_on === 'hr' 
-                        ? '<span class="badge bg-info">Pending HR</span>' 
-                        : '<span class="badge bg-secondary">Pending Supervisor</span>',
-                24: '<span class="badge bg-info">Pending HR</span>',
-                5:  '<span class="badge bg-success">Approved</span>',
-                41: '<span class="badge bg-danger">Rejected</span>',
-
-                // Older / current workflow
-                2:  '<span class="badge bg-secondary">Pending Approval</span>',
-                3:  '<span class="badge bg-success">Approved</span>'
-            };
-
-            return map[s] || '<span class="badge bg-light text-dark">' + s + '</span>';
+            const label = row.stage_label || 'Pending approval';
+            const color = [3, 5].includes(s) ? 'success' : s === 41 ? 'danger' : row.waiting_on === 'hr' ? 'info' : 'secondary';
+            if (type !== 'display') return label;
+            return '<span class="badge bg-' + color + '">' + $.fn.dataTable.render.text().display(label) + '</span>';
         }
     },
     {
@@ -579,6 +568,7 @@ $(function () {
     $('#leaveSubmitBtn').on('click', function () {
         const handoverSearch = document.getElementById('sl_handover_employee_search');
         if (handoverSearch && !handoverSearch.reportValidity()) return;
+        if (!document.getElementById('sl_handover_notes').reportValidity()) return;
         var durationType = $('input[name="leave_duration_type"]:checked').val();
         var data = {
             staff_id: staffId,
@@ -609,10 +599,15 @@ $(function () {
         $('#leaveSpinner').removeClass('d-none');
         $('#leaveSubmitBtn').prop('disabled', true);
 
+        const payload = new FormData();
+        Object.entries(data).forEach(([key, value]) => payload.append(key, value ?? ''));
+        for (const file of document.getElementById('sl_handover_documents').files) payload.append('handover_documents[]', file);
         $.ajax({
             url: "{{ route('ajax.leaveApplications.store') }}",
             method: 'POST',
-            data: data,
+            processData: false,
+            contentType: false,
+            data: payload,
             success: function (res) {
                 if (res.success) {
                     $('#leaveApplicationModal').modal('hide');

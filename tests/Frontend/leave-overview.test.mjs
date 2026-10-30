@@ -83,3 +83,31 @@ test('stale responses cannot replace the results after changing the selected emp
     assert.equal(ui.get('lo-status').textContent, 'Select an employee to load their leave account.');
     assert.equal(ui.get('lo-balances').children.length, 0);
 });
+
+test('missing categories remain selectable with recorded pending days and no invented balance', async()=>{
+    const missing={id:2,name:'Unconfigured leave category #2',setup_status:'missing',entitled:null,approved:0,pending:1,balance:null,available:null,warnings:['Category is missing. No days reassigned.']};
+    const days=[{request_id:20,category_id:2,category:missing.name,date:'2026-10-02',days:1,status:'Pending — recorded request total; category rules unavailable',tier:null,pay_rate:null}];
+    const ui=setup(async url=>ok(url.includes('?')?{categories:[missing],days}:options));
+    await ui.ready();await ui.load();
+    const cells=ui.get('lo-balances').children[0].children;
+    assert.equal(cells[3].textContent,'1');
+    assert.equal(cells[4].textContent,'—');
+    assert.equal(cells[5].textContent,'—');
+    assert.equal(cells[6].textContent,'Category missing');
+    assert.equal(ui.get('lo-category').children[1].textContent,missing.name);
+    assert.equal(ui.get('lo-warnings').open,true);
+    assert.equal(ui.get('lo-days').children[0].children[0].textContent,'2026-10-02');
+});
+
+test('month filter retains overlapping request periods while unallocated days stay unavailable',async()=>{
+    const missing={id:2,name:'Unconfigured leave category #2',entitled:null,approved:0,pending:null,balance:null,available:null,warnings:['Year allocation unavailable']};
+    const days=[{request_id:20,category_id:2,category:missing.name,date:null,request_start:'2025-12-30',request_end:'2026-01-03',days:null,status:'Pending — spans years',tier:null,pay_rate:null}];
+    const ui=setup(async url=>ok(url.includes('?')?{categories:[missing],days}:options));
+    await ui.ready();await ui.load();
+    ui.get('lo-month').value='01';ui.get('lo-month').handlers.change();
+    const cells=ui.get('lo-days').children[0].children;
+    assert.equal(cells[0].textContent,'2025-12-30 to 2026-01-03 (request period)');
+    assert.equal(cells[4].textContent,'—');
+    ui.get('lo-month').value='02';ui.get('lo-month').handlers.change();
+    assert.equal(ui.get('lo-days').children[0].children[0].textContent,'No leave days match these filters.');
+});

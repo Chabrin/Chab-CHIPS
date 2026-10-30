@@ -159,4 +159,91 @@ class EmployeeUploadGuardTest extends TestCase
             'hashes' => ['photo' => 'not-a-sha256'],
         ])->assertUnprocessable()->assertJsonValidationErrors('hashes.photo');
     }
+
+    public function test_preflight_explains_another_employee_conflict_without_exposing_identity(): void
+    {
+        $this->preflightUser(true);
+        Storage::disk('local')->put('employee_documents/12/id.pdf', 'existing document');
+        DB::table('employee_documents')->insert(['employee_id' => 12, 'file_path' => 'employee_documents/12/id.pdf']);
+        $response = $this->postJson(route('hr.uploads.check-duplicates'), [
+            'hashes' => ['documents.national_id' => hash('sha256', 'existing document')],
+        ])->assertUnprocessable();
+        $message = $response->json('errors')['documents.national_id'][0];
+        $this->assertStringContainsString('National ID / Passport copy', $message);
+        $this->assertStringContainsString('another employee', $message);
+        $this->assertStringContainsString('renaming', $message);
+        $this->assertStringNotContainsString('12', $message);
+    }
+
+    public function test_edit_preflight_distinguishes_a_file_already_saved_for_this_employee(): void
+    {
+        $this->preflightUser(true);
+        Storage::disk('public')->put('staff_photos/existing.png', 'existing photo');
+        DB::table('sys_staff')->insert(['id' => 12, 'photo' => 'staff_photos/existing.png']);
+        $response = $this->postJson(route('hr.uploads.check-duplicates'), [
+            'staff_id' => 12, 'hashes' => ['photo' => hash('sha256', 'existing photo')],
+        ])->assertUnprocessable();
+        $this->assertStringContainsString('this employee', $response->json('errors.photo.0'));
+    }
+
+    private function staffFormData(): array
+    {
+        Schema::table('sys_staff', function (Blueprint $table) {
+            $table->string('email_address')->nullable();
+            $table->string('national_id')->nullable();
+        });
+        Schema::create('cb_roles', fn (Blueprint $table) => $table->id());
+        DB::table('cb_roles')->insert(['id' => 1]);
+        return [
+            'full_names' => 'Test Staff', 'employment_type' => 'Permanent', 'email_address' => 'staff@example.test',
+            'national_id' => 'TEST123', 'gender' => 'Male', 'birth_date' => '2000-01-01',
+            'bank_name' => 1, 'account_name' => 'Test Staff', 'account_number' => '123',
+            'pin_number' => 'TESTPIN', 'nhif_number' => 'TESTSHA', 'nssf_number' => 'TESTNSSF',
+            'marital' => 'Single', 'citizenship' => 'Kenya', 'disability' => 'No',
+            'login_email' => 'login@example.test', 'role_id' => 1,
+            'documents' => [
+                'national_id' => $this->upload('id.pdf', "%PDF-1.4\nTest ID document"),
+                'kra_pin' => $this->upload('pin.pdf', "%PDF-1.4\nDifferent certificate"),
+            ],
+        ];
+    }
+
+    public function test_staff_save_returns_field_validation_as_json_without_a_reload(): void
+    {
+        $this->preflightUser(true);
+        $form = $this->staffFormData();
+        Storage::disk('local')->put('employee_documents/12/id.pdf', "%PDF-1.4\nTest ID document");
+        DB::table('employee_documents')->insert(['employee_id' => 12, 'file_path' => 'employee_documents/12/id.pdf']);
+        $response = $this->post(route('staff.store'), $form, ['Accept' => 'application/json'])
+            ->assertUnprocessable()->assertJsonValidationErrors('documents.national_id');
+        $this->assertStringContainsString('another employee', $response->json('errors')['documents.national_id'][0]);
+        $this->assertFalse($response->isRedirect());
+        $this->assertSame(0, DB::table('sys_staff')->count());
+        $this->assertSame(1, DB::table('employee_documents')->count());
+    }
+
+    public function test_php_rejected_upload_has_a_clear_limit_message_in_the_json_response(): void
+    {
+        $this->preflightUser(true);
+        $form = $this->staffFormData();
+        $original = $form['documents']['national_id'];
+        $form['documents']['national_id'] = new UploadedFile($original->getPathname(), 'id.pdf', 'application/pdf', UPLOAD_ERR_INI_SIZE, true);
+        $response = $this->post(route('staff.store'), $form, ['Accept' => 'application/json'])
+            ->assertUnprocessable()->assertJsonValidationErrors('documents.national_id');
+        $message = $response->json('errors')['documents.national_id'][0];
+        $this->assertStringContainsString('upload limit', $message);
+        $this->assertStringContainsString('National ID', $message);
+        $this->assertFalse($response->isRedirect());
+    }
+
+    public function test_upload_partial_renders_the_effective_server_limits_and_ajax_save_handler(): void
+    {
+        $this->view('staff.partials.upload-duplicate-check')
+            ->assertSee('const uploadLimits =', false)
+            ->assertSee('EmployeeStaffForm', false)
+            ->assertSee('new FormData(form)', false);
+        $limits = \App\Support\EmployeeUploadLimits::current();
+        $this->assertGreaterThan(0, $limits['file']);
+        $this->assertArrayHasKey('post', $limits);
+    }
 }

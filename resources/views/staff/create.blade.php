@@ -279,7 +279,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <div class="col-md-5">
                                                 <label class="form-label fw-semibold small mb-1">Staff Profile Photo</label>
                                                 <input type="file" name="photo" id="photo-input" class="form-control form-control-sm" accept="image/*">
-                                                <small class="text-muted">Square ratio (JPG, PNG), max 2MB.</small>
+                                                <small class="text-muted">Square ratio (JPG, PNG). Check the current upload limit above.</small>
                                             </div>
                                         </div>
                                     </div>
@@ -509,7 +509,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                 <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
                                     <div class="pt-3 pb-2 mb-3 border-bottom">
                                         <h6 class="fw-bold mb-1">Staff Documentation & Verification</h6>
-                                        <p class="text-muted small mb-0">Upload statutory documents, contracts, and certifications (PDF, JPG, PNG &mdash; Max 5MB per file).</p>
+                                        <p class="text-muted small mb-0">Upload statutory documents, contracts, and certifications. Current upload limits are shown beside each field.</p>
                                     </div>
 
                                     <div class="row g-3">
@@ -552,7 +552,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                     Curriculum Vitae (CV / Resume)
                                                 </label>
                                                 <input type="file" name="documents[cv]" class="form-control" accept=".pdf,.doc,.docx">
-                                                <small class="text-muted">Updated staff resume or CV (PDF or Word, Max 5MB)</small>
+                                                <small class="text-muted">Updated staff resume or CV (PDF or Word). Check the current upload limit above.</small>
                                             </div>
                                         </div>
                                         <!-- Academic / Professional Certificates -->
@@ -722,7 +722,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
         });
 
         // Handle form submission
-        $('#staffCreateForm').on('submit', function() {
+        $('#staffCreateForm').on('submit', function(event) {
+            event.preventDefault();
             var submitButton = $('#createButton');
             var spinner = $('#submitSpinner');
 
@@ -730,6 +731,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             spinner.removeClass('d-none');
             submitButton.prop('disabled', true);
             submitButton.css('opacity', '0.6');
+            window.EmployeeStaffForm.save();
         });
 
         // A required field inside a hidden tab blocks submit silently, so jump to the tab that has it.

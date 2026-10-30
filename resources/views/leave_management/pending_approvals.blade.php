@@ -21,7 +21,7 @@
                                         <th>Start Date</th>
                                         <th>End Date</th>
                                         <th>Days</th>
-                                        <th>Handover</th>
+                                        <th>Relief Arrangements</th>
                                         <th>Current Stage</th>
                                         <th>Action</th>
                                     </tr>
@@ -84,8 +84,10 @@ $(document).ready(function() {
             {
                 data: 'handover_notes',
                 render: function(notes, type, row) {
-                    const text = row.handover_employee_name ? row.handover_employee_name + ': ' + (notes || '') : 'No handover recorded';
-                    return $.fn.dataTable.render.text().display(text);
+                    const text = row.handover_employee_name ? row.handover_employee_name + ': ' + (notes || '') : 'No relief arrangements recorded';
+                    const receipt = row.handover_acknowledged_at ? 'Receipt acknowledged' : 'Awaiting acknowledgement';
+                    const url = $('<div>').text(row.handover_review_url || '').html();
+                    return $.fn.dataTable.render.text().display(text) + '<br><small>' + receipt + '</small><br><a href="' + url + '">View relief files and receipt</a>';
                 }
             },
             {
@@ -151,6 +153,9 @@ $(document).ready(function() {
                         `;
                     }
 
+                    if (!row.can_reject) {
+                        buttons += '<small class="text-muted">' + $.fn.dataTable.render.text().display(row.waiting_description || 'Awaiting approval at the current stage.') + '</small>';
+                    }
                     buttons += '</div>';
                     return buttons;
                 }

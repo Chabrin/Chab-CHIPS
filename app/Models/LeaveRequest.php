@@ -39,6 +39,8 @@ class LeaveRequest extends Model
     ];
 
     protected $casts = [
+        'handover_attachments' => 'array',
+        'handover_acknowledged_at' => 'datetime',
         'handover_staff_id' => 'integer',
         'date_time' => 'datetime',
         'start_date' => 'datetime',
@@ -48,6 +50,7 @@ class LeaveRequest extends Model
     ];
 
     public const STATUS_PENDING = 1;
+    protected $hidden = ['handover_attachments'];
     public const STATUS_PARTIAL = 24;
     public const STATUS_APPROVED = 5;
     public const STATUS_REJECTED = 41;

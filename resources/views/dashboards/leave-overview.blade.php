@@ -28,10 +28,10 @@
     <div id="lo-results" class="d-none">
         <h6>Category balances · days</h6>
         <div class="table-responsive"><table class="lo-table"><thead><tr><th>Category</th><th class="lo-number">Entitlement</th><th class="lo-number">Approved allocated</th><th class="lo-number">Pending reserved</th><th class="lo-number">Recorded balance</th><th class="lo-number">Available to request</th><th>Review</th></tr></thead><tbody id="lo-balances"></tbody></table></div>
-        <p class="lo-note">Balances use the same source as leave applications. Available days deduct pending reservations and have a minimum of zero. Approved allocations include future approved leave; they are not necessarily days already taken. Missing figures appear as —.</p>
+        <p class="lo-note">Configured categories use the same balance source as leave applications. Available days deduct pending reservations and have a minimum of zero. Missing or inactive categories keep their own recorded requests; their entitlement and balances appear as — until HR confirms the setup. Approved allocations include future approved leave.</p>
         <h6>Daily breakdown</h6>
         <div class="table-responsive" style="max-height:420px;overflow:auto;"><table class="lo-table"><thead><tr><th>Date</th><th>Category</th><th>Request</th><th>Status</th><th class="lo-number">Days</th><th>Pay tier / rate</th></tr></thead><tbody id="lo-days"></tbody></table></div>
-        <p class="lo-note">Approved rows use saved day fractions, including half-days. Refunded dates charge zero. Pending rows preview current weekend and holiday rules; the reserved request total remains authoritative. The month filter affects only this breakdown.</p>
+        <p class="lo-note">Approved rows use saved day fractions, including half-days. Refunded dates charge zero. Pending rows preview current rules only for configured categories. Where category rules are unavailable, recorded request totals are labelled separately; a multi-day total is not a daily deduction. Month filters also show overlapping request periods without assigning their total to that month.</p>
     </div>
 </section>
 <script>
@@ -61,16 +61,23 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('lo-balances').replaceChildren();
         document.getElementById('lo-days').replaceChildren();
         const categories = data.categories.filter(item => !category.value || String(item.id) === category.value);
-        categories.forEach(item => row('lo-balances', [item.name, number(item.entitled), number(item.approved), number(item.pending), number(item.balance), number(item.available), item.warnings.length ? 'Needs review' : 'Reconciled'], [1,2,3,4,5]));
-        if (!categories.length) row('lo-balances', ['No active leave categories configured.']);
-        const days = data.days.filter(item => (!category.value || String(item.category_id) === category.value) && (!month.value || (item.date && item.date.slice(5,7) === month.value)));
-        days.forEach(item => row('lo-days', [item.date || 'Dates unavailable', item.category, '#' + item.request_id, item.status, number(item.days), item.tier ? 'Tier ' + item.tier + (item.pay_rate !== null ? ' · ' + number(item.pay_rate) + '%' : '') : '—'], [4]));
+        categories.forEach(item => row('lo-balances', [item.name, number(item.entitled), number(item.approved), number(item.pending), number(item.balance), number(item.available), item.setup_status === 'missing' ? 'Category missing' : (item.setup_status === 'inactive' ? 'Category inactive' : (item.warnings.length ? 'Needs review' : 'Reconciled'))], [1,2,3,4,5]));
+        if (!categories.length) row('lo-balances', ['No leave categories or recorded requests found.']);
+        const selectedMonth = year.value + '-' + month.value;
+        const days = data.days.filter(item => (!category.value || String(item.category_id) === category.value) && (!month.value || (item.date
+            ? item.date.slice(0,7) === selectedMonth
+            : item.request_start && item.request_end && item.request_start.slice(0,7) <= selectedMonth && item.request_end.slice(0,7) >= selectedMonth)));
+        days.forEach(item => {
+            const period = item.date || (item.request_start && item.request_end ? item.request_start + ' to ' + item.request_end + ' (request period)' : 'Dates unavailable');
+            row('lo-days', [period, item.category, '#' + item.request_id, item.status, number(item.days), item.tier ? 'Tier ' + item.tier + (item.pay_rate !== null ? ' · ' + number(item.pay_rate) + '%' : '') : '—'], [4]);
+        });
         if (!days.length) row('lo-days', ['No leave days match these filters.']);
         const messages = categories.flatMap(item => item.warnings.map(message => item.name + ': ' + message));
         const list = document.getElementById('lo-warning-list');
         list.replaceChildren();
         messages.forEach(message => { const li = document.createElement('li'); li.textContent = message; list.appendChild(li); });
         document.getElementById('lo-warnings').classList.toggle('d-none', !messages.length);
+        document.getElementById('lo-warnings').open = messages.length > 0;
     }
     async function load() {
         const current = ++revision;

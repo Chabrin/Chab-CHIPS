@@ -42,6 +42,8 @@
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/notification-bell.css') }}?v={{ filemtime(public_path('assets/css/notification-bell.css')) }}">
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/handover-employee-picker.css') }}?v={{ filemtime(public_path('assets/css/handover-employee-picker.css')) }}">
 
+    <link rel="stylesheet" href="{{ asset('assets/css/header-refinements.css') }}?v={{ filemtime(public_path('assets/css/header-refinements.css')) }}">
+
     @yield('styles')
 
 </head>
@@ -98,12 +100,12 @@
                         
                        <li class="header-search-item">
                             <div class="header-search-wrapper" id="header_search_box">
-                                <span class="material-symbols-outlined search-icon" id="global_search_submit">search</span>
+                                <button type="button" class="header-search-submit" id="global_search_submit" aria-label="Search records"><span class="material-symbols-outlined search-icon" aria-hidden="true">search</span></button>
                                 <input 
                                     type="text" 
                                     id="global_search_input" 
                                     class="header-search-control" 
-                                    placeholder="Search properties, tenants, units..." 
+                                    placeholder="Search records..." aria-label="Search clients, staff, properties and invoices"
                                     autocomplete="off"
                                     spellcheck="false"
                                 >
@@ -113,8 +115,8 @@
 
 
                         @include('layouts.contract-notifications')
-                        <li class="profile-nav onhover-dropdown pe-0 py-0">
-                        <div class="d-flex align-items-center profile-trigger-btn">
+                        <li class="profile-nav dropdown pe-0 py-0">
+                        <button type="button" class="d-flex align-items-center profile-trigger-btn" id="account-menu-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="account-menu" aria-label="Open account menu">
                             {{-- Circular Avatar with Initials --}}
                             @php
                                 $staff = Auth::user()?->linkedStaff();
@@ -132,13 +134,13 @@
                             
                             <div class="profile-meta d-none d-md-block text-start">
                                 <span class="profile-name">{{ Auth::user()?->name }}</span>
-                                <span class="profile-role">Director</span>
+                                <span class="profile-role">{{ Auth::user()?->roles->map(fn ($role) => $role->display_name ?: ucwords(str_replace('_', ' ', $role->name)))->implode(', ') ?: 'Signed in' }}</span>
                             </div>
-                            <span class="material-symbols-outlined profile-caret">expand_more</span>
-                        </div>
+                            <span class="material-symbols-outlined profile-caret" aria-hidden="true">expand_more</span>
+                        </button>
 
                         {{-- Upgraded Dropdown Card --}}
-                        <div class="profile-dropdown onhover-show-div modern-profile-menu">
+                        <div class="profile-dropdown dropdown-menu dropdown-menu-end modern-profile-menu" id="account-menu" aria-labelledby="account-menu-trigger">
                             {{-- Header inside menu with full details --}}
                             <div class="profile-menu-header">
                                 <div class="header-avatar-circle lg" style="overflow: hidden; padding: 0;">

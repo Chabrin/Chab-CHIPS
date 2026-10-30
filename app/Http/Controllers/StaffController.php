@@ -16,6 +16,7 @@ use App\Models\PayrollElement;
 use App\Services\NssfCalculator;
 use App\Services\EmployeeUploadGuard;
 use App\Services\EmployeeContractExpiry;
+use App\Services\EmployeeContractReport;
 use App\Models\User;
 use App\Models\Contract;
 use App\Models\Incident;
@@ -60,6 +61,15 @@ class StaffController extends Controller
         'login_email' => 'login email',
         'documents.national_id' => 'National ID / Passport copy',
         'documents.kra_pin' => 'KRA PIN certificate',
+        'photo' => 'staff photo',
+        'documents.contract' => 'signed employment contract',
+        'documents.cv' => 'CV',
+        'documents.academic' => 'academic certificates',
+    ];
+
+    private const UPLOAD_MESSAGES = [
+        'photo.uploaded' => 'The :attribute could not be received. Check the upload limit shown beside the field and choose a smaller file.',
+        'documents.*.uploaded' => 'The :attribute could not be received. Check the upload limit shown beside the field and choose a smaller file.',
     ];
 
     private const DOCUMENT_MAP = [
@@ -353,6 +363,9 @@ class StaffController extends Controller
     {
         try {
             if (!auth()->user()->hasPermission('create_users')) {
+                if ($request->expectsJson()) {
+                    return response()->json(['message' => 'You do not have permission to create this staff member. Your form has been kept.'], 403);
+                }
                 return redirect()->back()->with('error', 'You need the create users permission to add staff, because permanent and temporary staff members get a system login.')->withInput();
             }
 
@@ -401,7 +414,7 @@ class StaffController extends Controller
                 'login_email' => 'required_unless:employment_type,Casual|nullable|email|max:255',
                 'role_id' => 'required_unless:employment_type,Casual|nullable|integer|exists:cb_roles,id',
                 'password' => 'nullable|string|min:8|max:255',
-            ], [], self::STATUTORY_ATTRIBUTES);
+            ], self::UPLOAD_MESSAGES, self::STATUTORY_ATTRIBUTES);
 
             $this->validateStaffUploads($request);
             $isCasual = $validated['employment_type'] === 'Casual';
@@ -504,8 +517,14 @@ class StaffController extends Controller
             if ($generatedPassword) {
                 $redirect->with('generated_password', $generatedPassword);
             }
+            if ($request->expectsJson()) {
+                return response()->json(['redirect_url' => $redirect->getTargetUrl()]);
+            }
             return $redirect;
         } catch (ValidationException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Please correct the highlighted fields. Your selected files have been kept.', 'errors' => $e->errors()], 422);
+            }
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
             Log::error('Staff create failed: ' . $e->getMessage(), [
@@ -516,19 +535,22 @@ class StaffController extends Controller
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Unable to save the staff member. Your form and selected files have been kept.'], 500);
+            }
             return redirect()->back()->with('error', 'Failed to create staff member')->withInput();
         }
     }
     /**
      * Save the documents uploaded on the create-staff form (REQ-01).
      */
-    private function validateStaffUploads(Request $request): void
+    private function validateStaffUploads(Request $request, ?int $staffId = null): void
     {
         $files = ['photo' => $request->file('photo')];
         foreach (array_keys(self::DOCUMENT_MAP) as $key) {
             $files["documents.$key"] = $request->file("documents.$key");
         }
-        app(EmployeeUploadGuard::class)->validate($files);
+        app(EmployeeUploadGuard::class)->validate($files, $staffId);
     }
 
     private function storeStaffDocuments(Request $request, Staff $staff): void {
@@ -551,7 +573,7 @@ class StaffController extends Controller
      * Attach the physically signed contract (PDF) to a contract, replacing any earlier upload for that contract.
      */
     private function saveSignedContract(Contract $contract, UploadedFile $file): void {
-        app(EmployeeUploadGuard::class)->validate(['signed_contract' => $file]);
+        app(EmployeeUploadGuard::class)->validate(['signed_contract' => $file], (int) $contract->staff_id);
 
         $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
         if (!$typeId) {
@@ -749,9 +771,9 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
             'remove_documents'      => 'nullable|array',
             'remove_documents.*'    => 'in:' . implode(',', array_keys(self::DOCUMENT_MAP)),
-        ], [], self::STATUTORY_ATTRIBUTES);
+        ], self::UPLOAD_MESSAGES, self::STATUTORY_ATTRIBUTES);
 
-        $this->validateStaffUploads($request);
+        $this->validateStaffUploads($request, (int) $id);
 
         $managedZoneIds = $validated['managed_zone_ids'] ?? [];
         $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
@@ -785,9 +807,16 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             Storage::disk($disk)->delete($path);
         }
 
-        return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member updated successfully');
+        $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member updated successfully');
+        if ($request->expectsJson()) {
+            return response()->json(['redirect_url' => $redirect->getTargetUrl()]);
+        }
+        return $redirect;
     } catch (ValidationException $e) {
         Log::error('Validation error updating staff member: ' . json_encode($e->errors()));
+        if ($request->expectsJson()) {
+            return response()->json(['message' => 'Please correct the highlighted fields. Your selected files have been kept.', 'errors' => $e->errors()], 422);
+        }
         return redirect()->back()->withErrors($e->errors())->withInput();
     } catch (\Exception $e) {
         Log::error('Staff update failed: ' . $e->getMessage(), ['file' => $e->getFile() . ':' . $e->getLine()]);
@@ -797,6 +826,9 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
         }
 
+        if ($request->expectsJson()) {
+            return response()->json(['message' => 'Unable to save the staff member. Your form and selected files have been kept.'], 500);
+        }
         return redirect()->back()->with('error', 'Failed to update staff member')->withInput();
     }
 }
@@ -878,19 +910,25 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         $canRead   = Auth::user()->isAbleTo('read_contracts');
         $canUpdate = Auth::user()->isAbleTo('update_contracts');
 
-        $contracts = Contract::with('employee', 'position', 'createdBy', 'elements.payrollElement')
+        $report = app(EmployeeContractReport::class);
+        $currentIds = $report->currentContracts()->pluck('id')->flip();
+
+        $contracts = Contract::with('employee.department', 'position', 'createdBy', 'elements.payrollElement')
             ->whereHas('employee', function ($query) {
-                $query->where('current_status_id', 1);
+                $query->whereIn('current_status_id', [1, 4]);
             })
             ->orderBy('date_time', 'desc')
             ->get()
-            ->map(function ($contract) use ($canRead, $canUpdate) {
+            ->map(function ($contract) use ($canRead, $canUpdate, $currentIds, $report) {
                 $encrypted_id = $contract->employee ? Crypt::encrypt($contract->employee->id) : null;
 
                 return [
                     'id' => $contract->id,
                     'staff_id' => $contract->staff_id,
-                    'staff_number' => $contract->staff_number,
+                    'staff_number' => $contract->employee?->staff_number ?? $contract->staff_number,
+                    'department' => $contract->employee?->department?->department_name,
+                    'approval_status' => $report->approvalLabel($contract->current_status_id),
+                    'is_current_approved' => $currentIds->has($contract->id),
                     'position_id' => $contract->position_id,
                     'date_start' => $contract->date_start ? date('Y-m-d', strtotime($contract->date_start)) : null,
                     'date_end' => $contract->date_end ? date('Y-m-d', strtotime($contract->date_end)) : null,
@@ -924,7 +962,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 ];
             });
 
-        return response()->json(['contracts' => $contracts]);
+        return response()->json(['contracts' => $contracts, 'report' => $report->summary()]);
     } catch (\Throwable $e) {
         try {
             ErrorDispatcher::dispatch($e);

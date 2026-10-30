@@ -613,12 +613,14 @@ private function syncPublicHolidays(array $holidays, int $year): void {
 
     public function pendingApprovalsList()
     {
-        $applications = $this->router->actionableFor(Auth::user());
+        $applications = $this->router->pendingVisibleFor(Auth::user());
         if ($applications->isNotEmpty()) {
             $applications->load(['employee.department', 'position', 'handoverEmployee:id,full_names']);
         }
 
         return response()->json(['leave_applications' => $applications->map(function ($app) {
+            $canAct = $this->router->canAct(Auth::user(), $app) === null;
+            $waitingOn = $this->router->decisionStage(Auth::user(), $app);
             return [
                 'id' => $app->id,
                 'encrypted_leave_application_id' => Crypt::encrypt($app->id),
@@ -633,9 +635,12 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                 'stage_label' => $this->router->stageLabel($app),
                 'handover_employee_name' => $app->handoverEmployee?->full_names,
                 'handover_notes' => $app->handover_notes,
-                'can_approve_hod' => (int) $app->current_status_id === 1,
-                'can_approve_hr' => (int) $app->current_status_id === 24,
-                'can_reject' => true,
+                'handover_acknowledged_at' => $app->handover_acknowledged_at?->toIso8601String(),
+                'handover_review_url' => route('leave-management.leave-applications.by-staff', Crypt::encrypt($app->id)),
+                'waiting_description' => $this->router->waitingDescription($app),
+                'can_approve_hod' => $canAct && $waitingOn === 'supervisor',
+                'can_approve_hr' => $canAct && $waitingOn === 'hr',
+                'can_reject' => $canAct,
             ];
         })->values()]);
     }
@@ -647,7 +652,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             'status' => 'required|integer|in:24,5,41',
         ]);
         $application = LeaveRequest::findOrFail($validated['id']);
-        $nextStatus = $this->router->waitingOn($application) === 'supervisor' ? 24 : 5;
+        $nextStatus = $this->router->decisionStage(Auth::user(), $application) === 'supervisor' ? 24 : 5;
         if ((int) $validated['status'] !== 41 && (int) $validated['status'] !== $nextStatus) {
             return response()->json(['success' => false, 'error' => 'The approval stage has changed. Please reload.'], 422);
         }
@@ -655,17 +660,20 @@ private function syncPublicHolidays(array $holidays, int $year): void {
         return $this->applicationDecision($request, (int) $validated['status'] === 41);
     }
 
-    private function handoverRules(): array
+    private function handoverRules(Request $request): array
     {
         return [
-            'handover_staff_id' => ['nullable', 'required_with:handover_notes', 'integer', 'different:staff_id',
+            'handover_staff_id' => ['required', 'integer', 'different:staff_id',
                 Rule::exists('sys_staff', 'id')->where('current_status_id', 1),
-                function ($attribute, $value, $fail) {
-                    if (!app(LeaveApplicationNotifications::class)->handoverStaff()->contains('id', (int) $value)) {
-                        $fail('Choose an active colleague with a linked, activated system account and an assigned role to receive the handover notification.');
+                function ($attribute, $value, $fail) use ($request) {
+                    $applicant = Staff::find((int) $request->input('staff_id'));
+                    if (!$applicant || !app(LeaveApplicationNotifications::class)->handoverStaff($applicant)->contains('id', (int) $value)) {
+                        $fail('Choose an active colleague in the applicant\'s department with a linked, activated system account and an assigned role.');
                     }
                 }],
-            'handover_notes' => ['nullable', 'required_with:handover_staff_id', 'string', 'max:5000'],
+            'handover_notes' => ['required', 'string', 'max:5000'],
+            'handover_documents' => ['nullable', 'array', 'max:5'],
+            'handover_documents.*' => ['required', 'file', 'max:5120'],
         ];
     }
 
@@ -818,8 +826,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
     {
         $application = LeaveRequest::with(['employee:id,full_names', 'handoverEmployee:id,full_names'])->findOrFail($id);
         $user = Auth::user();
-        $recipientId = $user->linkedStaff()?->id;
-        abort_unless(!$user->block && $user->activation != 0 && $recipientId && (int) $recipientId === (int) $application->handover_staff_id, 403,
+        abort_unless(app(\App\Services\Leave\LeaveHandoverService::class)->isRecipient($user, $application), 403,
             'This handover is no longer assigned to you or you do not have access.');
 
         // Give the colleague the handover only, not balances, salary/allowances, leave category, or approval actions.
@@ -830,18 +837,19 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             'end_date' => $application->end_date?->format('d M Y'),
             'status' => (int) $application->current_status_id,
             'notes' => $application->handover_notes,
+            'id' => $application->id,
+            'revision' => app(\App\Services\Leave\LeaveHandoverService::class)->revision($application),
+            'attachments' => app(\App\Services\Leave\LeaveHandoverService::class)->attachments($application),
+            'acknowledged_at' => $application->handover_acknowledged_at?->format('d M Y H:i'),
+            'acknowledgement_note' => $application->handover_acknowledgement_note,
         ]]);
     }
 
     public function leaveApplicationsList()
     {
         try {
-            // Everyone's requests for those who can read them; everyone else only sees their own
-            $canReadAll = Auth::user()->isAbleTo('read_leave_applications');
-            $ownStaffId = Auth::user()->linkedStaff()?->id;
-
-            $requests = LeaveRequest::with('createdBy', 'employee', 'leaveType', 'position', 'handoverEmployee:id,full_names')
-                ->when(!$canReadAll, fn ($query) => $query->where('staff_id', $ownStaffId ?? 0))
+            $requests = $this->router->visibleFor(Auth::user())
+                ->with('createdBy', 'employee', 'leaveType', 'position', 'handoverEmployee:id,full_names')
                 ->orderBy('date_time', 'desc')
                 ->get()
                 ->map(function ($request) {
@@ -852,6 +860,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                         'staff_id'                       => $request->staff_id,
                         'handover_staff_id'              => $request->handover_staff_id,
                         'handover_notes'                 => $request->handover_notes,
+                        'handover_files' => app(\App\Services\Leave\LeaveHandoverService::class)->attachments($request),
                         'handover_employee_name'         => $request->handoverEmployee?->full_names,
                         'encrypted_leave_application_id' => $encrypted_leave_application_id,
                         'position_id'                    => $request->position_id,
@@ -868,6 +877,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                         'amount'                         => $request->amount,
                         'current_status_id'              => $request->current_status_id,
                         'waiting_on'                     => $this->router->waitingOn($request),
+                        'stage_label'                    => $this->router->stageLabel($request),
                         'allowance_type_id'              => $request->allowance_type_id,
                         'created_by'                     => $request->createdBy ? [
                             'id'   => $request->createdBy->id,
@@ -888,7 +898,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                         'date_time'                      => $request->date_time,
                         'can_update'                     => Auth::user()->isAbleTo('update_leave_applications'),
                         'can_delete'                     => Auth::user()->isAbleTo('delete_leave_applications'),
-                        'can_view'                       => Auth::user()->isAbleTo('read_leave_applications'),
+                        'can_view'                       => true,
                     ];
                 });
     
@@ -899,6 +909,13 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             }
             return response()->json(['error' => 'Failed to load leave applications'], 500);
         }
+    }
+
+    /** Short notification URLs still use the existing owner/supervisor/HR access checks. */
+    public function notificationApplication(int $id)
+    {
+        $application = LeaveRequest::findOrFail($id);
+        return $this->leaveApplicationsByStaff(Crypt::encrypt($application->id));
     }
 
     public function leaveApplicationsByStaff($encryptedLeaveApplicationId)
@@ -919,6 +936,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
 
             return view('leave_management.leave_application_details', [
                 'leave_applications' => $requests,
+                'approvalRouter' => $this->router,
                 'actionableIds' => $requests->filter(fn ($application) => $this->router->canAct(Auth::user(), $application) === null)->modelKeys(),
             ]);
         } catch (\Exception $e) {
@@ -951,7 +969,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                 $rules['end_date']   = 'required|date';
             }
             
-            $validated = $request->validate(array_merge($rules, $this->handoverRules()));
+            $validated = $request->validate(array_merge($rules, $this->handoverRules($request)));
 
             if (!$this->canManageLeaveOf((int) $validated['staff_id'], 'create_leave_applications')) {
                 return response()->json(['success' => false, 'error' => 'You can only apply for leave for yourself.'], 403);
@@ -1023,10 +1041,9 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             $requestModel->current_status_id = 1;
             $requestModel->created_by_id     = Auth::id();
             $requestModel->date_time         = now();
-            $routing = DB::transaction(function () use ($requestModel) {
-                $requestModel->save();
-                return $this->approvals->submit($requestModel, (int) Auth::id());
-            });
+            $routing = app(\App\Services\Leave\LeaveHandoverService::class)->saveAndSubmit(
+                $requestModel, $request, fn ($leave) => $this->approvals->submit($leave, (int) Auth::id())
+            );
 
             return response()->json(['success' => true, 'leave_application' => $requestModel->fresh(), 'routing' => $routing, 'warning' => $balanceWarning]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1035,6 +1052,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
+            Log::error('leaveApplicationsStore failed', ['exception' => $e]);
             return response()->json(['success' => false, 'error' => 'Failed to create leave application'], 500);
         }
     }
@@ -1077,7 +1095,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                 $rules['end_date']   = 'required|date';
             }
             
-            $validated = $request->validate(array_merge($rules, $this->handoverRules()));
+            $validated = $request->validate(array_merge($rules, $this->handoverRules($request)));
 
             // Both the person the request belongs to now and the one it is being changed to must be allowed
             if (!$this->canManageLeaveOf((int) $requestModel->staff_id, 'update_leave_applications') || !$this->canManageLeaveOf((int) $validated['staff_id'], 'update_leave_applications')) {
@@ -1150,10 +1168,9 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             $requestModel->status_changed_by = null;
             $requestModel->created_by_id     = Auth::id();
             $requestModel->date_time         = now();
-            $routing = DB::transaction(function () use ($requestModel) {
-                $requestModel->save();
-                return $this->approvals->submit($requestModel, (int) Auth::id());
-            });
+            $routing = app(\App\Services\Leave\LeaveHandoverService::class)->saveAndSubmit(
+                $requestModel, $request, fn ($leave) => $this->approvals->submit($leave, (int) Auth::id())
+            );
 
             return response()->json(['success' => true, 'leave_application' => $requestModel->fresh(), 'routing' => $routing, 'warning' => $balanceWarning]);
         } catch (\Illuminate\Validation\ValidationException $e) {

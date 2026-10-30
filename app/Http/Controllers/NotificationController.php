@@ -21,10 +21,12 @@ class NotificationController extends Controller
         $items = collect();
         if (isset($validated['after_id'])) {
             $items = (clone $query)->unread()->where('id', '>', $validated['after_id'])
-                ->orderBy('id')->limit(51)->get(['id', 'title', 'message', 'action_url', 'read_at']);
+                ->orderBy('id')->limit(51)->get(['id', 'type', 'data', 'title', 'message', 'action_url', 'read_at']);
         }
         $hasMore = $items->count() > 50;
         $items = $items->take(50)->values();
+        $this->personalizeLeaveMessages($items, $user);
+        $items->each(fn ($item) => $item->makeHidden(['type', 'data']));
 
         return response()->json([
             'notifications' => $items,
@@ -49,12 +51,33 @@ class NotificationController extends Controller
         }
 
         $notifications = $query->paginate(20);
+        $this->personalizeLeaveMessages($notifications->getCollection(), $user);
 
         return response()->json([
             'success' => true,
             'notifications' => $notifications,
             'unread_count' => $this->getUnreadCount(),
         ]);
+    }
+
+    private function personalizeLeaveMessages($items, $user): void
+    {
+        $legacy = $items->filter(fn ($item) => isset($item->data['staff_id'])
+            && str_starts_with((string) $item->type, 'Leave')
+            && str_contains((string) $item->message, ' applied for leave ('));
+        if ($legacy->isEmpty()) return;
+        $staffId = $user->linkedStaff()?->id;
+        foreach ($legacy as $item) {
+            $isApplicant = $staffId && (int) $item->data['staff_id'] === (int) $staffId;
+            // The saved private link identifies alerts addressed to the relief recipient.
+            $path = parse_url((string) $item->action_url, PHP_URL_PATH) ?: '';
+            $isRelief = (bool) preg_match('#^/self-service/leave-handovers/[0-9]+$#', $path);
+            $copy = \App\Services\Leave\LeaveNotificationMessage::legacyDisplay($item->type, $item->message, (bool) $isApplicant, $isRelief);
+            if ($copy) {
+                $item->title = $copy[0];
+                $item->message = $copy[1];
+            }
+        }
     }
 
     /**

@@ -389,6 +389,7 @@
             {{-- End Charts --}}
 
             @include('dashboards.leave-overview')
+            @include('dashboards.contract-expiry-overview')
 
         </div>
     </div>

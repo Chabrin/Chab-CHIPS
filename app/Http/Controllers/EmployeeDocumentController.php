@@ -20,8 +20,9 @@ class EmployeeDocumentController extends Controller
         $validated = $request->validate([
             'hashes' => 'required|array|min:1|max:10',
             'hashes.*' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
+            'staff_id' => 'nullable|integer|min:1',
         ]);
-        app(EmployeeUploadGuard::class)->validateHashes($validated['hashes']);
+        app(EmployeeUploadGuard::class)->validateHashes($validated['hashes'], isset($validated['staff_id']) ? (int) $validated['staff_id'] : null);
 
         return response()->json(['valid' => true]);
     }
@@ -40,7 +41,7 @@ class EmployeeDocumentController extends Controller
         ]);
 
         $file = $request->file('document_file');
-        app(EmployeeUploadGuard::class)->validate(['document_file' => $file]);
+        app(EmployeeUploadGuard::class)->validate(['document_file' => $file], (int) $employee->id);
         $originalName = $file->getClientOriginalName();
         $mimeType = $file->getMimeType();
         $fileSize = round($file->getSize() / 1024); // KB
@@ -118,7 +119,7 @@ class EmployeeDocumentController extends Controller
             'photo' => 'required|image|mimes:jpeg,png,jpg|max:2048', // max 2MB
         ]);
 
-        app(EmployeeUploadGuard::class)->validate(['photo' => $request->file('photo')]);
+        app(EmployeeUploadGuard::class)->validate(['photo' => $request->file('photo')], (int) $employee->id);
 
         // Delete old photo if present
         if ($employee->photo && Storage::disk('public')->exists($employee->photo)) {

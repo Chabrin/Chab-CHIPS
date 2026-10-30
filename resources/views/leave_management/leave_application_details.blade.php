@@ -44,17 +44,7 @@ use Illuminate\Support\Facades\Crypt;
                                         <div class="col-md-3">
                                             <small class="text-muted">Status:</small><br>
                                             <strong>
-                                                @if($application->current_status_id == 1)
-                                                    <span class="badge bg-warning">Pending</span>
-                                                @elseif($application->current_status_id == 24)
-                                                    <span class="badge bg-info">Pending HR</span>
-                                                @elseif($application->current_status_id == 5)
-                                                    <span class="badge bg-success">Approved</span>
-                                                @elseif($application->current_status_id == 41)
-                                                    <span class="badge bg-danger">Rejected</span>
-                                                @else
-                                                    {{ $application->current_status_id }}
-                                                @endif
+                                                <span class="badge {{ in_array((int) $application->current_status_id, [3, 5]) ? 'bg-success' : ((int) $application->current_status_id === 41 ? 'bg-danger' : 'bg-warning text-dark') }}">{{ $approvalRouter->stageLabel($application) }}</span>
                                             </strong>
                                         </div>
                                         <div class="col-md-3">
@@ -97,17 +87,20 @@ use Illuminate\Support\Facades\Crypt;
                                         </div>
                                     </div>
                                     <div class="border-top mt-3 pt-3">
-                                        <h6>Work handover</h6>
-                                        <p class="mb-1"><strong>Hand over to:</strong> {{ $application->handoverEmployee?->full_names ?? 'Not recorded' }}</p>
-                                        <p style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ $application->handover_notes ?? 'No handover notes recorded.' }}</p>
+                                        <h6>Relief Arrangements</h6>
+                                        @include('leave_management.partials.handover-receipt', ['application' => $application])
+                                        <p class="mb-1"><strong>Relief employee:</strong> {{ $application->handoverEmployee?->full_names ?? 'Not recorded' }}</p>
+                                        <p style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ $application->handover_notes ?? 'No relief notes recorded.' }}</p>
                                     </div>
                                     @if(in_array($application->id, $actionableIds ?? []))
                                         <div class="d-flex gap-2 mt-3">
                                             <button type="button" class="btn btn-primary btn-sm" data-leave-decision="approve" data-id="{{ $application->id }}">
-                                                {{ (int) $application->current_status_id === 1 ? 'Approve as supervisor' : 'Give final HR approval' }}
+                                                {{ $approvalRouter->decisionStage(auth()->user(), $application) === 'supervisor' ? 'Approve as supervisor' : 'Give final HR approval' }}
                                             </button>
                                             <button type="button" class="btn btn-outline-danger btn-sm" data-leave-decision="reject" data-id="{{ $application->id }}">Reject</button>
                                         </div>
+                                    @elseif($approvalRouter->waitingDescription($application))
+                                        <p class="text-muted mt-3">{{ $approvalRouter->waitingDescription($application) }}</p>
                                     @endif
                                 </div>
                             </div>

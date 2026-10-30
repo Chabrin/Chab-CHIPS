@@ -29,15 +29,4 @@ class EmployeeContractExpiry
         return ['status' => $status, 'label' => $labels[$status], 'days_remaining' => $days];
     }
 
-    /** Catch up within the current reminder window if a daily run was missed. */
-    public function reminder(int $days): ?int
-    {
-        return match (true) {
-            $days <= 0 => 0,
-            $days <= 7 => 7,
-            $days <= 14 => 14,
-            $days <= 30 => 30,
-            default => null,
-        };
-    }
 }
