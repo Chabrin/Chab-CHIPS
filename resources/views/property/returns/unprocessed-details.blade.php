@@ -422,6 +422,13 @@
         var approvalsLoaded = false;
         var isEditable = ($meta.data('paid-status') == 0 && $meta.data('approved-status') == 0);
 
+        // Pads every number in a code so codes compare in natural order: B2 before B10
+        function naturalKey(value) {
+            return String(value || '').toLowerCase().replace(/\d+/g, function(n) {
+                return n.padStart(12, '0');
+            });
+        }
+
         var table = $('#details-table').DataTable({
             data: [],
             columns: [{
@@ -439,7 +446,11 @@
                     data: 'tenant_name'
                 },
                 {
-                    data: 'unit_code'
+                    data: 'unit_code',
+                    render: function(d, type) {
+                        // Sort and type detection use the natural key (B2 before B10); the cell still shows the code as it is
+                        return (type === 'sort' || type === 'type') ? naturalKey(d) : d;
+                    }
                 },
                 {
                     data: 'entry_description',
@@ -502,7 +513,8 @@
             searching: true,
             ordering: true,
             order: [
-                [1, 'asc']
+                [1, 'asc'],
+                [3, 'asc']
             ],
             pageLength: 50
         });

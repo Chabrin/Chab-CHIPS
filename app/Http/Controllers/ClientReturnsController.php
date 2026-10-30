@@ -467,11 +467,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $details = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $details = ReturnClient::forReturn($return->return_code);
 
             return response()->json([
                 'success' => true,
@@ -585,11 +581,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             // Recompute line totals (same formula as details page)
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
@@ -682,6 +674,9 @@ class ClientReturnsController extends Controller
                 }
             }
 
+            // Rows in unit order (B2 before B10), whichever entry type introduced the unit
+            $tenantRows = $this->sortTenantRowsByUnit($tenantRows);
+
             // Financial summary
             $commTotal      = (float) ($return->commission_total ?? 0);
             $commission     = (float) ($lineTotals->commission ?? 0);
@@ -764,11 +759,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
@@ -1788,11 +1779,7 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             return response()->json([
                 'success' => true,
@@ -1864,11 +1851,7 @@ class ClientReturnsController extends Controller
                 exit;
             }
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             // Recompute line totals (same formula as details page)
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
@@ -1960,6 +1943,9 @@ class ClientReturnsController extends Controller
                     $tenantRows[$key]['remarks'] = trim($tenantRows[$key]['remarks'] . ' ' . $l->remarks);
                 }
             }
+
+            // Rows in unit order (B2 before B10), whichever entry type introduced the unit
+            $tenantRows = $this->sortTenantRowsByUnit($tenantRows);
 
             // Financial summary
             $commTotal      = (float) ($return->commission_total ?? 0);
@@ -2184,11 +2170,7 @@ class ClientReturnsController extends Controller
                 exit;
             }
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
@@ -2378,6 +2360,15 @@ class ClientReturnsController extends Controller
             'propertyName' => $propertyDisplay,
             'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
         ];
+    }
+
+    /**
+     * Put the pivoted tenant rows of a return PDF in unit order (B2 before B10); a row with no unit stays first.
+     */
+    private function sortTenantRowsByUnit(array $tenantRows): array {
+        uasort($tenantRows, fn($a, $b) => strnatcasecmp((string) $a['unit_code'], (string) $b['unit_code']) ?: strnatcasecmp((string) $a['tenant_name'], (string) $b['tenant_name']));
+
+        return $tenantRows;
     }
 
     private function buildReturnSignoffData(ReturnSummary $return): array
