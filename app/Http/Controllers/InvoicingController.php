@@ -31,6 +31,7 @@ use Maatwebsite\Excel\Facades\Excel;
 class InvoicingController extends Controller
 {
     use \App\Traits\InvoiceCreationTrait;
+    use \App\Traits\PdfPageNumbers;
 
     /**
      * Inject the service that posts invoices to the GL.
@@ -841,8 +842,13 @@ class InvoicingController extends Controller
                 'dateTo' => $dateTo ? date('d M Y', strtotime($dateTo)) : 'Today',
             ];
 
-            $pdf = Pdf::loadView('property.invoices.tenant-statement-pdf', $data);
-            $pdf->setPaper('A4', 'portrait');
+            $pdf = Pdf::loadView('property.invoices.tenant-statement-pdf', $data)
+                ->setPaper('A4', 'portrait')
+                ->setOption(['enable_font_subsetting' => true]);
+
+            // Render first so the page numbers can be written on every page
+            $pdf->render();
+            $this->addPdfPageNumbers($pdf->getDomPDF());
 
             $fileName = 'Tenant_Statement_' . ($tenant->reference_number ?? $tenantId) . '_' . date('Y-m-d') . '.pdf';
 

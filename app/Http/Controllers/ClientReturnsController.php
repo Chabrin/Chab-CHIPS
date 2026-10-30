@@ -24,9 +24,11 @@ use App\Traits\ReturnsDeductionsTrait;
 use App\Traits\ReturnsSummaryTrait;
 use App\Traits\ReturnsMasterReturnTrait;
 use App\Traits\ReturnsLandlordAccountTrait;
+use App\Traits\PdfPageNumbers;
 
 class ClientReturnsController extends Controller
 {
+    use PdfPageNumbers;
     use ReturnsRentLinesTrait;
     use ReturnsPayThresholdTrait;
     use ReturnsDeductionsTrait;
@@ -650,11 +652,6 @@ class ClientReturnsController extends Controller
                 'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
             ];
 
-            $logoPath = public_path('assets/images/logo/logo_dark.png');
-            $logoSrc = file_exists($logoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
-                : '';
-
             $landlordName = $return->landlord_name
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
             $propertyName = $return->property_name
@@ -682,16 +679,15 @@ class ClientReturnsController extends Controller
                 ]
             ];
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff', 'propertyDisplay', 'landlordDisplay');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'signoff', 'propertyDisplay', 'landlordDisplay');
 
-            $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
-            $pdf->setPaper('A4', 'landscape');
+            $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
+                ->setPaper('A4', 'landscape')
+                ->setOption(['enable_font_subsetting' => true]);
 
             $dompdf = $pdf->getDomPDF();
             $dompdf->render();
-            $canvas = $dompdf->get_canvas();
-            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+            $this->addPdfPageNumbers($dompdf);
 
             $fileName = 'Unprocessed_Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token = request()->query('download_token');
@@ -1794,23 +1790,14 @@ class ClientReturnsController extends Controller
 
             if ($return->return_type === 'MASTERRETURN') {
                 $masterData = $this->buildMasterReturnExportData($return);
-                $logoPath = public_path('assets/images/logo/logo_dark.png');
-                $logoSrc  = file_exists($logoPath)
-                    ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
-                    : '';
-
                 $pdf = Pdf::loadView('property.processed-returns.master-pdf', array_merge($masterData, [
                     'return' => $return,
-                    'logoSrc' => $logoSrc,
                     'signoff' => $signoff,
-                ]));
-                $pdf->setPaper('A4', 'portrait');
+                ]))->setPaper('A4', 'portrait')->setOption(['enable_font_subsetting' => true]);
 
                 $dompdf = $pdf->getDomPDF();
                 $dompdf->render();
-                $canvas = $dompdf->get_canvas();
-                $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-                $canvas->page_text(470, 815, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+                $this->addPdfPageNumbers($dompdf);
 
                 $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
                 $token    = request()->query('download_token');
@@ -1944,11 +1931,6 @@ class ClientReturnsController extends Controller
                 'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
             ];
 
-            $logoPath = public_path('assets/images/logo/logo_dark.png');
-            $logoSrc  = file_exists($logoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
-                : '';
-
             $landlordName = $return->landlord_name
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
             $propertyName = $return->property_name
@@ -1961,17 +1943,16 @@ class ClientReturnsController extends Controller
                 ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
                 : ($return->landlord_code ?? '-');
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff', 'propertyDisplay', 'landlordDisplay');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'signoff', 'propertyDisplay', 'landlordDisplay');
 
-            $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
-            $pdf->setPaper('A4', 'landscape');
+            $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
+                ->setPaper('A4', 'landscape')
+                ->setOption(['enable_font_subsetting' => true]);
 
             // Render first so total page count is accurate, then draw page numbers.
             $dompdf = $pdf->getDomPDF();
             $dompdf->render();
-            $canvas = $dompdf->get_canvas();
-            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+            $this->addPdfPageNumbers($dompdf);
 
             $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token    = request()->query('download_token');
