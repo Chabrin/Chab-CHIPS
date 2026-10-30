@@ -15,11 +15,22 @@ use App\Models\ReturnClient;
 use App\Traits\HandlesApprovalWorkflow;
 use App\Traits\HandlesReturnApprovalWorkflow;
 use App\Jobs\ProcessReturnsFinalApprovalJob;
+use App\Services\ReturnApprovalWorkflowService;
+use App\Exceptions\ReturnApprovalException;
 
 class ReturnsApprovalController extends Controller
 {
     use HandlesApprovalWorkflow;
     use HandlesReturnApprovalWorkflow;
+
+    protected ReturnApprovalWorkflowService $returnApprovals;
+
+    /**
+     * Inject the service that decides who approves a return.
+     */
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals) {
+        $this->returnApprovals = $returnApprovals;
+    }
 
     /**
      * Get batch approvals data for timeline display (AJAX)
@@ -633,13 +644,10 @@ class ReturnsApprovalController extends Controller
                     'updated_at' => now()
                 ]);
 
-                $isAccountant = DB::table('cb_role_user as ru')
-                    ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                    ->where('ru.user_id', auth()->id())
-                    ->where('r.name', 'accountants')
-                    ->exists();
+                // The last level of the returns approval workflow is the final approval
+                $isFinal = (int) $itemApprover->approver_level >= (int) $approvalItem->total_levels;
 
-                if ($isAccountant) {
+                if ($isFinal) {
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update([
                             'status' => 'Approved',
@@ -661,19 +669,15 @@ class ReturnsApprovalController extends Controller
 
                     $message = 'Return approved successfully (Final Approval). Voucher: ' . $voucherNumber;
                 } else {
+                    // Next level's approvers come from the workflow; refuses (and rolls back) when the level has nobody
+                    $this->returnApprovals->addApproversForLevel($approvalItem, $itemApprover->approver_level + 1);
+
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update(['current_level' => $itemApprover->approver_level + 1, 'status' => 'InProgress', 'updated_at' => now()]);
 
                     // Mark return summary as InProgress (2)
                     DB::table('cb_returns_summary')->where('id', $returnSummary->id)
                         ->update(['approved_status' => 2]);
-
-                    $property = DB::table('sys_pm_properties')
-                        ->where('reference_number', $returnSummary->property_code)->first(['id']);
-                    if ($property) {
-                        $fakeObj = (object)['id' => $returnSummary->id, 'property_id' => $property->id];
-                        $this->addNextLevelApprover($approvalItem, $fakeObj, $itemApprover->approver_level);
-                    }
 
                     $message = 'Return approved successfully. Moved to Level ' . ($itemApprover->approver_level + 1);
                 }
@@ -684,6 +688,8 @@ class ReturnsApprovalController extends Controller
                 DB::rollBack();
                 throw $e;
             }
+        } catch (ReturnApprovalException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error approving return: ' . $e->getMessage());
@@ -746,10 +752,11 @@ class ReturnsApprovalController extends Controller
                     ->where('approver_level', $request->return_to_level)
                     ->first();
 
-                if ($returnToApprover) {
-                    DB::table('cb_item_approvers')->where('id', $returnToApprover->id)
-                        ->update(['approval_status' => 'Pending', 'actioned_at' => null, 'updated_at' => now()]);
-                }
+                // Every approver of that level can act again, not only the first one
+                DB::table('cb_item_approvers')
+                    ->where('approval_item_id', $approvalItem->id)
+                    ->where('approver_level', $request->return_to_level)
+                    ->update(['approval_status' => 'Pending', 'actioned_at' => null, 'updated_at' => now()]);
 
                 DB::table('cb_approval_actions')->insert([
                     'item_approver_id' => $itemApprover->id,

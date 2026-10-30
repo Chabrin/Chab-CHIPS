@@ -6,6 +6,8 @@ use Exception;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\ReturnApprovalWorkflowService;
+use App\Exceptions\ReturnApprovalException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -32,6 +34,16 @@ class ClientReturnsController extends Controller
     use ReturnsMasterReturnTrait;
     use ReturnsLandlordAccountTrait;
     use Reusables;
+
+    protected ReturnApprovalWorkflowService $returnApprovals;
+
+    /**
+     * Inject the service that decides who approves a return.
+     */
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals) {
+        $this->returnApprovals = $returnApprovals;
+    }
+
     /**
      * Display the unpaid returns listing page
      */
@@ -1020,6 +1032,13 @@ class ClientReturnsController extends Controller
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
 
+            // The approvers come from the 'returns_approval' workflow: do not generate returns nobody can approve
+            try {
+                $this->returnApprovals->assertConfigured();
+            } catch (ReturnApprovalException $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+
             // ═══════════════════════════════════════════════════════════════════
             // CHECK FOR MERGE BATCH: If single property is in merge batch, get all partners
             // ═══════════════════════════════════════════════════════════════════
@@ -1434,103 +1453,10 @@ class ClientReturnsController extends Controller
     }
 
     /**
-     * Create approval workflow items for new return summaries.
+     * Send the new return summaries for approval, with the approvers of the returns approval workflow.
      */
-    protected function createApprovalWorkflowItems(string $returnPeriod, int $userId, ?int $propertyId = null): int
-    {
-        $clientIp = request()->ip();
-        $propertyFilter = $propertyId ? " AND p.id = ?" : "";
-
-        // Bulk insert approval items
-        $approvalSql = "
-            INSERT INTO cb_approval_items (
-                item_type, item_id, item_reference, status,
-                current_level, total_levels, initiated_by, initiated_at,
-                created_at, updated_at
-            )
-            SELECT
-                'return_summary', rs.id, rs.return_code, 'Pending',
-                1, 4, ?, NOW(),
-                NOW(), NOW()
-            FROM cb_returns_summary rs
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-            WHERE rs.return_period = ?
-              AND rs.approved_status = 0
-              AND p.field_officer_id IS NOT NULL
-              {$propertyFilter}
-            ON CONFLICT (item_type, item_id) DO NOTHING
-        ";
-
-        $approvalBindings = [$userId, $returnPeriod];
-        if ($propertyId) {
-            $approvalBindings[] = $propertyId;
-        }
-
-        $approvalCount = DB::affectingStatement($approvalSql, $approvalBindings);
-
-        // Bulk insert level-1 approvers
-        $approverSql = "
-            INSERT INTO cb_item_approvers (
-                approval_item_id, approver_id, approver_level,
-                is_optional, approval_status, assigned_at,
-                created_at, updated_at
-            )
-            SELECT
-                ai.id, p.field_officer_id, 1,
-                0, 'Pending', NOW(),
-                NOW(), NOW()
-            FROM cb_approval_items ai
-            JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-            WHERE rs.return_period = ?
-              {$propertyFilter}
-              AND NOT EXISTS (
-                  SELECT 1 FROM cb_item_approvers ia
-                  WHERE ia.approval_item_id = ai.id AND ia.approver_level = 1
-              )
-        ";
-
-        $approverBindings = [$returnPeriod];
-        if ($propertyId) {
-            $approverBindings[] = $propertyId;
-        }
-
-        DB::statement($approverSql, $approverBindings);
-
-        // Bulk insert initial actions
-        $actionSql = "
-            INSERT INTO cb_approval_actions (
-                item_approver_id, approval_item_id, actor_id,
-                from_level, to_level, action, comments,
-                action_timestamp, ip_address, sequence_number, is_current,
-                created_at, updated_at
-            )
-            SELECT
-                ia.id, ai.id, ?,
-                0, 1, 'Initiated', 'Return submitted for approval',
-                NOW(), ?, 1, 1,
-                NOW(), NOW()
-            FROM cb_item_approvers ia
-            JOIN cb_approval_items ai ON ai.id = ia.approval_item_id
-            JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-            WHERE rs.return_period = ?
-              AND ia.approver_level = 1
-              {$propertyFilter}
-              AND NOT EXISTS (
-                  SELECT 1 FROM cb_approval_actions aa
-                  WHERE aa.item_approver_id = ia.id AND aa.action = 'Initiated'
-              )
-        ";
-
-        $actionBindings = [$userId, $clientIp, $returnPeriod];
-        if ($propertyId) {
-            $actionBindings[] = $propertyId;
-        }
-
-        DB::statement($actionSql, $actionBindings);
-
-        return $approvalCount;
+    protected function createApprovalWorkflowItems(string $returnPeriod, int $userId, ?int $propertyId = null): int {
+        return $this->returnApprovals->createItems($returnPeriod, $userId, request()->ip(), $propertyId);
     }
 
     /**
