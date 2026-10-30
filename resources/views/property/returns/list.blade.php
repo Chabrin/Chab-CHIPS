@@ -1,5 +1,34 @@
 @extends('layouts.main')
 
+@section('styles')
+<style>
+    /* Property dropdown (select2) sized like the small Year / Month controls beside it; the theme forces 47px with !important */
+    #property_select + .select2-container {
+        display: block;
+        height: 31px;
+    }
+
+    #property_select + .select2-container .select2-selection--single {
+        height: 31px !important;
+        padding: 0 !important;
+        border: 1px solid #dee2e6;
+        border-radius: 4px !important;
+    }
+
+    #property_select + .select2-container .select2-selection--single .select2-selection__rendered {
+        line-height: 29px !important;
+        padding-left: 8px;
+        font-size: 14px;
+    }
+
+    #property_select + .select2-container .select2-selection--single .select2-selection__arrow {
+        height: 29px;
+        top: 0 !important;
+        right: 6px;
+    }
+</style>
+@endsection
+
 @section('content')
 <div class="page-body" style="padding-top:10px;">
     <div class="container-fluid">
@@ -35,6 +64,12 @@
                                     <option value="10" {{ $currentMonth == 10 ? 'selected' : '' }}>October</option>
                                     <option value="11" {{ $currentMonth == 11 ? 'selected' : '' }}>November</option>
                                     <option value="12" {{ $currentMonth == 12 ? 'selected' : '' }}>December</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="property_select" class="form-label mb-1">Property</label>
+                                <select class="form-control form-control-sm" id="property_select">
+                                    <option value="">All properties</option>
                                 </select>
                             </div>
                             <div class="col-md-2 d-flex gap-2 align-items-end">
@@ -172,6 +207,26 @@
             });
         });
 
+        // Property dropdown: only the properties that have a return in the loaded month; keeps the pick when it is still there
+        $('#property_select').select2({
+            width: '100%'
+        });
+
+        function fillProperties(properties) {
+            var $select = $('#property_select');
+            var current = $select.val();
+
+            $select.empty().append($('<option>').val('').text('All properties'));
+            properties.forEach(function(p) {
+                $select.append($('<option>').val(p.code).text(p.name + ' (' + p.code + ')'));
+            });
+
+            var stillThere = properties.some(function(p) {
+                return p.code === current;
+            });
+            $select.val(stillThere ? current : '').trigger('change.select2');
+        }
+
         function loadData() {
             var year = $('#year_select').val();
             var month = $('#month_select').val();
@@ -191,6 +246,7 @@
                     if (response.success) {
                         $('#result_info').show();
                         $('#result_count').text(response.count);
+                        fillProperties(response.properties || []);
                         table.clear();
                         table.rows.add(response.data);
                         table.draw();
@@ -218,6 +274,17 @@
         });
 
         $('#status_filter').on('change', function() {
+            table.draw();
+        });
+
+        // Property filter: a return matches when the chosen property is one it covers (a master return covers its children's)
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+            var selected = $('#property_select').val();
+            if (!selected || settings.nTable.id !== 'returns-table') return true;
+            return (table.row(dataIndex).data().property_codes || []).indexOf(selected) !== -1;
+        });
+
+        $('#property_select').on('change', function() {
             table.draw();
         });
 

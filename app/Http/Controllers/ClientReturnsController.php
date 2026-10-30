@@ -86,6 +86,7 @@ class ClientReturnsController extends Controller
             //count of lines for sorting in datatable
 
             // Role-based filtering: non-global users only see returns for properties assigned to them
+            $allowedPropertyCodes = null;
             if (!$hasGlobalRole) {
                 $staffId = DB::table('sys_user_staff_links')
                     ->where('user_id', $userId)
@@ -174,7 +175,13 @@ class ClientReturnsController extends Controller
             //log count of returns fetched
             Log::info("Fetched {$returns->count()} returns for year={$year}, month={$month}, user_id={$userId}");
 
-            $propertyCodes = $returns->pluck('property_code')->unique()->filter();
+            // Properties each return covers (a master return has none of its own, so it carries its children's)
+            $coveredCodes = $this->returnPropertyCodes($returns, (int) $year, (int) $month);
+            if ($allowedPropertyCodes !== null) {
+                $coveredCodes = array_map(fn($codes) => array_values(array_intersect($codes, $allowedPropertyCodes)), $coveredCodes);
+            }
+
+            $propertyCodes = collect($coveredCodes)->flatten()->unique()->filter();
             $propertyNames = DB::table('sys_pm_properties')
                 ->whereIn('reference_number', $propertyCodes)
                 ->pluck('property_name', 'reference_number');
@@ -187,7 +194,11 @@ class ClientReturnsController extends Controller
             return response()->json([
                 'success' => true,
                 'count' => $returns->count(),
-                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames) {
+                'properties' => $propertyCodes
+                    ->map(fn($code) => ['code' => $code, 'name' => $propertyNames[$code] ?? $code])
+                    ->sortBy(fn($p) => strtolower($p['name']))
+                    ->values(),
+                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes) {
                     $name = $clientNames[$r->landlord_code] ?? '-';
                     $num = preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '');
                     return [
@@ -197,6 +208,7 @@ class ClientReturnsController extends Controller
                         'landlord_code' => $r->landlord_code,
                         'client_name' => $name . ' (' . $num . ')',
                         'property_code' => $r->property_code ?? '-',
+                        'property_codes' => $coveredCodes[$r->id] ?? [],
                         'property_name' => $propertyNames[$r->property_code] ?? '-',
                         'return_type' => $r->return_type ?? '-',
                         'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
@@ -220,6 +232,45 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to fetch returns list data'
             ], 500);
         }
+    }
+
+    /**
+     * Property reference numbers each listed return covers, keyed by return id: a main/mini return has its
+     * own property, a master return has the properties of its child (main) returns.
+     *
+     * @param \Illuminate\Support\Collection $returns
+     * @param int $year
+     * @param int $month
+     * @return array
+     */
+    private function returnPropertyCodes($returns, int $year, int $month): array {
+        $codesOf = fn($ref) => array_filter(array_map('trim', explode(',', (string) $ref)));
+        $masters = $returns->where('return_type', 'MASTERRETURN');
+        $children = collect();
+
+        if ($masters->isNotEmpty()) {
+            $listedCodes = $masters->flatMap(fn($m) => $codesOf($m->transaction_ref))->unique()->values()->all();
+
+            // Same child lookup as the master return PDF: the listed return codes, else the landlord's main returns of the period
+            $children = DB::table('cb_returns_summary')
+                ->where('return_type', 'MAINRETURN')
+                ->where(fn($q) => $q->whereIn('return_code', $listedCodes)->orWhere(fn($q2) => $q2->where('year', $year)->where('month', $month)))
+                ->get(['return_code', 'landlord_code', 'property_code']);
+        }
+
+        $covered = [];
+        foreach ($returns as $r) {
+            if ($r->return_type !== 'MASTERRETURN') {
+                $covered[$r->id] = array_values(array_filter([$r->property_code]));
+                continue;
+            }
+
+            $listed = $codesOf($r->transaction_ref);
+            $mine = $listed ? $children->whereIn('return_code', $listed) : $children->where('landlord_code', $r->landlord_code);
+            $covered[$r->id] = $mine->pluck('property_code')->filter()->unique()->values()->all();
+        }
+
+        return $covered;
     }
 
     // ═══════════════════════════════════════════════════════════════════
