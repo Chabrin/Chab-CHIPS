@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\ApprovalRequest;
 use App\Models\ApprovalRequestLog;
 use App\Models\ApprovalWorkflow;
+use App\Models\ClientAdvance;
 use App\Models\WorkflowApprover;
 use App\Models\PaymentVoucherHeader;
 use App\Models\PaymentVoucherLine;
@@ -22,6 +23,17 @@ use App\Traits\GlPostingTrait;
 class ApprovalService
 {
     use GlPostingTrait;
+
+    protected ClientAdvanceService $clientAdvances;
+
+    /**
+     * Inject the service that posts the bank side of an approved client advance payout.
+     *
+     * @param ClientAdvanceService $clientAdvances
+     */
+    public function __construct(ClientAdvanceService $clientAdvances) {
+        $this->clientAdvances = $clientAdvances;
+    }
 
     /**
      * Select the approver with the least pending workload at a given level.
@@ -567,6 +579,25 @@ class ApprovalService
                             // Post to landlord account and GL (will throw exception on failure)
                             $this->postReturnToLandlordAccountAndGl($return, $voucher->voucher_number);
                         }
+
+                        // A client advance payout: the advance is already on the client account and the GL,
+                        // so approval only posts the bank side (debit Accounts Payable, credit the bank).
+                        // The advance is found by its link to the voucher first, so a voucher whose lines were
+                        // removed cannot be approved without posting the payout.
+                        $advance = ClientAdvance::where('voucher_id', $voucher->id)->first();
+                        if (!$advance && $firstLine && $firstLine->voucher_type === ClientAdvanceService::VOUCHER_TYPE) {
+                            $advance = ClientAdvance::find($firstLine->entry_number);
+                            if (!$advance) {
+                                throw new Exception("Advance not found: ID {$firstLine->entry_number}");
+                            }
+                        }
+                        if ($advance) {
+                            $this->clientAdvances->postPayout($advance, $voucher, (int) Auth::id());
+                        }
+                    }
+
+                    if ($status === 'rejected') {
+                        $this->clientAdvances->releaseVoucher($voucher);
                     }
                 });
 

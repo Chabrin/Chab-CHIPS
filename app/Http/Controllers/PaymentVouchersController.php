@@ -19,6 +19,8 @@ use App\Models\ReturnSummary;
 use App\Models\Client;
 use App\Models\ChequeLeaf;
 use App\Services\ChequeBookService;
+use App\Services\ClientAdvanceService;
+use App\Models\ClientAdvance;
 
 class PaymentVouchersController extends Controller
 {
@@ -338,6 +340,10 @@ class PaymentVouchersController extends Controller
             $id      = decrypt($encryptedId);
             $voucher = PaymentVoucherHeader::findOrFail($id);
 
+            if ($this->isAdvanceVoucher($voucher)) {
+                return response()->json(['success' => false, 'message' => 'This voucher pays out a client advance. Its lines cannot be changed.'], 422);
+            }
+
             $validated = $request->validate([
                 'entry_description' => ['required', 'string', 'max:500'],
                 'account_number'    => ['nullable', 'string', 'max:100'],
@@ -417,6 +423,12 @@ class PaymentVouchersController extends Controller
         try {
             $line          = PaymentVoucherLine::findOrFail($lineId);
             $voucherNumber = $line->voucher_number;
+
+            $header = PaymentVoucherHeader::where('voucher_number', $voucherNumber)->first();
+            if ($line->voucher_type === ClientAdvanceService::VOUCHER_TYPE || ($header && $this->isAdvanceVoucher($header))) {
+                return response()->json(['success' => false, 'message' => 'This voucher pays out a client advance. Its lines cannot be changed.'], 422);
+            }
+
             $line->delete();
 
             $count = PaymentVoucherLine::where('voucher_number', $voucherNumber)->count();
@@ -428,6 +440,16 @@ class PaymentVouchersController extends Controller
             Log::error('Error removing voucher line: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to remove line'], 500);
         }
+    }
+
+    /**
+     * Whether the voucher pays out a client advance, either by its line type or by the advance's link to it.
+     * The amount is fixed to the advance's principal, so lines cannot be added or removed.
+     */
+    private function isAdvanceVoucher(PaymentVoucherHeader $voucher): bool
+    {
+        return PaymentVoucherLine::where('entry_id', $voucher->id)->where('voucher_type', ClientAdvanceService::VOUCHER_TYPE)->exists()
+            || ClientAdvance::where('voucher_id', $voucher->id)->exists();
     }
 
     /**
@@ -703,6 +725,7 @@ class PaymentVouchersController extends Controller
                     'cheque_type' => 'Cheque',
                     'source_account' => $line['source_account_name'],
                     'source_bank' => $line['source_bank_name'],
+                    'source_account_id' => $line['source_account_id'] ?? null,
                 ]);
                 $entryCount++;
             }
