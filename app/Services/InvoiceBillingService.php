@@ -17,6 +17,12 @@ class InvoiceBillingService
     const VAT_RATE = 16;
 
     /**
+     * Invoice statuses a return may see: 1 open, 8 partly paid, 9 cleared. Allocation moves an invoice from 1 to 8 or
+     * 9, so a list of only 1 drops every invoice the tenant has paid. Cancelled and recovery-closed invoices stay out.
+     */
+    const RETURNABLE_STATUSES = '1, 8, 9';
+
+    /**
      * SQL condition that says an existing invoice is for a given invoiceable item. Invoices raised by this app
      * carry item_type_id. Migrated legacy invoices (96% of all invoices) have it empty and name the item in
      * return_type_id, or in the narration ("Service Charge FOR August 2026") when that is blank. The duplicate

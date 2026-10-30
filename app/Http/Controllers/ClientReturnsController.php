@@ -1357,6 +1357,13 @@ class ClientReturnsController extends Controller
     ): int {
         $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
 
+        // The rent lines already carry their commission and VAT, and insertCommissionLines adds a DR 'COMMISSION' line
+        // that repeats the same two totals for the printed return. That line is left out of every total below, or the
+        // commission and the VAT would be taken off the landlord twice.
+        $netAmount = "SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
+                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
+                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END)";
+
         $q3 = "
             INSERT INTO cb_returns_summary (
                 return_code, landlord_code, property_code, year, month,
@@ -1394,11 +1401,9 @@ class ClientReturnsController extends Controller
                 SUM(rc.commission_amount) AS commission_amount,
                 SUM(rc.commission_amount) + SUM(rc.vat_amount)
                     + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
-                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
-                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
-                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS net_amount,
+                {$netAmount} AS net_amount,
                 0 AS transaction_amount,
-                0 AS net_balance,
+                {$netAmount} AS net_balance,
                 ? AS prepared_by,
                 1 AS prepared_status,
                 NOW() AS prepared_date,
@@ -1411,6 +1416,7 @@ class ClientReturnsController extends Controller
                 COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
             FROM cb_returns_clients rc
             WHERE rc.return_period = ?
+              AND COALESCE(rc.entry_type, '') <> 'COMMISSION'
               {$propertyFilter}
               AND NOT EXISTS (
                   SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code

@@ -13,6 +13,11 @@ use Illuminate\Support\Facades\Log;
  * commission_amount and vat_amount worked out from the SLA. Every other invoice (deposit, service charge, water,
  * electricity ...) becomes its own line, named after the item, with no commission or VAT, as in the legacy returns;
  * it is only passed on for what the tenant has actually paid, and a deposit the company holds is left out.
+ *
+ * Rent is read from open, partly paid and cleared invoices (statuses 1, 8, 9) of the return month. A bill paid after
+ * its month's return is passed on in a later run: the line is what is collected now less what earlier return lines
+ * already passed on for that invoice, so nothing goes out twice. Only bills that already appeared in an earlier
+ * return are considered for this, which keeps bills the legacy system returned from being paid again.
  */
 trait ReturnsRentLinesTrait
 {
@@ -41,24 +46,32 @@ trait ReturnsRentLinesTrait
     ): int {
         $propertyFilter = $propertyId ? "AND i.property_id = ?" : "";
 
+        // The item of an invoice: its catalog name, or for legacy invoices (no item_type_id) the name stored on the
+        // invoice, or the narration prefix when that is blank ("Service Charge FOR August 2026").
+        $itemName = "LEFT(COALESCE(it.item_name, NULLIF(i.return_type_id, ''), split_part(i.narration, ' FOR ', 1)), 80)";
+        $isRent = "(UPPER({$itemName}) = 'RENT')";
+        // What the tenant has paid of a non-rent invoice, less what earlier returns already passed on for it: only the
+        // difference is passed to the landlord now, so a bill paid after its month's return goes out in the next run once.
+        $collected = "GREATEST(i.total_amount - COALESCE(i.current_balance, i.total_amount), 0)";
+        $payable = "GREATEST({$collected} - prev.returned, 0)";
+
+        // This month's invoices (rent and bills), plus bills of earlier months that already appeared in an earlier
+        // return and have been paid further since. A bill that never appeared in a return is left alone, so a bill the
+        // legacy system already returned cannot be paid twice.
         $invoiceWhere = "
-            i.returns_period::date = ?::date
-            AND i.current_status_id = 1
-            AND i.debtor_type_id = '2'
+            i.debtor_type_id = '2'
+            AND i.current_status_id IN (" . InvoiceBillingService::RETURNABLE_STATUSES . ")
             AND i.property_id IS NOT NULL
             AND i.unit_id IS NOT NULL
             AND i.lease_id IS NOT NULL
             AND i.tenant_id IS NOT NULL
             AND NOT EXISTS (SELECT 1 FROM sys_pm_deposits dep WHERE dep.invoice_id = i.id::text AND dep.held_by = 'Company')
+            AND (
+                i.returns_period::date = ?::date
+                OR (NOT {$isRent} AND i.returns_period::date < ?::date AND prev.lines > 0 AND {$payable} > 0)
+            )
             {$propertyFilter}
         ";
-
-        // The item of an invoice: its catalog name, or for legacy invoices (no item_type_id) the name stored on the
-        // invoice, or the narration prefix when that is blank ("Service Charge FOR August 2026").
-        $itemName = "LEFT(COALESCE(it.item_name, NULLIF(i.return_type_id, ''), split_part(i.narration, ' FOR ', 1)), 80)";
-        $isRent = "(UPPER({$itemName}) = 'RENT')";
-        // What the tenant has paid of a non-rent invoice: only that is passed to the landlord.
-        $collected = "GREATEST(i.total_amount - COALESCE(i.current_balance, i.total_amount), 0)";
         // Commission is worked out on the rent after its inclusive VAT, as on the invoice (rent of a VAT-able unit).
         $commissionBase = "(i.total_amount - CASE WHEN u.vat_able = 'Yes' THEN ROUND(i.total_amount * " . InvoiceBillingService::VAT_RATE . " / (100 + " . InvoiceBillingService::VAT_RATE . "), 2) ELSE 0 END)";
         $commission = "ROUND({$commissionBase} * COALESCE(s.commission_percentage, 0) / 100, 2)";
@@ -69,6 +82,11 @@ trait ReturnsRentLinesTrait
             JOIN sys_pm_properties p ON p.id = i.property_id
             JOIN sys_pm_units u ON u.id = i.unit_id
             JOIN cb_tenant_records t ON t.id = i.tenant_id
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(SUM(pl.net_amount), 0) AS returned, COUNT(*) AS lines
+                FROM cb_returns_clients pl
+                WHERE pl.invoice_id = i.id AND pl.dr_cr = 'CR' AND pl.return_period <> ?::integer
+            ) prev ON true
             LEFT JOIN (
                 SELECT DISTINCT ON (property_id) * FROM sys_pm_service_agreements
                 ORDER BY property_id, date_start DESC NULLS LAST, id DESC
@@ -107,7 +125,7 @@ trait ReturnsRentLinesTrait
                 p.reference_number,
                 u.unit_code,
                 t.names,
-                CASE WHEN {$isRent} THEN i.total_amount ELSE {$collected} END,
+                CASE WHEN {$isRent} THEN i.total_amount ELSE {$payable} END,
                 i.total_amount,
                 CASE WHEN {$isRent} THEN ROUND({$commission} * COALESCE(s.vat_per, 16) / 100, 2) ELSE 0 END,
                 CASE WHEN {$isRent} THEN {$commission} ELSE 0 END,
@@ -121,10 +139,10 @@ trait ReturnsRentLinesTrait
                 i.tenant_id,
                 ? + DENSE_RANK() OVER (ORDER BY i.property_id) - 1,
                 i.id,
-                CASE WHEN {$isRent} THEN 'Rent for {$monthName} {$returnYear}' ELSE {$itemName} || ' for {$monthName} {$returnYear}' END,
+                CASE WHEN {$isRent} THEN 'Rent for {$monthName} {$returnYear}' ELSE {$itemName} || ' for ' || TRIM(TO_CHAR(i.returns_period::date, 'FMMonth YYYY')) END,
                 i.reference_number,
                 CASE WHEN {$isRent} THEN 'Yes' ELSE 'No' END,
-                CASE WHEN {$isRent} THEN NULL WHEN {$collected} > 0 THEN 1 ELSE 0 END,
+                CASE WHEN {$isRent} THEN NULL WHEN {$payable} > 0 THEN 1 ELSE 0 END,
                 NOW(),
                 ?
             {$invoiceJoins}
@@ -137,6 +155,8 @@ trait ReturnsRentLinesTrait
                 $transactionDate,
                 $baseReturnId,
                 $generatedBy,
+                $returnPeriod,
+                $monthStart,
                 $monthStart,
             ],
             $propertyId ? [$propertyId] : [],
@@ -170,7 +190,7 @@ trait ReturnsRentLinesTrait
         return DB::selectOne("
             SELECT COUNT(*) as cnt FROM sys_pm_debtors_invoices i
             WHERE i.returns_period::date = ?::date
-              AND i.current_status_id = 1
+              AND i.current_status_id IN (" . InvoiceBillingService::RETURNABLE_STATUSES . ")
               AND i.debtor_type_id = '2'
               AND i.property_id IS NOT NULL
               AND i.unit_id IS NOT NULL
