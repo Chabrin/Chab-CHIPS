@@ -34,6 +34,11 @@ class LeaveRequest extends Model
         'requested_days',
         'allowance_type_id',
         'amount',
+        'recalled_at',
+        'recall_effective_date',
+        'recall_reason',
+        'recalled_by',
+        'recalled_days',
     ];
 
     protected $casts = [
@@ -42,6 +47,11 @@ class LeaveRequest extends Model
         'end_date' => 'datetime',
         'days' => 'float',
         'requested_days' => 'float',
+        'entitled_days' => 'float',
+        'days_balance' => 'float',
+        'used_days' => 'float',
+        'recalled_at' => 'datetime',
+        'recalled_days' => 'float',
     ];
 
     public const STATUS_PENDING = 1;

@@ -140,6 +140,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees', [StaffController::class, 'index'])->name('staff.index');
     Route::get('/hr/employees/create', [StaffController::class, 'create'])->name('staff.create');
     Route::post('/hr/employees', [StaffController::class, 'store'])->name('staff.store');
+    Route::get('/hr/employees/onboarding', [App\Http\Controllers\StaffOnboardingController::class, 'index'])->name('staff.onboarding.index');
+    Route::get('/hr/employees/onboarding/create', [App\Http\Controllers\StaffOnboardingController::class, 'create'])->name('staff.onboarding.create');
+    Route::post('/hr/employees/onboarding', [App\Http\Controllers\StaffOnboardingController::class, 'send'])->name('staff.onboarding.send');
+    Route::get('/hr/employees/onboarding/{invitation}/review', [App\Http\Controllers\StaffOnboardingController::class, 'review'])->name('staff.onboarding.review');
+    Route::post('/hr/employees/onboarding/{invitation}/approve', [App\Http\Controllers\StaffOnboardingController::class, 'approve'])->name('staff.onboarding.approve');
+    Route::delete('/hr/employees/onboarding/{invitation}', [App\Http\Controllers\StaffOnboardingController::class, 'revoke'])->name('staff.onboarding.revoke');
     Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
     Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
@@ -180,6 +186,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // REQ-01 Report Route
     Route::get('/hr/reports/employee-documents', [EmployeeDocumentController::class, 'report'])->name('hr.reports.employee_documents');
+});
+
+// Public, token-protected employee self-onboarding endpoints. HR management
+// endpoints stay inside the authenticated route groups above.
+Route::middleware('throttle:5,1')->group(function () {
+    Route::get('/staff/onboarding/{token}', [App\Http\Controllers\StaffOnboardingController::class, 'show'])->name('staff.onboarding.complete')->withoutMiddleware(['auth', 'onelogin', 'acess_checker']);
+    Route::post('/staff/onboarding/{token}', [App\Http\Controllers\StaffOnboardingController::class, 'submit'])->name('staff.onboarding.submit')->withoutMiddleware(['auth', 'onelogin', 'acess_checker']);
 });
 
     // Staff Discipline Tracker
@@ -607,6 +620,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/leave-management/leave-applications/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsList'])->name('ajax.leaveApplications.list');
     Route::post('/ajax/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsStore'])->name('ajax.leaveApplications.store');
     Route::post('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsUpdate'])->name('ajax.leaveApplications.update')->whereNumber('id');
+    Route::post('/ajax/leave-management/leave-applications/{id}/recall', [\App\Http\Controllers\LeaveManagementController::class, 'recallApplication'])->name('ajax.leaveApplications.recall')->whereNumber('id');
     Route::delete('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsDelete'])->name('ajax.leaveApplications.delete')->whereNumber('id');
     Route::get('/ajax/hr/leave/available-days/{staffId}/{leaveTypeId}', [\App\Http\Controllers\LeaveManagementController::class, 'availableLeaveDays'])->name('ajax.leave.available-days');
     Route::get('/ajax/hr/publicholidays/list', [\App\Http\Controllers\LeaveManagementController::class, 'publicHolidaysList'])->name('ajax.publicholidays.list');
