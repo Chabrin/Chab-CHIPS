@@ -41,6 +41,17 @@
                                     <h6 class="text-muted border-bottom pb-2">Service Agreement Details</h6>
                                 </div>
 
+                                <!-- Copy terms from an existing SLA (shown once the client is known and has SLAs) -->
+                                <div class="col-12 mb-3 d-none" id="cloneSlaBlock">
+                                    <label for="clone_sla_id" class="form-label">Copy terms from an existing SLA <span class="text-muted small">(optional)</span></label>
+                                    <select class="form-select" id="clone_sla_id">
+                                        <option value="">Start from a blank form</option>
+                                    </select>
+                                    <small class="form-text text-muted">Copies commission, VAT, payment date, duration, returns combination and tenant invoiceable items. Pick the property, then check the start date before saving.</small>
+                                    <small class="d-block text-success" id="cloneSlaNote"></small>
+                                    <small class="d-block text-danger" id="cloneSlaError"></small>
+                                </div>
+
                                 <!-- Client selection (show dropdown if no client, otherwise hidden field) -->
                                 @if($client)
                                     <input type="hidden" name="client_id" value="{{ $client->id }}">
@@ -314,6 +325,10 @@
 </div>
 <script>
     $(document).ready(function() {
+        // Set when the page was opened from a clone link; applied once the SLA list has loaded
+        const cloneSourceId = @json($cloneSourceId ?? null);
+        let cloneApplied = false;
+
         // VATable change handler
         $('#vat_able').on('change', function() {
             const vatValue = $(this).val();
@@ -365,6 +380,7 @@
         const clientIdInput = $('input[name="client_id"]').val();
         if (clientIdInput) {
             loadProperties(clientIdInput);
+            loadCloneOptions(clientIdInput);
         } else {
             // Select2 AJAX search for client
             $('#client_id').select2({
@@ -387,8 +403,10 @@
                 const val = $(this).val();
                 if (val) {
                     loadProperties(val);
+                    loadCloneOptions(val);
                 } else {
                     $('#property_id').html('<option value="">Select client first</option>').prop('disabled', true);
+                    resetCloneOptions();
                 }
             });
         }
@@ -615,6 +633,82 @@
             const index = $(this).data('index');
             selectedInvoiceableItems.splice(index, 1);
             renderSelectedInvoiceableItems();
+        });
+
+        // Copy terms from an existing SLA: the dropdown lists the client's SLAs, picking one
+        // fills the form with its commercial terms. Property, documents, dates and the
+        // registration fee are left alone for the user to set.
+        function resetCloneOptions() {
+            $('#cloneSlaBlock').addClass('d-none');
+            $('#clone_sla_id').html('<option value="">Start from a blank form</option>');
+            $('#cloneSlaNote, #cloneSlaError').text('');
+        }
+
+        function loadCloneOptions(clientId) {
+            resetCloneOptions();
+
+            $.ajax({
+                url: '{{ route("ajax.sla.clone-options") }}',
+                method: 'GET',
+                data: { client_id: clientId },
+                success: function(response) {
+                    const slas = response.slas || [];
+                    if (slas.length === 0) return;
+
+                    slas.forEach(function(sla) {
+                        $('#clone_sla_id').append(`<option value="${sla.id}">${escapeHtml(sla.label)}</option>`);
+                    });
+                    $('#cloneSlaBlock').removeClass('d-none');
+
+                    if (cloneSourceId && !cloneApplied) {
+                        cloneApplied = true;
+                        $('#clone_sla_id').val(String(cloneSourceId)).trigger('change');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Error loading SLAs to copy from:', xhr.responseText);
+                }
+            });
+        }
+
+        function applyCloneTerms(terms) {
+            $('#commission_percentage').val(terms.commission_percentage);
+
+            // The VAT change handlers reset the VAT fields, so set the VAT values after them
+            $('#vat_able').val(terms.vat_able).trigger('change');
+            if (!$('#vat_percentage').prop('disabled')) $('#vat_percentage').val(terms.vat_percentage ?? '');
+            if (!$('#flat_rate_vat').prop('disabled')) $('#flat_rate_vat').val(terms.flat_rate_vat ?? '');
+
+            $('#auto_renewal').val(terms.auto_renewal);
+            $('#move_in_inspection_required').val(terms.move_in_inspection_required);
+            $('#payment_date').val(terms.payment_date ?? '');
+            $('#duration_years').val(terms.duration_years ?? '');
+            $('input[name="returns_combination"]').prop('checked', false);
+            $('input[name="returns_combination"][value="' + terms.returns_combination + '"]').prop('checked', true);
+
+            selectedInvoiceableItems = (terms.items || []).slice();
+            renderSelectedInvoiceableItems();
+        }
+
+        $('#clone_sla_id').on('change', function() {
+            const slaId = $(this).val();
+            const $note = $('#cloneSlaNote').text('');
+            const $error = $('#cloneSlaError').text('');
+
+            if (!slaId) return;
+
+            $.ajax({
+                url: '{{ route("ajax.sla.clone-terms", ["id" => "__ID__"]) }}'.replace('__ID__', slaId),
+                method: 'GET',
+                success: function(response) {
+                    applyCloneTerms(response.terms);
+                    $note.text('Copied from ' + $('#clone_sla_id option:selected').text() + '. Now pick the property.');
+                },
+                error: function(xhr) {
+                    console.error('Error loading SLA terms to copy:', xhr.responseText);
+                    $error.text('Could not copy the terms from that SLA. Fill the form in by hand or try again.');
+                }
+            });
         });
 
     });

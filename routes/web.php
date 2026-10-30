@@ -1173,6 +1173,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Get SLA for a property
     Route::get('/property/{propertyId}/sla', [SLAController::class, 'getSLAForProperty'])->name('property.sla');
     Route::get('/ajax/sla/check-current', [SLAController::class, 'checkCurrentSla'])->name('ajax.sla.check-current');
+    Route::get('/ajax/sla/clone-options', [SLAController::class, 'cloneOptions'])->name('ajax.sla.clone-options');
+    Route::get('/ajax/sla/{id}/clone-terms', [SLAController::class, 'cloneTerms'])->whereNumber('id')->name('ajax.sla.clone-terms');
 
     // Get tenant for a unit in a property
     Route::get('/property/{propertyId}/unit/{unitId}/tenant', [TenantsController::class, 'getTenantForUnit'])->name('property.unit.tenant');
