@@ -921,4 +921,5 @@ document.addEventListener('DOMContentLoaded', function () {
 
 });
 </script>
+@include('staff.partials.upload-duplicate-check')
 @endsection

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Employee;
 use App\Models\EmployeeDocument;
 use App\Models\DocumentType;
+use App\Services\EmployeeUploadGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -12,6 +13,19 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EmployeeDocumentController extends Controller
 {
+    public function checkDuplicates(Request $request)
+    {
+        abort_unless(auth()->user()->hasPermission('update_staff') || auth()->user()->hasPermission('create_users'), 403);
+
+        $validated = $request->validate([
+            'hashes' => 'required|array|min:1|max:10',
+            'hashes.*' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
+        ]);
+        app(EmployeeUploadGuard::class)->validateHashes($validated['hashes']);
+
+        return response()->json(['valid' => true]);
+    }
+
     /**
      * Upload an employee document (REQ-01)
      */
@@ -26,6 +40,7 @@ class EmployeeDocumentController extends Controller
         ]);
 
         $file = $request->file('document_file');
+        app(EmployeeUploadGuard::class)->validate(['document_file' => $file]);
         $originalName = $file->getClientOriginalName();
         $mimeType = $file->getMimeType();
         $fileSize = round($file->getSize() / 1024); // KB
@@ -102,6 +117,8 @@ class EmployeeDocumentController extends Controller
         $request->validate([
             'photo' => 'required|image|mimes:jpeg,png,jpg|max:2048', // max 2MB
         ]);
+
+        app(EmployeeUploadGuard::class)->validate(['photo' => $request->file('photo')]);
 
         // Delete old photo if present
         if ($employee->photo && Storage::disk('public')->exists($employee->photo)) {

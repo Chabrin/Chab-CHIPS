@@ -133,6 +133,10 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                             </div>
                         <div class="d-flex gap-2">
                             @permission('create_staff')
+                            <a href="{{ route('staff.onboarding.index') }}" class="btn btn-outline-primary rounded-pill px-3 py-1 d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">mail</span>
+                                <span class="fw-semibold">Onboarding</span>
+                            </a>
                             <a href="{{ route('staff.create') }}" class="btn btn-primary rounded-pill px-3 py-1 d-flex align-items-center gap-1 shadow-sm">
                                 <span class="material-symbols-outlined" style="font-size: 18px;">add_circle</span>
                                 <span class="fw-semibold">Add Staff</span>
@@ -172,12 +176,14 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                 </span>
                             </div>
 
-                            {{-- Status Filter --}}
+                           {{-- Status Filter --}}
                             <div class="col-sm-3 col-md-2">
                                 <select id="filter-status" class="form-select form-select-sm">
                                     <option value="">All Statuses</option>
                                     @foreach(\App\Models\Staff::STATUSES as $id => $label)
-                                        <option value="{{ $label }}">{{ $label }}</option>
+                                        <option value="{{ $id }}" {{ strtolower($label) === 'active' ? 'selected' : '' }}>
+                                            {{ $label }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -308,7 +314,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </td>
 
                                         {{-- Status --}}
-                                        <td>
+                                        <td data-search="{{ $member->current_status_id }}">
                                             <span class="badge border rounded-pill px-2 py-1 text-nowrap status-badge {{ $statusClass }}" 
                                                   data-status-id="{{ $member->current_status_id }}">
                                                 ● {{ $statusLabel }}
@@ -447,6 +453,12 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
     var statusLabels = @json(\App\Models\Staff::STATUSES);
 
     $(document).ready(function() {
+        // Search the numeric status ID stored on each status cell. This keeps
+        // Active (1) distinct from any other label and avoids parsing badge HTML.
+        function applyStatusFilter(val, dataTable) {
+            dataTable.column(8).search(val ? '^' + $.fn.dataTable.util.escapeRegex(val) + '$' : '', true, false).draw();
+        }
+
         // 1. Single DataTable Initialization
         var table = $('#staff-table').DataTable({
             paging: true,
@@ -461,28 +473,29 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             initComplete: function() {
                 $('#staff-preloader').hide();
                 $('#staff-table').css('visibility', 'visible');
+
+                // Apply the selected default (Active) once DataTables has rows.
+                applyStatusFilter($('#filter-status').val(), this.api());
             }
         });
 
         // 2. Status Filter (Column 8: Status)
         $('#filter-status').on('change', function() {
-            var val = $(this).val();
-            // Regex match so 'Active' does not match 'Inactive'
-            var regex = val ? '^.*\\b' + $.fn.dataTable.util.escapeRegex(val) + '\\b.*$' : '';
-            table.column(8).search(regex, true, false).draw();
+            applyStatusFilter($(this).val(), table);
         });
-            // 3. Position Filter (Column 3: Position)
-            $('#filter-position').on('change', function() {
-                var val = $.trim($(this).val());
-                if (val) {
-                    // Case-insensitive containment match with escaped characters
-                    table.column(3).search($.fn.dataTable.util.escapeRegex(val), false, false, true).draw();
-                } else {
-                    table.column(3).search('').draw();
-                }
-            });
 
-        // 4. Reset Filters
+        // 3. Position Filter (Column 3: Position)
+        $('#filter-position').on('change', function() {
+            var val = $.trim($(this).val());
+            if (val) {
+                // Case-insensitive containment match with escaped characters
+                table.column(3).search($.fn.dataTable.util.escapeRegex(val), false, false, true).draw();
+            } else {
+                table.column(3).search('').draw();
+            }
+        });
+
+        // 4. Reset Filters → show everything again
         $('#btn-reset-filters').on('click', function() {
             $('#filter-status').val('');
             $('#filter-position').val('');
@@ -624,10 +637,12 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                     success: function(response) {
                         if (response.success) {
                             var badge = currentRow.find('.status-badge');
+                            currentRow.find('td').eq(8).attr('data-search', newStatusId);
                             badge.text('● ' + (statusLabels[newStatusId] || 'Unknown'));
                             badge.data('status-id', newStatusId);
 
                             currentRow.find('.btn-update-status').data('status-id', newStatusId);
+                            $('#staff-table').DataTable().draw(false);
                             bootstrap.Modal.getInstance(document.getElementById('statusUpdateModal')).hide();
                         }
                     },

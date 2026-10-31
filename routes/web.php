@@ -140,6 +140,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees', [StaffController::class, 'index'])->name('staff.index');
     Route::get('/hr/employees/create', [StaffController::class, 'create'])->name('staff.create');
     Route::post('/hr/employees', [StaffController::class, 'store'])->name('staff.store');
+    Route::get('/hr/employees/onboarding', [App\Http\Controllers\StaffOnboardingController::class, 'index'])->name('staff.onboarding.index');
+    Route::get('/hr/employees/onboarding/create', [App\Http\Controllers\StaffOnboardingController::class, 'create'])->name('staff.onboarding.create');
+    Route::post('/hr/employees/onboarding', [App\Http\Controllers\StaffOnboardingController::class, 'send'])->name('staff.onboarding.send');
+    Route::get('/hr/employees/onboarding/{invitation}/review', [App\Http\Controllers\StaffOnboardingController::class, 'review'])->name('staff.onboarding.review');
+    Route::post('/hr/employees/onboarding/{invitation}/approve', [App\Http\Controllers\StaffOnboardingController::class, 'approve'])->name('staff.onboarding.approve');
+    Route::delete('/hr/employees/onboarding/{invitation}', [App\Http\Controllers\StaffOnboardingController::class, 'revoke'])->name('staff.onboarding.revoke');
     Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
     Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
@@ -148,6 +154,9 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
     Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
     Route::delete('/hr/employees/{id}', [StaffController::class, 'destroy'])->name('staff.destroy');
+    Route::get('/staff/get-staff-number', [StaffController::class, 'getStaffNumber'])->name('staff.get-staff-number');
+
+    Route::post('/ajax/hr/uploads/check-duplicates', [EmployeeDocumentController::class, 'checkDuplicates'])->name('hr.uploads.check-duplicates');
 
     // AJAX Routes for Staff
     Route::get('/ajax/zone-areas/{zoneId}', [StaffController::class, 'getZoneAreas'])->name('ajax.zone_areas');
@@ -177,6 +186,13 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // REQ-01 Report Route
     Route::get('/hr/reports/employee-documents', [EmployeeDocumentController::class, 'report'])->name('hr.reports.employee_documents');
+});
+
+// Public, token-protected employee self-onboarding endpoints. HR management
+// endpoints stay inside the authenticated route groups above.
+Route::middleware('throttle:5,1')->group(function () {
+    Route::get('/staff/onboarding/{token}', [App\Http\Controllers\StaffOnboardingController::class, 'show'])->name('staff.onboarding.complete')->withoutMiddleware(['auth', 'onelogin', 'acess_checker']);
+    Route::post('/staff/onboarding/{token}', [App\Http\Controllers\StaffOnboardingController::class, 'submit'])->name('staff.onboarding.submit')->withoutMiddleware(['auth', 'onelogin', 'acess_checker']);
 });
 
     // Staff Discipline Tracker
@@ -299,13 +315,22 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/hr/payroll/calendar/{id}', [PayrollController::class, 'calendarUpdate'])->name('ajax.payrollCalendar.update');
     Route::delete('/ajax/hr/payroll/calendar/{id}', [PayrollController::class, 'calendarDelete'])->name('ajax.payrollCalendar.delete');
 
-    // HR Settings - Training Materials & Compliance
-    Route::get('/hrsettings/training-materials', [TrainingMaterialController::class, 'index'])->name('settings.hr.training_materials');
-    Route::post('/hrsettings/training-materials/store', [TrainingMaterialController::class, 'store'])->name('settings.hr.training_materials.store');
-    Route::get('/hrsettings/training-materials/stream/{id}', [TrainingMaterialController::class, 'stream'])->name('settings.hr.training_materials.stream');
-    Route::post('/hrsettings/training-materials/acknowledge/{id}', [TrainingMaterialController::class, 'acknowledge'])->name('settings.hr.training_materials.acknowledge');
-    Route::get('/hrsettings/training-materials/compliance', [TrainingMaterialController::class, 'complianceReport'])->name('settings.hr.training_materials.compliance');
-
+    // HR - Training Materials & Compliance
+    
+    Route::get('/hr/training-materials', [TrainingMaterialController::class, 'index'])->name('hr.training.index');
+    Route::post('/hr/training-materials/store', [TrainingMaterialController::class, 'store'])->name('hr.training.store');
+    Route::get('/hr/training-materials/stream/{id}', [TrainingMaterialController::class, 'stream'])->name('hr.training.stream');
+    Route::post('/hr/training-materials/acknowledge/{id}', [TrainingMaterialController::class, 'acknowledge'])->name('hr.training.acknowledge');
+    Route::get('/hr/training-materials/compliance', [TrainingMaterialController::class, 'complianceReport'])->name('hr.training.compliance');
+    Route::get('/training-materials/{id}/edit', [TrainingMaterialController::class, 'edit'])->name('hr.training.edit');
+    Route::put('/training-materials/{id}', [TrainingMaterialController::class, 'update'])->name('hr.training.update');
+    Route::delete('/training-materials/{id}', [TrainingMaterialController::class, 'destroy'])->name('hr.training.destroy');
+    Route::get('training/{id}/read', [TrainingMaterialController::class, 'show'])->name('hr.training.show');
+    Route::get('training/sessions', [TrainingMaterialController::class, 'sessionsIndex'])->name('hr.training.sessions.index');
+    Route::post('training/sessions', [TrainingMaterialController::class, 'storeSession'])->name('hr.training.sessions.store');
+    Route::post('training/sessions/{id}/attend', [TrainingMaterialController::class, 'attendSession'])->name('hr.training.sessions.attend');
+    Route::get('training/sessions/report', [TrainingMaterialController::class, 'sessionsReport'])->name('hr.training.sessions.report');
+   
     // Payroll Periods
     Route::get('/ajax/hr/payroll/calendar/{calendarId}/periods', [PayrollController::class, 'periodsList'])->name('ajax.payrollPeriods.list');
     Route::post('/ajax/hr/payroll/calendar/{calendarId}/periods', [PayrollController::class, 'periodsStore'])->name('ajax.payrollPeriods.store');
@@ -595,11 +620,28 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/ajax/leave-management/leave-applications/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsList'])->name('ajax.leaveApplications.list');
     Route::post('/ajax/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsStore'])->name('ajax.leaveApplications.store');
     Route::post('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsUpdate'])->name('ajax.leaveApplications.update')->whereNumber('id');
+    Route::post('/ajax/leave-management/leave-applications/{id}/recall', [\App\Http\Controllers\LeaveManagementController::class, 'recallApplication'])->name('ajax.leaveApplications.recall')->whereNumber('id');
     Route::delete('/ajax/leave-management/leave-applications/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsDelete'])->name('ajax.leaveApplications.delete')->whereNumber('id');
     Route::get('/ajax/hr/leave/available-days/{staffId}/{leaveTypeId}', [\App\Http\Controllers\LeaveManagementController::class, 'availableLeaveDays'])->name('ajax.leave.available-days');
     Route::get('/ajax/hr/publicholidays/list', [\App\Http\Controllers\LeaveManagementController::class, 'publicHolidaysList'])->name('ajax.publicholidays.list');
     Route::get('/ajax/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
     Route::get('/ajax/hr/leave-management/staff-annual-slots', [\App\Http\Controllers\LeaveManagementController::class, 'getStaffAnnualSlots']);
+    
+     // Pending Approvals (3-tier workflow)
+    Route::post('/ajax/leave-management/leave-applications/approve', [LeaveManagementController::class, 'approveApplication'])
+    ->name('ajax.hr.leave.applications.approve');
+    Route::post('/ajax/leave-management/leave-applications/reject', [LeaveManagementController::class, 'rejectApplication'])
+    ->name('ajax.hr.leave.applications.reject');
+
+    Route::get('/hr/leave-management/pending-approvals', [LeaveManagementController::class, 'pendingApprovalsView'])
+    ->name('hr.leave.pending.approvals');
+
+    Route::get('/ajax/leave-management/pending-approvals/list', [LeaveManagementController::class, 'pendingApprovalsList'])
+    ->name('ajax.hr.leave.pending.approvals.list');
+
+    // Leave Application Status Update (Approval workflow action)
+    Route::post('/ajax/leave-management/leave-applications/status-update', [LeaveManagementController::class, 'updateApplicationStatus'])
+        ->name('ajax.hr.leave.applications.status.update');    
     // Leave Adjustments
     Route::get('/hr/leave-management/leave-adjustments', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustments'])->name('leave.adjustments');
     Route::get('/ajax/leave-management/leave-adjustments/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveAdjustmentsList']);
@@ -614,6 +656,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
         ->name('leave-management.leave-balance-report-data');
     Route::get('/ajax/leave-management/export-leave-balance-report', [\App\Http\Controllers\LeaveManagementController::class, 'exportLeaveBalanceReport'])
         ->name('leave-management.export-leave-balance-report');
+
+
 
     ####### Leave Management Section End ########
 
@@ -1497,6 +1541,8 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/dashboard', [HomeController::class, 'Dashboard'])->name('dashboard');
 
     Route::get('/search', [SearchController::class, 'index'])->name('search');
+
+    Route::get('/dashboard/leave-overview', [\App\Http\Controllers\LeaveOverviewController::class, 'show'])->name('dashboard.leave-overview');
 
     // Dashboard AJAX endpoints
     Route::get('/dashboard/field-officer/stats', [HomeController::class, 'getFieldOfficerStats'])->name('dashboard.field-officer.stats');

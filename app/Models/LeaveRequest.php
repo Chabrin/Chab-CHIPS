@@ -34,6 +34,11 @@ class LeaveRequest extends Model
         'requested_days',
         'allowance_type_id',
         'amount',
+        'recalled_at',
+        'recall_effective_date',
+        'recall_reason',
+        'recalled_by',
+        'recalled_days',
     ];
 
     protected $casts = [
@@ -42,6 +47,11 @@ class LeaveRequest extends Model
         'end_date' => 'datetime',
         'days' => 'float',
         'requested_days' => 'float',
+        'entitled_days' => 'float',
+        'days_balance' => 'float',
+        'used_days' => 'float',
+        'recalled_at' => 'datetime',
+        'recalled_days' => 'float',
     ];
 
     public const STATUS_PENDING = 1;
@@ -143,5 +153,18 @@ class LeaveRequest extends Model
         
         return $this->days . ' days';
     }
+
+
+public function getStatusLabelAttribute(): string
+{
+    return match ((int) $this->current_status_id) {
+        1  => 'Pending HOD Approval',
+        24 => 'Pending HR Approval',
+        5  => 'Approved',
+        41 => 'Rejected',
+        // add any other statuses you have
+        default => 'Unknown Status (' . $this->current_status_id . ')',
+    };
+}
 
 }

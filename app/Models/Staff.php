@@ -22,6 +22,7 @@ class Staff extends Model
         'date_time',
         'photo',
         'full_names',
+        'employment_type',
         'gender',
         'address',
         'mobile_number',
@@ -130,9 +131,9 @@ class Staff extends Model
     }
 
     public function employee_attendances()
-    {
-        return $this->hasMany(EmployeeAttendance::class, 'employee_id', 'staff_number');
-    }
+{
+    return $this->hasMany(EmployeeAttendance::class, 'employee_id', 'id');
+}
 
     // Discipline Tracker Relationships
     
@@ -185,14 +186,31 @@ class Staff extends Model
 {
     return $this->hasMany(\App\Models\EmployeeDocument::class, 'employee_id');
 }
-public static function nextStaffNumber(): int
+public static function nextStaffNumber(string $employmentType = 'Permanent'): string
 {
-    // Strip any non-digits, ignore blanks, then take the highest number.
-    // Works for "3", "007" and "STF-012" alike, and won't crash on odd values.
+    $prefixMap = [
+        'Permanent' => '',
+        'Temporary' => 'T',
+        'Casual'    => 'C',
+        'Intern'    => 'I',
+    ];
+
+    $prefix = $prefixMap[$employmentType] ?? '';
+
+    // Get the highest numeric part for this category
     $max = static::query()
-        ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\D', '', 'g'), '')::bigint) as max_no")
+        ->where('employment_type', $employmentType)
+        ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\\D', '', 'g'), '')::bigint) as max_no")
         ->value('max_no');
 
-    return ((int) $max) + 1;
+    $nextNo = ((int) $max) + 1;
+
+    // Permanent → plain number
+    if ($prefix === '') {
+        return (string) $nextNo;
+    }
+
+    // Others → PREFIX-001 (3 digits with leading zeros)
+    return sprintf('%s-%03d', $prefix, $nextNo);
 }
 }

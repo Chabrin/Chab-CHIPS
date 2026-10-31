@@ -8,6 +8,12 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Annual Leave Calendar Planning (Mandatory 21 Days)</h5>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('read_leave_calendar_plans')
+                                <button type="button" id="export-leave-plans" class="btn btn-outline-success btn-sm d-flex align-items-center" disabled title="Export the current plan list search across all pages">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">download</span>
+                                    <span class="ms-1">Export CSV</span>
+                                </button>
+                            @endpermission
                             @permission('create_leave_calendar_plans')
                                 <button class="btn btn-success btn-sm d-flex align-items-center" id="generateAnnualPlansBtn">
                                     <span class="material-symbols-outlined">autorenew</span>
@@ -17,6 +23,9 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        @permission('read_leave_calendar_plans')
+                        <div id="leave-plans-export-status" class="small text-muted mb-2" role="status" aria-live="polite"></div>
+                        @endpermission
                         <div class="table-responsive custom-scrollbar">
                             <table class="display" id="leave-calendar-plan-table" style="width:100%;">
                                 <thead>
@@ -147,6 +156,7 @@
     </div>
 </div>
 
+<script src="{{ asset('assets/js/hr-leave-export.js') }}?v={{ filemtime(public_path('assets/js/hr-leave-export.js')) }}"></script>
 <script>
 $(document).ready(function() {
     let currentTotalDays = 0;
@@ -168,8 +178,11 @@ $(document).ready(function() {
                             plan_id: lt.id,
                             leave_type_id: lt.leave_type_id,
                             leave_type_name: lt.leave_type ? lt.leave_type.type_name : 'Annual Leave',
+                            start_date: lt.start_date,
+                            end_date: lt.end_date,
                             entitled_days: lt.entitled_days,
                             balance: lt.balance,
+                            has_schedule: lt.has_schedule,
                             status: lt.current_status_id
                         });
                     });
@@ -195,13 +208,14 @@ $(document).ready(function() {
                 orderable: false,
                 render: function(data, type, row) {
                     return `
-                        <button class="btn btn-sm btn-outline-primary open-schedule-modal" 
+                        <button class="btn btn-sm ${row.has_schedule ? 'btn-outline-secondary' : 'btn-outline-primary'} open-schedule-modal" 
                             data-plan-id="${row.plan_id}" 
                             data-leave-type-id="${row.leave_type_id}"
                             data-entitled-days="${row.entitled_days}"
-                            data-employee-name="${row.employee_name}">
+                            data-employee-name="${row.employee_name}"
+                            ${row.has_schedule ? 'disabled title="Schedule already submitted"' : ''}>
                             <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span>
-                            Schedule ${Math.floor(row.entitled_days * 2) / 2} Days
+                            ${row.has_schedule ? 'Schedule Submitted' : `Schedule ${Math.floor(row.entitled_days * 2) / 2} Days`}
                         </button>
                     `;
                 }
@@ -210,6 +224,8 @@ $(document).ready(function() {
     });
 
     // -------------------------------------------------------------
+    window.LeaveCsvExport.bind(table, 'plans', 'export-leave-plans', 'leave-plans-export-status');
+
     // Staff Scheduling / Rescheduling Modal
     // -------------------------------------------------------------
     $(document).on('click', '.open-schedule-modal', function() {
@@ -219,7 +235,7 @@ $(document).ready(function() {
 
         // Saturdays count half, so schedules are made in half days (5.25 entitled = schedule 5)
         requiredPlanDays = Math.floor(parseFloat($(this).data('entitled-days')) * 2) / 2;
-        if (isNaN(requiredPlanDays)) { requiredPlanDays = 21; }
+    if (isNaN(requiredPlanDays)) { requiredPlanDays = 21; }
 
         $('#modalPlanId').val(planId);
         $('#modalLeaveTypeId').val(leaveTypeId);
@@ -330,27 +346,31 @@ $(document).ready(function() {
         });
 
         currentTotalDays = total;
-        let remaining = requiredPlanDays - total;
+       let remaining = requiredPlanDays - total;
 
-        $('#allocatedDaysBadge').text(total + ' Days');
-        
-        if (Math.abs(remaining) < 0.001) {
-            $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Requirement Met!)');
-            $('#saveScheduleBtn').prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
-        } else if (remaining < 0) {
-            $('#remainingDaysBadge').removeClass('bg-warning bg-success').addClass('bg-danger text-white').text(Math.abs(remaining) + ' Days Exceeded');
-            $('#saveScheduleBtn').prop('disabled', true);
-        } else {
-            $('#remainingDaysBadge').removeClass('bg-success bg-danger text-white').addClass('bg-warning text-dark').text(remaining + ' Days Remaining');
-            $('#saveScheduleBtn').prop('disabled', true);
-        }
+// Use .toFixed(2) or custom formatting if decimals are present to prevent dropping .25, .5, etc.
+let formattedTotal = Number.isInteger(total) ? total : total.toFixed(2);
+$('#allocatedDaysBadge').text(formattedTotal + ' Days');
+
+if (Math.abs(remaining) < 0.001) {
+    $('#remainingDaysBadge').removeClass('bg-warning text-dark bg-danger').addClass('bg-success text-white').text('0 Days (Requirement Met!)');
+    $('#saveScheduleBtn').prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
+} else if (remaining < 0) {
+    let formattedExceeded = Number.isInteger(Math.abs(remaining)) ? Math.abs(remaining) : Math.abs(remaining).toFixed(2);
+    $('#remainingDaysBadge').removeClass('bg-warning bg-success').addClass('bg-danger text-white').text(formattedExceeded + ' Days Exceeded');
+    $('#saveScheduleBtn').prop('disabled', true);
+} else {
+    let formattedRemaining = Number.isInteger(remaining) ? remaining : remaining.toFixed(2);
+    $('#remainingDaysBadge').removeClass('bg-success bg-danger text-white').addClass('bg-warning text-dark').text(formattedRemaining + ' Days Remaining');
+    $('#saveScheduleBtn').prop('disabled', true);
+}
     }
 
     $('#saveScheduleBtn').on('click', function() {
-        if (currentTotalDays !== requiredPlanDays) {
-            toastr.error(`You must allocate exactly ${requiredPlanDays} working days.`);
-            return;
-        }
+    if (Math.abs(currentTotalDays - requiredPlanDays) > 0.001) {
+        toastr.error(`You must allocate exactly ${requiredPlanDays} working days. Current total: ${currentTotalDays}`);
+        return;
+    }
 
         let formData = $('#scheduleSlotsForm').serialize();
 

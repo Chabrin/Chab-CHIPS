@@ -55,6 +55,9 @@ use Illuminate\Support\Facades\Crypt;
                                                 @else
                                                     {{ $application->current_status_id }}
                                                 @endif
+                                                @if($application->recalled_at)
+                                                    <span class="badge bg-dark ms-1">Recalled · {{ $application->recall_effective_date ? \Carbon\Carbon::parse($application->recall_effective_date)->format('d M Y') : '' }}</span>
+                                                @endif
                                             </strong>
                                         </div>
                                         <div class="col-md-3">
@@ -96,6 +99,50 @@ use Illuminate\Support\Facades\Crypt;
                                             <strong>{{ $application->date_time ? \Carbon\Carbon::parse($application->date_time)->format('d M Y H:i') : '-' }}</strong>
                                         </div>
                                     </div>
+                                    @if($application->recalled_at)
+                                    <div class="alert alert-secondary py-2 mt-2 mb-0"><strong>Recall reason:</strong> {{ $application->recall_reason }} <span class="ms-2">({{ number_format((float) $application->recalled_days, 2) }} days refunded)</span></div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="card mb-3">
+                                <div class="card-header bg-light py-2 d-flex align-items-center justify-content-between">
+                                    <h6 class="mb-0">Department staffing</h6>
+                                    <div class="d-flex flex-wrap align-items-center gap-2">
+                                        @if((int) $application->current_status_id === 5 && !$application->recalled_at && $application->employee?->department_id && $application->start_date && $application->end_date && \Carbon\Carbon::parse($application->start_date)->toDateString() <= now()->toDateString() && \Carbon\Carbon::parse($application->end_date)->toDateString() >= now()->toDateString() && auth()->user()->isAbleTo('update_leave_applications'))
+                                            @if(!$departmentStaffingHealthy)
+                                                <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#recallLeaveModal">Recall Employee</button>
+                                            @else
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Active staffing is at or above 80%">Recall unavailable · Staffing healthy</button>
+                                            @endif
+                                        @endif
+                                        <form method="get" class="d-flex align-items-center gap-2">
+                                            <label for="staffing-date" class="small mb-0">Check date</label>
+                                            <input type="date" id="staffing-date" name="staffing_date" class="form-control form-control-sm" value="{{ $staffingDate }}">
+                                            <button class="btn btn-sm btn-outline-primary">Check</button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div class="card-body py-2">
+                                    @if($application->employee?->department)
+                                        @if($staffingThreshold && $staffingThreshold['staff_total'] > 0)
+                                            <div class="alert {{ $staffingThreshold['met'] ? 'alert-success' : 'alert-danger' }} py-2 mb-2">
+                                                <strong>Department:</strong> {{ $application->employee->department->department_name }}<br>
+                                                <strong>Active staff:</strong> {{ $staffingThreshold['active_staff'] }} of {{ $staffingThreshold['staff_total'] }} available ({{ number_format($staffingThreshold['active_percentage'], 1) }}% active). On approved leave: {{ $staffingThreshold['on_leave'] }}.<br>
+                                                @if($staffingThreshold['met'])
+                                                    <strong>Status:</strong> At or above 80% threshold — staffing level is healthy.
+                                                @else
+                                                    <strong>Understaffing Warning:</strong> Active staff at {{ number_format($staffingThreshold['active_percentage'], 1) }}% (below 80% threshold). Approval or recall required!
+                                                @endif
+                                            </div>
+                                        @endif
+                                        <div class="d-flex flex-wrap gap-2">
+                                            @foreach($departmentStaff as $member)
+                                                <span class="badge {{ $onLeaveStaffIds->contains($member->id) ? 'bg-warning text-dark' : 'bg-light text-dark border' }}">{{ $member->full_names }}{{ $member->staff_number ? ' · #'.$member->staff_number : '' }}{{ $member->position?->position_name ? ' · '.$member->position->position_name : '' }}{{ $onLeaveStaffIds->contains($member->id) ? ' · On leave' : '' }}</span>
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        <div class="text-muted">No department is assigned to this employee.</div>
+                                    @endif
                                 </div>
                             </div>
                             @endforeach
@@ -108,6 +155,42 @@ use Illuminate\Support\Facades\Crypt;
         </div>
     </div>
 </div>
+
+@if(isset($application) && (int) $application->current_status_id === 5 && !$application->recalled_at && $application->employee?->department_id && $application->start_date && $application->end_date && \Carbon\Carbon::parse($application->start_date)->toDateString() <= now()->toDateString() && \Carbon\Carbon::parse($application->end_date)->toDateString() >= now()->toDateString() && auth()->user()->isAbleTo('update_leave_applications') && !$departmentStaffingHealthy)
+<div class="modal fade" id="recallLeaveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Recall employee from leave</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <label class="form-label" for="recall-effective-date">Effective recall date</label>
+            <input type="date" class="form-control mb-3" id="recall-effective-date" min="{{ now()->toDateString() }}" max="{{ \Carbon\Carbon::parse($application->end_date)->toDateString() }}" value="{{ now()->toDateString() }}">
+            <label class="form-label" for="recall-reason">Recall reason</label>
+            <textarea class="form-control" id="recall-reason" rows="4" maxlength="2000" required></textarea>
+            <div class="form-text">Unused approved leave days from the effective date onward will be returned to the employee’s balance.</div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-danger" id="submit-leave-recall">Confirm recall</button></div>
+    </div></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('submit-leave-recall')?.addEventListener('click', async function () {
+        const reason = document.getElementById('recall-reason').value.trim();
+        const effectiveDate = document.getElementById('recall-effective-date').value;
+        if (!reason || !effectiveDate) { alert('Enter a recall reason and effective date.'); return; }
+        this.disabled = true;
+        try {
+            const response = await fetch(@json(route('ajax.leaveApplications.recall', $application->id)), {
+                method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json'},
+                body: JSON.stringify({reason: reason, effective_date: effectiveDate})
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.error || 'Recall failed.');
+            alert(result.message);
+            window.location.reload();
+        } catch (error) { alert(error.message); this.disabled = false; }
+    });
+});
+</script>
+@endif
 
 
 <style>

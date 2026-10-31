@@ -148,6 +148,19 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                 <!-- Personal Information Tab -->
                                 <div class="tab-pane fade show active" id="personal" role="tabpanel" aria-labelledby="personal-tab">
                                     <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            {{-- added on 27th --}}
+                                        <label for="employment_type" class="form-label">Employment Category <span class="text-danger">*</span></label>
+                                        <select class="form-select @error('employment_type') is-invalid @enderror" id="employment_type" name="employment_type" required>
+                                            <option value="Permanent" {{ old('employment_type', 'Permanent') == 'Permanent' ? 'selected' : '' }}>Permanent</option>
+                                            <option value="Temporary" {{ old('employment_type') == 'Temporary' ? 'selected' : '' }}>Temporary</option>
+                                            <option value="Casual" {{ old('employment_type') == 'Casual' ? 'selected' : '' }}>Casual</option>
+                                            <option value="Intern" {{ old('employment_type') == 'Intern' ? 'selected' : '' }}>Intern</option>
+                                        </select>
+                                        @error('employment_type')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
                                        <div class="col-md-4 mb-3">
                                             <label for="staff_number" class="form-label">Staff Number <span class="text-danger">*</span></label>
                                             <input type="text" class="form-control @error('staff_number') is-invalid @enderror"
@@ -799,5 +812,61 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
             });
         }
     });
+// added on 27th
+   document.addEventListener('DOMContentLoaded', function () {
+    const employmentTypeSelect = document.getElementById('employment_type');
+    const staffNumberInput = document.getElementById('staff_number');
+    
+    const userTabLi = document.getElementById('user-tab')?.closest('li'); // The tab header item
+    const userTabPane = document.getElementById('user'); // The tab content pane
+    const loginEmailInput = document.getElementById('login_email');
+    const roleIdSelect = document.getElementById('role_id');
+
+    function handleEmploymentTypeChanges() {
+        if (!employmentTypeSelect) return;
+        let category = employmentTypeSelect.value;
+        let isCasual = category === 'Casual';
+
+        // 1. Handle System User Tab Visibility for Casual Staff
+        if (isCasual) {
+            if (userTabLi) userTabLi.style.display = 'none';
+            if (userTabPane) {
+                userTabPane.classList.remove('show', 'active');
+                userTabPane.style.display = 'none';
+            }
+            if (loginEmailInput) loginEmailInput.required = false;
+            if (roleIdSelect) roleIdSelect.required = false;
+
+            const personalTabBtn = document.getElementById('personal-tab');
+            if (personalTabBtn) {
+                new bootstrap.Tab(personalTabBtn).show();
+            }
+        } else {
+            if (userTabLi) userTabLi.style.display = '';
+            if (userTabPane) userTabPane.style.display = '';
+            if (loginEmailInput) loginEmailInput.required = true;
+            if (roleIdSelect) roleIdSelect.required = true;
+        }
+
+        // 2. Fetch Category-Specific Staff Number via AJAX
+        if (staffNumberInput) {
+            fetch(`{{ route('staff.get-staff-number') }}?category=${encodeURIComponent(category)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        staffNumberInput.value = data.staff_number;
+                    }
+                })
+                .catch(error => console.error('Error fetching dynamic staff number:', error));
+        }
+    }
+
+    if (employmentTypeSelect) {
+        employmentTypeSelect.addEventListener('change', handleEmploymentTypeChanges);
+        // Run on initial load just in case old values or defaults are set
+        handleEmploymentTypeChanges();
+    }
+});
 </script>
+@include('staff.partials.upload-duplicate-check')
 @endsection
