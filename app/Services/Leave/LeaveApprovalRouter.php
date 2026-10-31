@@ -114,11 +114,25 @@ class LeaveApprovalRouter
     }
 
     /**
-     * Whether the user can approve leave at all: an HR approver, or a holder of a supervisor position.
-     *
-     * @param User $user
-     * @return bool
+     * A notification may open an application for its owner, their supervisor, or HR.
+     * Viewing does not grant approval rights or bypass the current approval stage.
      */
+    public function canReview(User $user, LeaveRequest $request): bool {
+        if ($this->isHrApprover($user)) {
+            return true;
+        }
+        $staffId = $user->linkedStaff()?->id;
+        if (!$staffId) {
+            return false;
+        }
+        if ((int) $staffId === (int) $request->staff_id) {
+            return true;
+        }
+        $requester = $request->employee;
+        return $requester && $this->supervisorStaffIds($requester)->contains($staffId);
+    }
+
+    /** Whether the user can approve leave at all. */
     public function isApprover(User $user): bool {
         if ($this->isHrApprover($user)) {
             return true;
@@ -177,6 +191,10 @@ class LeaveApprovalRouter
             return ['error' => 'The referenced staff member no longer exists.', 'status' => 422];
         }
 
+        if ($this->isHrApprover($user)) {
+            return null; // HR may make the final decision before supervisor approval.
+        }
+
         if ($this->routeFor($requester)['route'] === self::ROUTE_SUPERVISOR) {
             return $staff && $this->supervisorStaffIds($requester)->contains($staff->id)
                 ? null
@@ -208,6 +226,12 @@ class LeaveApprovalRouter
         return $requester && $this->routeFor($requester)['route'] === self::ROUTE_SUPERVISOR ? 'supervisor' : 'hr';
     }
 
+    /** The decision this viewer can make, distinct from the normal waiting stage. */
+    public function decisionStage(User $user, LeaveRequest $request): ?string {
+        return $this->waitingOn($request) === null ? null
+            : ($this->isHrApprover($user) ? 'hr' : $this->waitingOn($request));
+    }
+
     /**
      * The pending leave requests (stage 1 and stage 2) this user is allowed to act on.
      *
@@ -215,7 +239,7 @@ class LeaveApprovalRouter
      * @return Collection
      */
     public function actionableFor(User $user): Collection {
-        $query = LeaveRequest::with(['employee.position', 'leaveType'])
+        $query = LeaveRequest::with(['employee.position', 'leaveType', 'handoverEmployee:id,full_names'])
             ->whereIn('current_status_id', [self::STATUS_PENDING, self::STATUS_PARTIAL]);
 
         if (!$this->isHrApprover($user)) {
@@ -232,6 +256,46 @@ class LeaveApprovalRouter
         return $query->orderBy('id')->get()->filter(fn (LeaveRequest $request) => $this->canAct($user, $request) === null)->values();
     }
 
+    /** Viewing a request does not grant permission to decide its current stage. */
+    public function visibleFor(User $user): \Illuminate\Database\Eloquent\Builder {
+        $query = LeaveRequest::query();
+        if ($this->isHrApprover($user) || $user->isAbleTo('read_leave_applications')) {
+            return $query;
+        }
+
+        $staff = $user->linkedStaff();
+        return $query->where(function ($scope) use ($staff) {
+            $scope->where('staff_id', $staff?->id ?? 0);
+            $supervisorLogin = $staff?->userLink?->user;
+            if ($staff && (int) $staff->current_status_id === 1 && $staff->position_id && $supervisorLogin && !$supervisorLogin->block) {
+                $scope->orWhereHas('employee.position', fn ($position) => $position->where('reports_to_id', $staff->position_id));
+            }
+        });
+    }
+
+    /** HR follows all pending requests; supervisors follow their team at both stages. */
+    public function pendingVisibleFor(User $user): Collection {
+        if (!$this->isApprover($user)) {
+            return collect();
+        }
+
+        return $this->visibleFor($user)
+            ->with(['employee.position', 'leaveType', 'handoverEmployee:id,full_names'])
+            ->whereIn('current_status_id', [self::STATUS_PENDING, self::STATUS_PARTIAL])
+            ->orderBy('id')->get()
+            ->filter(fn (LeaveRequest $request) => $this->isHrApprover($user)
+                || ((int) $request->staff_id !== (int) $user->linkedStaff()?->id && $this->canReview($user, $request)))
+            ->values();
+    }
+
+    public function waitingDescription(LeaveRequest $request): ?string {
+        if ($this->waitingOn($request) === 'supervisor') {
+            $names = Staff::whereIn('id', $this->supervisorStaffIds($request->employee))->pluck('full_names')->implode(', ');
+            return 'Awaiting supervisor approval' . ($names !== '' ? ' — ' . $names : '') . '.';
+        }
+        return $this->waitingOn($request) === 'hr' ? 'Awaiting HR final approval.' : null;
+    }
+
     /**
      * Human label for the stage a pending request is at, from the viewer's point of view.
      *
@@ -239,16 +303,14 @@ class LeaveApprovalRouter
      * @return string
      */
     public function stageLabel(LeaveRequest $request): string {
-        if ((int) $request->current_status_id === self::STATUS_PARTIAL) {
-            return 'Stage 2 (HR approval)';
-        }
-
-        $requester = Staff::find($request->staff_id);
-        $route = $requester ? $this->routeFor($requester) : null;
-
-        return $route && $route['route'] === self::ROUTE_SUPERVISOR
-            ? 'Stage 1 (Supervisor approval)'
-            : 'HR approval (no supervisor stage)';
+        return match ((int) $request->current_status_id) {
+            self::STATUS_PENDING => $this->waitingOn($request) === 'supervisor'
+                ? 'Pending supervisor approval' : 'Pending HR final approval',
+            self::STATUS_PARTIAL => 'Pending HR final approval',
+            3, 5 => 'Approved',
+            41 => 'Rejected',
+            default => 'Pending approval',
+        };
     }
 
     /**

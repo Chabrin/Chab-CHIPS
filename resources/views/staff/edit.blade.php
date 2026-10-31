@@ -231,7 +231,7 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" enctype="multipart/form-data" novalidate>
+                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" data-employee-id="{{ $staff->id }}" enctype="multipart/form-data" novalidate>
                             @csrf
                             @method('PUT')
 
@@ -393,7 +393,7 @@
                                                 <div class="col-md-5">
                                                     <label for="photo-input" class="form-label fw-semibold small mb-1">Staff Profile Photo</label>
                                                     <input type="file" name="photo" id="photo-input" class="form-control form-control-sm @error('photo') is-invalid @enderror" accept="image/png,image/jpeg">
-                                                    <small class="text-muted">Square ratio (JPG, PNG), max 2MB. Choose a file only to replace the current photo.</small>
+                                                    <small class="text-muted">Square ratio (JPG, PNG). Check the current upload limit above. Choose a file only to replace the current photo.</small>
                                                     @error('photo')
                                                     <div class="invalid-feedback d-block">{{ $message }}</div>
                                                     @enderror
@@ -555,7 +555,7 @@
                                     @php $accept = ['contract' => '.pdf', 'cv' => '.pdf,.doc,.docx']; @endphp
                                     <div class="pt-3 pb-2 mb-3 border-bottom">
                                         <h6 class="fw-bold mb-1">Staff Documentation & Verification</h6>
-                                        <p class="text-muted small mb-0">Upload missing documents, replace existing ones, or remove them. Changes are saved when you click <strong>Update Staff</strong> (max 5MB per file).</p>
+                                        <p class="text-muted small mb-0">Upload missing documents, replace existing ones, or remove them. Changes are saved when you click <strong>Update Staff</strong>. Current upload limits are shown beside each field.</p>
                                     </div>
 
                                     <div class="row g-3">
@@ -820,6 +820,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     document.getElementById('staffEditForm').addEventListener('submit', function (e) {
+        e.preventDefault();
         clearValidationState();
         var result = validateForm();
         if (Object.keys(result.errors).length > 0) {
@@ -833,6 +834,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var spinner = document.getElementById('submitSpinner');
         if (spinner) spinner.classList.remove('d-none');
+        window.EmployeeStaffForm.save();
     });
 
     var zoneSelect = document.getElementById('zone_id');

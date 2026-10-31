@@ -267,6 +267,7 @@
                             <input type="number" class="form-control" name="amount" id="amount" min="0" step="0.01">
                         </div>
                     </div>
+                    @include('leave_management.partials.handover-fields', ['prefix' => 'hr'])
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-light d-flex align-items-center" data-bs-dismiss="modal">
                             <span class="material-symbols-outlined">close</span>
@@ -337,6 +338,18 @@
 <script src="{{ asset('assets/js/hr-leave-export.js') }}?v={{ filemtime(public_path('assets/js/hr-leave-export.js')) }}"></script>
 <script>
 $(document).ready(function() {
+    $('#staff_id').on('change', function () {
+        const staffId = String($(this).val() || '');
+        const departmentId = String($(this).find('option:selected').attr('data-department-id') || '');
+        $('#hr_handover_staff_id option').each(function () {
+            this.disabled = Boolean(this.value && (!departmentId || this.dataset.departmentId !== departmentId || this.value === staffId));
+        });
+        if ($('#hr_handover_staff_id option:selected').prop('disabled')) {
+            $('#hr_handover_staff_id').val('');
+        }
+        $('#hr_handover_staff_id').trigger('change');
+    });
+
     // Toggle between leave duration types
     $('input[name="leave_duration_type"]').on('change', function() {
         const durationType = $(this).val();
@@ -484,21 +497,15 @@ $(document).ready(function() {
     render: function(data, type, row) {
         data = parseInt(data);
 
-        if (data === 1) {
-            return '<span class="badge bg-warning text-dark">Pending Supervisor</span>';
-        } else if (data === 2) {
-            return '<span class="badge bg-secondary">Pending Approval</span>';
-        } else if (data === 3) {
-            return '<span class="badge bg-success">Approved</span>';
-        } else if (data === 24) {
-            return '<span class="badge bg-info text-dark">HOD Recommended / Pending HR</span>';
-        } else if (data === 5) {
-            return row.recalled_at ? '<span class="badge bg-dark">Approved · Recalled</span>' : '<span class="badge bg-success">Approved</span>';
-        } else if (data === 41) {
-            return '<span class="badge bg-danger">Rejected</span>';
-        } else {
-            return '<span class="badge bg-secondary">Unknown (' + data + ')</span>';
+        if (data === 5 && row.recalled_at) {
+            if (type !== 'display') return 'Approved · Recalled';
+            return '<span class="badge bg-dark">Approved · Recalled</span>';
         }
+
+        const color = [3, 5].includes(data) ? 'success' : data === 41 ? 'danger' : row.waiting_on === 'hr' ? 'info' : 'warning';
+        const label = row.stage_label || 'Pending approval';
+        if (type !== 'display') return label;
+        return '<span class="badge bg-' + color + ' text-dark">' + $.fn.dataTable.render.text().display(label) + '</span>';
     }
 },
             {
@@ -609,7 +616,7 @@ $(document).ready(function() {
                                         leave_type: app.leave_type && app.leave_type.type_name ? app.leave_type.type_name : '-',
                                         position: app.position && app.position.position_name ? app.position.position_name : '-',
                                         requested_days: app.requested_days,
-                                        status: app.current_status_id == 5 ? 'Approved' : (app.current_status_id == 41 ? 'Rejected' : (app.current_status_id == 24 ? 'Partially Approved' : 'Pending')),
+                                        status: app.stage_label || 'Pending approval',
                                         encrypted_id: app.encrypted_leave_application_id
                                     }
                                 });
@@ -625,10 +632,9 @@ $(document).ready(function() {
             },
             eventClick: function(info) {
                 let event = info.event;
-                let statusBadge = '<span class="badge bg-warning">Pending</span>';
-                if (event.extendedProps.status === 'Approved') statusBadge = '<span class="badge bg-success">Approved</span>';
-                else if (event.extendedProps.status === 'Rejected') statusBadge = '<span class="badge bg-danger">Rejected</span>';
-                else if (event.extendedProps.status === 'Partially Approved') statusBadge = '<span class="badge bg-info">Partially Approved</span>';
+                const status = event.extendedProps.status;
+                const statusColor = status === 'Approved' ? 'success' : status === 'Rejected' ? 'danger' : 'warning';
+                const statusBadge = '<span class="badge bg-' + statusColor + ' text-dark">' + $.fn.dataTable.render.text().display(status) + '</span>';
 
                 let content = `
                     <div class="row g-2">
@@ -689,8 +695,15 @@ $(document).ready(function() {
         }, resetPaging);
     };
 
+    $('#addLeaveApplicationModal').on('hidden.bs.modal', function () {
+        $('#leaveApplicationForm')[0].reset();
+        $('#leaveApplicationId').val('');
+        $('#hr_handover_staff_id option[value!=""]').prop('disabled', true);
+    });
+
     // Populate selects on modal show
     $('#addLeaveApplicationModal').on('show.bs.modal', function() {
+        if ($('#leaveApplicationId').val()) return; // The edit handler loads the saved selections.
         $.ajax({
             url: "{{ url('/ajax/hr/staff/list') }}",
             type: 'GET',
@@ -708,7 +721,8 @@ $(document).ready(function() {
                     response.staff.forEach(function(staff) {
                         $staff_id.append($('<option>', {
                             value: staff.id,
-                            text: staff.full_names
+                            text: staff.full_names,
+                            'data-department-id': staff.department_id
                         }));
                     });
                 }
@@ -933,8 +947,13 @@ $(document).ready(function() {
 
     $('#leaveApplicationForm').on('submit', function(e) {
         e.preventDefault();
+        const handoverSearch = document.getElementById('hr_handover_employee_search');
+        if (handoverSearch && !handoverSearch.reportValidity()) return;
 
         let formData = new FormData();
+        formData.append('handover_staff_id', $('#hr_handover_staff_id').val() || '');
+        formData.append('handover_notes', $('#hr_handover_notes').val() || '');
+        for (const file of document.getElementById('hr_handover_documents').files) formData.append('handover_documents[]', file);
         let durationType = $('input[name="leave_duration_type"]:checked').val();
         let id = $('#leaveApplicationId').val();
 
@@ -1037,6 +1056,10 @@ $(document).ready(function() {
         let $btn = $(this);
 
         $('#leaveApplicationId').val($btn.data('id'));
+        const leaveRow = table.row($btn.closest('tr')).data();
+        $('#hr_handover_existing_files').text((leaveRow.handover_files || []).length
+            ? 'Existing files retained: ' + leaveRow.handover_files.map(file => file.name).join(', ') : '');
+        $('#hr_handover_notes').val(leaveRow.handover_notes || '');
         $('#amount').val($btn.data('amount'));
         $('#allowance_type').val($btn.data('allowance_type_id')).trigger('change');
 
@@ -1093,7 +1116,8 @@ $(document).ready(function() {
                     response.staff.forEach(function(staff) {
                         $staff_id.append($('<option>', {
                             value: staff.id,
-                            text: staff.full_names
+                            text: staff.full_names,
+                            'data-department-id': staff.department_id
                         }));
                     });
                 }
@@ -1110,6 +1134,7 @@ $(document).ready(function() {
 
                 let selectedStaffId = $btn.data('staff_id');
                 $staff_id.val(selectedStaffId).trigger('change');
+                $('#hr_handover_staff_id').val(leaveRow.handover_staff_id || '').trigger('change');
             },
             error: function() {
                 toastr.error('Failed to load staff.');

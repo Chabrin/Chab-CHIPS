@@ -38,6 +38,11 @@
 
     <!-- Layout overrides -->
     <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/chabrin-layout.css') }}?v={{ filemtime(public_path('assets/css/chabrin-layout.css')) }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/focused-navigation.css') }}?v={{ filemtime(public_path('assets/css/focused-navigation.css')) }}">
+    <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/notification-bell.css') }}?v={{ filemtime(public_path('assets/css/notification-bell.css')) }}">
+    <link rel="stylesheet" type="text/css" href="{{ asset('assets/css/handover-employee-picker.css') }}?v={{ filemtime(public_path('assets/css/handover-employee-picker.css')) }}">
+
+    <link rel="stylesheet" href="{{ asset('assets/css/header-refinements.css') }}?v={{ filemtime(public_path('assets/css/header-refinements.css')) }}">
 
     @yield('styles')
 
@@ -95,12 +100,12 @@
                         
                        <li class="header-search-item">
                             <div class="header-search-wrapper" id="header_search_box">
-                                <span class="material-symbols-outlined search-icon" id="global_search_submit">search</span>
+                                <button type="button" class="header-search-submit" id="global_search_submit" aria-label="Search records"><span class="material-symbols-outlined search-icon" aria-hidden="true">search</span></button>
                                 <input 
                                     type="text" 
                                     id="global_search_input" 
                                     class="header-search-control" 
-                                    placeholder="Search properties, tenants, units..." 
+                                    placeholder="Search records..." aria-label="Search clients, staff, properties and invoices"
                                     autocomplete="off"
                                     spellcheck="false"
                                 >
@@ -110,8 +115,8 @@
 
 
                         @include('layouts.contract-notifications')
-                        <li class="profile-nav onhover-dropdown pe-0 py-0">
-                        <div class="d-flex align-items-center profile-trigger-btn">
+                        <li class="profile-nav dropdown pe-0 py-0">
+                        <button type="button" class="d-flex align-items-center profile-trigger-btn" id="account-menu-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="account-menu" aria-label="Open account menu">
                             {{-- Circular Avatar with Initials --}}
                             @php
                                 $staff = Auth::user()?->linkedStaff();
@@ -129,13 +134,13 @@
                             
                             <div class="profile-meta d-none d-md-block text-start">
                                 <span class="profile-name">{{ Auth::user()?->name }}</span>
-                                <span class="profile-role">Director</span>
+                                <span class="profile-role">{{ Auth::user()?->roles->map(fn ($role) => $role->display_name ?: ucwords(str_replace('_', ' ', $role->name)))->implode(', ') ?: 'Signed in' }}</span>
                             </div>
-                            <span class="material-symbols-outlined profile-caret">expand_more</span>
-                        </div>
+                            <span class="material-symbols-outlined profile-caret" aria-hidden="true">expand_more</span>
+                        </button>
 
                         {{-- Upgraded Dropdown Card --}}
-                        <div class="profile-dropdown onhover-show-div modern-profile-menu">
+                        <div class="profile-dropdown dropdown-menu dropdown-menu-end modern-profile-menu" id="account-menu" aria-labelledby="account-menu-trigger">
                             {{-- Header inside menu with full details --}}
                             <div class="profile-menu-header">
                                 <div class="header-avatar-circle lg" style="overflow: hidden; padding: 0;">
@@ -206,109 +211,13 @@
 
                     <div class="logo-icon-wrapper">
                     </div>
-                    <nav class="sidebar-main">
-                        <div class="left-arrow" id="left-arrow"><i data-feather="arrow-left"></i></div>
-                        <div id="sidebar-menu">
-                            <ul class="sidebar-links" id="simple-bar">
-
-                                <li class="sidebar-main-title">
-                                    <div>
-                                        <h6 class="lan-8">Applications</h6>
-                                    </div>
-                                </li>
-
-
-
-
-                                @foreach($menus as $menu)
-                                <li class="dropdown sidebar-list">
-                                    <a class="sidebar-link sidebar-title">
-                                        @if(!empty($menu['icon']))
-                                        <span style="color:#3598db !important" class="material-symbols-outlined">{!! $menu['icon'] !!}</span>
-                                        @endif
-                                        <span>{{ $menu['module_name'] }}</span>
-                                    </a>
-                                    @if(!empty($menu['submenus']))
-                                    <ul class="sidebar-submenu">
-                                        @foreach($menu['submenus'] as $submenu)
-                                        <li><a style="vertical-align:middle !important;" href="{{ $submenu->sub_module_url }}">
-                                                <span style="vertical-align:middle !important;" class="material-symbols-outlined">
-                                                    arrow_right
-                                                </span>
-                                                {{ $submenu->sub_module_name }}
-                                            </a>
-                                        </li>
-                                        @endforeach
-                                    </ul>
-                                    @endif
-                                </li>
-                                @endforeach
-
-                                {{-- Super Module Groups --}}
-                                <li>
-                                    <div class="super-modules-grid">
-                                        @foreach($superModuleMenus as $smId => $sm)
-                                        <div class="super-module-item" data-super-module-id="{{ $smId }}">
-                                            <a class="sidebar-link">
-                                                <span style="color:#3598db !important" class="material-symbols-outlined sm-icon">{!! $sm['icon'] ?: 'folder' !!}</span>
-                                                <span class="sm-label">{{ $sm['name'] }}</span>
-                                            </a>
-                                        </div>
-                                        @endforeach
-                                    </div>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="right-arrow" id="right-arrow"><i data-feather="arrow-right"></i></div>
-                    </nav>
+                    @include('layouts.focused-navigation')
                 </div>
             </div>
             <!-- Page Sidebar Ends-->
 
-            {{-- Super Module Flyout Drawer --}}
-            <div class="super-module-flyout" id="superModuleFlyout">
-                <div class="super-module-flyout-header">
-                    <button class="flyout-back-btn" id="flyoutBackBtn" type="button">
-                        <span class="material-symbols-outlined">arrow_back</span>
-                    </button>
-                    <span class="material-symbols-outlined super-module-flyout-icon" id="flyoutIcon" style="font-variation-settings: 'FILL' 1;"></span>
-                    <h6 id="flyoutTitle"></h6>
-                </div>
-                <div class="super-module-flyout-body" id="flyoutBody">
-                    @foreach($superModuleMenus as $smId => $sm)
-                    <div class="super-module-flyout-content" data-super-module-id="{{ $smId }}" style="display:none;">
-                        @foreach($sm['modules'] as $moduleId => $mod)
-                        <div class="flyout-module-group">
-                            <div class="flyout-module-title">
-                                @if(!empty($mod['icon']))
-                                <span class="material-symbols-outlined" style="color:#3598db; font-size:20px;">{!! $mod['icon'] !!}</span>
-                                @endif
-                                <span>{{ $mod['module_name'] }}</span>
-                                @if(!empty($mod['submenus']))
-                                <span class="material-symbols-outlined flyout-expand-icon">expand_more</span>
-                                @endif
-                            </div>
-                            @if(!empty($mod['submenus']))
-                            <ul class="flyout-submenu-list">
-                                @foreach($mod['submenus'] as $submenu)
-                                <li>
-                                    <a href="{{ $submenu->sub_module_url }}">
-                                        <span class="material-symbols-outlined" style="font-size:16px;">arrow_right</span>
-                                        {{ $submenu->sub_module_name }}
-                                    </a>
-                                </li>
-                                @endforeach
-                            </ul>
-                            @endif
-                        </div>
-                        @endforeach
-                    </div>
-                    @endforeach
-                </div>
-            </div>
-            <div class="super-module-flyout-overlay" id="superModuleFlyoutOverlay"></div>
-
             <!-- ######################## BODY START  ########################3 -->
+            <div id="notification-toast-container" aria-live="polite" aria-atomic="false" style="position:fixed;top:85px;right:20px;z-index:10510;width:min(380px,90vw);"></div>
             <div id="global-alert-container" style="position:fixed;top:50px;right:20px;z-index:10500;max-width:400px;"></div>
 
             {{-- jQuery + the toastr-compatible alert shim load here, before page content, so every
@@ -395,6 +304,7 @@
     <script src="{{ asset('assets/js/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('assets/datatables/datatables.min.js') }}"></script>
     <script src="{{ asset('assets/js/select2/select2.min.js') }}"></script>
+    <script src="{{ asset('assets/js/handover-employee-picker.js') }}?v={{ filemtime(public_path('assets/js/handover-employee-picker.js')) }}"></script>
     <script src="{{ asset('assets/js/scrollbar/simplebar.js') }}"></script>
     <script src="{{ asset('assets/js/scrollbar/custom.js') }}"></script>
     <script src="{{ asset('assets/js/config.js') }}"></script>
@@ -540,188 +450,7 @@
         })();
     </script>
 
-    <!-- Super Module Flyout Script -->
-    <script>
-        (function() {
-            function setupSuperModuleFlyout() {
-                var flyout = document.getElementById('superModuleFlyout');
-                var flyoutOverlay = document.getElementById('superModuleFlyoutOverlay');
-                var flyoutTitle = document.getElementById('flyoutTitle');
-                var flyoutIcon = document.getElementById('flyoutIcon');
-                var flyoutBody = document.getElementById('flyoutBody');
-                var superModuleItems = document.querySelectorAll('.super-module-item');
-                var activeSuperModuleId = null;
-                var closeTimer = null;
-                var CLOSE_DELAY = 500; // ms delay before closing on mouse-out
-
-                if (!flyout || !superModuleItems.length) return;
-
-                function cancelClose() {
-                    if (closeTimer) {
-                        clearTimeout(closeTimer);
-                        closeTimer = null;
-                    }
-                }
-
-                function scheduleClose() {
-                    cancelClose();
-                    closeTimer = setTimeout(function() {
-                        closeFlyout();
-                    }, CLOSE_DELAY);
-                }
-
-                function openFlyout(smId) {
-                    cancelClose();
-
-                    // Hide all flyout content sections
-                    var allContent = flyoutBody.querySelectorAll('.super-module-flyout-content');
-                    allContent.forEach(function(c) {
-                        c.style.display = 'none';
-                    });
-
-                    // Show the selected one
-                    var target = flyoutBody.querySelector('.super-module-flyout-content[data-super-module-id="' + smId + '"]');
-                    if (target) target.style.display = 'block';
-
-                    // Update header
-                    var triggerItem = document.querySelector('.super-module-item[data-super-module-id="' + smId + '"]');
-                    if (triggerItem) {
-                        var nameSpan = triggerItem.querySelector('.sm-label');
-                        var iconSpan = triggerItem.querySelector('.sm-icon');
-                        flyoutTitle.textContent = nameSpan ? nameSpan.textContent.trim() : '';
-                        flyoutIcon.textContent = iconSpan ? iconSpan.textContent.trim() : 'folder';
-                    }
-
-                    // Mark active
-                    document.querySelectorAll('.super-module-item').forEach(function(el) {
-                        el.classList.remove('active');
-                    });
-                    if (triggerItem) triggerItem.classList.add('active');
-
-                    flyout.classList.add('open');
-                    flyoutOverlay.classList.add('active');
-                    activeSuperModuleId = smId;
-                }
-
-                function closeFlyout() {
-                    cancelClose();
-                    flyout.classList.remove('open');
-                    flyoutOverlay.classList.remove('active');
-                    document.querySelectorAll('.super-module-item').forEach(function(el) {
-                        el.classList.remove('active');
-                    });
-                    activeSuperModuleId = null;
-                }
-
-                // Desktop hover — use event delegation via mouseover/mouseout
-                // (more robust than mouseenter on individual items, handles
-                //  SimpleBar DOM wrapping and dynamic content)
-                var smGrid = document.querySelector('.super-modules-grid');
-                if (smGrid) {
-                    smGrid.addEventListener('mouseover', function(e) {
-                        if (window.innerWidth < 992) return;
-                        var item = e.target.closest('.super-module-item');
-                        if (item) {
-                            var smId = item.getAttribute('data-super-module-id');
-                            if (activeSuperModuleId !== smId) {
-                                openFlyout(smId);
-                            } else {
-                                cancelClose();
-                            }
-                        }
-                    });
-                    smGrid.addEventListener('mouseout', function(e) {
-                        if (window.innerWidth < 992) return;
-                        var related = e.relatedTarget;
-                        // Don't close if mouse moved to another item or to the flyout
-                        if (related && (related.closest('.super-module-item') || related.closest('.super-module-flyout'))) {
-                            return;
-                        }
-                        scheduleClose();
-                    });
-                }
-
-                // Click/tap for mobile + desktop fallback
-                superModuleItems.forEach(function(item) {
-                    item.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        var smId = item.getAttribute('data-super-module-id');
-                        if (activeSuperModuleId === smId) {
-                            closeFlyout();
-                        } else {
-                            openFlyout(smId);
-                        }
-                    });
-                });
-
-                // Back button (mobile) — close flyout
-                var flyoutBackBtn = document.getElementById('flyoutBackBtn');
-                if (flyoutBackBtn) {
-                    flyoutBackBtn.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        closeFlyout();
-                    });
-                }
-
-                // Keep flyout open while hovering over it
-                flyout.addEventListener('mouseenter', function() {
-                    cancelClose();
-                });
-                flyout.addEventListener('mouseleave', function(e) {
-                    // Don't close if mouse went back to a super module item
-                    if (e.relatedTarget && e.relatedTarget.closest('.super-module-item')) {
-                        return;
-                    }
-                    scheduleClose();
-                });
-
-                // Close on Escape key
-                document.addEventListener('keydown', function(e) {
-                    if (e.key === 'Escape' && activeSuperModuleId !== null) {
-                        closeFlyout();
-                    }
-                });
-
-                // Close flyout when clicking a submenu link inside
-                flyout.querySelectorAll('.flyout-submenu-list a').forEach(function(link) {
-                    link.addEventListener('click', function() {
-                        closeFlyout();
-                    });
-                });
-
-                // Accordion: click module title to expand/collapse, only one open at a time
-                flyout.querySelectorAll('.flyout-module-title').forEach(function(title) {
-                    title.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        var group = title.closest('.flyout-module-group');
-                        if (!group) return;
-                        var isExpanded = group.classList.contains('expanded');
-
-                        // Collapse all groups in the same flyout content section
-                        var parentContent = group.closest('.super-module-flyout-content');
-                        if (parentContent) {
-                            parentContent.querySelectorAll('.flyout-module-group.expanded').forEach(function(g) {
-                                g.classList.remove('expanded');
-                            });
-                        }
-
-                        // Toggle the clicked one (if it was closed, open it)
-                        if (!isExpanded) {
-                            group.classList.add('expanded');
-                        }
-                    });
-                });
-            }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', setupSuperModuleFlyout);
-            } else {
-                setupSuperModuleFlyout();
-            }
-        })();
-    </script>
+    <script src="{{ asset('assets/js/focused-navigation.js') }}?v={{ filemtime(public_path('assets/js/focused-navigation.js')) }}"></script>
 
     @yield('scripts')
 

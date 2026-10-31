@@ -214,7 +214,7 @@ class WorkflowApprovalController extends Controller
                 $items = $this->router->actionableFor(Auth::user());
                 $records = $items->map(function ($item) {
                     $statusCode = (int) $item->current_status_id;
-                    $approvalStage = $statusCode === 24 ? 2 : 1;
+                    $approvalStage = $this->router->decisionStage(Auth::user(), $item) === 'hr' ? 2 : 1;
                     $stageOneConfirmedBy = null;
 
                     if ($statusCode === 24 && $item->status_changed_by) {
@@ -253,6 +253,10 @@ class WorkflowApprovalController extends Controller
                     return [
                         'id' => $item->id,
                         'type' => 'Leave Application',
+                        'handover_employee_name' => $item->handoverEmployee?->full_names,
+                        'handover_notes' => $item->handover_notes,
+                        'handover_acknowledged_at' => $item->handover_acknowledged_at?->toIso8601String(),
+                        'handover_review_url' => route('leave-management.leave-applications.by-staff', \Illuminate\Support\Facades\Crypt::encrypt($item->id)),
                         'requested_by' => $item->createdBy->name ?? '-',
                         'requested_at' => $item->date_time,
                         'details' => implode(' | ', [

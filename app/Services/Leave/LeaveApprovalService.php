@@ -52,6 +52,7 @@ class LeaveApprovalService
         $outcome = ['route' => $route['route'], 'reason' => $route['reason'], 'status' => self::STATUS_PENDING, 'auto_approved' => false];
 
         if ($route['route'] === LeaveApprovalRouter::ROUTE_SUPERVISOR) {
+            app(LeaveApplicationNotifications::class)->submitted($request, $route['route']);
             return $outcome;
         }
 
@@ -70,12 +71,16 @@ class LeaveApprovalService
             }
         }
 
+        if ($route['route'] === LeaveApprovalRouter::ROUTE_HR || $outcome['auto_approved']) {
+            app(LeaveApplicationNotifications::class)->submitted($request, $route['route']);
+        }
+
         return $outcome;
     }
 
     /**
-     * Approve a request as the given user at whichever stage it is at: the supervisor stage for a request waiting
-     * on a supervisor, otherwise the HR (final) stage. Checks the user is allowed to act on this request.
+     * HR gives final approval at either pending stage. Other eligible supervisors recommend requests
+     * waiting for them. Checks the user is allowed to act on this request.
      *
      * @param LeaveRequest $request
      * @param User $user
@@ -90,8 +95,12 @@ class LeaveApprovalService
             $requester = Staff::find($request->staff_id);
             $route = $this->router->routeFor($requester);
 
-            if ($route['route'] === LeaveApprovalRouter::ROUTE_SUPERVISOR) {
+            if ($route['route'] === LeaveApprovalRouter::ROUTE_SUPERVISOR && !$this->router->isHrApprover($user)) {
                 return $this->hodApprove($request, $user->id);
+            }
+
+            if ($route['route'] === LeaveApprovalRouter::ROUTE_SUPERVISOR) {
+                return $this->hrApprove($request, $user->id);
             }
 
             // Filed before routing existed and now waiting on HR only: move it to the HR stage first
@@ -113,7 +122,14 @@ class LeaveApprovalService
             return ['success' => false, 'error' => $denial['error'], 'status' => $denial['status']];
         }
 
-        return $this->quickReject($request, $user->id);
+        return DB::transaction(function () use ($request, $user) {
+            $result = $this->quickReject($request, $user->id, [
+                'stage' => $this->router->isHrApprover($user) ? 'hr_final_rejection' : 'supervisor_rejection',
+                'hr_override' => $this->router->isHrApprover($user) && $this->router->waitingOn($request) === 'supervisor',
+            ]);
+            if ($result['success']) app(LeaveApplicationNotifications::class)->decided($request, $user->id);
+            return $result;
+        });
     }
 
     /**
@@ -203,12 +219,12 @@ class LeaveApprovalService
      * @param int $rejecterId
      * @return array{success: bool, error?: string}
      */
-    public function quickReject(LeaveRequest $request, int $rejecterId): array {
+    public function quickReject(LeaveRequest $request, int $rejecterId, array $metadata = []): array {
         if ($error = $this->actionableError($request)) {
             return ['success' => false, 'error' => $error];
         }
 
-        $rejected = DB::transaction(function () use ($request, $rejecterId) {
+        $rejected = DB::transaction(function () use ($request, $rejecterId, $metadata) {
             if (!$this->lockPending($request, [self::STATUS_PENDING, self::STATUS_PARTIAL])) {
                 return false;
             }
@@ -217,7 +233,7 @@ class LeaveApprovalService
             $request->status_changed_by = $rejecterId;
             $request->save();
 
-            $this->log('reject', $request->id, $rejecterId, null, ['quick_approval' => true]);
+            $this->log('reject', $request->id, $rejecterId, null, array_merge(['quick_approval' => true, 'final_decision' => true], $metadata));
 
             return true;
         });
@@ -460,6 +476,7 @@ class LeaveApprovalService
                 'leave_type_id' => $request->leave_type_id,
             ]);
 
+            app(LeaveApplicationNotifications::class)->readyForHr($request);
             return true;
         });
 
@@ -467,7 +484,7 @@ class LeaveApprovalService
     }
 
     /**
-     * Stage 2: HR final approval. Moves status 24 (Partial) -> 5 (Approved). Calculates countable days, creates
+     * HR final approval. Moves status 1 (Pending) or 24 (Partial) -> 5 (Approved). Calculates countable days, creates
      * LeaveRequestDaysTaken, deducts the plan balance and logs stage 2.
      *
      * @param LeaveRequest $request
@@ -476,8 +493,12 @@ class LeaveApprovalService
      * @return array{success: bool, error?: string, used_days?: float}
      */
     public function hrApprove(LeaveRequest $request, int $approverId, array $metadata = []): array {
-        if ((int) $request->current_status_id !== self::STATUS_PARTIAL) {
-            return ['success' => false, 'error' => 'Application must be approved by the supervisor first.'];
+        $approver = User::find($approverId);
+        if (!$approver || !$this->router->isHrApprover($approver)) {
+            return ['success' => false, 'error' => 'Only HR can give the final approval.', 'status' => 403];
+        }
+        if (empty($metadata['auto_approved']) && ($denial = $this->router->denial($approver, $request))) {
+            return ['success' => false, 'error' => $denial['error'], 'status' => $denial['status']];
         }
 
         if ($error = $this->actionableError($request)) {
@@ -494,10 +515,15 @@ class LeaveApprovalService
             return ['success' => false, 'error' => 'The requested dates contain no chargeable leave days.'];
         }
 
-        $usedDays = DB::transaction(function () use ($request, $approverId, $dates, $isPartialDay, $rules, $metadata) {
-            if (!$this->lockPending($request, [self::STATUS_PARTIAL])) {
+        $usedDays = DB::transaction(function () use ($request, $approverId, $approver, $dates, $isPartialDay, $rules, $metadata) {
+            if (!$this->lockPending($request, [self::STATUS_PENDING, self::STATUS_PARTIAL])) {
                 return null;
             }
+            if (empty($metadata['auto_approved']) && $this->router->denial($approver, $request)) {
+                return null;
+            }
+            $supervisorSkipped = (int) $request->current_status_id === self::STATUS_PENDING
+                && $this->router->waitingOn($request) === 'supervisor';
 
             LeaveRequestDaysTaken::where('parent_id', $request->id)->delete();
 
@@ -530,6 +556,8 @@ class LeaveApprovalService
 
             $this->log('approve', $request->id, $approverId, 2, array_merge([
                 'stage' => 'hr_final_approval',
+                'supervisor_skipped' => $supervisorSkipped,
+                'reason' => $supervisorSkipped ? 'hr_final_decision_before_supervisor' : null,
                 'used_days' => $usedDays,
                 'is_partial_day' => $isPartialDay,
                 'employee_id' => $request->staff_id,
@@ -537,6 +565,8 @@ class LeaveApprovalService
                 'plan_id' => $plan ? $plan->id : null,
                 'plan_balance_after' => $plan ? $plan->balance : null,
             ], $metadata));
+
+            app(LeaveApplicationNotifications::class)->decided($request, $approverId);
 
             return $usedDays;
         });

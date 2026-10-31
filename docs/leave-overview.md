@@ -12,6 +12,12 @@ The HR Manager and Director dashboards include an employee/year leave account. E
 - Available balance follows the application rule: recorded balance less pending reservations, minimum zero. A negative recorded balance remains visible. Categories are shown individually rather than summed into one interchangeable leave allowance.
 - Category filters affect both tables; month filters affect the daily table only, leaving the year-level account unchanged. All figures are in days; pay tiers and rates are shown only when saved on daily records.
 
+### Missing or inactive leave categories
+
+The overview includes categories referenced by the employee's requests even if those categories are now inactive or absent from HR settings. Missing categories are labelled Unconfigured leave category #ID; inactive categories retain their name with an inactive label. Their recorded pending totals and approved daily records remain visible, but entitlement, balance and available-to-request figures are unavailable until HR confirms the setup. Legacy plans under a missing category are not automatically mapped to a current category, and no records are changed.
+
+For pending requests without category rules, a single-day request shows the recorded requested amount; a multi-day request shows one clearly labelled request-period total instead of an invented daily breakdown. An unresolved cross-year allocation is unavailable, not zero. Month filters retain overlapping request periods without assigning the full request total to the selected month. Setup warnings open automatically. An approved cross-year request without daily records, or an approved day without its fraction, is also flagged as unavailable rather than treated as zero.
+
 ## Verification
 
 Refresh `/dashboard` as a Director or HR Manager. Select an active employee and year. Compare annual entitlement/balance with their plan and leave application availability. Compare approved entries with the request's saved daily records, including a half-day, refunded date, future approval, and cross-year request. Check pending previews around weekends and public holidays. Use a historical employee with missing details to confirm warnings and unavailable values are visible. Change category/month/year and verify filters and error states. No migration is required.

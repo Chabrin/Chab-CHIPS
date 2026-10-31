@@ -1450,7 +1450,7 @@ public function positionsDropdowns(Request $request)
     {
         try {
             $query = Staff::with(['position:id,position_name', 'zone:id,zone_name'])
-                ->select('id', 'full_names', 'position_id', 'zone_id');
+                ->select('id', 'full_names', 'position_id', 'zone_id', 'department_id');
 
             if ($request->filled('zone_id')) {
                 $query->where('zone_id', $request->input('zone_id'));
@@ -1466,6 +1466,7 @@ public function positionsDropdowns(Request $request)
                     return [
                         'id' => $employee->id,
                         'full_names' => $employee->full_names,
+                        'department_id' => $employee->department_id,
                         'position' => $employee->position ? $employee->position->position_name : null,
                         'zone_name' => $employee->zone->zone_name ?? null,
                     ];

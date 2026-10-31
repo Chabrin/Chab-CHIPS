@@ -75,6 +75,7 @@ use App\Http\Controllers\LeaveManagementController;
 Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Notifications
+    Route::get('/notifications/feed', [App\Http\Controllers\NotificationController::class, 'feed'])->name('notifications.feed');
     Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/unread-count', [App\Http\Controllers\NotificationController::class, 'getUnreadCount'])->name('notifications.unread-count');
     Route::get('/notifications/{id}', [App\Http\Controllers\NotificationController::class, 'show'])->name('notifications.show');
@@ -616,6 +617,8 @@ Route::middleware('throttle:5,1')->group(function () {
     // Leave Applications Routes
     Route::get('/hr/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplications'])->name('leave-management.leave-applications');
     Route::get('/hr/leave-management/leave-applications/{encryptedLeaveApplicationId}', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsByStaff'])->name('leave-management.leave-applications.by-staff');
+    Route::get('/hr/leave-management/requests/{id}', [\App\Http\Controllers\LeaveManagementController::class, 'notificationApplication'])
+        ->whereNumber('id')->name('leave-management.application-notification');
     Route::get('/hr/leave-management/leave-pass/{encryptedLeaveApplicationId}', [\App\Http\Controllers\LeaveManagementController::class, 'downloadLeavePass'])->name('leave-management.download-pass');
     Route::get('/ajax/leave-management/leave-applications/list', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsList'])->name('ajax.leaveApplications.list');
     Route::post('/ajax/leave-management/leave-applications', [\App\Http\Controllers\LeaveManagementController::class, 'leaveApplicationsStore'])->name('ajax.leaveApplications.store');
@@ -1543,6 +1546,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/search', [SearchController::class, 'index'])->name('search');
 
     Route::get('/dashboard/leave-overview', [\App\Http\Controllers\LeaveOverviewController::class, 'show'])->name('dashboard.leave-overview');
+    Route::get('/dashboard/contract-expiry-overview', [\App\Http\Controllers\ContractExpiryOverviewController::class, 'show'])->name('dashboard.contract-expiry-overview');
 
     // Dashboard AJAX endpoints
     Route::get('/dashboard/field-officer/stats', [HomeController::class, 'getFieldOfficerStats'])->name('dashboard.field-officer.stats');
@@ -1653,6 +1657,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     // Self Service
     Route::get('/self-service/my-payslip', [SelfServiceController::class, 'myPayslip'])->name('self-service.my-payslip');
     Route::get('/self-service/my-leave',   [SelfServiceController::class, 'myLeave'])->name('self-service.my-leave');
+    Route::get('/self-service/leave-handovers/{id}', [LeaveManagementController::class, 'handoverDetails'])
+        ->whereNumber('id')->name('self-service.leave-handover');
+    Route::post('/self-service/leave-handovers/{id}/acknowledge', [\App\Http\Controllers\LeaveHandoverController::class, 'acknowledge'])
+        ->whereNumber('id')->name('leave-handover.acknowledge');
+    Route::get('/self-service/leave-handovers/{id}/files/{attachment}', [\App\Http\Controllers\LeaveHandoverController::class, 'download'])
+        ->whereNumber('id')->whereUuid('attachment')->name('leave-handover.download');
     Route::get('/self-service/my-disciplinary-cases', [SelfServiceController::class, 'showSelf'])->name('self-service.my-disciplinary-cases');
 
     // Cheque Books

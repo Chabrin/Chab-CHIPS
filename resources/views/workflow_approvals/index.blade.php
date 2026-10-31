@@ -270,6 +270,17 @@ $(document).ready(function() {
                     </div>
                 </div>`;
         
+        if (data.type === 'Leave Application') {
+            const colleague = $('<div>').text(data.handover_employee_name || 'Not recorded').html();
+            const notes = $('<div>').text(data.handover_notes || 'No relief notes recorded.').html();
+            const receipt = data.handover_acknowledged_at ? 'Receipt acknowledged' : 'Awaiting acknowledgement of receipt';
+            const reviewUrl = $('<div>').text(data.handover_review_url || '').html();
+            detailsContent += `<div class="col-12 mt-3"><strong>Relief Arrangements</strong>
+                <p class="mb-1">Relief employee: ${colleague}</p>
+                <div class="border rounded p-2" style="white-space:pre-wrap;overflow-wrap:anywhere;">${notes}</div>
+                <p class="mt-2 mb-1">${receipt}</p><a href="${reviewUrl}">View acknowledgement and relief files</a></div>`;
+        }
+
         if (data.days_taken && data.days_taken.length > 0) {
             detailsContent += `
                 <div class="col-12 mt-3">

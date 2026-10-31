@@ -195,4 +195,94 @@ class LeaveOverviewTest extends TestCase
         $this->request(['start_date' => '2026-10-23 08:00:00', 'end_date' => '2026-10-23 10:00:00', 'requested_days' => 0.25, 'current_status_id' => 1]);
         $this->assertSame(0.25, $this->overview()['days'][0]['days']);
     }
+
+    public function test_missing_category_request_is_visible_and_is_not_reassigned_to_current_annual_leave(): void
+    {
+        DB::table('sys_hr_leave_types')->insert(['id'=>4,'type_name'=>'Annual leave','entitled_days'=>21,'current_status_id'=>5]);
+        foreach ([2,4] as $typeId) {
+            LeaveCalendarPlan::create(['employee_id'=>$this->staff->id,'leave_type_id'=>$typeId,'start_date'=>'2026-01-01','end_date'=>'2026-12-31','entitled_days'=>21,'balance'=>21,'current_status_id'=>5]);
+        }
+        $request=$this->request(['leave_type_id'=>2,'start_date'=>'2026-10-02 08:00:00','end_date'=>'2026-10-02 17:00:00','requested_days'=>1,'current_status_id'=>1]);
+        $plansBefore=DB::table('sys_hr_leave_calendar')->orderBy('id')->get()->toJson();
+        $data=$this->overview();
+        $categories=collect($data['categories'])->keyBy('id');
+        $this->assertSame('Unconfigured leave category #2',$categories[2]['name']);
+        $this->assertSame('missing',$categories[2]['setup_status']);
+        $this->assertSame(1.0,$categories[2]['pending']);
+        $this->assertNull($categories[2]['entitled']);
+        $this->assertNull($categories[2]['balance']);
+        $this->assertNull($categories[2]['available']);
+        $this->assertNotEmpty($categories[2]['warnings']);
+        $this->assertSame(0.0,$categories[4]['pending']);
+        $this->assertSame(21.0,$categories[4]['available']);
+        $this->assertSame('2026-10-02',$data['days'][0]['date']);
+        $this->assertSame(1.0,$data['days'][0]['days']);
+        $this->assertSame(2,$data['days'][0]['category_id']);
+        $this->assertStringContainsString('recorded request total',$data['days'][0]['status']);
+        $this->assertSame(2,LeaveRequest::find($request->id)->leave_type_id);
+        $this->assertSame($plansBefore,DB::table('sys_hr_leave_calendar')->orderBy('id')->get()->toJson());
+        $this->assertSame(0,DB::table('sys_hr_leave_types')->where('id',2)->count());
+    }
+
+    public function test_inactive_category_approved_days_remain_visible_with_balances_unavailable(): void
+    {
+        DB::table('sys_hr_leave_types')->where('id',1)->update(['current_status_id'=>41]);
+        $request=$this->request();
+        $this->day($request,'2026-10-23',1);
+        $this->day($request,'2026-10-24',0.5);
+        $data=$this->overview();
+        $category=$data['categories'][0];
+        $this->assertSame('Sick Leave (inactive)',$category['name']);
+        $this->assertSame('inactive',$category['setup_status']);
+        $this->assertSame(1.5,$category['approved']);
+        $this->assertNull($category['balance']);
+        $this->assertNull($category['available']);
+        $this->assertCount(2,$data['days']);
+        $this->assertNotEmpty($data['warnings']);
+    }
+
+    public function test_unknown_category_multi_day_request_shows_total_without_inventing_daily_rules(): void
+    {
+        $this->request(['leave_type_id'=>2,'start_date'=>'2026-10-23','end_date'=>'2026-10-25','requested_days'=>2,'current_status_id'=>1]);
+        $data=$this->overview();
+        $missing=collect($data['categories'])->firstWhere('id',2);
+        $this->assertSame(2.0,$missing['pending']);
+        $this->assertCount(1,$data['days']);
+        $this->assertNull($data['days'][0]['date']);
+        $this->assertSame(2.0,$data['days'][0]['days']);
+        $this->assertSame('2026-10-23',$data['days'][0]['request_start']);
+        $this->assertSame('2026-10-25',$data['days'][0]['request_end']);
+    }
+
+    public function test_unknown_category_cross_year_request_does_not_guess_a_yearly_pending_total(): void
+    {
+        $this->request(['leave_type_id'=>2,'start_date'=>'2025-12-30','end_date'=>'2026-01-03','requested_days'=>3,'current_status_id'=>1]);
+        $data=$this->overview();
+        $missing=collect($data['categories'])->firstWhere('id',2);
+        $this->assertNull($missing['pending']);
+        $this->assertNull($data['days'][0]['days']);
+        $this->assertStringContainsString('spans years',$data['days'][0]['status']);
+        $this->assertNotEmpty($missing['warnings']);
+    }
+
+    public function test_cross_year_approved_total_without_daily_records_is_unavailable_instead_of_zero(): void
+    {
+        $this->request(['leave_type_id'=>2,'start_date'=>'2025-12-30','end_date'=>'2026-01-03']);
+        $data=$this->overview();
+        $missing=collect($data['categories'])->firstWhere('id',2);
+        $this->assertNull($missing['approved']);
+        $this->assertNull($data['days'][0]['days']);
+        $this->assertStringContainsString('year allocation unavailable',$data['days'][0]['status']);
+    }
+
+    public function test_missing_approved_day_fraction_is_not_reported_as_zero(): void
+    {
+        $request=$this->request(['leave_type_id'=>2]);
+        LeaveRequestDaysTaken::create(['parent_id'=>$request->id,'leave_date'=>'2026-10-23','day_fraction'=>null,'current_status_id'=>5]);
+        $data=$this->overview();
+        $missing=collect($data['categories'])->firstWhere('id',2);
+        $this->assertNull($missing['approved']);
+        $this->assertNull($data['days'][0]['days']);
+        $this->assertNotEmpty($missing['warnings']);
+    }
 }

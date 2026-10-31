@@ -20,6 +20,7 @@ use App\Models\LeaveCalendarSlot;
 use App\Services\ErrorDispatcher;
 use App\Services\Leave\LeaveApprovalRouter;
 use App\Services\Leave\LeaveApprovalService;
+use App\Services\Leave\LeaveApplicationNotifications;
 use App\Services\Leave\LeaveCalendarService;
 use App\Services\Leave\LeavePlanService;
 use App\Services\Leave\LeaveTierService;
@@ -27,6 +28,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Validation\Rule;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 
@@ -690,101 +692,79 @@ private function syncPublicHolidays(array $holidays, int $year): void {
 
     public function pendingApprovalsList()
     {
-        $user = Auth::user();
-        
-        $isDirector = $user->hasRole(['directors', 'superadministrator']);
-        $isHR = $user->hasRole(['hr_manager']);
-        
-        $staff = $user->linkedStaff();
-        $departmentId = $staff?->department_id;
-
-        $query = LeaveRequest::with(['employee.department', 'leaveType', 'position'])
-            ->whereIn('current_status_id', [1, 24]);
-
-        // If not Director or HR, scope by the manager's department or linked permissions
-        if (!$isDirector && !$isHR) {
-            if ($departmentId) {
-                $query->whereHas('employee', function ($q) use ($departmentId) {
-                    $q->where('department_id', $departmentId);
-                });
-            } else {
-                return response()->json(['leave_applications' => []]);
-            }
+        $applications = $this->router->pendingVisibleFor(Auth::user());
+        if ($applications->isNotEmpty()) {
+            $applications->load(['employee.department', 'position', 'handoverEmployee:id,full_names']);
         }
 
-        $applications = $query->orderBy('id', 'desc')->get();
-
-        return response()->json([
-            'leave_applications' => $applications->map(function ($app) use ($isDirector, $isHR) {
-                return [
-                    'id' => $app->id,
-                    'encrypted_leave_application_id' => \Illuminate\Support\Facades\Crypt::encrypt($app->id),
-                    'employee' => $app->employee,
-                    'department' => $app->employee?->department?->department_name ?? '-',
-                    'position' => $app->position ?? $app->employee?->position,
-                    'leave_type' => $app->leaveType,
-                    'start_date' => $app->start_date ? \Carbon\Carbon::parse($app->start_date)->format('Y-m-d') : '-',
-                    'end_date' => $app->end_date ? \Carbon\Carbon::parse($app->end_date)->format('Y-m-d') : '-',
-                    'requested_days' => $app->requested_days ?? $app->days ?? 0,
-                    'current_status_id' => (int) $app->current_status_id,
-                    'status_label' => $app->status_label,
-                    'can_approve_hod' => (int) $app->current_status_id === 1,
-                    'can_approve_hr' => (int) $app->current_status_id === 24 && ($isHR || $isDirector),
-                    'can_reject' => true,
-                ];
-            })
-        ]);
+        return response()->json(['leave_applications' => $applications->map(function ($app) {
+            $canAct = $this->router->canAct(Auth::user(), $app) === null;
+            $waitingOn = $this->router->decisionStage(Auth::user(), $app);
+            return [
+                'id' => $app->id,
+                'encrypted_leave_application_id' => Crypt::encrypt($app->id),
+                'employee' => ['id' => $app->staff_id, 'full_names' => $app->employee?->full_names],
+                'department' => $app->employee?->department?->department_name ?? '-',
+                'position' => $app->position ?? $app->employee?->position,
+                'leave_type' => $app->leaveType,
+                'start_date' => $app->start_date?->format('Y-m-d'),
+                'end_date' => $app->end_date?->format('Y-m-d'),
+                'requested_days' => $app->requested_days ?? $app->days ?? 0,
+                'current_status_id' => (int) $app->current_status_id,
+                'stage_label' => $this->router->stageLabel($app),
+                'handover_employee_name' => $app->handoverEmployee?->full_names,
+                'handover_notes' => $app->handover_notes,
+                'handover_acknowledged_at' => $app->handover_acknowledged_at?->toIso8601String(),
+                'handover_review_url' => route('leave-management.leave-applications.by-staff', Crypt::encrypt($app->id)),
+                'waiting_description' => $this->router->waitingDescription($app),
+                'can_approve_hod' => $canAct && $waitingOn === 'supervisor',
+                'can_approve_hr' => $canAct && $waitingOn === 'hr',
+                'can_reject' => $canAct,
+            ];
+        })->values()]);
     }
 
-public function updateApplicationStatus(Request $request)
+    public function updateApplicationStatus(Request $request)
     {
-        try {
-            $validated = $request->validate([
-                'id'     => 'required|integer|exists:sys_hr_leave_requests,id',
-                'status' => 'required|integer',
-            ]);
-
-            $leaveRequest = LeaveRequest::findOrFail($validated['id']);
-            $newStatus = (int) $validated['status'];
-            $user = Auth::user();
-
-            $isDirector = $user->hasRole(['directors', 'superadministrator']);
-            $isHR = $user->hasRole(['hr_manager']);
-
-            // Authorization checks based on stage transition
-            if ($newStatus === 24) {
-                if ((int) $leaveRequest->current_status_id !== 1) {
-                    return response()->json(['success' => false, 'error' => 'Application is not at the supervisor review stage.'], 422);
-                }
-            } elseif ($newStatus === 5) {
-                if (!$isHR && !$isDirector) {
-                    return response()->json(['success' => false, 'error' => 'Unauthorized. Only HR or Directors can grant final approval.'], 403);
-                }
-                if ((int) $leaveRequest->current_status_id !== 24) {
-                    return response()->json(['success' => false, 'error' => 'Application must be recommended by HOD before final approval.'], 422);
-                }
-            } elseif ($newStatus === 41) {
-                if ((int) $leaveRequest->current_status_id === 5) {
-                    return response()->json(['success' => false, 'error' => 'Approved leave cannot be rejected.'], 422);
-                }
-            }
-
-            // Update the status and log who changed it
-            $leaveRequest->current_status_id = $newStatus;
-            $leaveRequest->status_changed_by = $user->id;
-            $leaveRequest->save();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Leave application status updated successfully.',
-            ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Throwable $e) {
-            Log::error('updateApplicationStatus error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => 'Failed to update application status: ' . $e->getMessage()], 500);
+        $validated = $request->validate([
+            'id' => 'required|integer',
+            'status' => 'required|integer|in:24,5,41',
+        ]);
+        $application = LeaveRequest::findOrFail($validated['id']);
+        $nextStatus = $this->router->decisionStage(Auth::user(), $application) === 'supervisor' ? 24 : 5;
+        if ((int) $validated['status'] !== 41 && (int) $validated['status'] !== $nextStatus) {
+            return response()->json(['success' => false, 'error' => 'The approval stage has changed. Please reload.'], 422);
         }
+
+        return $this->applicationDecision($request, (int) $validated['status'] === 41);
+    }
+
+    private function handoverRules(Request $request): array
+    {
+        return [
+            'handover_staff_id' => ['required', 'integer', 'different:staff_id',
+                Rule::exists('sys_staff', 'id')->where('current_status_id', 1),
+                function ($attribute, $value, $fail) use ($request) {
+                    $applicant = Staff::find((int) $request->input('staff_id'));
+                    if (!$applicant || !app(LeaveApplicationNotifications::class)->handoverStaff($applicant)->contains('id', (int) $value)) {
+                        $fail('Choose an active colleague in the applicant\'s department with a linked, activated system account and an assigned role.');
+                    }
+                }],
+            'handover_notes' => ['required', 'string', 'max:5000'],
+            'handover_documents' => ['nullable', 'array', 'max:5'],
+            'handover_documents.*' => ['required', 'file', 'max:5120'],
+        ];
+    }
+
+    private function applicationDecision(Request $request, bool $reject = false)
+    {
+        $validated = $request->validate(['id' => 'required|integer']);
+        $application = LeaveRequest::findOrFail($validated['id']);
+        $result = $reject
+            ? $this->approvals->reject($application, Auth::user())
+            : $this->approvals->approve($application, Auth::user());
+
+        return response()->json($result, $result['success'] ? 200 : ($result['status'] ?? 422));
     }
 
     public function leaveCalendarPlanUpdate(Request $request, $id)
@@ -919,8 +899,32 @@ public function updateApplicationStatus(Request $request)
     public function leaveApplications()
     {
         return view('leave_management.leave_applications', [
+            'handoverStaff' => app(LeaveApplicationNotifications::class)->handoverStaff(),
             'departments' => Department::orderBy('department_name')->get(['id', 'department_name']),
         ]);
+    }
+
+    public function handoverDetails(int $id)
+    {
+        $application = LeaveRequest::with(['employee:id,full_names', 'handoverEmployee:id,full_names'])->findOrFail($id);
+        $user = Auth::user();
+        abort_unless(app(\App\Services\Leave\LeaveHandoverService::class)->isRecipient($user, $application), 403,
+            'This handover is no longer assigned to you or you do not have access.');
+
+        // Give the colleague the handover only, not balances, salary/allowances, leave category, or approval actions.
+        return view('self-service.leave-handover', ['handover' => [
+            'employee_name' => $application->employee?->full_names ?? 'Employee',
+            'recipient_name' => $application->handoverEmployee?->full_names ?? 'You',
+            'start_date' => $application->start_date?->format('d M Y'),
+            'end_date' => $application->end_date?->format('d M Y'),
+            'status' => (int) $application->current_status_id,
+            'notes' => $application->handover_notes,
+            'id' => $application->id,
+            'revision' => app(\App\Services\Leave\LeaveHandoverService::class)->revision($application),
+            'attachments' => app(\App\Services\Leave\LeaveHandoverService::class)->attachments($application),
+            'acknowledged_at' => $application->handover_acknowledged_at?->format('d M Y H:i'),
+            'acknowledgement_note' => $application->handover_acknowledgement_note,
+        ]]);
     }
 
     public function leaveApplicationsList(?Request $request = null)
@@ -937,12 +941,12 @@ public function updateApplicationStatus(Request $request)
         }
 
         try {
-            // Everyone's requests for those who can read them; everyone else only sees their own
+            // The list is scoped by the approval router; the on-leave panel below shows everyone's leave to those who can read it, everyone else only their own
             $canReadAll = Auth::user()->isAbleTo('read_leave_applications');
             $ownStaffId = Auth::user()->linkedStaff()?->id;
 
-            $requests = LeaveRequest::with('createdBy', 'employee.department', 'leaveType', 'position')
-                ->when(!$canReadAll, fn ($query) => $query->where('staff_id', $ownStaffId ?? 0))
+            $requests = $this->router->visibleFor(Auth::user())
+                ->with('createdBy', 'employee.department', 'leaveType', 'position', 'handoverEmployee:id,full_names')
                 ->when(isset($validated['status']), fn ($query) => $query->where('current_status_id', $validated['status']))
                 ->when(isset($validated['department_id']), fn ($query) => $query->whereHas('employee', fn ($employee) => $employee->where('department_id', $validated['department_id'])))
                 ->when(isset($validated['date_from']), fn ($query) => $query->whereDate('end_date', '>=', $validated['date_from']))
@@ -955,6 +959,10 @@ public function updateApplicationStatus(Request $request)
                     return [
                         'id'                             => $request->id,
                         'staff_id'                       => $request->staff_id,
+                        'handover_staff_id'              => $request->handover_staff_id,
+                        'handover_notes'                 => $request->handover_notes,
+                        'handover_files' => app(\App\Services\Leave\LeaveHandoverService::class)->attachments($request),
+                        'handover_employee_name'         => $request->handoverEmployee?->full_names,
                         'encrypted_leave_application_id' => $encrypted_leave_application_id,
                         'position_id'                    => $request->position_id,
                         'start_date'                     => $request->start_date ? $request->start_date->format('Y-m-d H:i') : null,
@@ -970,6 +978,7 @@ public function updateApplicationStatus(Request $request)
                         'amount'                         => $request->amount,
                         'current_status_id'              => $request->current_status_id,
                         'waiting_on'                     => $this->router->waitingOn($request),
+                        'stage_label'                    => $this->router->stageLabel($request),
                         'allowance_type_id'              => $request->allowance_type_id,
                         'created_by'                     => $request->createdBy ? [
                             'id'   => $request->createdBy->id,
@@ -996,7 +1005,7 @@ public function updateApplicationStatus(Request $request)
                         'date_time'                      => $request->date_time,
                         'can_update'                     => Auth::user()->isAbleTo('update_leave_applications'),
                         'can_delete'                     => Auth::user()->isAbleTo('delete_leave_applications'),
-                        'can_view'                       => Auth::user()->isAbleTo('read_leave_applications'),
+                        'can_view'                       => true,
                     ];
                 });
     
@@ -1039,18 +1048,25 @@ public function updateApplicationStatus(Request $request)
         }
     }
 
+    /** Short notification URLs still use the existing owner/supervisor/HR access checks. */
+    public function notificationApplication(int $id)
+    {
+        $application = LeaveRequest::findOrFail($id);
+        return $this->leaveApplicationsByStaff(Crypt::encrypt($application->id));
+    }
+
     public function leaveApplicationsByStaff($encryptedLeaveApplicationId)
     {
         try {
             $leaveApplicationId = Crypt::decrypt($encryptedLeaveApplicationId);
 
-            $requests = LeaveRequest::with('createdBy', 'employee.department', 'leaveType', 'position')
+            $requests = LeaveRequest::with('createdBy', 'employee.department', 'leaveType', 'position', 'handoverEmployee:id,full_names')
                 ->where('id', $leaveApplicationId)
                 ->orderBy('date_time', 'desc')
                 ->get();
 
             foreach ($requests as $request) {
-                if (!$this->canManageLeaveOf((int) $request->staff_id, 'read_leave_applications')) {
+                if (!$this->canManageLeaveOf((int) $request->staff_id, 'read_leave_applications') && !$this->router->canReview(Auth::user(), $request)) {
                     return response('You are not allowed to view this leave application.', 403);
                 }
             }
@@ -1080,6 +1096,8 @@ public function updateApplicationStatus(Request $request)
 
             return view('leave_management.leave_application_details', [
                 'leave_applications' => $requests,
+                'approvalRouter' => $this->router,
+                'actionableIds' => $requests->filter(fn ($application) => $this->router->canAct(Auth::user(), $application) === null)->modelKeys(),
                 'staffingDate' => $staffingDate,
                 'departmentStaff' => $departmentStaff,
                 'onLeaveStaffIds' => $onLeaveStaffIds,
@@ -1240,7 +1258,7 @@ public function updateApplicationStatus(Request $request)
                 $rules['end_date']   = 'required|date';
             }
             
-            $validated = $request->validate($rules);
+            $validated = $request->validate(array_merge($rules, $this->handoverRules($request)));
 
             if (!$this->canManageLeaveOf((int) $validated['staff_id'], 'create_leave_applications')) {
                 return response()->json(['success' => false, 'error' => 'You can only apply for leave for yourself.'], 403);
@@ -1253,6 +1271,11 @@ public function updateApplicationStatus(Request $request)
             
             $requestModel = new LeaveRequest();
             $requestModel->staff_id    = $validated['staff_id'];
+            foreach (['handover_staff_id', 'handover_notes'] as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $requestModel->{$field} = $validated[$field];
+                }
+            }
             $requestModel->leave_type_id = $validated['leave_type_id'];
             $requestModel->position_id = $staff->position_id;
             
@@ -1311,10 +1334,9 @@ public function updateApplicationStatus(Request $request)
             $requestModel->current_status_id = 1;
             $requestModel->created_by_id     = Auth::id();
             $requestModel->date_time         = now();
-            $requestModel->save();
-
-            // Decide who approves it: the supervisor, straight to HR, or automatic for the HR approver
-            $routing = $this->approvals->submit($requestModel, (int) Auth::id());
+            $routing = app(\App\Services\Leave\LeaveHandoverService::class)->saveAndSubmit(
+                $requestModel, $request, fn ($leave) => $this->approvals->submit($leave, (int) Auth::id())
+            );
 
             return response()->json(['success' => true, 'leave_application' => $requestModel->fresh(), 'routing' => $routing, 'warning' => $balanceWarning]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -1323,71 +1345,30 @@ public function updateApplicationStatus(Request $request)
             try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
+            Log::error('leaveApplicationsStore failed', ['exception' => $e]);
             return response()->json(['success' => false, 'error' => 'Failed to create leave application'], 500);
         }
     }
 
 
-public function approveApplication(Request $request)
-{
-    try {
-        $applicationId = $request->input('id');
-
-        $application = DB::table('sys_hr_leave_requests')->where('id', $applicationId)->first();
-
-        if (!$application) {
-            return response()->json(['success' => false, 'message' => 'Leave application not found.'], 404);
-        }
-
-        // If it's currently at Stage 1 (status 1), advance it to HR Final (status 24)
-        $nextStatus = $application->current_status_id == 1 ? 24 : 3; 
-
-        DB::table('sys_hr_leave_requests')
-            ->where('id', $applicationId)
-            ->update([
-                'current_status_id' => $nextStatus,
-                'status_changed_by' => Auth::id()
-            ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Leave application successfully recommended/approved.'
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Error: ' . $e->getMessage()
-        ], 500);
+    public function approveApplication(Request $request)
+    {
+        return $this->applicationDecision($request);
     }
-}
 
-public function rejectApplication(Request $request)
-{
-    try {
-        $applicationId = $request->input('id');
-
-        DB::table('sys_hr_leave_requests')
-            ->where('id', $applicationId)
-            ->update([
-                'current_status_id' => 0, // Set to your rejected status ID
-                'status_changed_by' => Auth::id()
-            ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Leave application rejected.'
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Error: ' . $e->getMessage()
-        ], 500);
+    public function rejectApplication(Request $request)
+    {
+        return $this->applicationDecision($request, true);
     }
-}
-    
+
     public function leaveApplicationsUpdate(Request $request, $id)
     {
         try {
+            $requestModel = LeaveRequest::findOrFail($id);
+            $request->mergeIfMissing([
+                'handover_staff_id' => $requestModel->handover_staff_id,
+                'handover_notes' => $requestModel->handover_notes,
+            ]);
             $durationType = $request->input('leave_duration_type', 'full_day');
             
             $rules = [
@@ -1407,9 +1388,7 @@ public function rejectApplication(Request $request)
                 $rules['end_date']   = 'required|date';
             }
             
-            $validated = $request->validate($rules);
-
-            $requestModel = LeaveRequest::findOrFail($id);
+            $validated = $request->validate(array_merge($rules, $this->handoverRules($request)));
 
             // Both the person the request belongs to now and the one it is being changed to must be allowed
             if (!$this->canManageLeaveOf((int) $requestModel->staff_id, 'update_leave_applications') || !$this->canManageLeaveOf((int) $validated['staff_id'], 'update_leave_applications')) {
@@ -1427,6 +1406,11 @@ public function rejectApplication(Request $request)
             }
 
             $requestModel->staff_id      = $validated['staff_id'];
+            foreach (['handover_staff_id', 'handover_notes'] as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $requestModel->{$field} = $validated[$field];
+                }
+            }
             $requestModel->leave_type_id = $validated['leave_type_id'];
             $requestModel->position_id   = $staff->position_id;
             
@@ -1481,9 +1465,9 @@ public function rejectApplication(Request $request)
             $requestModel->status_changed_by = null;
             $requestModel->created_by_id     = Auth::id();
             $requestModel->date_time         = now();
-            $requestModel->save();
-
-            $routing = $this->approvals->submit($requestModel, (int) Auth::id());
+            $routing = app(\App\Services\Leave\LeaveHandoverService::class)->saveAndSubmit(
+                $requestModel, $request, fn ($leave) => $this->approvals->submit($leave, (int) Auth::id())
+            );
 
             return response()->json(['success' => true, 'leave_application' => $requestModel->fresh(), 'routing' => $routing, 'warning' => $balanceWarning]);
         } catch (\Illuminate\Validation\ValidationException $e) {

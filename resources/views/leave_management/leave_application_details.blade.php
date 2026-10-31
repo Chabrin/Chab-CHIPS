@@ -44,17 +44,7 @@ use Illuminate\Support\Facades\Crypt;
                                         <div class="col-md-3">
                                             <small class="text-muted">Status:</small><br>
                                             <strong>
-                                                @if($application->current_status_id == 1)
-                                                    <span class="badge bg-warning">Pending</span>
-                                                @elseif($application->current_status_id == 24)
-                                                    <span class="badge bg-info">Pending HR</span>
-                                                @elseif($application->current_status_id == 5)
-                                                    <span class="badge bg-success">Approved</span>
-                                                @elseif($application->current_status_id == 41)
-                                                    <span class="badge bg-danger">Rejected</span>
-                                                @else
-                                                    {{ $application->current_status_id }}
-                                                @endif
+                                                <span class="badge {{ in_array((int) $application->current_status_id, [3, 5]) ? 'bg-success' : ((int) $application->current_status_id === 41 ? 'bg-danger' : 'bg-warning text-dark') }}">{{ $approvalRouter->stageLabel($application) }}</span>
                                                 @if($application->recalled_at)
                                                     <span class="badge bg-dark ms-1">Recalled · {{ $application->recall_effective_date ? \Carbon\Carbon::parse($application->recall_effective_date)->format('d M Y') : '' }}</span>
                                                 @endif
@@ -101,6 +91,22 @@ use Illuminate\Support\Facades\Crypt;
                                     </div>
                                     @if($application->recalled_at)
                                     <div class="alert alert-secondary py-2 mt-2 mb-0"><strong>Recall reason:</strong> {{ $application->recall_reason }} <span class="ms-2">({{ number_format((float) $application->recalled_days, 2) }} days refunded)</span></div>
+                                    @endif
+                                    <div class="border-top mt-3 pt-3">
+                                        <h6>Relief Arrangements</h6>
+                                        @include('leave_management.partials.handover-receipt', ['application' => $application])
+                                        <p class="mb-1"><strong>Relief employee:</strong> {{ $application->handoverEmployee?->full_names ?? 'Not recorded' }}</p>
+                                        <p style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ $application->handover_notes ?? 'No relief notes recorded.' }}</p>
+                                    </div>
+                                    @if(in_array($application->id, $actionableIds ?? []))
+                                        <div class="d-flex gap-2 mt-3">
+                                            <button type="button" class="btn btn-primary btn-sm" data-leave-decision="approve" data-id="{{ $application->id }}">
+                                                {{ $approvalRouter->decisionStage(auth()->user(), $application) === 'supervisor' ? 'Approve as supervisor' : 'Give final HR approval' }}
+                                            </button>
+                                            <button type="button" class="btn btn-outline-danger btn-sm" data-leave-decision="reject" data-id="{{ $application->id }}">Reject</button>
+                                        </div>
+                                    @elseif($approvalRouter->waitingDescription($application))
+                                        <p class="text-muted mt-3">{{ $approvalRouter->waitingDescription($application) }}</p>
                                     @endif
                                 </div>
                             </div>
@@ -193,6 +199,31 @@ document.addEventListener('DOMContentLoaded', function () {
 @endif
 
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-leave-decision]').forEach(button => {
+        button.addEventListener('click', async function () {
+            const approve = button.dataset.leaveDecision === 'approve';
+            if (!window.confirm(approve ? 'Approve this leave application at the current stage?' : 'Reject this leave application?')) return;
+            const buttons = document.querySelectorAll('[data-leave-decision]');
+            buttons.forEach(item => { item.disabled = true; });
+            try {
+                const response = await fetch(approve ? @json(route('ajax.hr.leave.applications.approve')) : @json(route('ajax.hr.leave.applications.reject')), {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ id: button.dataset.id })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Unable to update the application.');
+                window.location.reload();
+            } catch (error) {
+                window.alert(error.message);
+                buttons.forEach(item => { item.disabled = false; });
+            }
+        });
+    });
+});
+</script>
 <style>
     .card-header {
         border-bottom: 1px solid #e0e0e0;

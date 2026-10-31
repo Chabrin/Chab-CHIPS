@@ -57,6 +57,8 @@ class SelfServiceController extends Controller
             return view('self-service.my-leave', [
                 'staff' => $staff,
                 'staffLinked' => (bool) $staff,
+                'handoverStaff' => $staff ? app(\App\Services\Leave\LeaveApplicationNotifications::class)->handoverStaff($staff)
+                    : collect(),
                 'staffId' => $staff?->id,
                 'staffName' => $staff?->full_names ?? auth()->user()->name,
                 'annualPlan' => $annualPlan,
