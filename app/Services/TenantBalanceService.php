@@ -3,9 +3,14 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
-use App\Models\DebtorInvoice;
 use App\Models\Client;
 
+/**
+ * A tenant's balance, read from the tenant ledger (sys_pm_tenants_accounts_trans): debits are what the
+ * tenant was invoiced, credits what the tenant paid. This is the same source and the same filter as the
+ * tenant statements and the arrears report, so every screen shows the same figure. It used to add up
+ * invoices and a payments table whose ids do not match the migrated data.
+ */
 class TenantBalanceService
 {
     /**
@@ -30,16 +35,16 @@ class TenantBalanceService
     {
         $cutoff = $asOfDate ?? now()->toDateString();
 
-        // Sum all invoice debits up to the cutoff date
-        $totalInvoiced = DebtorInvoice::where('tenant_id', $tenantId)
-            ->whereDate('date_due', '<=', $cutoff)
-            ->sum('total_amount');
-
-        // Sum all payment credits up to the cutoff date
-        $totalPaid = DB::table('sys_pm_tenants_payments')
+        // Ledger debits (invoiced) and credits (paid) up to the cutoff date
+        $totals = DB::table('sys_pm_tenants_accounts_trans')
             ->where('tenant_id', $tenantId)
-            ->whereDate('payment_date', '<=', $cutoff)
-            ->sum('amount');
+            ->where('current_status_id', 1)
+            ->whereDate('date_time', '<=', $cutoff)
+            ->selectRaw('COALESCE(SUM(debit_amount), 0) AS invoiced, COALESCE(SUM(credit_amount), 0) AS paid')
+            ->first();
+
+        $totalInvoiced = $totals->invoiced;
+        $totalPaid = $totals->paid;
 
         // Positive = in credit, Negative = in arrears (owes money)
         $balance = (float) $totalPaid - (float) $totalInvoiced;
@@ -72,20 +77,17 @@ class TenantBalanceService
 
         $cutoff = $asOfDate ?? now()->toDateString();
 
-        // Batch-sum invoices
-        $invoiceTotals = DebtorInvoice::whereIn('tenant_id', $tenantIds)
-            ->whereDate('date_due', '<=', $cutoff)
-            ->groupBy('tenant_id')
-            ->selectRaw('tenant_id, SUM(total_amount) as total_invoiced')
-            ->pluck('total_invoiced', 'tenant_id');
-
-        // Batch-sum payments
-        $paymentTotals = DB::table('sys_pm_tenants_payments')
+        // Batch-sum the ledger debits (invoiced) and credits (paid)
+        $ledgerTotals = DB::table('sys_pm_tenants_accounts_trans')
             ->whereIn('tenant_id', $tenantIds)
-            ->whereDate('payment_date', '<=', $cutoff)
+            ->where('current_status_id', 1)
+            ->whereDate('date_time', '<=', $cutoff)
             ->groupBy('tenant_id')
-            ->selectRaw('tenant_id, SUM(amount) as total_paid')
-            ->pluck('total_paid', 'tenant_id');
+            ->selectRaw('tenant_id, SUM(debit_amount) AS total_invoiced, SUM(credit_amount) AS total_paid')
+            ->get()
+            ->keyBy('tenant_id');
+        $invoiceTotals = $ledgerTotals->pluck('total_invoiced', 'tenant_id');
+        $paymentTotals = $ledgerTotals->pluck('total_paid', 'tenant_id');
 
         $results = [];
 

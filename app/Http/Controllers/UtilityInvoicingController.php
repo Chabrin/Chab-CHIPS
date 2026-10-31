@@ -7,6 +7,7 @@ use App\Models\InvoiceableItem;
 use App\Models\LeaseAgreement;
 use App\Models\Property;
 use App\Models\ServiceAgreement;
+use App\Services\InvoiceJournalService;
 use App\Traits\InvoiceCreationTrait;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
@@ -30,6 +31,13 @@ use Illuminate\Support\Facades\Log;
 class UtilityInvoicingController extends Controller
 {
     use InvoiceCreationTrait;
+
+    /**
+     * Inject the service that posts invoices to the GL.
+     */
+    public function __construct(InvoiceJournalService $invoiceJournals) {
+        $this->invoiceJournals = $invoiceJournals;
+    }
 
     private const BILLING_CODES = ['water' => '0003', 'electricity' => '0001'];
 
@@ -81,7 +89,7 @@ class UtilityInvoicingController extends Controller
             $fixedAmount = (float) $sla->{$costField};
 
             $query = LeaseAgreement::where('property_id', $property->id)
-                ->where('lease_status', 'Active');
+                ->billable();
 
             if ($validated['scope'] === 'selected') {
                 if (empty($validated['tenant_ids'])) {
@@ -153,7 +161,7 @@ class UtilityInvoicingController extends Controller
             ]);
 
             $lease = LeaseAgreement::where('tenant_id', $validated['tenant_id'])
-                ->where('lease_status', 'Active')
+                ->billable()
                 ->latest('date_start')
                 ->first();
 

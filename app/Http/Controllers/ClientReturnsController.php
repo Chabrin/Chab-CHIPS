@@ -6,6 +6,8 @@ use Exception;
 use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
+use App\Services\ReturnApprovalWorkflowService;
+use App\Exceptions\ReturnApprovalException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -22,9 +24,11 @@ use App\Traits\ReturnsDeductionsTrait;
 use App\Traits\ReturnsSummaryTrait;
 use App\Traits\ReturnsMasterReturnTrait;
 use App\Traits\ReturnsLandlordAccountTrait;
+use App\Traits\PdfPageNumbers;
 
 class ClientReturnsController extends Controller
 {
+    use PdfPageNumbers;
     use ReturnsRentLinesTrait;
     use ReturnsPayThresholdTrait;
     use ReturnsDeductionsTrait;
@@ -32,6 +36,16 @@ class ClientReturnsController extends Controller
     use ReturnsMasterReturnTrait;
     use ReturnsLandlordAccountTrait;
     use Reusables;
+
+    protected ReturnApprovalWorkflowService $returnApprovals;
+
+    /**
+     * Inject the service that decides who approves a return.
+     */
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals) {
+        $this->returnApprovals = $returnApprovals;
+    }
+
     /**
      * Display the unpaid returns listing page
      */
@@ -72,6 +86,7 @@ class ClientReturnsController extends Controller
             //count of lines for sorting in datatable
 
             // Role-based filtering: non-global users only see returns for properties assigned to them
+            $allowedPropertyCodes = null;
             if (!$hasGlobalRole) {
                 $staffId = DB::table('sys_user_staff_links')
                     ->where('user_id', $userId)
@@ -160,7 +175,13 @@ class ClientReturnsController extends Controller
             //log count of returns fetched
             Log::info("Fetched {$returns->count()} returns for year={$year}, month={$month}, user_id={$userId}");
 
-            $propertyCodes = $returns->pluck('property_code')->unique()->filter();
+            // Properties each return covers (a master return has none of its own, so it carries its children's)
+            $coveredCodes = $this->returnPropertyCodes($returns, (int) $year, (int) $month);
+            if ($allowedPropertyCodes !== null) {
+                $coveredCodes = array_map(fn($codes) => array_values(array_intersect($codes, $allowedPropertyCodes)), $coveredCodes);
+            }
+
+            $propertyCodes = collect($coveredCodes)->flatten()->unique()->filter();
             $propertyNames = DB::table('sys_pm_properties')
                 ->whereIn('reference_number', $propertyCodes)
                 ->pluck('property_name', 'reference_number');
@@ -173,7 +194,11 @@ class ClientReturnsController extends Controller
             return response()->json([
                 'success' => true,
                 'count' => $returns->count(),
-                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames) {
+                'properties' => $propertyCodes
+                    ->map(fn($code) => ['code' => $code, 'name' => $propertyNames[$code] ?? $code])
+                    ->sortBy(fn($p) => strtolower($p['name']))
+                    ->values(),
+                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes) {
                     $name = $clientNames[$r->landlord_code] ?? '-';
                     $num = preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '');
                     return [
@@ -183,6 +208,7 @@ class ClientReturnsController extends Controller
                         'landlord_code' => $r->landlord_code,
                         'client_name' => $name . ' (' . $num . ')',
                         'property_code' => $r->property_code ?? '-',
+                        'property_codes' => $coveredCodes[$r->id] ?? [],
                         'property_name' => $propertyNames[$r->property_code] ?? '-',
                         'return_type' => $r->return_type ?? '-',
                         'period' => str_pad($r->month, 2, '0', STR_PAD_LEFT) . '/' . $r->year,
@@ -206,6 +232,45 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to fetch returns list data'
             ], 500);
         }
+    }
+
+    /**
+     * Property reference numbers each listed return covers, keyed by return id: a main/mini return has its
+     * own property, a master return has the properties of its child (main) returns.
+     *
+     * @param \Illuminate\Support\Collection $returns
+     * @param int $year
+     * @param int $month
+     * @return array
+     */
+    private function returnPropertyCodes($returns, int $year, int $month): array {
+        $codesOf = fn($ref) => array_filter(array_map('trim', explode(',', (string) $ref)));
+        $masters = $returns->where('return_type', 'MASTERRETURN');
+        $children = collect();
+
+        if ($masters->isNotEmpty()) {
+            $listedCodes = $masters->flatMap(fn($m) => $codesOf($m->transaction_ref))->unique()->values()->all();
+
+            // Same child lookup as the master return PDF: the listed return codes, else the landlord's main returns of the period
+            $children = DB::table('cb_returns_summary')
+                ->where('return_type', 'MAINRETURN')
+                ->where(fn($q) => $q->whereIn('return_code', $listedCodes)->orWhere(fn($q2) => $q2->where('year', $year)->where('month', $month)))
+                ->get(['return_code', 'landlord_code', 'property_code']);
+        }
+
+        $covered = [];
+        foreach ($returns as $r) {
+            if ($r->return_type !== 'MASTERRETURN') {
+                $covered[$r->id] = array_values(array_filter([$r->property_code]));
+                continue;
+            }
+
+            $listed = $codesOf($r->transaction_ref);
+            $mine = $listed ? $children->whereIn('return_code', $listed) : $children->where('landlord_code', $r->landlord_code);
+            $covered[$r->id] = $mine->pluck('property_code')->filter()->unique()->values()->all();
+        }
+
+        return $covered;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -297,10 +362,11 @@ class ClientReturnsController extends Controller
                 ->orderBy('return_type')
                 ->get(['id', 'return_code', 'return_type']);
 
+            // The DR 'COMMISSION' line repeats the commission and VAT already on the rent lines, so it stays out of the debits.
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -334,7 +400,7 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -401,11 +467,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $details = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $details = ReturnClient::forReturn($return->return_code);
 
             return response()->json([
                 'success' => true,
@@ -519,11 +581,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             // Recompute line totals (same formula as details page)
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
@@ -616,6 +674,9 @@ class ClientReturnsController extends Controller
                 }
             }
 
+            // Rows in unit order (B2 before B10), whichever entry type introduced the unit
+            $tenantRows = $this->sortTenantRowsByUnit($tenantRows);
+
             // Financial summary
             $commTotal      = (float) ($return->commission_total ?? 0);
             $commission     = (float) ($lineTotals->commission ?? 0);
@@ -636,11 +697,6 @@ class ClientReturnsController extends Controller
                 'water_elec_bills' => $waterElecBills,
                 'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
             ];
-
-            $logoPath = public_path('assets/images/logo/logo_dark.png');
-            $logoSrc = file_exists($logoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
-                : '';
 
             $landlordName = $return->landlord_name
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
@@ -669,16 +725,15 @@ class ClientReturnsController extends Controller
                 ]
             ];
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff', 'propertyDisplay', 'landlordDisplay');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'signoff', 'propertyDisplay', 'landlordDisplay');
 
-            $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
-            $pdf->setPaper('A4', 'landscape');
+            $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
+                ->setPaper('A4', 'landscape')
+                ->setOption(['enable_font_subsetting' => true]);
 
             $dompdf = $pdf->getDomPDF();
             $dompdf->render();
-            $canvas = $dompdf->get_canvas();
-            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+            $this->addPdfPageNumbers($dompdf);
 
             $fileName = 'Unprocessed_Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token = request()->query('download_token');
@@ -704,11 +759,7 @@ class ClientReturnsController extends Controller
             $id = decrypt($id);
             $return = ReturnSummary::findOrFail($id);
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
@@ -1018,6 +1069,13 @@ class ClientReturnsController extends Controller
             $prevMonthStart = date('Y-m-01', strtotime($monthStart . ' -1 month'));
             $transactionDate = date('d-M-Y', strtotime($returnsMonth . '-05'));
             $preparedByName = DB::table('josya_users')->where('id', $generatedBy)->value('name') ?? 'System';
+
+            // The approvers come from the 'returns_approval' workflow: do not generate returns nobody can approve
+            try {
+                $this->returnApprovals->assertConfigured();
+            } catch (ReturnApprovalException $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
 
             // ═══════════════════════════════════════════════════════════════════
             // CHECK FOR MERGE BATCH: If single property is in merge batch, get all partners
@@ -1357,6 +1415,13 @@ class ClientReturnsController extends Controller
     ): int {
         $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
 
+        // The rent lines already carry their commission and VAT, and insertCommissionLines adds a DR 'COMMISSION' line
+        // that repeats the same two totals for the printed return. That line is left out of every total below, or the
+        // commission and the VAT would be taken off the landlord twice.
+        $netAmount = "SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
+                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
+                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END)";
+
         $q3 = "
             INSERT INTO cb_returns_summary (
                 return_code, landlord_code, property_code, year, month,
@@ -1394,11 +1459,9 @@ class ClientReturnsController extends Controller
                 SUM(rc.commission_amount) AS commission_amount,
                 SUM(rc.commission_amount) + SUM(rc.vat_amount)
                     + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
-                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
-                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
-                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS net_amount,
+                {$netAmount} AS net_amount,
                 0 AS transaction_amount,
-                0 AS net_balance,
+                {$netAmount} AS net_balance,
                 ? AS prepared_by,
                 1 AS prepared_status,
                 NOW() AS prepared_date,
@@ -1411,6 +1474,7 @@ class ClientReturnsController extends Controller
                 COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
             FROM cb_returns_clients rc
             WHERE rc.return_period = ?
+              AND COALESCE(rc.entry_type, '') <> 'COMMISSION'
               {$propertyFilter}
               AND NOT EXISTS (
                   SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code
@@ -1427,103 +1491,10 @@ class ClientReturnsController extends Controller
     }
 
     /**
-     * Create approval workflow items for new return summaries.
+     * Send the new return summaries for approval, with the approvers of the returns approval workflow.
      */
-    protected function createApprovalWorkflowItems(string $returnPeriod, int $userId, ?int $propertyId = null): int
-    {
-        $clientIp = request()->ip();
-        $propertyFilter = $propertyId ? " AND p.id = ?" : "";
-
-        // Bulk insert approval items
-        $approvalSql = "
-            INSERT INTO cb_approval_items (
-                item_type, item_id, item_reference, status,
-                current_level, total_levels, initiated_by, initiated_at,
-                created_at, updated_at
-            )
-            SELECT
-                'return_summary', rs.id, rs.return_code, 'Pending',
-                1, 4, ?, NOW(),
-                NOW(), NOW()
-            FROM cb_returns_summary rs
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-            WHERE rs.return_period = ?
-              AND rs.approved_status = 0
-              AND p.field_officer_id IS NOT NULL
-              {$propertyFilter}
-            ON CONFLICT (item_type, item_id) DO NOTHING
-        ";
-
-        $approvalBindings = [$userId, $returnPeriod];
-        if ($propertyId) {
-            $approvalBindings[] = $propertyId;
-        }
-
-        $approvalCount = DB::affectingStatement($approvalSql, $approvalBindings);
-
-        // Bulk insert level-1 approvers
-        $approverSql = "
-            INSERT INTO cb_item_approvers (
-                approval_item_id, approver_id, approver_level,
-                is_optional, approval_status, assigned_at,
-                created_at, updated_at
-            )
-            SELECT
-                ai.id, p.field_officer_id, 1,
-                0, 'Pending', NOW(),
-                NOW(), NOW()
-            FROM cb_approval_items ai
-            JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-            WHERE rs.return_period = ?
-              {$propertyFilter}
-              AND NOT EXISTS (
-                  SELECT 1 FROM cb_item_approvers ia
-                  WHERE ia.approval_item_id = ai.id AND ia.approver_level = 1
-              )
-        ";
-
-        $approverBindings = [$returnPeriod];
-        if ($propertyId) {
-            $approverBindings[] = $propertyId;
-        }
-
-        DB::statement($approverSql, $approverBindings);
-
-        // Bulk insert initial actions
-        $actionSql = "
-            INSERT INTO cb_approval_actions (
-                item_approver_id, approval_item_id, actor_id,
-                from_level, to_level, action, comments,
-                action_timestamp, ip_address, sequence_number, is_current,
-                created_at, updated_at
-            )
-            SELECT
-                ia.id, ai.id, ?,
-                0, 1, 'Initiated', 'Return submitted for approval',
-                NOW(), ?, 1, 1,
-                NOW(), NOW()
-            FROM cb_item_approvers ia
-            JOIN cb_approval_items ai ON ai.id = ia.approval_item_id
-            JOIN cb_returns_summary rs ON rs.id = ai.item_id AND ai.item_type = 'return_summary'
-            JOIN sys_pm_properties p ON p.reference_number = rs.property_code
-            WHERE rs.return_period = ?
-              AND ia.approver_level = 1
-              {$propertyFilter}
-              AND NOT EXISTS (
-                  SELECT 1 FROM cb_approval_actions aa
-                  WHERE aa.item_approver_id = ia.id AND aa.action = 'Initiated'
-              )
-        ";
-
-        $actionBindings = [$userId, $clientIp, $returnPeriod];
-        if ($propertyId) {
-            $actionBindings[] = $propertyId;
-        }
-
-        DB::statement($actionSql, $actionBindings);
-
-        return $approvalCount;
+    protected function createApprovalWorkflowItems(string $returnPeriod, int $userId, ?int $propertyId = null): int {
+        return $this->returnApprovals->createItems($returnPeriod, $userId, request()->ip(), $propertyId);
     }
 
     /**
@@ -1709,7 +1680,7 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -1743,7 +1714,7 @@ class ClientReturnsController extends Controller
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
                 ->selectRaw("
                     SUM(CASE WHEN dr_cr = 'CR' THEN net_amount ELSE 0 END) as total_cr,
-                    SUM(CASE WHEN dr_cr = 'DR' THEN net_amount ELSE 0 END)
+                    SUM(CASE WHEN dr_cr = 'DR' AND COALESCE(entry_type, '') <> 'COMMISSION' THEN net_amount ELSE 0 END)
                       + SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN COALESCE(commission_amount, 0) + COALESCE(vat_amount, 0) ELSE 0 END) as total_dr,
                     SUM(CASE WHEN entry_type IN ('RENT CURRENT','RENT ARREARS') THEN net_amount ELSE 0 END) as rent_total,
                     SUM(CASE WHEN entry_type = 'Commission' THEN net_amount ELSE 0 END)
@@ -1808,11 +1779,7 @@ class ClientReturnsController extends Controller
 
             $return = ReturnSummary::findOrFail($id);
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             return response()->json([
                 'success' => true,
@@ -1861,23 +1828,14 @@ class ClientReturnsController extends Controller
 
             if ($return->return_type === 'MASTERRETURN') {
                 $masterData = $this->buildMasterReturnExportData($return);
-                $logoPath = public_path('assets/images/logo/logo_dark.png');
-                $logoSrc  = file_exists($logoPath)
-                    ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
-                    : '';
-
                 $pdf = Pdf::loadView('property.processed-returns.master-pdf', array_merge($masterData, [
                     'return' => $return,
-                    'logoSrc' => $logoSrc,
                     'signoff' => $signoff,
-                ]));
-                $pdf->setPaper('A4', 'portrait');
+                ]))->setPaper('A4', 'portrait')->setOption(['enable_font_subsetting' => true]);
 
                 $dompdf = $pdf->getDomPDF();
                 $dompdf->render();
-                $canvas = $dompdf->get_canvas();
-                $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-                $canvas->page_text(470, 815, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+                $this->addPdfPageNumbers($dompdf);
 
                 $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
                 $token    = request()->query('download_token');
@@ -1893,11 +1851,7 @@ class ClientReturnsController extends Controller
                 exit;
             }
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             // Recompute line totals (same formula as details page)
             $lineTotals = ReturnClient::where('return_code', $return->return_code)
@@ -1990,6 +1944,9 @@ class ClientReturnsController extends Controller
                 }
             }
 
+            // Rows in unit order (B2 before B10), whichever entry type introduced the unit
+            $tenantRows = $this->sortTenantRowsByUnit($tenantRows);
+
             // Financial summary
             $commTotal      = (float) ($return->commission_total ?? 0);
             $commission     = (float) ($lineTotals->commission ?? 0);
@@ -2011,11 +1968,6 @@ class ClientReturnsController extends Controller
                 'net_income'       => $balLessVat + $houseDeposits + $waterElecBills,
             ];
 
-            $logoPath = public_path('assets/images/logo/logo_dark.png');
-            $logoSrc  = file_exists($logoPath)
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
-                : '';
-
             $landlordName = $return->landlord_name
                 ?: DB::table('sys_pm_clients')->where('reference_number', $return->landlord_code)->value('names');
             $propertyName = $return->property_name
@@ -2028,17 +1980,16 @@ class ClientReturnsController extends Controller
                 ? trim($landlordName . ' (' . ($return->landlord_code ?? '') . ')')
                 : ($return->landlord_code ?? '-');
 
-            $data = compact('return', 'tenantRows', 'totals', 'summary', 'logoSrc', 'signoff', 'propertyDisplay', 'landlordDisplay');
+            $data = compact('return', 'tenantRows', 'totals', 'summary', 'signoff', 'propertyDisplay', 'landlordDisplay');
 
-            $pdf = Pdf::loadView('property.processed-returns.pdf', $data);
-            $pdf->setPaper('A4', 'landscape');
+            $pdf = Pdf::loadView('property.processed-returns.pdf', $data)
+                ->setPaper('A4', 'landscape')
+                ->setOption(['enable_font_subsetting' => true]);
 
             // Render first so total page count is accurate, then draw page numbers.
             $dompdf = $pdf->getDomPDF();
             $dompdf->render();
-            $canvas = $dompdf->get_canvas();
-            $font = $dompdf->getFontMetrics()->get_font('Helvetica', 'normal');
-            $canvas->page_text(735, 580, 'Page {PAGE_NUM} of {PAGE_COUNT}', $font, 8, [0, 0, 0]);
+            $this->addPdfPageNumbers($dompdf);
 
             $fileName = 'Return_' . $return->return_code . '_' . date('Y-m-d') . '.pdf';
             $token    = request()->query('download_token');
@@ -2219,11 +2170,7 @@ class ClientReturnsController extends Controller
                 exit;
             }
 
-            $lines = ReturnClient::where('return_code', $return->return_code)
-                ->orderBy('entry_type')
-                ->orderBy('unit_code')
-                ->orderBy('tenant_name')
-                ->get();
+            $lines = ReturnClient::forReturn($return->return_code);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
@@ -2413,6 +2360,15 @@ class ClientReturnsController extends Controller
             'propertyName' => $propertyDisplay,
             'monthLabel' => date('F Y', strtotime(sprintf('%04d-%02d-01', (int) $return->year, (int) $return->month))),
         ];
+    }
+
+    /**
+     * Put the pivoted tenant rows of a return PDF in unit order (B2 before B10); a row with no unit stays first.
+     */
+    private function sortTenantRowsByUnit(array $tenantRows): array {
+        uasort($tenantRows, fn($a, $b) => strnatcasecmp((string) $a['unit_code'], (string) $b['unit_code']) ?: strnatcasecmp((string) $a['tenant_name'], (string) $b['tenant_name']));
+
+        return $tenantRows;
     }
 
     private function buildReturnSignoffData(ReturnSummary $return): array

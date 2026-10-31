@@ -15,11 +15,26 @@ use App\Models\ReturnClient;
 use App\Traits\HandlesApprovalWorkflow;
 use App\Traits\HandlesReturnApprovalWorkflow;
 use App\Jobs\ProcessReturnsFinalApprovalJob;
+use App\Services\ReturnApprovalWorkflowService;
+use App\Services\ReturnPostingService;
+use App\Exceptions\ClientAccountException;
+use App\Exceptions\ReturnApprovalException;
 
 class ReturnsApprovalController extends Controller
 {
     use HandlesApprovalWorkflow;
     use HandlesReturnApprovalWorkflow;
+
+    protected ReturnApprovalWorkflowService $returnApprovals;
+    protected ReturnPostingService $returnPosting;
+
+    /**
+     * Inject the service that decides who approves a return and the one that posts it when it is approved.
+     */
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals, ReturnPostingService $returnPosting) {
+        $this->returnApprovals = $returnApprovals;
+        $this->returnPosting = $returnPosting;
+    }
 
     /**
      * Get batch approvals data for timeline display (AJAX)
@@ -633,13 +648,10 @@ class ReturnsApprovalController extends Controller
                     'updated_at' => now()
                 ]);
 
-                $isAccountant = DB::table('cb_role_user as ru')
-                    ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
-                    ->where('ru.user_id', auth()->id())
-                    ->where('r.name', 'accountants')
-                    ->exists();
+                // The last level of the returns approval workflow is the final approval
+                $isFinal = (int) $itemApprover->approver_level >= (int) $approvalItem->total_levels;
 
-                if ($isAccountant) {
+                if ($isFinal) {
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update([
                             'status' => 'Approved',
@@ -656,24 +668,21 @@ class ReturnsApprovalController extends Controller
                             'approved_date' => now()
                         ]);
 
-                    // Generate payment voucher for the approved return
-                    $voucherNumber = $this->generatePaymentVoucher($returnSummary);
+                    // Post the return to the client's ledger and the GL; refuses (and rolls back) when it cannot be posted.
+                    // The payment voucher is made from Payments > Payment Vouchers once the return is approved.
+                    $this->returnPosting->postApproval($returnSummary->fresh(), (int) auth()->id());
 
-                    $message = 'Return approved successfully (Final Approval). Voucher: ' . $voucherNumber;
+                    $message = 'Return approved successfully (Final Approval).';
                 } else {
+                    // Next level's approvers come from the workflow; refuses (and rolls back) when the level has nobody
+                    $this->returnApprovals->addApproversForLevel($approvalItem, $itemApprover->approver_level + 1);
+
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update(['current_level' => $itemApprover->approver_level + 1, 'status' => 'InProgress', 'updated_at' => now()]);
 
                     // Mark return summary as InProgress (2)
                     DB::table('cb_returns_summary')->where('id', $returnSummary->id)
                         ->update(['approved_status' => 2]);
-
-                    $property = DB::table('sys_pm_properties')
-                        ->where('reference_number', $returnSummary->property_code)->first(['id']);
-                    if ($property) {
-                        $fakeObj = (object)['id' => $returnSummary->id, 'property_id' => $property->id];
-                        $this->addNextLevelApprover($approvalItem, $fakeObj, $itemApprover->approver_level);
-                    }
 
                     $message = 'Return approved successfully. Moved to Level ' . ($itemApprover->approver_level + 1);
                 }
@@ -684,6 +693,8 @@ class ReturnsApprovalController extends Controller
                 DB::rollBack();
                 throw $e;
             }
+        } catch (ReturnApprovalException | ClientAccountException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error approving return: ' . $e->getMessage());
@@ -746,10 +757,11 @@ class ReturnsApprovalController extends Controller
                     ->where('approver_level', $request->return_to_level)
                     ->first();
 
-                if ($returnToApprover) {
-                    DB::table('cb_item_approvers')->where('id', $returnToApprover->id)
-                        ->update(['approval_status' => 'Pending', 'actioned_at' => null, 'updated_at' => now()]);
-                }
+                // Every approver of that level can act again, not only the first one
+                DB::table('cb_item_approvers')
+                    ->where('approval_item_id', $approvalItem->id)
+                    ->where('approver_level', $request->return_to_level)
+                    ->update(['approval_status' => 'Pending', 'actioned_at' => null, 'updated_at' => now()]);
 
                 DB::table('cb_approval_actions')->insert([
                     'item_approver_id' => $itemApprover->id,
@@ -990,89 +1002,5 @@ class ReturnsApprovalController extends Controller
                 'message' => 'Failed to reject batch'
             ], 500);
         }
-    }
-
-    /**
-     * Generate a payment voucher for an approved return summary.
-     *
-     * Creates a header in cb_payment_vouchers_headers_new and
-     * property-level summary lines in cb_payment_vouchers_lines_new.
-     * Updates cb_returns_summary.voucher_number.
-     *
-     * Voucher number format: PV{YYYY}{MM}{sequence}
-     */
-    protected function generatePaymentVoucher(ReturnSummary $return): string
-    {
-        $year = (int) $return->year;
-        $month = (int) $return->month;
-
-        // Next global sequence
-        $maxSeq = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
-        $nextSeq = $maxSeq + 1;
-
-        $voucherNumber = 'PV' . $year . str_pad($month, 2, '0', STR_PAD_LEFT) . $nextSeq;
-
-        // Resolve landlord name from cb_landlord_account
-        $landlordName = DB::table('cb_landlord_account')
-            ->where('landlord_code', $return->landlord_code)
-            ->value('landlord_name') ?? $return->landlord_code;
-
-        // Resolve property name
-        $propertyName = DB::table('sys_pm_properties')
-            ->where('reference_number', $return->property_code)
-            ->value('property_name') ?? $return->property_code;
-
-        // Create voucher header
-        $header = PaymentVoucherHeader::create([
-            'voucher_sequence' => $nextSeq,
-            'voucher_number'   => $voucherNumber,
-            'year'             => $year,
-            'month'            => $month,
-            'voucher_date'     => now(),
-            'description'      => 'Return Payment ' . str_pad($month, 2, '0', STR_PAD_LEFT) . '/' . $year,
-            'vendor_id'        => $return->landlord_code,
-            'vendor_name'      => $landlordName,
-            'vendor_type'      => 'Landlord',
-            'debit_amount'     => $return->net_amount ?? 0,
-            'credit_amount'    => 0,
-            'entry_count'      => 0,
-            'voucher_status'   => 'Pending',
-            'is_deleted'       => 0,
-            'prepared_by'      => auth()->user()->name,
-            'is_printed'       => 0,
-        ]);
-
-        // Single line: final net amount from the return summary
-        PaymentVoucherLine::create([
-            'voucher_number'       => $voucherNumber,
-            'entry_number'         => 1,
-            'entry_year'           => $year,
-            'entry_month'          => $month,
-            'property_code'        => $return->property_code,
-            'dr_cr'                => 'DR',
-            'entry_id'             => $return->return_code,
-            'entry_description'    => 'Net Payable - ' . $propertyName,
-            'is_approved'          => 'Yes',
-            'amount'               => abs($return->net_amount ?? 0),
-            'gl_account'           => $return->landlord_code,
-            'payee_name'           => $landlordName,
-            'property_description' => $propertyName,
-        ]);
-
-        // Update header with line count
-        $header->update(['entry_count' => 1]);
-
-        // Stamp voucher number on the return summary
-        $return->update(['voucher_number' => $voucherNumber]);
-
-        Log::info('Payment voucher generated', [
-            'voucher_number' => $voucherNumber,
-            'return_code'    => $return->return_code,
-            'landlord'       => $return->landlord_code,
-            'net_amount'     => $return->net_amount,
-            'lines'          => 1,
-        ]);
-
-        return $voucherNumber;
     }
 }

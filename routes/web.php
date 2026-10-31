@@ -1193,6 +1193,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/property/advances/{encryptedId}/schedule/email', [App\Http\Controllers\ClientAdvanceController::class, 'emailSchedule'])->name('property.advances.schedule.email');
     Route::post('/property/advances/{encryptedId}/confirm', [App\Http\Controllers\ClientAdvanceController::class, 'confirmAdvance'])->name('property.advances.confirm');
     Route::post('/property/advances/{encryptedId}/post', [App\Http\Controllers\ClientAdvanceController::class, 'postAdvance'])->name('property.advances.post');
+    Route::post('/property/advances/{encryptedId}/voucher', [App\Http\Controllers\ClientAdvanceController::class, 'createVoucher'])->name('property.advances.voucher');
     Route::post('/property/advances/{encryptedId}/restructure', [App\Http\Controllers\ClientAdvanceController::class, 'restructure'])->name('property.advances.restructure');
 
 
@@ -1216,6 +1217,8 @@ Route::middleware('throttle:5,1')->group(function () {
     // Get SLA for a property
     Route::get('/property/{propertyId}/sla', [SLAController::class, 'getSLAForProperty'])->name('property.sla');
     Route::get('/ajax/sla/check-current', [SLAController::class, 'checkCurrentSla'])->name('ajax.sla.check-current');
+    Route::get('/ajax/sla/clone-options', [SLAController::class, 'cloneOptions'])->name('ajax.sla.clone-options');
+    Route::get('/ajax/sla/{id}/clone-terms', [SLAController::class, 'cloneTerms'])->whereNumber('id')->name('ajax.sla.clone-terms');
 
     // Get tenant for a unit in a property
     Route::get('/property/{propertyId}/unit/{unitId}/tenant', [TenantsController::class, 'getTenantForUnit'])->name('property.unit.tenant');

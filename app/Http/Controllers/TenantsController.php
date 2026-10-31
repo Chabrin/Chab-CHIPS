@@ -22,8 +22,8 @@ use App\Models\TenantBankDetail;
 use App\Models\TenantOtherContact;
 use App\Models\TenantNextOfKin;
 use App\Services\ErrorDispatcher;
+use App\Services\InvoiceJournalService;
 use App\Services\TenantBalanceService;
-use App\Models\TenantAccountTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +34,14 @@ class TenantsController extends Controller
 {
     use TenantRecordHelperTrait;
     use LeaseCreationTrait;
+    use \App\Traits\InvoiceCreationTrait;
+
+    /**
+     * Inject the service that posts invoices to the GL.
+     */
+    public function __construct(InvoiceJournalService $invoiceJournals) {
+        $this->invoiceJournals = $invoiceJournals;
+    }
 
     public function getTenantBalance(Request $request, $tenantId = null)
     {
@@ -1270,9 +1278,10 @@ class TenantsController extends Controller
     }
 
     /**
-     * Record the move-in deposit, if one was entered, in the dedicated deposits
-     * register and mirror it as a credit entry on the tenant's ledger so it
-     * shows up consistently on the tenant statement and exit workflow alike.
+     * Bill the move-in deposit, if one was entered: a House Deposit invoice raised through the same shared
+     * invoice code the One Off tab uses (invoice, tenant-ledger debit and, when posting is on, the GL journal),
+     * linked from a row in the dedicated deposits register. The deposit is owed until the tenant pays it, so it
+     * is no longer written as a direct credit on the ledger.
      *
      * $leaseId: optional — both the onboarding flow (store(), once
      * createLeaseAgreementRecord() has run) and the returning-tenant flow (see
@@ -1293,6 +1302,26 @@ class TenantsController extends Controller
         $narration = 'Move-in security deposit';
         $now = now();
 
+        $depositItem = \App\Models\InvoiceableItem::where('billing_code', '2002')->first();
+
+        if (!$depositItem) {
+            throw new \RuntimeException('The House Deposit item is not configured, so the deposit cannot be billed.');
+        }
+
+        // Raised today, due today, in this month's return period. A tenant who already has a House Deposit invoice
+        // for the month is refused by the shared code's duplicate guard.
+        $invoice = $this->createSingleDebtorInvoice([
+            'tenant_id' => $tenant->id,
+            'property_id' => $validated['property_id'],
+            'unit_id' => $validated['unit_id'],
+            'lease_id' => $leaseId,
+            'item_type_id' => $depositItem->id,
+            'date_due' => $now->toDateString(),
+            'returns_period' => $now->toDateString(),
+            'total_amount' => $amount,
+            'deposit_held_by' => $validated['deposit_held_by'] ?? null,
+        ]);
+
         Deposit::create([
             'date_time' => $now,
             'deposit_date' => $now,
@@ -1302,30 +1331,16 @@ class TenantsController extends Controller
             'sla_id' => $validated['sla_ref'] ?? null,
             'unit_id' => $validated['unit_id'],
             'lease_id' => $leaseId,
+            'invoice_id' => $invoice->id,
+            'item_id' => $depositItem->id,
             'amount' => $amount,
+            'invoice_balance' => $amount,
             'months' => $months,
             'held_by' => $validated['deposit_held_by'] ?? null,
             'created_by_id' => Auth::id(),
             'current_status_id' => 1,
             'reference_number' => $validated['deposit_reference'] ?? null,
             'narration' => $narration,
-        ]);
-
-        TenantAccountTransaction::create([
-            'date_time' => $now,
-            'narration' => $narration,
-            'pay_for' => 'Security Deposit',
-            'dr_cr' => 'CR',
-            'debit_amount' => 0,
-            'credit_amount' => $amount,
-            'entry_ref' => $validated['deposit_reference'] ?? null,
-            'tenant_id' => $tenant->id,
-            'property_id' => $validated['property_id'],
-            'unit_id' => $validated['unit_id'],
-            'client_id' => $property->client_id ?? null,
-            'sla_id' => $validated['sla_ref'] ?? null,
-            'current_status_id' => 1,
-            'entry_by' => Auth::id(),
         ]);
     }
 

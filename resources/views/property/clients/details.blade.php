@@ -2483,6 +2483,14 @@ COPY PERMISSIONS (paste when re-enabling checks):
                             </a>
                         `;
                         // }
+                        // Clone button: opens the Add SLA form with this SLA's terms copied in
+                        if (row.can_create_sla) {
+                            buttons += `
+                                <a href="{{ route('service.agreements.create') }}?clone=${encodeURIComponent(row.encrypted_id)}" title="Clone SLA">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">content_copy</span>
+                                </a>
+                            `;
+                        }
                         buttons += '</div>';
                         return buttons;
                     }
