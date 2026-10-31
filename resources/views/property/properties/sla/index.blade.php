@@ -160,6 +160,15 @@
                             `;
                         }
 
+                        // Clone action: opens the Add SLA form with this SLA's terms copied in
+                        if (row.can_create_sla) {
+                            actions += `
+                                <a href="{{ route('service.agreements.create') }}?clone=${encodeURIComponent(encryptedId)}" class="text-info ms-2" title="Clone SLA">
+                                    <span class="material-symbols-outlined" style="font-size: 18px;">content_copy</span>
+                                </a>
+                            `;
+                        }
+
                         actions += `
                             <span class="spinner-border spinner-border-sm text-primary row-spinner ms-2" style="display:none;" role="status">
                                 <span class="visually-hidden">Loading...</span>

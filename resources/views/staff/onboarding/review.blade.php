@@ -1,0 +1,7 @@
+@extends('layouts.main')
+@section('content')
+<div class="container py-4" style="max-width:1000px"><h3>Review onboarding submission</h3><div class="alert alert-warning">Review the employee information before approval. Approval creates the staff record and, except for Casual staff, a system login.</div>
+@if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
+<div class="card card-body"><p><strong>Company email:</strong> {{ $invitation->recipient_email }}</p><p><strong>Employment category:</strong> {{ $invitation->employment_type }}</p><p><strong>Department:</strong> {{ $department->department_name ?? '—' }}</p><p><strong>Position:</strong> {{ $position->position_name ?? '—' }}</p><p><strong>Hire date:</strong> {{ $invitation->hire_date ?? '—' }}</p><p><strong>Zone:</strong> {{ $zone->zone_name ?? '—' }}</p><p><strong>System role:</strong> {{ $role->display_name ?? 'No system account (Casual)' }}</p><dl class="row">@foreach($invitation->submission as $key=>$value)<dt class="col-sm-4">{{ ucwords(str_replace('_',' ',$key)) }}</dt><dd class="col-sm-8">{{ is_scalar($value) ? $value : '' }}</dd>@endforeach</dl>
+<form method="POST" action="{{ route('staff.onboarding.approve',$invitation) }}">@csrf<button class="btn btn-success" onclick="return confirm('Approve and create this staff record?')">Approve and create staff</button> <a href="{{ route('staff.onboarding.index') }}" class="btn btn-outline-secondary">Back</a></form></div></div>
+@endsection

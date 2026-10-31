@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
  * Handles updating pay percentage and payable status for rent lines.
  * 
  * The 85% threshold logic:
- * - If tenant paid >= 85% of PREVIOUS month's invoice, they are payable (status 1)
+ * - If tenant paid >= 85% of their latest earlier rent invoice (open, partly paid or cleared), they are payable (status 1)
  * - If no previous invoice exists (new tenant), they are payable (status 2)
  * - If previous invoice paid < 85%, they are NOT payable (status 0) and net_amount = 0
  */
@@ -32,6 +32,15 @@ trait ReturnsPayThresholdTrait
         ?int $propertyId = null
     ): void {
         $propertyFilter = $propertyId ? "AND rc2.property_id = ?" : "";
+
+        // The rule looks at the tenant's earlier RENT invoices only: an unpaid deposit or service charge must not hold
+        // back the rent. Legacy invoices have no item_type_id, so the item is matched by its stored name as well.
+        // Open, partly paid and cleared invoices all count, so a tenant who paid 10% last month does not drop out of the
+        // check (a partly paid invoice is status 8) and a fully paid one reads as 100%.
+        $liveStatuses = \App\Services\InvoiceBillingService::RETURNABLE_STATUSES;
+        $rentItemId = "(SELECT id FROM sys_set_invoiceable_items WHERE billing_code = '0024')";
+        $rentOlder = \App\Services\InvoiceBillingService::sameItemCondition('older', $rentItemId, "'RENT'");
+        $rentPrev = \App\Services\InvoiceBillingService::sameItemCondition('pi2', $rentItemId, "'RENT'");
 
         $bindings = [
             $monthStart,
@@ -72,8 +81,9 @@ trait ReturnsPayThresholdTrait
                             SELECT 1 FROM sys_pm_debtors_invoices older
                             WHERE older.tenant_id = rc2.tenant_id
                               AND older.date_due < ?::date
-                              AND older.current_status_id = 1
+                              AND older.current_status_id IN ({$liveStatuses})
                               AND older.debtor_type_id = '2'
+                              AND {$rentOlder}
                         ) THEN 100.00
                         ELSE 0.00
                     END AS pct_num,
@@ -89,8 +99,9 @@ trait ReturnsPayThresholdTrait
                             SELECT 1 FROM sys_pm_debtors_invoices older
                             WHERE older.tenant_id = rc2.tenant_id
                               AND older.date_due < ?::date
-                              AND older.current_status_id = 1
+                              AND older.current_status_id IN ({$liveStatuses})
                               AND older.debtor_type_id = '2'
+                              AND {$rentOlder}
                         ) THEN '100'
                         ELSE '0'
                     END AS pct,
@@ -103,8 +114,9 @@ trait ReturnsPayThresholdTrait
                             SELECT 1 FROM sys_pm_debtors_invoices older
                             WHERE older.tenant_id = rc2.tenant_id
                               AND older.date_due < ?::date
-                              AND older.current_status_id = 1
+                              AND older.current_status_id IN ({$liveStatuses})
                               AND older.debtor_type_id = '2'
+                              AND {$rentOlder}
                         ) THEN 1
                         ELSE 0
                     END AS pay_status
@@ -114,8 +126,9 @@ trait ReturnsPayThresholdTrait
                     FROM sys_pm_debtors_invoices pi2
                     WHERE pi2.tenant_id = rc2.tenant_id
                       AND pi2.date_due < ?::date
-                      AND pi2.current_status_id = 1
+                      AND pi2.current_status_id IN ({$liveStatuses})
                       AND pi2.debtor_type_id = '2'
+                      AND {$rentPrev}
                     ORDER BY pi2.date_due DESC, pi2.id DESC LIMIT 1
                 ) pi ON true
                 WHERE rc2.return_period = ?

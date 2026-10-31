@@ -9,6 +9,7 @@ use App\Models\InvoiceableItem;
 use App\Models\ServiceAgreement;
 use App\Models\SlaInvoiceableItem;
 use App\Services\ErrorDispatcher;
+use App\Services\ServiceAgreementCloneService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
@@ -20,6 +21,16 @@ use App\Traits\ClientSearchTrait;
 class SLAController extends Controller
 {
     use ClientSearchTrait;
+
+    protected ServiceAgreementCloneService $cloneService;
+
+    /**
+     * Inject the service that copies an existing SLA's terms into a new one.
+     */
+    public function __construct(ServiceAgreementCloneService $cloneService) {
+        $this->cloneService = $cloneService;
+    }
+
     /**
      * Display a listing of service agreements
      */
@@ -44,6 +55,7 @@ class SLAController extends Controller
             $can_view_client = Auth::user()->isAbleTo('read_clients');
             $can_edit_sla = Auth::user()->isAbleTo('update_service_agreements');
             $can_view_sla = Auth::user()->isAbleTo('read_service_agreements');
+            $can_create_sla = Auth::user()->isAbleTo('create_service_agreements');
 
             $slas = ServiceAgreement::with(['property', 'client'])
                 ->select([
@@ -62,7 +74,7 @@ class SLAController extends Controller
                 ])
                 ->orderBy('date_start', 'desc')
                 ->get()
-                ->map(function ($sla) use ($can_view_property, $can_view_client, $can_edit_sla, $can_view_sla) {
+                ->map(function ($sla) use ($can_view_property, $can_view_client, $can_edit_sla, $can_view_sla, $can_create_sla) {
                     return [
                         'id' => $sla->id,
                         'encrypted_id' => Crypt::encrypt($sla->id),
@@ -83,9 +95,10 @@ class SLAController extends Controller
                         'can_view_client' => $can_view_client,
                         'can_edit_sla' => $can_edit_sla,
                         'can_view_sla' => $can_view_sla,
+                        'can_create_sla' => $can_create_sla,
                     ];
                 });
-    
+
             return response()->json(['data' => $slas]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
@@ -104,6 +117,7 @@ class SLAController extends Controller
             $clientId = null;
             $client = null;
             $properties = [];
+            $cloneSourceId = null;
 
             // If client parameter is provided, decrypt it and load related data
             if ($request->has('client')) {
@@ -112,11 +126,59 @@ class SLAController extends Controller
                 $properties = Property::where('client_id', $client->id)->get();
             }
 
-            return view('property.properties.sla.create', compact('properties', 'client'));
+            // A clone link carries the SLA to copy; the new SLA stays on that SLA's client
+            if ($request->filled('clone')) {
+                $source = ServiceAgreement::findOrFail(Crypt::decrypt($request->clone));
+                $cloneSourceId = $source->id;
+                $client = Client::findOrFail($source->client_d);
+                $properties = Property::where('client_id', $client->id)->get();
+            }
+
+            return view('property.properties.sla.create', compact('properties', 'client', 'cloneSourceId'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading SLA create form: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to load form');
+        }
+    }
+
+    /**
+     * List a client's SLAs for the "Copy terms from" dropdown on the create form (AJAX).
+     */
+    public function cloneOptions(Request $request) {
+        if (!Auth::user()->isAbleTo('create_service_agreements')) {
+            return response()->json(['error' => 'You do not have permission to create service agreements'], 403);
+        }
+
+        $request->validate(['client_id' => 'required|integer']);
+
+        try {
+            return response()->json(['slas' => $this->cloneService->optionsForClient((int) $request->input('client_id'))]);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading SLAs to copy from: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load service agreements'], 500);
+        }
+    }
+
+    /**
+     * The terms of one SLA, shaped as Add SLA form values, so the form can copy them (AJAX).
+     */
+    public function cloneTerms($id) {
+        if (!Auth::user()->isAbleTo('create_service_agreements')) {
+            return response()->json(['error' => 'You do not have permission to create service agreements'], 403);
+        }
+
+        try {
+            $sla = ServiceAgreement::findOrFail($id);
+
+            return response()->json(['terms' => $this->cloneService->termsFor($sla)]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Service agreement not found'], 404);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error loading SLA terms to copy: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load service agreement terms'], 500);
         }
     }
 
@@ -511,6 +573,7 @@ class SLAController extends Controller
     {
         try {
             $clientId = Crypt::decrypt($encryptedId);
+            $can_create_sla = Auth::user()->isAbleTo('create_service_agreements');
 
             $slas = ServiceAgreement::with(['property'])
                 ->select([
@@ -529,10 +592,11 @@ class SLAController extends Controller
                 ->where('client_d', $clientId)
                 ->orderBy('date_start', 'desc')
                 ->get()
-                ->map(function ($sla) {
+                ->map(function ($sla) use ($can_create_sla) {
                     return [
                         'id' => $sla->id,
                         'encrypted_id' => Crypt::encrypt($sla->id),
+                        'can_create_sla' => $can_create_sla,
                         'reference_number' => $sla->reference_number ?? '-',
                         'property_name' => $sla->property->property_name ?? '-',
                         'date_start' => $sla->date_start,

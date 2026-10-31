@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 class ReturnClient extends Model
 {
@@ -75,5 +76,38 @@ class ReturnClient extends Model
     public function summary()
     {
         return $this->belongsTo(ReturnSummary::class, 'return_code', 'return_code');
+    }
+
+    /**
+     * Lines of a return in display order: grouped by entry type, unit codes in natural order within each group.
+     *
+     * @param string $returnCode
+     * @return Collection
+     */
+    public static function forReturn(string $returnCode): Collection {
+        return self::sortNaturally(static::where('return_code', $returnCode)->orderBy('entry_type')->orderBy('tenant_name')->get());
+    }
+
+    /**
+     * Keep the entry-type groups in the order they came in and put the unit codes inside each group in
+     * natural order (B2 before B10) instead of the database's text order (B10 before B2). Lines with no unit
+     * go last in their group, and lines of the same unit keep the order they came in (tenant name).
+     *
+     * @param Collection $lines
+     * @return Collection
+     */
+    public static function sortNaturally(Collection $lines): Collection {
+        return $lines->groupBy(fn($line) => (string) $line->entry_type)->flatMap(function ($group) {
+            return $group->sort(function ($a, $b) {
+                $unitA = trim((string) $a->unit_code);
+                $unitB = trim((string) $b->unit_code);
+
+                if ($unitA === '' || $unitB === '') {
+                    return ($unitA === '') <=> ($unitB === '');
+                }
+
+                return strnatcasecmp($unitA, $unitB);
+            })->values();
+        })->values();
     }
 }

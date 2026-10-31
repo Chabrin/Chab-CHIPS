@@ -7,20 +7,28 @@ use App\Models\ClientAdvance;
 use App\Models\Client;
 use App\Models\Property;
 use App\Models\InvoiceableItem;
-use App\Models\ChartAccount;
 use App\Models\LandlordAccount;
-use App\Traits\GlPostingTrait;
+use App\Exceptions\ClientAccountException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use App\Services\ClientAdvanceService;
 use App\Services\ErrorDispatcher;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ClientAdvanceController extends Controller
 {
-    use GlPostingTrait;
+    protected ClientAdvanceService $advances;
+
+    /**
+     * Inject the advance posting service.
+     */
+    public function __construct(ClientAdvanceService $advances)
+    {
+        $this->advances = $advances;
+    }
 
     /**
      * Display advances page
@@ -63,7 +71,16 @@ class ClientAdvanceController extends Controller
                 ];
             });
 
-            return view('property.advances.show', compact('advance', 'schedule', 'canRestructure', 'recoveredScheduleRows'));
+            // The payment voucher that pays the advance out, unless it was rejected (then a new one can be made).
+            $activeVoucher = $advance->voucher_id ? \App\Models\PaymentVoucherHeader::find($advance->voucher_id) : null;
+            if ($activeVoucher && $activeVoucher->voucher_status === 'Rejected') {
+                $activeVoucher = null;
+            }
+            $bankAccounts = \App\Models\CompanyBankAccount::with('bank')->where('current_status_id', 1)->orderBy('account_name')->get(['id', 'account_name', 'account_number', 'bank_id']);
+
+            $canPayOut = $this->advances->hasPrincipalJournal($advance);
+
+            return view('property.advances.show', compact('advance', 'schedule', 'canRestructure', 'recoveredScheduleRows', 'activeVoucher', 'bankAccounts', 'canPayOut'));
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading advance details: ' . $e->getMessage());
@@ -286,8 +303,10 @@ class ClientAdvanceController extends Controller
 
             // Check client eligibility
             $maxAmount = $this->getMaxAdvanceAmount($clientId);
-            if ($amount > $maxAmount && $maxAmount > 0) {
-                $errors['amount'] = ['Amount exceeds available limit of KSh ' . number_format($maxAmount, 2)];
+            if ($amount > $maxAmount) {
+                $errors['amount'] = [$maxAmount > 0
+                    ? 'Amount exceeds available limit of KSh ' . number_format($maxAmount, 2)
+                    : 'No advance limit available: this client has no returns in the last 6 months, or the advances already out use up the limit'];
             }
 
             // Check active advances count
@@ -519,6 +538,20 @@ class ClientAdvanceController extends Controller
 
             $disbursement  = \Carbon\Carbon::parse($validated['disbursement_date']);
             $amount        = floatval($validated['amount']);
+
+            // The limit applies to an edit that raises the amount, the same as when the advance was requested.
+            // The advance's own balance is left out of what is outstanding, since it is the one being changed.
+            if ($amount > (float) $advance->amount) {
+                $maxAmount = $this->getMaxAdvanceAmount($advance->client_id, $advance->id);
+
+                if ($amount > $maxAmount) {
+                    DB::rollBack();
+                    return response()->json(['success' => false, 'message' => $maxAmount > 0
+                        ? 'Amount exceeds available limit of KSh ' . number_format($maxAmount, 2)
+                        : 'No advance limit available for this client'], 422);
+                }
+            }
+
             $rate          = floatval($validated['interest_rate']);
             $day           = $disbursement->day;
             $daysInMonth   = $disbursement->daysInMonth;
@@ -611,9 +644,9 @@ class ClientAdvanceController extends Controller
      * only the still-pending ones are rebuilt, and the principal being carried forward
      * can never be reduced below what was still outstanding. A one-off Client Payment
      * Advance has no partial concept, so it's blocked entirely once recovered. The
-     * interest rate may only be held or lowered, never raised. No new GL journal entries
-     * are posted — this corrects the pending ledger records, it does not create a new
-     * financial transaction. A cb_advance_reschedule_history row is written purely as an
+     * interest rate may only be held or lowered, never raised. The only GL entry is the
+     * change in interest, if any (the principal does not move, so this is not a new
+     * financial transaction). A cb_advance_reschedule_history row is written purely as an
      * audit trail (from/to/original all point at this same advance, since nothing new is
      * created).
      */
@@ -627,6 +660,7 @@ class ClientAdvanceController extends Controller
         try {
             $id = Crypt::decrypt($encryptedId);
             $advance = ClientAdvance::with(['client', 'schedule', 'landlordAccountEntries'])->findOrFail($id);
+            $oldTotal = (float) $advance->total_amount;
 
             if (!$advance->canBeRestructured()) {
                 DB::rollBack();
@@ -694,6 +728,8 @@ class ClientAdvanceController extends Controller
                 $recoveredPrincipal = (float) $recoveredRows->sum('principal_amount');
                 $recoveredInterest  = (float) $recoveredRows->sum('interest');
                 $pendingPrincipal   = (float) $pendingRowsBefore->sum('principal_amount');
+                // The charge row has no schedule row, but once it has been recovered it counts as paid.
+                $recoveredCharge    = (float) $advance->landlordAccountEntries->where('is_recovered', 1)->whereNull('schedule_id')->sum('debit_amount');
                 $repaymentMonths    = (int) $validated['repayment_months'];
 
                 $schedule = $this->calculateAmortizationSchedule(
@@ -710,7 +746,7 @@ class ClientAdvanceController extends Controller
                 $newPendingInterest = round(array_sum(array_column($schedule, 'interest')), 2);
                 $interestAmount     = round($recoveredInterest + $newPendingInterest, 2);
                 $totalAmount        = round($recoveredPrincipal + $pendingPrincipal + $interestAmount + $chargeAmount, 2);
-                $amountPaid         = round($recoveredPrincipal + $recoveredInterest, 2);
+                $amountPaid         = round($recoveredPrincipal + $recoveredInterest + $recoveredCharge, 2);
 
                 $advance->update([
                     'disbursement_date'    => $validated['disbursement_date'],
@@ -749,7 +785,12 @@ class ClientAdvanceController extends Controller
                     ->first();
                 $ref = $advance->reference_number ?? 'N/A';
 
-                LandlordAccount::where('advance_id', $advance->id)->where('is_recovered', 0)->delete();
+                $glCode = $this->advances->receivableCode();
+
+                // An instalment advance keeps its charge row (it has no schedule row): only the instalment rows are rebuilt.
+                LandlordAccount::where('advance_id', $advance->id)->where('is_recovered', 0)
+                    ->when($advance->advance_type_id == 3, fn ($query) => $query->whereNotNull('schedule_id'))
+                    ->delete();
 
                 if ($advance->advance_type_id == 3) {
                     // Old recovered rows keep their original (pre-rebuild) IDs, which are
@@ -774,7 +815,7 @@ class ClientAdvanceController extends Controller
                             'transaction_number' => $ref . '/' . $position, 'entry_type_code' => '0009',
                             'entry_description' => 'ADVANCE', 'entry_particulars' => $label, 'entry_date' => $payDate,
                             'debit_amount' => $installment, 'credit_amount' => 0, 'total_amount' => $installment,
-                            'gl_account' => '1150', 'vendor_id' => $codes->landlord_code ?? null,
+                            'gl_account' => $glCode, 'vendor_id' => $codes->landlord_code ?? null,
                             'audit_user' => substr(Auth::user()->name ?? (string) Auth::id(), 0, 20),
                             'is_recovered' => 0, 'client_id' => $advance->client_id, 'property_id' => $advance->property_id,
                             'advance_id' => $advance->id, 'schedule_id' => $entry->id,
@@ -788,12 +829,18 @@ class ClientAdvanceController extends Controller
                         'transaction_number' => $ref, 'entry_type_code' => '0009',
                         'entry_description' => 'ADVANCE', 'entry_particulars' => 'Advance ' . $ref . ' (restructured)',
                         'entry_date' => $disbursement, 'debit_amount' => $totalAmount, 'credit_amount' => 0, 'total_amount' => $totalAmount,
-                        'gl_account' => '1150', 'vendor_id' => $codes->landlord_code ?? null,
+                        'gl_account' => $glCode, 'vendor_id' => $codes->landlord_code ?? null,
                         'audit_user' => substr(Auth::user()->name ?? (string) Auth::id(), 0, 20),
                         'is_recovered' => 0, 'client_id' => $advance->client_id, 'property_id' => $advance->property_id,
                         'advance_id' => $advance->id, 'schedule_id' => null,
                     ]);
                 }
+            }
+
+            // The GL follows the ledger: book any change in the interest. An advance posted before the GL
+            // leg existed has no journal, so adjustInterest leaves it alone.
+            if (LandlordAccount::where('advance_id', $advance->id)->exists()) {
+                $this->advances->adjustInterest($advance->fresh(), $oldTotal, Auth::id());
             }
 
             // Audit trail — no new advance is created, so from/to/original all point at this one
@@ -828,8 +875,18 @@ class ClientAdvanceController extends Controller
     public function destroy($encryptedId)
     {
         try {
+            if (!Auth::user()->isAbleTo('delete_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to delete advances'], 403);
+            }
+
             $id = Crypt::decrypt($encryptedId);
             $advance = ClientAdvance::findOrFail($id);
+
+            // Once an advance is approved or posted it is on the client account and in the GL, so only a Pending one can go.
+            if ((int) $advance->current_status_id !== 1) {
+                return response()->json(['success' => false, 'message' => 'Only a Pending advance can be deleted. Once approved or posted, an advance is on the client account.'], 422);
+            }
+
             $advance->delete();
 
             return response()->json(['success' => true, 'message' => 'Client advance deleted successfully']);
@@ -1126,7 +1183,7 @@ class ClientAdvanceController extends Controller
                 }
 
                 $advance = ClientAdvance::with(['client', 'property', 'schedule'])->findOrFail($id);
-                $this->postToLandlordAccount($advance, $advance->created_by ?? 0);
+                $this->advances->post($advance, $advance->created_by ?? 0);
 
                 return $advance;
             });
@@ -1145,6 +1202,10 @@ class ClientAdvanceController extends Controller
 
             return view('property.advances.approved', compact('advance'))
                 ->with('alreadyProcessed', false);
+        } catch (ClientAccountException $e) {
+            // Nothing was posted: the status change rolled back with it. The reason is for the office, not the landlord.
+            Log::error('Advance approval could not be posted: ' . $e->getMessage(), ['advance_id' => $id ?? null]);
+            abort(500, 'We could not complete this approval right now. Please contact the office.');
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error approving advance: ' . $e->getMessage());
@@ -1233,7 +1294,7 @@ class ClientAdvanceController extends Controller
                 }
 
                 $advance = ClientAdvance::with('schedule')->findOrFail($id);
-                $this->postToLandlordAccount($advance, Auth::id());
+                $this->advances->post($advance, Auth::id());
 
                 return $advance;
             });
@@ -1248,6 +1309,9 @@ class ClientAdvanceController extends Controller
             ]);
 
             return response()->json(['success' => true, 'message' => 'Advance posted successfully']);
+        } catch (ClientAccountException $e) {
+            // The status change rolled back with the failed posting, so the advance is still Approved.
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error posting advance: ' . $e->getMessage());
@@ -1256,176 +1320,39 @@ class ClientAdvanceController extends Controller
     }
 
     /**
-     * Insert debit entries (entry_type_code 0009) into cb_landlord_account
-     * when an advance is posted/approved.
-     *
-     * For advances with a repayment schedule (Type 2/3 with months):
-     *   One row per installment, tagged with that installment's year/month so that
-     *   insertAdvancePaymentLines() picks up exactly the right amount each month.
-     *
-     * For single-payment advances (Type 1, Type 2 no months):
-     *   One row for the full total_amount, tagged with the disbursement year/month.
+     * Create the payment voucher that pays out a posted advance's principal. The voucher then goes through
+     * cheque printing and approval; approving it posts the bank side of the payment to the GL.
      */
-    private function postToLandlordAccount(ClientAdvance $advance, int $userId): void
+    public function createVoucher(Request $request, $encryptedId)
     {
-        $clientId   = $advance->client_id;
-        $propertyId = $advance->property_id;
-        $ref        = $advance->reference_number ?? 'N/A';
-        $auditUser  = substr(optional(\App\Models\User::find($userId))->name ?? (string) $userId, 0, 20);
-
-        // Resolve reference codes once via a single query
-        $codes = DB::table('sys_pm_clients as c')
-            ->crossJoin('sys_pm_properties as p')
-            ->where('c.id', $clientId)
-            ->where('p.id', $propertyId)
-            ->select('c.reference_number as landlord_code', 'p.reference_number as property_code')
-            ->first();
-
-        if (!$codes) {
-            throw new \Exception("postToLandlordAccount: could not resolve client/property codes for advance {$advance->id}");
-        }
-
-        // Resolve GL accounts for advance posting (1150 Loans & Advances Receivable / 2297 Clients Expense/Advance/Loans Payable)
-        $glDebitAccountId  = ChartAccount::where('account_code', '1150')->value('id');
-        $glCreditAccountId = ChartAccount::where('account_code', '2297')->value('id');
-
-        // Load schedule if not already eager-loaded
-        $schedule = $advance->relationLoaded('schedule')
-            ? $advance->schedule
-            : $advance->schedule()->orderBy('payment_date')->get();
-
-        $hasSchedule = $schedule->isNotEmpty() && !empty($advance->repayment_months);
-
-        if ($hasSchedule) {
-            // --- Multi-installment: one ledger row per schedule entry ---
-            $disbDate = $advance->disbursement_date instanceof \Carbon\Carbon
-                ? $advance->disbursement_date
-                : \Carbon\Carbon::parse($advance->disbursement_date);
-
-            $rows = [];
-            foreach ($schedule as $idx => $entry) {
-                $payDate     = $entry->payment_date instanceof \Carbon\Carbon
-                    ? $entry->payment_date
-                    : \Carbon\Carbon::parse($entry->payment_date);
-                $installment = round((float) $entry->principal_amount + (float) $entry->interest, 2);
-
-                $label = $idx === 0
-                    ? 'Advance ' . $ref . ' Instalment 1 of ' . $schedule->count() . ' disbursed ' . $disbDate->format('d M Y')
-                    : 'Advance ' . $ref . ' Instalment ' . ($idx + 1) . ' of ' . $schedule->count();
-
-                $rows[] = [
-                    'year'               => $payDate->year,
-                    'month'              => $payDate->month,
-                    'landlord_code'      => $codes->landlord_code,
-                    'landlord_name'      => $advance->client->names ?? null,
-                    'property_code'      => $codes->property_code,
-                    'transaction_number' => $ref . '/' . ($idx + 1),
-                    'entry_type_code'    => '0009',
-                    'entry_description'  => 'ADVANCE',
-                    'entry_particulars'  => $label,
-                    'entry_date'         => now(),
-                    'debit_amount'       => $installment,
-                    'credit_amount'      => 0,
-                    'total_amount'       => $installment,
-                    'gl_account'         => '1150',
-                    'vendor_id'          => $codes->landlord_code,
-                    'audit_user'         => $auditUser,
-                    'is_recovered'       => 0,
-                    'client_id'          => $clientId,
-                    'property_id'        => $propertyId,
-                    'advance_id'         => $advance->id,
-                    'schedule_id'        => $entry->id,
-                ];
+        try {
+            if (!Auth::user()->isAbleTo('update_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to create advance payment vouchers'], 403);
             }
 
-            foreach ($rows as $row) {
-                LandlordAccount::create($row);
+            $validated = $request->validate(['source_account_id' => 'required|integer']);
+            $id = Crypt::decrypt($encryptedId);
 
-                // Post matching GL journal for this installment
-                if ($glDebitAccountId && $glCreditAccountId) {
-                    $this->postGlEntry([
-                        'type'              => 'generic',
-                        'amount'            => $row['debit_amount'],
-                        'date'              => $row['entry_date']->toDateString(),
-                        'reference'         => $ref,
-                        'narration'         => $row['entry_particulars'],
-                        'entered_by'        => $userId,
-                        'debit_account_id'  => $glDebitAccountId,
-                        'credit_account_id' => $glCreditAccountId,
-                    ]);
-                } else {
-                    Log::warning('postToLandlordAccount: GL accounts 1150/2297 not found — GL posting skipped', [
-                        'advance_id' => $advance->id,
-                    ]);
-                }
-            }
+            $voucher = DB::transaction(fn () => $this->advances->createPayoutVoucher(ClientAdvance::findOrFail($id), (int) $validated['source_account_id'], Auth::id()));
 
-            Log::info('Advance posted to landlord account (installments)', [
-                'advance_id'   => $advance->id,
-                'reference'    => $ref,
-                'rows'         => count($rows),
-                'client_id'    => $clientId,
-                'property_id'  => $propertyId,
+            Log::info('Advance payment voucher created', ['advance_id' => $id, 'voucher' => $voucher->voucher_number, 'user_id' => Auth::id()]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment voucher ' . $voucher->voucher_number . ' created. Print the cheque and submit it for approval.',
+                'voucher_number' => $voucher->voucher_number,
+                'url' => route('cheque.printing.details', encrypt($voucher->id)),
             ]);
-
-        } else {
-            // --- Single row: full total_amount, disbursement month ---
-            $disbDate    = $advance->disbursement_date instanceof \Carbon\Carbon
-                ? $advance->disbursement_date
-                : \Carbon\Carbon::parse($advance->disbursement_date);
-            $totalAmount = (float) $advance->total_amount;
-            $particulars = 'Advance ' . $ref . ' disbursed ' . $disbDate->format('d M Y');
-
-            LandlordAccount::create([
-                'year'               => $disbDate->year,
-                'month'              => $disbDate->month,
-                'landlord_code'      => $codes->landlord_code,
-                'landlord_name'      => $advance->client->names ?? null,
-                'property_code'      => $codes->property_code,
-                'transaction_number' => $ref,
-                'entry_type_code'    => '0009',
-                'entry_description'  => 'ADVANCE',
-                'entry_particulars'  => $particulars,
-                'entry_date'         => now(),
-                'debit_amount'       => $totalAmount,
-                'credit_amount'      => 0,
-                'total_amount'       => $totalAmount,
-                'gl_account'         => '1150',
-                'vendor_id'          => $codes->landlord_code,
-                'audit_user'         => $auditUser,
-                'is_recovered'       => 0,
-                'client_id'          => $clientId,
-                'property_id'        => $propertyId,
-                'advance_id'         => $advance->id,
-                'schedule_id'        => null,
-            ]);
-
-            // Post matching GL journal
-            if ($glDebitAccountId && $glCreditAccountId) {
-                $this->postGlEntry([
-                    'type'              => 'generic',
-                    'amount'            => $totalAmount,
-                    'date'              => now()->toDateString(),
-                    'reference'         => $ref,
-                    'narration'         => $particulars,
-                    'entered_by'        => $userId,
-                    'debit_account_id'  => $glDebitAccountId,
-                    'credit_account_id' => $glCreditAccountId,
-                ]);
-            } else {
-                Log::warning('postToLandlordAccount: GL accounts 1150/2297 not found — GL posting skipped', [
-                    'advance_id' => $advance->id,
-                ]);
-            }
-
-            Log::info('Advance posted to landlord account (lump sum)', [
-                'advance_id'   => $advance->id,
-                'reference'    => $ref,
-                'debit_amount' => $totalAmount,
-                'period'       => $disbDate->year . '/' . str_pad($disbDate->month, 2, '0', STR_PAD_LEFT),
-                'client_id'    => $clientId,
-                'property_id'  => $propertyId,
-            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors(), 'message' => 'Choose the bank account to pay from'], 422);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException | \Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Advance not found'], 404);
+        } catch (ClientAccountException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error creating advance payment voucher: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to create the payment voucher'], 500);
         }
     }
 
@@ -1435,15 +1362,18 @@ class ClientAdvanceController extends Controller
     private function getClientAverageReturns($clientId, $months = 6)
     {
         try {
-            // Get returns from sys_reports_landlord_accounts for last N months
-            $startDate = now()->subMonths($months)->startOfMonth();
-            //'2024-09-01';
+            // The RETURNS credits (0005) on the client ledger for the last N months. The old
+            // sys_reports_landlord_accounts table this used to read is empty, so every client
+            // looked as if they had no returns and no limit.
+            // The last N complete months, so the sum divides by the months it covers (the current month is left out).
+            $startDate = now()->startOfMonth()->subMonths($months);
 
-            $totalReturns = DB::table('sys_reports_landlord_accounts')
+            $totalReturns = DB::table('cb_landlord_account')
                 ->where('client_id', $clientId)
-                ->where('transaction_date', '>=', $startDate)
-                ->whereIn('transaction_type_id', [1, 2]) // Returns types
-                ->sum('credit');
+                ->where('entry_type_code', '0005')
+                ->where('entry_date', '>=', $startDate)
+                ->where('entry_date', '<', now()->startOfMonth())
+                ->sum('credit_amount');
 
             return $totalReturns > 0 ? $totalReturns / $months : 0;
         } catch (\Exception $e) {
@@ -1455,11 +1385,12 @@ class ClientAdvanceController extends Controller
     /**
      * Get client total outstanding advances
      */
-    private function getClientOutstandingAdvances($clientId)
+    private function getClientOutstandingAdvances($clientId, $excludeAdvanceId = null)
     {
         try {
             return ClientAdvance::where('client_id', $clientId)
                 ->whereIn('current_status_id', [1, 5, 6]) // Pending, Approved, Posted
+                ->when($excludeAdvanceId, fn ($query) => $query->where('id', '!=', $excludeAdvanceId))
                 ->sum('current_balance');
         } catch (\Exception $e) {
             Log::error('Error getting client outstanding advances: ' . $e->getMessage());
@@ -1486,22 +1417,17 @@ class ClientAdvanceController extends Controller
     /**
      * Calculate maximum advance amount for client
      */
-    private function getMaxAdvanceAmount($clientId)
+    private function getMaxAdvanceAmount($clientId, $excludeAdvanceId = null)
     {
         try {
             // Get last 6 months average returns
             $avgMonthlyReturns = $this->getClientAverageReturns($clientId, 6);
 
             // Get existing outstanding balance
-            $outstandingBalance = $this->getClientOutstandingAdvances($clientId);
+            $outstandingBalance = $this->getClientOutstandingAdvances($clientId, $excludeAdvanceId);
 
-            // Calculate max (80% of annual returns)
-            $maxAnnualAdvance = $avgMonthlyReturns * 12 * 0.8;
-
-            // Available = Max - Outstanding
-            $available = $maxAnnualAdvance - $outstandingBalance;
-
-            return max(0, $available);
+            // 80% of annual returns, less what is outstanding
+            return $this->advances->availableLimit((float) $avgMonthlyReturns, (float) $outstandingBalance);
         } catch (\Exception $e) {
             Log::error('Error calculating max advance amount: ' . $e->getMessage());
             return 0;

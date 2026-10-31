@@ -182,6 +182,7 @@ $(document).ready(function() {
                             end_date: lt.end_date,
                             entitled_days: lt.entitled_days,
                             balance: lt.balance,
+                            has_schedule: lt.has_schedule,
                             status: lt.current_status_id
                         });
                     });
@@ -207,13 +208,14 @@ $(document).ready(function() {
                 orderable: false,
                 render: function(data, type, row) {
                     return `
-                        <button class="btn btn-sm btn-outline-primary open-schedule-modal" 
+                        <button class="btn btn-sm ${row.has_schedule ? 'btn-outline-secondary' : 'btn-outline-primary'} open-schedule-modal" 
                             data-plan-id="${row.plan_id}" 
                             data-leave-type-id="${row.leave_type_id}"
                             data-entitled-days="${row.entitled_days}"
-                            data-employee-name="${row.employee_name}">
+                            data-employee-name="${row.employee_name}"
+                            ${row.has_schedule ? 'disabled title="Schedule already submitted"' : ''}>
                             <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">calendar_month</span>
-                            Schedule ${Math.floor(row.entitled_days * 2) / 2} Days
+                            ${row.has_schedule ? 'Schedule Submitted' : `Schedule ${Math.floor(row.entitled_days * 2) / 2} Days`}
                         </button>
                     `;
                 }

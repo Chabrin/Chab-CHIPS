@@ -248,6 +248,9 @@ trait ReturnsSummaryTrait
               AND return_code IN ({$placeholders})
         ", array_merge([$returnPeriod], $returnCodes));
 
+        // Their approval items go too, or they are left behind pointing at returns that no longer exist
+        $this->deleteApprovalItemsForReturns($returnPeriod, $returnCodes);
+
         // Delete cb_returns_summary entries (both MAINRETURN and MASTERRETURN)
         $summariesDeleted = DB::delete("
             DELETE FROM cb_returns_summary
@@ -281,6 +284,33 @@ trait ReturnsSummaryTrait
             'summaries' => $summariesDeleted,
             'landlord_reset' => $landlordReset
         ];
+    }
+
+    /**
+     * Delete the approval items (with their approvers and actions) of unapproved returns that are about to be deleted.
+     *
+     * @param string $returnPeriod YYYYMM format
+     * @param array $returnCodes return codes of the returns being deleted
+     * @return void
+     */
+    protected function deleteApprovalItemsForReturns(string $returnPeriod, array $returnCodes): void
+    {
+        if (empty($returnCodes)) {
+            return;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($returnCodes), '?'));
+        $items = "SELECT ai.id FROM cb_approval_items ai
+            JOIN cb_returns_summary rs ON rs.id = ai.item_id
+            WHERE ai.item_type = 'return_summary'
+              AND rs.return_period = ?
+              AND rs.approved_status != 1
+              AND rs.return_code IN ({$placeholders})";
+        $bindings = array_merge([$returnPeriod], $returnCodes);
+
+        DB::delete("DELETE FROM cb_approval_actions WHERE approval_item_id IN ({$items})", $bindings);
+        DB::delete("DELETE FROM cb_item_approvers WHERE approval_item_id IN ({$items})", $bindings);
+        DB::delete("DELETE FROM cb_approval_items WHERE id IN ({$items})", $bindings);
     }
 
     /**
