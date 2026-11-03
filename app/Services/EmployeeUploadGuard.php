@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 class EmployeeUploadGuard
 {
     /** Check file contents across photos and documents before anything is saved. */
-    public function validate(array $files, ?int $staffId = null): void
+    public function validate(array $files, ?int $staffId = null, ?int $ignoreInvitationId = null): void
     {
         $fingerprints = [];
         foreach ($files as $field => $file) {
@@ -18,11 +18,15 @@ class EmployeeUploadGuard
                 $fingerprints[$field] = hash_file('sha256', $file->getRealPath());
             }
         }
-        $this->validateHashes($fingerprints, $staffId);
+        $this->validateHashes($fingerprints, $staffId, $ignoreInvitationId);
     }
 
-    /** Browser preflight uses fingerprints; saving always hashes the actual files again. */
-    public function validateHashes(array $fingerprints, ?int $staffId = null): void
+    /**
+     * Browser preflight uses fingerprints; saving always hashes the actual files again.
+     * $ignoreInvitationId skips that onboarding submission's own pending files, so they
+     * can be moved onto the staff record without matching themselves.
+     */
+    public function validateHashes(array $fingerprints, ?int $staffId = null, ?int $ignoreInvitationId = null): void
     {
         $hashes = [];
         $errors = [];
@@ -45,6 +49,25 @@ class EmployeeUploadGuard
         }
         foreach (DB::table('sys_staff')->whereNotNull('photo')->select('id', 'photo')->cursor() as $staff) {
             $this->checkStoredFile('public', $staff->photo, $hashes, $errors, $staffId, (int) $staff->id);
+        }
+        // Pending onboarding uploads are not yet employee_documents rows. Include
+        // them so the same source file cannot be reused in another active submission.
+        if (DB::getSchemaBuilder()->hasTable('staff_onboarding_invitations')) {
+            $pending = DB::table('staff_onboarding_invitations')->whereIn('status', ['sent', 'submitted', 'reviewed'])->whereNotNull('submission');
+            if ($ignoreInvitationId) $pending->where('id', '!=', $ignoreInvitationId);
+            foreach ($pending->select('submission')->cursor() as $invitation) {
+                try {
+                    $submission = \Illuminate\Support\Facades\Crypt::decryptString($invitation->submission);
+                    $submission = json_decode($submission, true) ?: [];
+                } catch (\Throwable) {
+                    continue;
+                }
+                $stored = collect($submission['onboarding_documents'] ?? [])->pluck('path')->all();
+                if (!empty($submission['staff_photo_path'])) $stored[] = $submission['staff_photo_path'];
+                foreach ($stored as $path) {
+                    $this->checkStoredFile('local', $path, $hashes, $errors, $staffId, -1);
+                }
+            }
         }
 
         if ($errors) {

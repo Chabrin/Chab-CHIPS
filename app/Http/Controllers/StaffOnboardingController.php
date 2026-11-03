@@ -3,29 +3,28 @@
 namespace App\Http\Controllers;
 
 use App\Mail\StaffOnboardingInvitationMail;
-use App\Models\Department;
-use App\Models\DocumentType;
-use App\Models\EmployeeDocument;
-use App\Models\Position;
-use App\Models\Role;
+use App\Models\Bank;
 use App\Models\Staff;
 use App\Models\StaffOnboardingInvitation;
-use App\Models\User;
-use App\Models\UserStaffLink;
-use App\Models\Zone;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use App\Jobs\PasswordResetJob;
 use App\Services\EmployeeUploadGuard;
+use App\Traits\HandlesStaffSignature;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Invite -> staff fills the private link -> HR reviews and approves -> HR finishes
+ * the record on the Add Staff form (StaffController@create / store), which is
+ * prefilled from the submission and marks the invitation approved on save.
+ */
 class StaffOnboardingController extends Controller
 {
+    use HandlesStaffSignature;
+
     private function authorizeStaffCreation(): void
     {
         abort_unless(auth()->user()?->hasPermission('create_staff'), 403);
@@ -34,12 +33,7 @@ class StaffOnboardingController extends Controller
     public function create()
     {
         $this->authorizeStaffCreation();
-        return view('staff.onboarding.create', [
-            'departments' => Department::orderBy('department_name')->get(),
-            'positions' => Position::orderBy('position_name')->get(),
-            'roles' => Role::orderBy('display_name')->get(),
-            'zones' => Zone::orderBy('zone_name')->get(),
-        ]);
+        return view('staff.onboarding.create');
     }
 
     public function send(Request $request)
@@ -48,35 +42,23 @@ class StaffOnboardingController extends Controller
         $data = $request->validate([
             'recipient_email' => 'required|email|max:255|same:recipient_email_confirmation',
             'recipient_email_confirmation' => 'required|email|max:255',
-            'employment_type' => 'required|in:Permanent,Temporary,Casual,Intern',
-            'department_id' => 'nullable|integer|exists:sys_set_departments,id',
-            'position_id' => 'nullable|integer|exists:sys_set_staff_positions,id',
-            'hire_date' => 'nullable|date',
-            'zone_id' => 'nullable|integer|exists:sys_set_zones,id',
-            'role_id' => 'required_unless:employment_type,Casual|nullable|integer|exists:cb_roles,id',
         ]);
         $normalizedEmail = strtolower($data['recipient_email']);
-        if (Staff::whereRaw('LOWER(email_address) = ?', [$normalizedEmail])->exists()) {
-            throw ValidationException::withMessages(['recipient_email' => 'This company email is already attached to a staff record.']);
+        if (Staff::whereRaw('LOWER(email_address) = ? OR LOWER(personal_email) = ?', [$normalizedEmail, $normalizedEmail])->exists()) {
+            throw ValidationException::withMessages(['recipient_email' => 'This email is already attached to a staff record.']);
         }
-        if ($data['employment_type'] !== 'Casual' && User::whereRaw('LOWER(email) = ?', [$normalizedEmail])->exists()) {
-            throw ValidationException::withMessages(['recipient_email' => 'This email already belongs to a system user.']);
-        }
-        if (StaffOnboardingInvitation::where('recipient_email', $normalizedEmail)
-            ->whereIn('status', ['sent', 'submitted'])->where('expires_at', '>', now())->exists()) {
+        $hasActiveInvite = StaffOnboardingInvitation::where('recipient_email', $normalizedEmail)
+            ->where(fn ($query) => $query->where('status', 'reviewed')
+                ->orWhere(fn ($query) => $query->whereIn('status', ['sent', 'submitted'])->where('expires_at', '>', now())))
+            ->exists();
+        if ($hasActiveInvite) {
             throw ValidationException::withMessages(['recipient_email' => 'An active onboarding invitation already exists for this email.']);
         }
 
         $token = Str::random(64);
         $invitation = StaffOnboardingInvitation::create([
-            'recipient_email' => strtolower($data['recipient_email']),
+            'recipient_email' => $normalizedEmail,
             'token_hash' => hash('sha256', $token),
-            'employment_type' => $data['employment_type'],
-            'department_id' => $data['department_id'] ?? null,
-            'position_id' => $data['position_id'] ?? null,
-            'hire_date' => $data['hire_date'] ?? null,
-            'zone_id' => $data['zone_id'] ?? null,
-            'role_id' => $data['employment_type'] === 'Casual' ? null : ($data['role_id'] ?? null),
             'invited_by' => auth()->id(),
             'expires_at' => now()->addHours(72),
             'status' => 'sent',
@@ -110,26 +92,31 @@ class StaffOnboardingController extends Controller
         return $this->privatePage('staff.onboarding.complete', [
             'invitation' => $invitation,
             'token' => $token,
-            'banks' => \App\Models\Bank::orderBy('bank_name')->get(),
+            'banks' => Bank::orderBy('bank_name')->get(),
         ]);
     }
 
     public function submit(Request $request, string $token)
     {
         $invitation = $this->findUsableInvitation($token);
-        $data = $request->validate([
+        $data = $request->validate($this->signatureRules() + [
             'full_names' => 'required|string|max:255',
             'gender' => 'required|in:Male,Female',
             'birth_date' => 'required|date|before:today',
+            'birth_place' => 'nullable|string|max:255',
             'national_id' => 'required|string|max:255|unique:sys_staff,national_id',
             'passport' => 'nullable|string|max:255',
+            'marital' => 'required|in:Single,Married,Divorced,Widowed',
+            'spouse_name' => 'nullable|string|max:255',
+            'citizenship' => 'required|in:RESIDENT,NO',
+            'disability' => 'required|in:YES,NO',
             'mobile_number' => 'required|string|max:30',
             'personal_email' => 'required|email|max:255',
             'address' => 'nullable|string|max:1000',
-            'marital' => 'required|in:Single,Married,Divorced,Widowed',
-            'spouse_name' => 'nullable|string|max:255',
-            'citizenship' => 'required|string|max:100',
-            'disability' => 'required|in:YES,NO',
+            'district' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'sub_location' => 'nullable|string|max:255',
+            'kins_names' => 'nullable|string|max:255',
             'bank_name' => 'required|integer|exists:sys_set_banks,id',
             'account_name' => 'required|string|max:255',
             'account_number' => 'required|string|max:255',
@@ -141,30 +128,32 @@ class StaffOnboardingController extends Controller
             'documents.contract' => 'nullable|file|mimes:pdf|max:5120',
             'documents.cv' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'documents.academic' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+            'staff_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
+        unset($data['documents'], $data['staff_photo'], $data['signature_file'], $data['signature_data']);
         $files = [];
-        foreach (['national_id', 'kra_pin', 'contract', 'cv', 'academic'] as $type) {
+        foreach (array_keys(StaffOnboardingInvitation::DOCUMENT_TYPES) as $type) {
             $files["documents.$type"] = $request->file("documents.$type");
         }
+        $files['photo'] = $request->file('staff_photo');
         app(EmployeeUploadGuard::class)->validate($files);
-        $documentTypes = [
-            'national_id' => 'National ID / Passport', 'kra_pin' => 'KRA PIN Certificate',
-            'contract' => 'Signed Employment Contract', 'cv' => 'Curriculum Vitae (CV)',
-            'academic' => 'Academic Certificates & Transcripts',
-        ];
-        $data['onboarding_documents'] = [];
-        foreach ($documentTypes as $key => $title) {
-            $file = $request->file("documents.$key");
-            if (!$file) continue;
-            $data['onboarding_documents'][] = [
-                'type_name' => $title,
-                'path' => $file->store("staff_onboarding/{$invitation->id}", 'local'),
-                'name' => $file->getClientOriginalName(),
-                'size' => (int) round($file->getSize() / 1024),
-                'mime' => $file->getMimeType(),
-            ];
+        if ($request->hasFile('staff_photo')) {
+            $data['staff_photo_path'] = $request->file('staff_photo')->store("staff_onboarding/{$invitation->id}", 'local');
         }
+        $data['onboarding_documents'] = [];
         try {
+            $data['signature_path'] = $this->storeSignature($request, "staff_onboarding/{$invitation->id}");
+            foreach (StaffOnboardingInvitation::DOCUMENT_TYPES as $key => $title) {
+                $file = $request->file("documents.$key");
+                if (!$file) continue;
+                $data['onboarding_documents'][] = [
+                    'type_name' => $title,
+                    'path' => $file->store("staff_onboarding/{$invitation->id}", 'local'),
+                    'name' => $file->getClientOriginalName(),
+                    'size' => (int) round($file->getSize() / 1024),
+                    'mime' => $file->getMimeType(),
+                ];
+            }
             DB::transaction(function () use ($invitation, $data) {
                 $lockedInvite = StaffOnboardingInvitation::whereKey($invitation->id)->lockForUpdate()->firstOrFail();
                 abort_unless($lockedInvite->status === 'sent' && $lockedInvite->expires_at->isFuture(), 410);
@@ -172,6 +161,8 @@ class StaffOnboardingController extends Controller
             });
         } catch (\Throwable $e) {
             foreach ($data['onboarding_documents'] as $document) Storage::disk('local')->delete($document['path']);
+            if (!empty($data['staff_photo_path'])) Storage::disk('local')->delete($data['staff_photo_path']);
+            if (!empty($data['signature_path'])) Storage::disk('local')->delete($data['signature_path']);
             throw $e;
         }
         return $this->privatePage('staff.onboarding.received');
@@ -180,149 +171,73 @@ class StaffOnboardingController extends Controller
     public function review(StaffOnboardingInvitation $invitation)
     {
         $this->authorizeStaffCreation();
-        abort_unless($invitation->status === 'submitted', 404);
+        abort_unless(in_array($invitation->status, ['submitted', 'reviewed'], true), 404);
+        $data = $invitation->submission ?? [];
+        $bank = !empty($data['bank_name']) ? Bank::whereKey($data['bank_name'])->value('bank_name') : null;
+        $sections = [
+            'Personal Information' => [
+                'Full Names' => $data['full_names'] ?? null, 'Gender' => $data['gender'] ?? null,
+                'Date of Birth' => $data['birth_date'] ?? null, 'Birth Place' => $data['birth_place'] ?? null,
+                'National ID' => $data['national_id'] ?? null, 'Passport Number' => $data['passport'] ?? null,
+                'Marital Status' => $data['marital'] ?? null, 'Spouse Name' => $data['spouse_name'] ?? null,
+                'Citizenship' => $data['citizenship'] ?? null, 'Disability' => $data['disability'] ?? null,
+            ],
+            'Contact Information' => [
+                'Mobile Number' => $data['mobile_number'] ?? null, 'Personal Email' => $data['personal_email'] ?? null,
+                'Address' => $data['address'] ?? null, 'District' => $data['district'] ?? null,
+                'Location' => $data['location'] ?? null, 'Sub Location' => $data['sub_location'] ?? null,
+                'Next of Kin Names' => $data['kins_names'] ?? null,
+            ],
+            'Banking & Statutory' => [
+                'Bank' => $bank, 'Account Name' => $data['account_name'] ?? null,
+                'Account Number' => $data['account_number'] ?? null, 'KRA PIN Number' => $data['pin_number'] ?? null,
+                'SHA Number' => $data['nhif_number'] ?? null, 'NSSF Number' => $data['nssf_number'] ?? null,
+            ],
+        ];
         return view('staff.onboarding.review', [
             'invitation' => $invitation,
-            'role' => $invitation->role_id ? Role::find($invitation->role_id) : null,
-            'department' => $invitation->department_id ? Department::find($invitation->department_id) : null,
-            'position' => $invitation->position_id ? Position::find($invitation->position_id) : null,
-            'zone' => $invitation->zone_id ? Zone::find($invitation->zone_id) : null,
+            'sections' => $sections,
+            'files' => $invitation->submittedFiles(),
         ]);
     }
 
+    public function reviewFile(StaffOnboardingInvitation $invitation, string $file, Request $request)
+    {
+        $this->authorizeStaffCreation();
+        abort_unless(in_array($invitation->status, ['submitted', 'reviewed'], true), 404);
+        $document = collect($invitation->submittedFiles())->first(fn ($item) => hash_equals(hash('sha256', $item['path']), $file));
+        abort_unless($document && Storage::disk('local')->exists($document['path']), 404);
+        $name = addslashes(basename($document['name']));
+        return Storage::disk('local')->response($document['path'], $document['name'], [
+            'Content-Type' => $document['mime'] ?? Storage::disk('local')->mimeType($document['path']) ?: 'application/octet-stream',
+            'Content-Disposition' => ($request->boolean('download') ? 'attachment' : 'inline') . '; filename="' . $name . '"',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
+    /**
+     * HR accepts the submitted details and continues on the Add Staff form,
+     * where the company details are filled in and the staff record is created.
+     */
     public function approve(StaffOnboardingInvitation $invitation)
     {
         $this->authorizeStaffCreation();
-        abort_unless($invitation->status === 'submitted', 409, 'This submission has already been reviewed.');
-        if ($invitation->employment_type !== 'Casual') {
-            abort_unless(auth()->user()->hasPermission('create_users'), 403, 'You need create users permission to approve an onboarding that provisions a system account.');
+        if ($invitation->status === 'submitted') {
+            $invitation->update(['status' => 'reviewed', 'reviewed_by' => auth()->id(), 'reviewed_at' => now()]);
         }
-        $data = $invitation->submission;
-        abort_unless(is_array($data), 409, 'The submitted onboarding data is unavailable.');
-        if (Staff::where('national_id', $data['national_id'])->exists()) {
-            throw ValidationException::withMessages(['national_id' => 'This national ID is already attached to a staff record.']);
-        }
-        if ($invitation->employment_type !== 'Casual' && User::whereRaw('LOWER(email) = ?', [strtolower($invitation->recipient_email)])->exists()) {
-            throw ValidationException::withMessages(['recipient_email' => 'This company email already belongs to a system user.']);
-        }
-
-        $resetDetails = null;
-        $approvedDocumentPaths = [];
-        try {
-        DB::transaction(function () use ($invitation, $data, &$resetDetails, &$approvedDocumentPaths) {
-            $lockedInvite = StaffOnboardingInvitation::whereKey($invitation->id)->lockForUpdate()->firstOrFail();
-            abort_unless($lockedInvite->status === 'submitted', 409, 'This submission has already been reviewed.');
-            if (Staff::where('national_id', $data['national_id'])->exists()) {
-                throw ValidationException::withMessages(['national_id' => 'This national ID is already attached to a staff record.']);
-            }
-            if (Staff::whereRaw('LOWER(email_address) = ?', [strtolower($invitation->recipient_email)])->exists()) {
-                throw ValidationException::withMessages(['recipient_email' => 'This company email is already attached to a staff record.']);
-            }
-            if ($invitation->employment_type !== 'Casual' && User::whereRaw('LOWER(email) = ?', [strtolower($invitation->recipient_email)])->exists()) {
-                throw ValidationException::withMessages(['recipient_email' => 'This company email already belongs to a system user.']);
-            }
-            $staff = new Staff();
-            $documents = $data['onboarding_documents'] ?? [];
-            unset($data['onboarding_documents']);
-            $staff->fill(array_merge($data, [
-                'full_names' => strtoupper($data['full_names']),
-                'email_address' => $invitation->recipient_email,
-                'employment_type' => $invitation->employment_type,
-                'department_id' => $invitation->department_id,
-                'position_id' => $invitation->position_id,
-                'hire_date' => $invitation->hire_date,
-                'zone_id' => $invitation->zone_id,
-            ]));
-            $staff->date_time = now();
-            $staff->staff_number = Staff::nextStaffNumber($invitation->employment_type);
-            $staff->uid = uniqid('staff_', true);
-            $staff->current_status_id = 1;
-            $staff->save();
-
-            $documentTypeIds = DocumentType::pluck('id', 'name');
-            Storage::disk('local')->makeDirectory("employee_documents/{$staff->id}");
-            foreach ($documents as $document) {
-                $typeId = $documentTypeIds[$document['type_name']] ?? null;
-                if (!$typeId) throw new \RuntimeException('Required staff document type is missing: ' . $document['type_name']);
-                $approvedPath = "employee_documents/{$staff->id}/" . $staff->id . '-' . basename($document['path']);
-                if (!Storage::disk('local')->copy($document['path'], $approvedPath)) {
-                    throw new \RuntimeException('Could not move onboarding document into the staff document store.');
-                }
-                $approvedDocumentPaths[] = $approvedPath;
-                EmployeeDocument::create([
-                    'employee_id' => $staff->id,
-                    'document_type_id' => $typeId,
-                    'title' => $document['type_name'],
-                    'file_path' => $approvedPath,
-                    'file_name' => $document['name'],
-                    'file_size' => $document['size'],
-                    'mime_type' => $document['mime'],
-                    'uploaded_by' => auth()->id(),
-                ]);
-            }
-
-            if ($invitation->employment_type !== 'Casual') {
-                $username = Str::before($invitation->recipient_email, '@');
-                $base = $username;
-                $suffix = 1;
-                while (User::where('username', $username)->exists()) $username = $base . $suffix++;
-                $user = User::create([
-                    'name' => $staff->full_names,
-                    'username' => $username,
-                    'email' => $invitation->recipient_email,
-                    'password' => Str::password(40),
-                    'block' => 0,
-                    'sendEmail' => 0,
-                    'registerDate' => now(),
-                    'activation' => 1,
-                    'params' => '',
-                    'resetCount' => 0,
-                    'otpKey' => '',
-                    'otep' => '',
-                    'requireReset' => 1,
-                    'staff_id' => $staff->id,
-                ]);
-                DB::table('cb_role_user')->insert(['user_id' => $user->id, 'role_id' => $invitation->role_id]);
-                UserStaffLink::create(['user_id' => $user->id, 'staff_id' => $staff->id]);
-                $resetToken = Str::random(64);
-                $user->reset_token = Hash::make($resetToken);
-                $resetValidityHours = (int) (DB::table('cb_system_configs')->where('setting', 'password_reset_link_validity')->value('value') ?? 4);
-                $user->reset_token_expires_at = now()->addHours(max(1, $resetValidityHours));
-                $user->save();
-                $resetDetails = ['username' => $user->name, 'email' => $user->email, 'token' => $resetToken];
-            }
-            $lockedInvite->update(['status' => 'approved', 'reviewed_by' => auth()->id(), 'reviewed_at' => now(), 'staff_id' => $staff->id, 'submission' => null]);
-        });
-        } catch (\Throwable $e) {
-            foreach ($approvedDocumentPaths as $path) Storage::disk('local')->delete($path);
-            throw $e;
-        }
-        Storage::disk('local')->deleteDirectory("staff_onboarding/{$invitation->id}");
-
-        if ($resetDetails) {
-            try {
-                if ($this->mailerMayExposeLinksInLogs()) {
-                    throw new \RuntimeException('A mailer that writes password links to logs is not allowed.');
-                }
-                PasswordResetJob::dispatch($resetDetails);
-            } catch (\Throwable $e) {
-                Log::error('Staff account setup email could not be queued.', ['invitation_id' => $invitation->id, 'exception' => get_class($e)]);
-                return redirect()->route('staff.onboarding.index')->with('success', 'Staff record created, but no safe password setup email could be sent. Configure a private mail transport and issue a password reset.');
-            }
-        }
-
-        return redirect()->route('staff.onboarding.index')->with('success', 'Onboarding approved and the staff record was created.');
+        abort_unless($invitation->status === 'reviewed', 409, 'This submission has already been processed.');
+        return redirect()->route('staff.create', ['onboarding' => $invitation->id])
+            ->with('success', 'Submission approved. Complete the company details below and save to create the staff record.');
     }
 
     public function revoke(StaffOnboardingInvitation $invitation)
     {
         $this->authorizeStaffCreation();
-        abort_unless(in_array($invitation->status, ['sent', 'submitted'], true), 409);
-        foreach ($invitation->submission['onboarding_documents'] ?? [] as $document) {
-            Storage::disk('local')->delete($document['path']);
-        }
+        abort_unless(in_array($invitation->status, ['sent', 'submitted', 'reviewed'], true), 409);
         $invitation->update(['status' => 'revoked', 'reviewed_by' => auth()->id(), 'reviewed_at' => now(), 'submission' => null]);
-        return back()->with('success', 'The onboarding link was revoked and any pending submission was removed.');
+        Storage::disk('local')->deleteDirectory("staff_onboarding/{$invitation->id}");
+        return redirect()->route('staff.onboarding.index')->with('success', 'The onboarding was cancelled and any submitted details and files were removed.');
     }
 
     private function findUsableInvitation(string $token): StaffOnboardingInvitation

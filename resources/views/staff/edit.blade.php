@@ -597,6 +597,16 @@
                                             </div>
                                         </div>
                                         @endforeach
+                                        <div class="col-md-6">
+                                            <div class="staff-document-card h-100">
+                                                <label class="form-label fw-semibold small mb-1">Staff Signature</label>
+                                                @include('staff.partials.signature-input', [
+                                                    'currentSignatureUrl' => $staff->signature ? route('staff.signature', $staff->id) : null,
+                                                    'currentSignatureNote' => 'Current signature. Draw or upload only to replace it.',
+                                                    'allowSignatureRemoval' => (bool) $staff->signature,
+                                                ])
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

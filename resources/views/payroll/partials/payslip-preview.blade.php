@@ -120,6 +120,8 @@
         <div class="ps-field"><label>Department</label><span>{{ $departmentName }}</span></div>
         <div class="ps-field"><label>Period</label><span>{{ date('d/m/Y', strtotime($payroll->period)) }}</span></div>
         <div class="ps-field"><label>Pay Date</label><span>{{ date('d/m/Y', strtotime($payroll->date_time)) }}</span></div>
+        <div class="ps-field"><label>Days Paid</label><span>{{ rtrim(rtrim(number_format((float) ($payroll->worked_days ?? 0), 2, '.', ''), '0'), '.') }}</span></div>
+        <div class="ps-field"><label>Period Days</label><span>{{ $payroll->payrollPeriod?->duration_days ?? '-' }}</span></div>
         <div class="ps-field"><label>Bank</label><span>{{ $bankName }}</span></div>
         <div class="ps-field"><label>Account No</label><span>{{ $accountNumber }}</span></div>
         <div class="ps-field"><label>Account Name</label><span>{{ $accountName }}</span></div>

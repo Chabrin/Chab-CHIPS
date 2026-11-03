@@ -219,6 +219,14 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Next of Kin:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->kins_names ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Signature:</small></div>
+                                                    <div class="col-7">
+                                                        @if($staff->signature)
+                                                        <img src="{{ route('staff.signature', $staff->id) }}" alt="Staff signature" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #e3e7eb;border-radius:4px;padding:2px">
+                                                        @else
+                                                        <small>-</small>
+                                                        @endif
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
