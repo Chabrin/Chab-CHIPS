@@ -61,7 +61,17 @@
     padding-right: 20px !important;
     border-bottom-color: #274057;
 }
+.page-wrapper.compact-wrapper .page-header .header-wrapper {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
 .page-header .nav-menus { gap: 14px; }
+/* The base theme sets these list items to block, putting the account at the top. */
+.page-header .header-wrapper .nav-right .nav-menus > .profile-nav,
+.page-header .header-wrapper .nav-right .nav-menus > .header-search-item {
+    display: flex !important;
+    align-items: center;
+}
 .page-header .nav-menus > .header-search-item { border-right: 0 !important; }
 .page-header .nav-menus > .header-search-item::before,
 .page-header .nav-menus > .header-search-item::after { display: none !important; }

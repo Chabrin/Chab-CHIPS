@@ -14,6 +14,33 @@ class User extends Authenticatable implements LaratrustUser
 {
     use HasFactory, Notifiable, HasRolesAndPermissions;
 
+    protected ?string $pendingPassword = null;
+
+    public function save(array $options = [])
+    {
+        if (!$this->isDirty('password')) {
+            return parent::save($options);
+        }
+
+        $saved = $this->getConnection()->transaction(function () use ($options) {
+            $previousHash = $this->exists
+                ? $this->newQuery()->whereKey($this->getKey())->lockForUpdate()->value('password')
+                : null;
+            $policy = app(\App\Services\StaffPasswordPolicy::class);
+            if ($this->pendingPassword !== null) {
+                $policy->validate($this, $this->pendingPassword, $previousHash);
+            }
+            $saved = parent::save($options);
+            if ($saved) {
+                $policy->record($this, $previousHash);
+            }
+            return $saved;
+        });
+        $this->pendingPassword = null;
+
+        return $saved;
+    }
+
     protected static function boot()
     {
         parent::boot();
@@ -135,6 +162,7 @@ class User extends Authenticatable implements LaratrustUser
      */
     public function setPasswordAttribute($value)
     {
+        $this->pendingPassword = $value;
         $this->attributes['password'] = bcrypt($value);
     }
 }
