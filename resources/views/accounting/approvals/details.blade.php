@@ -106,6 +106,19 @@
             <div class="modal-body">
                 <form id="approverForm">
                     <input type="hidden" id="approverId" value="">
+                    @if($workflow->workflow_name === 'returns_approval')
+                    <div class="mb-3" id="positionWrap">
+                        <label for="positionSelect" class="form-label">Position</label>
+                        <select class="form-select form-select-sm" id="positionSelect">
+                            <option value="">A named person (choose below)</option>
+                            <option value="zone_manager">Zone Manager of the return's zone</option>
+                            @foreach($roles as $role)
+                            <option value="role:{{ $role->id }}">{{ $role->name }} (everyone with this role)</option>
+                            @endforeach
+                        </select>
+                        <small class="text-muted">A position follows whoever holds it, so changing the person never needs a change here</small>
+                    </div>
+                    @endif
                     <div class="mb-3" id="approverSelectWrap">
                         <label for="approverSelect" class="form-label">Select Users <span class="text-danger">*</span></label>
                         <select id="approverSelect" style="width:100%;" multiple="multiple"></select>
@@ -114,11 +127,16 @@
                     <div class="mb-3">
                         <label for="approvalLevel" class="form-label">Approval Role <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm" id="approvalLevel">
+                            @if($workflow->workflow_name === 'returns_approval')
+                            <option value="1">Verifier</option>
+                            <option value="2">Approver (Final)</option>
+                            @else
                             <option value="1">Checker</option>
                             <option value="2">Verifier</option>
                             <option value="3">Approver (Final)</option>
+                            @endif
                         </select>
-                        <small class="text-muted">Only the Approver role is marked as final</small>
+                        <small class="text-muted">{{ $workflow->workflow_name === 'returns_approval' ? 'Level 1 verifies the return, level 2 gives the final approval' : 'Only the Approver role is marked as final' }}</small>
                     </div>
                     <div class="mb-3" id="isActiveWrap" style="display:none;">
                         <label class="form-label">Status</label>
@@ -171,11 +189,19 @@
 $(document).ready(function() {
     var workflowEncryptedId = '{{ Crypt::encrypt($workflow->id) }}';
 
-    // Level to role name mapping
+    // Level to role name mapping; the returns workflow has two stages: verify, then approve
+    var isReturnsWorkflow = {{ $workflow->workflow_name === 'returns_approval' ? 'true' : 'false' }};
+    var finalLevel = isReturnsWorkflow ? 2 : 3;
+
     function getLevelLabel(level) {
-        var labels = { 1: 'Checker', 2: 'Verifier', 3: 'Approver' };
+        var labels = isReturnsWorkflow ? { 1: 'Verifier', 2: 'Approver' } : { 1: 'Checker', 2: 'Verifier', 3: 'Approver' };
         return labels[level] || 'Level ' + level;
     }
+
+    // A chosen position replaces the list of users
+    $('#positionSelect').on('change', function() {
+        $('#approverSelectWrap').toggle($(this).val() === '');
+    });
 
     // Initialize Select2 for user search (multiple selection) - names only
     $('#approverSelect').select2({
@@ -246,7 +272,7 @@ $(document).ready(function() {
             var group = grouped[level];
             var levelLabel = getLevelLabel(parseInt(level));
             // Add (Final) indicator for Approver role
-            if (parseInt(level) === 3) {
+            if (parseInt(level) === finalLevel) {
                 levelLabel += ' <small class="text-muted">(Final)</small>';
             }
 
@@ -291,6 +317,7 @@ $(document).ready(function() {
         $('#approverSelect').val(null).trigger('change');
         $('#approverModalTitle').text('Add Approvers');
         $('#saveApproverBtnText').text('Add');
+        $('#positionSelect').val('');
         $('#approverSelectWrap').show();
         $('#isActiveWrap').hide();
         $('#approvalLevel').val('1');
@@ -307,12 +334,16 @@ $(document).ready(function() {
         };
 
         if (!isEdit) {
+            var position = $('#positionSelect').val() || '';
             var selectedUsers = $('#approverSelect').select2('data');
-            if (!selectedUsers || selectedUsers.length === 0) {
-                toastr.error('Please select at least one user');
+            if (position !== '') {
+                formData.position = position;
+            } else if (!selectedUsers || selectedUsers.length === 0) {
+                toastr.error('Please select at least one user, or a position');
                 return;
+            } else {
+                formData.approver_ids = selectedUsers.map(function(u) { return u.id; });
             }
-            formData.approver_ids = selectedUsers.map(function(u) { return u.id; });
         } else {
             formData.is_active = $('#isActive').val();
         }

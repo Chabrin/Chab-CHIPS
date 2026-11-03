@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Models\ApprovalWorkflow;
 use App\Models\WorkflowApprover;
 use App\Services\ErrorDispatcher;
+use App\Services\ReturnApprovalWorkflowService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -243,7 +244,11 @@ class WorkflowsController extends Controller
                     ->with('error', 'Workflow not found');
             }
 
-            return view('accounting.approvals.details', compact('workflow'));
+            $roles = $workflow->workflow_name === ReturnApprovalWorkflowService::WORKFLOW_NAME
+                ? DB::table('cb_roles')->orderBy('name')->get(['id', 'name'])
+                : collect();
+
+            return view('accounting.approvals.details', compact('workflow', 'roles'));
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading workflow details: ' . $e->getMessage());
@@ -270,7 +275,8 @@ class WorkflowsController extends Controller
                     'id' => $item->id,
                     'encrypted_id' => Crypt::encrypt($item->id),
                     'approver_id' => $item->approver_id,
-                    'approver_name' => $item->approver->name ?? '-',
+                    'position_type' => $item->position_type,
+                    'approver_name' => $item->display_name,
                     'approver_email' => $item->approver->email ?? '-',
                     'approval_level' => $item->approval_level,
                     'is_final' => $item->is_final,
@@ -304,6 +310,63 @@ class WorkflowsController extends Controller
     }
 
     /**
+     * Add a position to a level of the returns approval workflow instead of named users: the manager of the return's zone,
+     * or everyone holding a role. Level 1 verifies, level 2 gives the final approval.
+     */
+    private function addPositionApprover(Request $request, ApprovalWorkflow $workflow) {
+        if ($workflow->workflow_name !== ReturnApprovalWorkflowService::WORKFLOW_NAME) {
+            return response()->json(['success' => false, 'message' => 'Positions can only be set on the returns approval workflow'], 422);
+        }
+
+        $validated = $request->validate([
+            'position' => ['required', 'regex:/^(zone_manager|role:\d+)$/'],
+            'approval_level' => 'required|integer|min:1|max:2',
+        ]);
+
+        $positionType = 'zone_manager';
+        $roleId = null;
+        if ($validated['position'] !== 'zone_manager') {
+            $positionType = 'role';
+            $roleId = (int) substr($validated['position'], 5);
+            if (!DB::table('cb_roles')->where('id', $roleId)->exists()) {
+                return response()->json(['success' => false, 'message' => 'That role does not exist'], 422);
+            }
+        }
+
+        $level = (int) $validated['approval_level'];
+        $labels = [1 => 'Verifier', 2 => 'Approver'];
+        $exists = WorkflowApprover::where('workflow_id', $workflow->id)
+            ->where('position_type', $positionType)
+            ->when($roleId, fn ($query) => $query->where('role_id', $roleId))
+            ->first();
+
+        if ($exists) {
+            return response()->json(['success' => false, 'message' => 'That position is already on the workflow (' . ($labels[$exists->approval_level] ?? 'Level ' . $exists->approval_level) . ')'], 422);
+        }
+
+        $isFinal = $level === 2 ? 1 : 0;
+        if ($isFinal === 1) {
+            WorkflowApprover::where('workflow_id', $workflow->id)->where('is_final', 1)->update(['is_final' => 0]);
+        }
+
+        $row = WorkflowApprover::create([
+            'workflow_id' => $workflow->id,
+            'approver_id' => null,
+            'position_type' => $positionType,
+            'role_id' => $roleId,
+            'approval_level' => $level,
+            'is_final' => $isFinal,
+            'is_active' => 1,
+            'added_by' => Auth::id(),
+            'added_on' => now(),
+        ]);
+
+        WorkflowApproverChangeLog::logChange($workflow->id, null, 'APPROVER_ADDED', 'Added position "' . $row->display_name . '" as ' . $labels[$level], null, $level, null, $isFinal);
+
+        return response()->json(['success' => true, 'message' => 'Position added as ' . $labels[$level]]);
+    }
+
+    /**
      * Add approvers to workflow (AJAX) - supports multiple users.
      */
     public function addApprover(Request $request, $encryptedWorkflowId)
@@ -318,6 +381,13 @@ class WorkflowsController extends Controller
                     'success' => false,
                     'message' => 'Workflow not found',
                 ], 404);
+            }
+
+            if ($request->filled('position')) {
+                $response = $this->addPositionApprover($request, $workflow);
+                DB::commit();
+
+                return $response;
             }
 
             $validated = $request->validate([
@@ -529,7 +599,7 @@ class WorkflowsController extends Controller
 
             $workflowId = $approver->workflow_id;
             $approverId = $approver->approver_id;
-            $approverName = $approver->approver->name ?? 'Unknown';
+            $approverName = $approver->display_name;
             $level = $approver->approval_level;
             $levelLabel = $this->getLevelLabel($level);
 

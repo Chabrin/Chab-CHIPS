@@ -1077,6 +1077,12 @@ class ClientReturnsController extends Controller
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
 
+            // A field officer generates for one property of their own zone; a director or accountant for any property
+            $generationRefusal = $this->generationRefusal($requestedPropertyId);
+            if ($generationRefusal !== null) {
+                return response()->json(['success' => false, 'message' => $generationRefusal], 403);
+            }
+
             // ═══════════════════════════════════════════════════════════════════
             // CHECK FOR MERGE BATCH: If single property is in merge batch, get all partners
             // ═══════════════════════════════════════════════════════════════════
@@ -1348,6 +1354,11 @@ class ClientReturnsController extends Controller
                     'properties_count' => count($propertyIds)
                 ] : null
             ]);
+        } catch (ReturnApprovalException $e) {
+            // A zone with no manager login (or an incomplete workflow): nothing is generated, and the message says what to fix
+            DB::rollBack();
+
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {
             DB::rollBack();
             ErrorDispatcher::dispatch($e);
@@ -1488,6 +1499,27 @@ class ClientReturnsController extends Controller
         }
 
         return DB::affectingStatement($q3, $bindings);
+    }
+
+    /**
+     * Why the user may not generate returns for the property asked for, or null when they may. A user with a global role
+     * (director, accountant) generates for any property; everyone else, a field officer, for one property they can see,
+     * which is one of their own zone.
+     *
+     * @param int|null $propertyId the one property asked for, or null for every property
+     */
+    protected function generationRefusal(?int $propertyId): ?string {
+        if (\App\Models\Client::zoneAccessState() === null) {
+            return null;
+        }
+        if (!$propertyId) {
+            return 'You can generate returns for one property at a time: choose one of the properties in your zone.';
+        }
+        if (!Property::whereKey($propertyId)->exists()) {
+            return 'That property is not in your zone, so you cannot generate its returns.';
+        }
+
+        return null;
     }
 
     /**
