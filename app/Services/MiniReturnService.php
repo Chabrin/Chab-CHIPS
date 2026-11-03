@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
  * Generates a mini return: one property, any time after the month's main return is approved, carrying only the money
  * that came in late and has not been passed to the landlord yet (rent of earlier months, bills paid since). The closed
  * main return is never touched. It is built with the same lines, commission and deduction rules as a main return, goes
- * through the same approval and is paid by its own payment voucher.
+ * through the same approval and is paid by its own payment voucher. Advances are not recovered on a mini return: they come off the main return.
  *
  * The return code is R + a sequence digit (2 to 9) + period + landlord + property, as in the legacy mini returns: the
  * main return is R1, the first mini return of the month R2, the next R3, and so on.

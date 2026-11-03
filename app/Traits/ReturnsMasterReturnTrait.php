@@ -261,6 +261,7 @@ trait ReturnsMasterReturnTrait
               AND la.year  = ?
               AND la.month = ?
               AND la.entry_type_code IN ({$placeholders})
+              {$advancePaid}
         ", array_merge([$clientId, $returnYear, $returnMonth], $this->masterLandlordDeductionCodes));
 
         return [
@@ -352,6 +353,7 @@ trait ReturnsMasterReturnTrait
         int $userId
     ): int {
         $placeholders = implode(',', array_fill(0, count($this->masterLandlordDeductionCodes), '?'));
+        $advancePaid = $this->advancePaidSql('cb_landlord_account');
 
         $inserted = DB::affectingStatement("
             INSERT INTO cb_returns_clients (
@@ -419,6 +421,7 @@ trait ReturnsMasterReturnTrait
                   AND year  = ?
                   AND month = ?
                   AND entry_type_code IN ({$placeholders})
+                  {$advancePaid}
                 RETURNING id
             ", array_merge(
                 [$returnYear, $returnMonth, $masterReturnCode, $clientId, $returnYear, $returnMonth],

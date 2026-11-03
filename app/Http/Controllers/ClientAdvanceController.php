@@ -787,6 +787,11 @@ class ClientAdvanceController extends Controller
 
                 $glCode = $this->advances->receivableCode();
 
+                // The rebuilt rows keep the date the advance went on the client account. The instalment's month is its year
+                // and month columns, which is what the return reads; dating the row in a future month would hide it from the
+                // client ledger and statement, which only show entries up to today.
+                $postedOn = $advance->landlordAccountEntries->sortBy(fn ($row) => (string) $row->entry_date)->first()->entry_date ?? now();
+
                 // An instalment advance keeps its charge row (it has no schedule row): only the instalment rows are rebuilt.
                 LandlordAccount::where('advance_id', $advance->id)->where('is_recovered', 0)
                     ->when($advance->advance_type_id == 3, fn ($query) => $query->whereNotNull('schedule_id'))
@@ -813,7 +818,7 @@ class ClientAdvanceController extends Controller
                             'landlord_code' => $codes->landlord_code ?? null, 'landlord_name' => $advance->client->names ?? null,
                             'property_code' => $codes->property_code ?? null,
                             'transaction_number' => $ref . '/' . $position, 'entry_type_code' => '0009',
-                            'entry_description' => 'ADVANCE', 'entry_particulars' => $label, 'entry_date' => $payDate,
+                            'entry_description' => 'ADVANCE', 'entry_particulars' => $label, 'entry_date' => $postedOn,
                             'debit_amount' => $installment, 'credit_amount' => 0, 'total_amount' => $installment,
                             'gl_account' => $glCode, 'vendor_id' => $codes->landlord_code ?? null,
                             'audit_user' => substr(Auth::user()->name ?? (string) Auth::id(), 0, 20),
@@ -828,7 +833,7 @@ class ClientAdvanceController extends Controller
                         'property_code' => $codes->property_code ?? null,
                         'transaction_number' => $ref, 'entry_type_code' => '0009',
                         'entry_description' => 'ADVANCE', 'entry_particulars' => 'Advance ' . $ref . ' (restructured)',
-                        'entry_date' => $disbursement, 'debit_amount' => $totalAmount, 'credit_amount' => 0, 'total_amount' => $totalAmount,
+                        'entry_date' => $postedOn, 'debit_amount' => $totalAmount, 'credit_amount' => 0, 'total_amount' => $totalAmount,
                         'gl_account' => $glCode, 'vendor_id' => $codes->landlord_code ?? null,
                         'audit_user' => substr(Auth::user()->name ?? (string) Auth::id(), 0, 20),
                         'is_recovered' => 0, 'client_id' => $advance->client_id, 'property_id' => $advance->property_id,
