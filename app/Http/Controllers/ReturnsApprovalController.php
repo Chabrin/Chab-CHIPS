@@ -465,7 +465,8 @@ class ReturnsApprovalController extends Controller
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * Get return approvals data for timeline display (AJAX)
+     * Get return approvals data for timeline display (AJAX). Who may act is worked out now from the workflow: the
+     * levels are the workflow's, a level shows who holds it until someone acts, then the person who did.
      */
     public function getReturnApprovals($encryptedId)
     {
@@ -485,67 +486,60 @@ class ReturnsApprovalController extends Controller
                 ]);
             }
 
-            $approvers = DB::table('cb_item_approvers as ia')
+            $currentUserId = (int) auth()->id();
+            $levels = array_keys($this->returnApprovals->levels());
+            $currentLevel = $this->returnApprovals->effectiveLevel($approvalItem);
+            $isOpen = in_array($approvalItem->status, ['Pending', 'InProgress']);
+
+            // Who acted at each level (the latest, when a return went back and forth), and every action by level
+            $actors = DB::table('cb_item_approvers as ia')
                 ->leftJoin('josya_users as u', 'u.id', '=', 'ia.approver_id')
                 ->where('ia.approval_item_id', $approvalItem->id)
+                ->where('ia.approver_level', '>=', 1)
+                ->whereIn('ia.approval_status', ['Approved', 'Rejected'])
                 ->select('ia.*', 'u.name as approver_name', 'u.email as approver_email')
-                ->orderBy('ia.approver_level', 'asc')
-                ->get();
+                ->orderBy('ia.actioned_at', 'desc')
+                ->get()
+                ->groupBy('approver_level')
+                ->map(fn ($rows) => $rows->first());
+            $actionsByLevel = DB::table('cb_approval_actions')
+                ->where('approval_item_id', $approvalItem->id)
+                ->where('from_level', '>=', 1)
+                ->orderBy('sequence_number', 'asc')
+                ->get()
+                ->groupBy('from_level');
 
-            foreach ($approvers as $approver) {
-                $approver->actions = DB::table('cb_approval_actions')
-                    ->where('item_approver_id', $approver->id)
-                    ->orderBy('sequence_number', 'asc')
-                    ->get();
-            }
-
-            $currentUserId = auth()->id();
             $canApprove = false;
             $canReject = false;
             $userApproverLevel = null;
             $availableRejectLevels = [];
             $waitingForPrevious = false;
             $waitingMessage = null;
-
-            foreach ($approvers as $approver) {
-                if ($approver->approver_id == $currentUserId) {
-                    $userApproverLevel = $approver->approver_level;
-                    if (
-                        $approvalItem->current_level == $userApproverLevel
-                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
-                        && $approver->approval_status == 'Pending'
-                    ) {
-                        $canApprove = true;
-                        if ($userApproverLevel >= 2) {
-                            $canReject = true;
-                            for ($i = 1; $i < $userApproverLevel; $i++) {
-                                $lowerApprover = collect($approvers)->firstWhere('approver_level', $i);
-                                if ($lowerApprover) {
-                                    $availableRejectLevels[] = [
-                                        'level' => $i,
-                                        'approver_name' => $lowerApprover->approver_name ?? 'Level ' . $i
-                                    ];
-                                }
-                            }
-                        }
-                    } elseif (
-                        $userApproverLevel > $approvalItem->current_level
-                        && in_array($approvalItem->status, ['Pending', 'InProgress'])
-                        && $approver->approval_status == 'Pending'
-                    ) {
-                        $waitingForPrevious = true;
-                        $pendingApprover = collect($approvers)->firstWhere('approver_level', $approvalItem->current_level);
-                        $pendingName = $pendingApprover->approver_name ?? ('Level ' . $approvalItem->current_level);
-                        $waitingMessage = 'Waiting for Level ' . $approvalItem->current_level . ' (' . $pendingName . ') to approve before you can action.';
-                    }
-                    break;
-                }
-            }
-
             $timeline = [];
-            foreach ($approvers as $approver) {
+
+            foreach ($levels as $level) {
+                $actor = $actors->get($level);
+                $label = $this->returnApprovals->levelLabel($approvalItem, $level);
+                $isEligible = in_array($currentUserId, $this->returnApprovals->eligibleUserIds($approvalItem, $level), true);
+
+                if ($isEligible && $userApproverLevel === null) {
+                    $userApproverLevel = $level;
+                }
+
+                if ($isOpen && $level === $currentLevel) {
+                    $canApprove = $this->returnApprovals->actorRefusal($approvalItem, $level, $currentUserId) === null;
+                    $blocked = $this->returnApprovals->blockedReason($approvalItem, $level);
+                    if ($blocked !== null) {
+                        $waitingForPrevious = true;
+                        $waitingMessage = $blocked;
+                    }
+                } elseif ($isOpen && $level > $currentLevel && $isEligible && !$waitingForPrevious) {
+                    $waitingForPrevious = true;
+                    $waitingMessage = 'Waiting for Level ' . $currentLevel . ' (' . $this->returnApprovals->levelLabel($approvalItem, $currentLevel) . ') to approve before you can action.';
+                }
+
                 $actions = [];
-                foreach ($approver->actions as $action) {
+                foreach ($actionsByLevel->get($level, collect()) as $action) {
                     $actions[] = [
                         'action' => $action->action,
                         'comments' => $action->comments ?? '',
@@ -554,17 +548,28 @@ class ReturnsApprovalController extends Controller
                         'returned_to_level' => $action->returned_to_level ?? null
                     ];
                 }
+
                 $timeline[] = [
-                    'level' => $approver->approver_level,
-                    'approver_name' => $approver->approver_name ?? 'Unknown',
-                    'approver_email' => $approver->approver_email ?? '',
-                    'status' => $approver->approval_status,
-                    'assigned_at' => $approver->assigned_at,
-                    'actioned_at' => $approver->actioned_at,
+                    'level' => $level,
+                    'approver_name' => $actor->approver_name ?? $label,
+                    'approver_email' => $actor->approver_email ?? '',
+                    'status' => $actor->approval_status ?? 'Pending',
+                    'assigned_at' => $approvalItem->initiated_at,
+                    'actioned_at' => $actor->actioned_at ?? null,
                     'actions' => $actions,
-                    'is_current' => ($approver->approver_level == $approvalItem->current_level),
-                    'is_user' => ($approver->approver_id == $currentUserId)
+                    'is_current' => ($isOpen && $level === $currentLevel),
+                    'is_user' => $isEligible
                 ];
+            }
+
+            if ($canApprove && $currentLevel >= 2) {
+                $canReject = true;
+                for ($i = 1; $i < $currentLevel; $i++) {
+                    $availableRejectLevels[] = [
+                        'level' => $i,
+                        'approver_name' => $actors->get($i)->approver_name ?? $this->returnApprovals->levelLabel($approvalItem, $i)
+                    ];
+                }
             }
 
             return response()->json([
@@ -581,6 +586,8 @@ class ReturnsApprovalController extends Controller
                     'waiting_message' => $waitingMessage
                 ]
             ]);
+        } catch (ReturnApprovalException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error loading return approvals: ' . $e->getMessage());
@@ -589,7 +596,8 @@ class ReturnsApprovalController extends Controller
     }
 
     /**
-     * Approve a return summary
+     * Approve a return summary. Level by level, by whoever holds the level now; whoever generated the return, or checked
+     * it at a lower level, cannot approve it. The last level of the workflow gives the final approval.
      */
     public function approveReturn($encryptedId, Request $request)
     {
@@ -612,31 +620,23 @@ class ReturnsApprovalController extends Controller
                 return response()->json(['success' => false, 'message' => 'This return has already been processed'], 400);
             }
 
-            $itemApprover = DB::table('cb_item_approvers')
-                ->where('approval_item_id', $approvalItem->id)
-                ->where('approver_id', auth()->id())
-                ->where('approver_level', $approvalItem->current_level)
-                ->first();
+            $level = $this->returnApprovals->effectiveLevel($approvalItem);
+            $refusal = $this->returnApprovals->actorRefusal($approvalItem, $level, (int) auth()->id());
 
-            if (!$itemApprover) {
-                return response()->json(['success' => false, 'message' => 'You are not authorized to approve at this level'], 403);
-            }
-
-            if ($itemApprover->approval_status === 'Approved') {
-                return response()->json(['success' => false, 'message' => 'You have already approved this return'], 400);
+            if ($refusal !== null) {
+                return response()->json(['success' => false, 'message' => $refusal], 403);
             }
 
             DB::beginTransaction();
             try {
-                DB::table('cb_item_approvers')->where('id', $itemApprover->id)
-                    ->update(['approval_status' => 'Approved', 'actioned_at' => now(), 'updated_at' => now()]);
+                $actorRowId = $this->returnApprovals->recordActor((int) $approvalItem->id, $level, (int) auth()->id(), 'Approved');
 
                 DB::table('cb_approval_actions')->insert([
-                    'item_approver_id' => $itemApprover->id,
+                    'item_approver_id' => $actorRowId,
                     'approval_item_id' => $approvalItem->id,
                     'actor_id' => auth()->id(),
-                    'from_level' => $itemApprover->approver_level,
-                    'to_level' => $itemApprover->approver_level + 1,
+                    'from_level' => $level,
+                    'to_level' => $level + 1,
                     'action' => 'Approved',
                     'comments' => $request->comments,
                     'action_timestamp' => now(),
@@ -648,14 +648,16 @@ class ReturnsApprovalController extends Controller
                     'updated_at' => now()
                 ]);
 
-                // The last level of the returns approval workflow is the final approval
-                $isFinal = (int) $itemApprover->approver_level >= (int) $approvalItem->total_levels;
+                // The last level of the returns approval workflow, as it is now, is the final approval
+                $totalLevels = $this->returnApprovals->totalLevels();
+                $isFinal = $level >= $totalLevels;
 
                 if ($isFinal) {
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
                         ->update([
                             'status' => 'Approved',
-                            'current_level' => $itemApprover->approver_level,
+                            'current_level' => $level,
+                            'total_levels' => $totalLevels,
                             'approved_by' => auth()->id(),
                             'approved_at' => now(),
                             'updated_at' => now()
@@ -674,17 +676,17 @@ class ReturnsApprovalController extends Controller
 
                     $message = 'Return approved successfully (Final Approval).';
                 } else {
-                    // Next level's approvers come from the workflow; refuses (and rolls back) when the level has nobody
-                    $this->returnApprovals->addApproversForLevel($approvalItem, $itemApprover->approver_level + 1);
+                    // Refuses (and rolls back) when nobody can act at the next level, e.g. a zone with no manager login
+                    $this->returnApprovals->assertSomeoneCanAct($approvalItem, $level + 1);
 
                     DB::table('cb_approval_items')->where('id', $approvalItem->id)
-                        ->update(['current_level' => $itemApprover->approver_level + 1, 'status' => 'InProgress', 'updated_at' => now()]);
+                        ->update(['current_level' => $level + 1, 'total_levels' => $totalLevels, 'status' => 'InProgress', 'updated_at' => now()]);
 
-                    // Mark return summary as InProgress (2)
+                    // Mark return summary as InProgress (2); the person who checked it is saved on the return
                     DB::table('cb_returns_summary')->where('id', $returnSummary->id)
-                        ->update(['approved_status' => 2]);
+                        ->update(['approved_status' => 2, 'checked_by' => auth()->user()->name]);
 
-                    $message = 'Return approved successfully. Moved to Level ' . ($itemApprover->approver_level + 1);
+                    $message = 'Return approved successfully. Moved to Level ' . ($level + 1);
                 }
 
                 DB::commit();
@@ -703,7 +705,7 @@ class ReturnsApprovalController extends Controller
     }
 
     /**
-     * Reject a return summary
+     * Reject a return summary: send it back to a lower level. Only level 2 and above can, by whoever holds the level now.
      */
     public function rejectReturn($encryptedId, Request $request)
     {
@@ -729,48 +731,41 @@ class ReturnsApprovalController extends Controller
                 return response()->json(['success' => false, 'message' => 'This return has already been processed'], 400);
             }
 
-            $itemApprover = DB::table('cb_item_approvers')
-                ->where('approval_item_id', $approvalItem->id)
-                ->where('approver_id', auth()->id())
-                ->where('approver_level', $approvalItem->current_level)
-                ->first();
+            $level = $this->returnApprovals->effectiveLevel($approvalItem);
+            $refusal = $this->returnApprovals->actorRefusal($approvalItem, $level, (int) auth()->id());
 
-            if (!$itemApprover) {
-                return response()->json(['success' => false, 'message' => 'You are not authorized to reject at this level'], 403);
+            if ($refusal !== null) {
+                return response()->json(['success' => false, 'message' => $refusal], 403);
             }
 
-            if ($itemApprover->approver_level < 2) {
+            if ($level < 2) {
                 return response()->json(['success' => false, 'message' => 'Only level 2 and above can reject'], 403);
             }
 
-            if ($request->return_to_level >= $itemApprover->approver_level) {
+            if ($request->return_to_level >= $level) {
                 return response()->json(['success' => false, 'message' => 'Can only return to a lower level'], 400);
             }
 
             DB::beginTransaction();
             try {
-                DB::table('cb_item_approvers')->where('id', $itemApprover->id)
-                    ->update(['approval_status' => 'Rejected', 'actioned_at' => now(), 'updated_at' => now()]);
-
-                $returnToApprover = DB::table('cb_item_approvers')
+                $returnToApproverId = DB::table('cb_item_approvers')
                     ->where('approval_item_id', $approvalItem->id)
                     ->where('approver_level', $request->return_to_level)
-                    ->first();
+                    ->orderByDesc('actioned_at')
+                    ->value('approver_id');
 
-                // Every approver of that level can act again, not only the first one
-                DB::table('cb_item_approvers')
-                    ->where('approval_item_id', $approvalItem->id)
-                    ->where('approver_level', $request->return_to_level)
-                    ->update(['approval_status' => 'Pending', 'actioned_at' => null, 'updated_at' => now()]);
+                // The levels from the one it goes back to are open again; the person who sent it back is saved as Rejected
+                $this->returnApprovals->reopenFrom((int) $approvalItem->id, (int) $request->return_to_level);
+                $actorRowId = $this->returnApprovals->recordActor((int) $approvalItem->id, $level, (int) auth()->id(), 'Rejected');
 
                 DB::table('cb_approval_actions')->insert([
-                    'item_approver_id' => $itemApprover->id,
+                    'item_approver_id' => $actorRowId,
                     'approval_item_id' => $approvalItem->id,
                     'actor_id' => auth()->id(),
-                    'from_level' => $itemApprover->approver_level,
+                    'from_level' => $level,
                     'to_level' => $request->return_to_level,
                     'action' => 'Returned',
-                    'returned_to_approver_id' => $returnToApprover ? $returnToApprover->approver_id : null,
+                    'returned_to_approver_id' => $returnToApproverId,
                     'returned_to_level' => $request->return_to_level,
                     'comments' => $request->reason,
                     'action_timestamp' => now(),
@@ -799,7 +794,8 @@ class ReturnsApprovalController extends Controller
     }
 
     /**
-     * Add a comment to return approval
+     * Add a comment to return approval. Allowed to whoever holds the current level, and to anyone who already acted on
+     * the return, including the person who generated it.
      */
     public function addReturnApprovalComment($encryptedId, Request $request)
     {
@@ -818,20 +814,29 @@ class ReturnsApprovalController extends Controller
                 return response()->json(['success' => false, 'message' => 'No approval workflow found'], 404);
             }
 
-            $itemApprover = DB::table('cb_item_approvers')
+            $userId = (int) auth()->id();
+            $level = $this->returnApprovals->effectiveLevel($approvalItem);
+            $existing = DB::table('cb_item_approvers')
                 ->where('approval_item_id', $approvalItem->id)
-                ->where('approver_id', auth()->id())
+                ->where('approver_id', $userId)
+                ->orderBy('approver_level')
                 ->first();
 
-            if (!$itemApprover) {
+            if ($existing) {
+                $itemApproverId = (int) $existing->id;
+                $fromLevel = (int) $existing->approver_level >= 1 ? (int) $existing->approver_level : $level;
+            } elseif (in_array($userId, $this->returnApprovals->eligibleUserIds($approvalItem, $level), true)) {
+                $itemApproverId = $this->returnApprovals->recordActor((int) $approvalItem->id, $level, $userId, 'Pending');
+                $fromLevel = $level;
+            } else {
                 return response()->json(['success' => false, 'message' => 'You are not an approver for this return'], 403);
             }
 
             DB::table('cb_approval_actions')->insert([
-                'item_approver_id' => $itemApprover->id,
+                'item_approver_id' => $itemApproverId,
                 'approval_item_id' => $approvalItem->id,
                 'actor_id' => auth()->id(),
-                'from_level' => $itemApprover->approver_level,
+                'from_level' => $fromLevel,
                 'to_level' => null,
                 'action' => 'Commented',
                 'comments' => $request->comment,
