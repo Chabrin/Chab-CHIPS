@@ -123,6 +123,7 @@
 </div>
 <script>
     $(document).ready(function() {
+        const canCreateHelb = @json(Auth::user()->isAbleTo('create_helb_loans'));
         let helbTable;
         let staffSelect;
 
@@ -153,7 +154,7 @@
             });
         }
 
-        loadStaffList();
+        if (canCreateHelb) loadStaffList();
 
         // Initialize HELB Table
         helbTable = $('#helb-table').DataTable({

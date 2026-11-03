@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('staffCreateForm') || document.getElementById('staffEditForm');
     if (!form) return;
-    const inputs = Array.from(form.querySelectorAll('input[type="file"]'));
+    const inputs = Array.from(form.querySelectorAll('input[type="file"]:not([data-no-duplicate-check])'));
     const states = new Map();
     const uploadLimits = @json(\App\Support\EmployeeUploadLimits::current());
     let revision = 0;

@@ -18,11 +18,17 @@ use Illuminate\Validation\ValidationException;
 
 class DeductionsController extends Controller
 {
+    private function requirePermission(string $permission): void
+    {
+        abort_unless(Auth::check() && Auth::user()->isAbleTo($permission), 403, 'You do not have permission to perform this deduction action.');
+    }
+
     /**
      * Display HELB deductions index page
      */
     public function helbIndex()
     {
+        $this->requirePermission('read_helb_loans');
         return view('deductions.helb');
     }
 
@@ -31,6 +37,7 @@ class DeductionsController extends Controller
      */
     public function helbShow($encryptedId)
     {
+        $this->requirePermission('read_helb_loans');
         try {
             $id = \Illuminate\Support\Facades\Crypt::decrypt($encryptedId);
             $deduction = HelbDeduction::with(['staff', 'createdBy'])->findOrFail($id);
@@ -47,6 +54,7 @@ class DeductionsController extends Controller
      */
     public function helbList()
     {
+        $this->requirePermission('read_helb_loans');
         try {
             $deductions = HelbDeduction::with(['staff', 'createdBy'])
                 ->select('sys_helb_deductions.*')
@@ -54,9 +62,11 @@ class DeductionsController extends Controller
                 ->get();
 
             // Add permission flags and computed fields
-            $deductions = $deductions->map(function ($deduction) {
-                $deduction->can_update = Auth::user()->isAbleTo('update_helb_loans');
-                $deduction->can_delete = Auth::user()->isAbleTo('delete_helb_loans');
+            $canUpdate = Auth::user()->isAbleTo('update_helb_loans');
+            $canDelete = Auth::user()->isAbleTo('delete_helb_loans');
+            $deductions = $deductions->map(function ($deduction) use ($canUpdate, $canDelete) {
+                $deduction->can_update = $canUpdate;
+                $deduction->can_delete = $canDelete;
                 $deduction->staff_name = $deduction->staff ? $deduction->staff->full_names : 'N/A';
                 $deduction->staff_number = $deduction->staff ? $deduction->staff->staff_number : 'N/A';
                 $deduction->status = $deduction->cleared ? 'Cleared' : ($deduction->suspended ? 'Suspended' : 'Active');
@@ -82,6 +92,7 @@ class DeductionsController extends Controller
      */
     public function helbStore(Request $request)
     {
+        $this->requirePermission('create_helb_loans');
         try {
             $validated = $request->validate([
                 'staff_id' => 'required|exists:sys_staff,id',
@@ -134,6 +145,7 @@ class DeductionsController extends Controller
      */
     public function helbUpdate(Request $request, $id)
     {
+        $this->requirePermission('update_helb_loans');
         try {
             $validated = $request->validate([
                 'loan_balance' => 'required|numeric|min:0',
@@ -171,6 +183,7 @@ class DeductionsController extends Controller
      */
     public function helbDestroy($id)
     {
+        $this->requirePermission('delete_helb_loans');
         try {
             $deduction = HelbDeduction::findOrFail($id);
 
@@ -197,6 +210,12 @@ class DeductionsController extends Controller
      */
     public function getStaffList()
     {
+        $user = Auth::user();
+        abort_unless(
+            $user && ($user->isAbleTo('create_helb_loans') || $user->isAbleTo('create_prorated_deductions')),
+            403,
+            'You do not have permission to select staff for deductions.'
+        );
         try {
             $staff = Staff::select('id', 'staff_number', 'full_names')
                 ->orderBy('full_names')
@@ -221,6 +240,7 @@ class DeductionsController extends Controller
      */
     public function helbRepeatsList($id)
     {
+        $this->requirePermission('read_helb_loans');
         try {
             $repeats = HelbDeductionRepeat::where('parent_id', $id)
                 ->orderBy('deduction_date', 'desc')
@@ -243,6 +263,7 @@ class DeductionsController extends Controller
      */
     public function proratedIndex()
     {
+        $this->requirePermission('read_prorated_deductions');
         return view('deductions.prorated');
     }
 
@@ -251,6 +272,7 @@ class DeductionsController extends Controller
      */
     public function proratedShow($encryptedId)
     {
+        $this->requirePermission('read_prorated_deductions');
         try {
             $id = \Illuminate\Support\Facades\Crypt::decrypt($encryptedId);
             $deduction = ProratedDeduction::with(['staff', 'createdBy', 'element'])->findOrFail($id);
@@ -266,6 +288,7 @@ class DeductionsController extends Controller
      */
     public function proratedList()
     {
+        $this->requirePermission('read_prorated_deductions');
         try {
             $deductions = ProratedDeduction::with(['staff', 'createdBy', 'element'])
                 ->select('sys_hr_employee_amortized_deductions.*')
@@ -273,8 +296,9 @@ class DeductionsController extends Controller
                 ->get();
 
             // Add permission flags and computed fields
-            $deductions = $deductions->map(function ($deduction) {
-                $deduction->can_update = Auth::user()->isAbleTo('update_prorated_deductions');
+            $canUpdate = Auth::user()->isAbleTo('update_prorated_deductions');
+            $deductions = $deductions->map(function ($deduction) use ($canUpdate) {
+                $deduction->can_update = $canUpdate;
                 $deduction->staff_name = $deduction->staff ? $deduction->staff->full_names : 'N/A';
                 $deduction->staff_number = $deduction->staff ? $deduction->staff->staff_number : 'N/A';
                 $deduction->element_name = $deduction->element ? $deduction->element->element_name : 'N/A';
@@ -312,6 +336,7 @@ class DeductionsController extends Controller
      */
     public function proratedStore(Request $request)
     {
+        $this->requirePermission('create_prorated_deductions');
         try {
             $validated = $request->validate([
                 'staff_id' => 'required|exists:sys_staff,id',
@@ -371,6 +396,7 @@ class DeductionsController extends Controller
      */
     public function proratedUpdate(Request $request, $id)
     {
+        $this->requirePermission('update_prorated_deductions');
         try {
             $validated = $request->validate([
                 'principal_amount' => 'required|numeric|min:0',
@@ -424,6 +450,7 @@ class DeductionsController extends Controller
      */
     public function getElementsList()
     {
+        $this->requirePermission('create_prorated_deductions');
         try {
             $elements = PayrollElement::select('id', 'element_name')
                 ->where('element_type', '1')
@@ -449,6 +476,7 @@ class DeductionsController extends Controller
      */
     public function proratedRepeatsList($id)
     {
+        $this->requirePermission('read_prorated_deductions');
         try {
             $repeats = ProratedDeductionRepeat::where('parent_id', $id)
                 ->orderBy('deduction_date', 'desc')

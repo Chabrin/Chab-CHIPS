@@ -73,6 +73,7 @@ class HrReportsController extends Controller
             )
                 ->join('sys_staff', 'sys_hr_payroll_summary.staff_id', '=', 'sys_staff.id')
                 ->whereYear('sys_hr_payroll_summary.period', '=', date('Y', strtotime($period)))
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', '=', date('m', strtotime($period)))
                 ->where('sys_hr_payroll_summary.' . $column, '>', 0)
                 ->orderBy('sys_staff.full_names', 'asc')
@@ -149,6 +150,7 @@ class HrReportsController extends Controller
             )
                 ->join('sys_staff', 'sys_hr_payroll_summary.staff_id', '=', 'sys_staff.id')
                 ->whereYear('sys_hr_payroll_summary.period', '=', date('Y', strtotime($period)))
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', '=', date('m', strtotime($period)))
                 ->where('sys_hr_payroll_summary.' . $column, '>', 0)
                 ->orderBy('sys_staff.full_names', 'asc')
@@ -391,6 +393,7 @@ class HrReportsController extends Controller
                     'sys_set_departments.department_name'
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->when($request->department_id, fn($q) => $q->where('sys_staff.department_id', $request->department_id))
                 ->orderBy('sys_staff.full_names')
@@ -458,6 +461,7 @@ class HrReportsController extends Controller
                     'sys_set_departments.department_name'
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->when($request->department_id, fn($q) => $q->where('sys_staff.department_id', $request->department_id))
                 ->orderBy('sys_staff.full_names')
@@ -554,6 +558,7 @@ class HrReportsController extends Controller
                     DB::raw("SUM(sys_hr_payroll_summary.net_pay) as total_net_pay")
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->groupBy('sys_set_departments.department_name', 'sys_staff.department_id')
                 ->orderBy('sys_set_departments.department_name')
@@ -618,6 +623,7 @@ class HrReportsController extends Controller
                     DB::raw("SUM(sys_hr_payroll_summary.net_pay) as total_net_pay")
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->groupBy('sys_set_departments.department_name', 'sys_staff.department_id')
                 ->orderBy('sys_set_departments.department_name')
@@ -1707,6 +1713,7 @@ class HrReportsController extends Controller
     {
         try {
             $rows = DB::table('sys_hr_payroll_summary')
+                ->where('current_status_id', 5)
                 ->select([
                     DB::raw("CONCAT(period_year, '-', LPAD(period_month::text, 2, '0')) as period"),
                     DB::raw('MIN(created_at) as period_start'),
@@ -1738,6 +1745,7 @@ class HrReportsController extends Controller
     public function exportPayrollPeriods(Request $request)
     {
         $rows = DB::table('sys_hr_payroll_summary')
+            ->where('current_status_id', 5)
             ->select([DB::raw("CONCAT(period_year,'-',LPAD(period_month::text,2,'0')) as period"),DB::raw('MIN(created_at) as period_start'),DB::raw('MAX(updated_at) as period_end'),DB::raw('COUNT(DISTINCT staff_id) as staff_count')])
             ->groupBy('period_year','period_month')->orderByDesc('period_year')->orderByDesc('period_month')->get();
         $dataRows = $rows->values()->map(fn($r,$i)=>[$i+1,$r->period,substr($r->period_start??'',0,10),substr($r->period_end??'',0,10),$r->staff_count,'Processed'])->all();

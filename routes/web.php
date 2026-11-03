@@ -145,12 +145,14 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::get('/hr/employees/onboarding/create', [App\Http\Controllers\StaffOnboardingController::class, 'create'])->name('staff.onboarding.create');
     Route::post('/hr/employees/onboarding', [App\Http\Controllers\StaffOnboardingController::class, 'send'])->name('staff.onboarding.send');
     Route::get('/hr/employees/onboarding/{invitation}/review', [App\Http\Controllers\StaffOnboardingController::class, 'review'])->name('staff.onboarding.review');
+    Route::get('/hr/employees/onboarding/{invitation}/documents/{file}', [App\Http\Controllers\StaffOnboardingController::class, 'reviewFile'])->where('file', '[a-f0-9]{64}')->name('staff.onboarding.document');
     Route::post('/hr/employees/onboarding/{invitation}/approve', [App\Http\Controllers\StaffOnboardingController::class, 'approve'])->name('staff.onboarding.approve');
     Route::delete('/hr/employees/onboarding/{invitation}', [App\Http\Controllers\StaffOnboardingController::class, 'revoke'])->name('staff.onboarding.revoke');
     Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
     Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
+    Route::get('/hr/employees/{id}/signature', [StaffController::class, 'signature'])->whereNumber('id')->name('staff.signature');
     Route::put('/hr/employees/{id}', [StaffController::class, 'update'])->name('staff.update');
     Route::patch('/hr/employees/{id}/status', [StaffController::class, 'updateStatus'])->name('staff.updateStatus');
     Route::post('/hr/employees/{id}/convert-user', [StaffController::class, 'convertToUser'])->name('staff.convertToUser');
@@ -365,6 +367,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/payroll/recent-periods', [PayrollController::class, 'getRecentPeriodsSummary'])->name('ajax.payroll.recentPeriods');
     Route::get('/ajax/payroll/unprocessed-periods', [PayrollController::class, 'getUnprocessedPeriods'])->name('ajax.payroll.unprocessedPeriods');
     Route::post('/ajax/payroll/process', [PayrollController::class, 'processPayroll'])->name('ajax.payroll.process');
+    Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollController::class, 'approvePayroll'])->name('ajax.payroll.approve');
 
     // Payslips
     Route::get('/payroll/payslips', [PayslipsController::class, 'index'])->name('payroll.payslips');

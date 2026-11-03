@@ -190,8 +190,9 @@
                         $('#employee_select').html('<option value="">-- Select Staff --</option>');
                     }
                 },
-                error: function() {
-                    toastr.error('Search failed');
+                error: function(xhr) {
+                    const message = xhr.responseJSON?.message || xhr.responseJSON?.error || 'Search failed. Please try again.';
+                    toastr.error(message);
                 },
                 complete: function() {
                     // Re-enable button, hide spinner, show icon

@@ -65,21 +65,8 @@ class EmployeeContract extends Model
      */
     public function scopeActive($query)
     {
-
-        return $query->where('current_status_id', 21);
-
-        // return $query->where('current_status_id', 21)
-        //     ->where(function ($q) {
-        //         $q->whereNull('date_end')
-        //             ->orWhere('date_end', '>=', now());
-        //     });
-
-
-        // return $query->where('current_status_id', 5)
-        //     ->where(function ($q) {
-        //         $q->whereNull('date_end')
-        //             ->orWhere('date_end', '>=', now());
-        //     });
+        // HR contract creation and updates use status 5 for Active.
+        return $query->where('current_status_id', 5);
     }
 
     /**

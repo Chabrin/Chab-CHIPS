@@ -94,8 +94,8 @@ $(function () {
                     $('#payslipNoResult').removeClass('d-none');
                 }
             },
-            error: function () {
-                toastr.error('Failed to load payslip. Please try again.');
+            error: function (xhr) {
+                toastr.error(xhr.responseJSON?.message || xhr.responseJSON?.error || 'Failed to load payslip. Please try again.');
             },
             complete: function () {
                 $('#payslipSpinner').addClass('d-none');

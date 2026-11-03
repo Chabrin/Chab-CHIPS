@@ -2,6 +2,12 @@
 @section('content')
 @php
 $canCreateUsers = auth()->user()->hasPermission('create_users');
+// When finishing an approved onboarding submission, fields start with what the new staff member entered
+$onboarding = $onboarding ?? null;
+$prefill = $prefill ?? [];
+$onboardingFiles = $onboardingFiles ?? [];
+$val = fn ($field, $default = null) => old($field, $prefill[$field] ?? $default);
+$fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash('sha256', $onboardingFiles[$field]['path'])]);
 @endphp
 <style>
     /* Match select2 to Bootstrap's .form-select styling — the stock select2 theme
@@ -95,12 +101,22 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                         @endif
+                        @if($onboarding)
+                        <div class="alert alert-info">
+                            <strong>Completing onboarding for {{ $onboarding->recipient_email }}.</strong>
+                            Personal, contact, banking and document details below were filled in by the new staff member. Check them, then complete the
+                            Employment Category, Official Email, Employment Details and System User before saving.
+                        </div>
+                        @endif
                         @if(!$canCreateUsers)
                         <div class="alert alert-warning">You need the "create users" permission to add staff, because every staff member gets a system login.</div>
                         @endif
 
                        <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" enctype="multipart/form-data">
                             @csrf
+                            @if($onboarding)
+                            <input type="hidden" name="onboarding_invitation_id" value="{{ $onboarding->id }}">
+                            @endif
 
                             <!-- Nav Tabs -->
                             <ul class="nav nav-tabs" id="staffCreateTabs" role="tablist">
@@ -152,10 +168,10 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             {{-- added on 27th --}}
                                         <label for="employment_type" class="form-label">Employment Category <span class="text-danger">*</span></label>
                                         <select class="form-select @error('employment_type') is-invalid @enderror" id="employment_type" name="employment_type" required>
-                                            <option value="Permanent" {{ old('employment_type', 'Permanent') == 'Permanent' ? 'selected' : '' }}>Permanent</option>
-                                            <option value="Temporary" {{ old('employment_type') == 'Temporary' ? 'selected' : '' }}>Temporary</option>
-                                            <option value="Casual" {{ old('employment_type') == 'Casual' ? 'selected' : '' }}>Casual</option>
-                                            <option value="Intern" {{ old('employment_type') == 'Intern' ? 'selected' : '' }}>Intern</option>
+                                            <option value="Permanent" {{ $val('employment_type', 'Permanent') == 'Permanent' ? 'selected' : '' }}>Permanent</option>
+                                            <option value="Temporary" {{ $val('employment_type') == 'Temporary' ? 'selected' : '' }}>Temporary</option>
+                                            <option value="Casual" {{ $val('employment_type') == 'Casual' ? 'selected' : '' }}>Casual</option>
+                                            <option value="Intern" {{ $val('employment_type') == 'Intern' ? 'selected' : '' }}>Intern</option>
                                         </select>
                                         @error('employment_type')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -173,7 +189,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="full_names" class="form-label">Full Names <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('full_names') is-invalid @enderror" id="full_names" name="full_names" value="{{ old('full_names') }}" required>
+                                            <input type="text" class="form-control @error('full_names') is-invalid @enderror" id="full_names" name="full_names" value="{{ $val('full_names') }}" required>
                                             @error('full_names')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -182,8 +198,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <label for="gender" class="form-label">Gender <span class="text-danger">*</span></label>
                                             <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender" required>
                                                 <option value="">Select Gender</option>
-                                                <option value="Male" {{ old('gender') == 'Male' ? 'selected' : '' }}>Male</option>
-                                                <option value="Female" {{ old('gender') == 'Female' ? 'selected' : '' }}>Female</option>
+                                                <option value="Male" {{ $val('gender') == 'Male' ? 'selected' : '' }}>Male</option>
+                                                <option value="Female" {{ $val('gender') == 'Female' ? 'selected' : '' }}>Female</option>
                                             </select>
                                             @error('gender')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -191,28 +207,28 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="birth_date" class="form-label">Date of Birth <span class="text-danger">*</span></label>
-                                            <input type="date" class="form-control @error('birth_date') is-invalid @enderror" id="birth_date" name="birth_date" value="{{ old('birth_date') }}" required>
+                                            <input type="date" class="form-control @error('birth_date') is-invalid @enderror" id="birth_date" name="birth_date" value="{{ $val('birth_date') }}" required>
                                             @error('birth_date')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="birth_place" class="form-label">Birth Place</label>
-                                            <input type="text" class="form-control @error('birth_place') is-invalid @enderror" id="birth_place" name="birth_place" value="{{ old('birth_place') }}">
+                                            <input type="text" class="form-control @error('birth_place') is-invalid @enderror" id="birth_place" name="birth_place" value="{{ $val('birth_place') }}">
                                             @error('birth_place')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="national_id" class="form-label">National ID <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ old('national_id') }}" required>
+                                            <input type="text" class="form-control @error('national_id') is-invalid @enderror" id="national_id" name="national_id" value="{{ $val('national_id') }}" required>
                                             @error('national_id')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="passport" class="form-label">Passport Number</label>
-                                            <input type="text" class="form-control @error('passport') is-invalid @enderror" id="passport" name="passport" value="{{ old('passport') }}">
+                                            <input type="text" class="form-control @error('passport') is-invalid @enderror" id="passport" name="passport" value="{{ $val('passport') }}">
                                             @error('passport')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -221,10 +237,10 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <label for="marital" class="form-label">Marital Status <span class="text-danger">*</span></label>
                                             <select class="form-select @error('marital') is-invalid @enderror" id="marital" name="marital" required>
                                                 <option value="">Select Status</option>
-                                                <option value="Single" {{ old('marital') == 'Single' ? 'selected' : '' }}>Single</option>
-                                                <option value="Married" {{ old('marital') == 'Married' ? 'selected' : '' }}>Married</option>
-                                                <option value="Divorced" {{ old('marital') == 'Divorced' ? 'selected' : '' }}>Divorced</option>
-                                                <option value="Widowed" {{ old('marital') == 'Widowed' ? 'selected' : '' }}>Widowed</option>
+                                                <option value="Single" {{ $val('marital') == 'Single' ? 'selected' : '' }}>Single</option>
+                                                <option value="Married" {{ $val('marital') == 'Married' ? 'selected' : '' }}>Married</option>
+                                                <option value="Divorced" {{ $val('marital') == 'Divorced' ? 'selected' : '' }}>Divorced</option>
+                                                <option value="Widowed" {{ $val('marital') == 'Widowed' ? 'selected' : '' }}>Widowed</option>
                                             </select>
                                             @error('marital')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -232,7 +248,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="spouse_name" class="form-label">Spouse Name</label>
-                                            <input type="text" class="form-control @error('spouse_name') is-invalid @enderror" id="spouse_name" name="spouse_name" value="{{ old('spouse_name') }}">
+                                            <input type="text" class="form-control @error('spouse_name') is-invalid @enderror" id="spouse_name" name="spouse_name" value="{{ $val('spouse_name') }}">
                                             @error('spouse_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -241,8 +257,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <label for="citizenship" class="form-label">Citizenship <span class="text-danger">*</span></label>
                                             <select class="form-select @error('citizenship') is-invalid @enderror" id="citizenship" name="citizenship" required>
                                                 <option value="">Select Option</option>
-                                                <option value="RESIDENT" {{ old('citizenship') == 'RESIDENT' ? 'selected' : '' }}>RESIDENT</option>
-                                                <option value="NO" {{ old('citizenship') == 'NO' ? 'selected' : '' }}>NO</option>
+                                                <option value="RESIDENT" {{ $val('citizenship') == 'RESIDENT' ? 'selected' : '' }}>RESIDENT</option>
+                                                <option value="NO" {{ $val('citizenship') == 'NO' ? 'selected' : '' }}>NO</option>
                                             </select>
                                             @error('citizenship')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -252,8 +268,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <label for="disability" class="form-label">Disability <span class="text-danger">*</span></label>
                                             <select class="form-select @error('disability') is-invalid @enderror" id="disability" name="disability" required>
                                                 <option value="">Select Option</option>
-                                                <option value="YES" {{ old('disability') == 'YES' ? 'selected' : '' }}>YES</option>
-                                                <option value="NO" {{ old('disability') == 'NO' ? 'selected' : '' }}>NO</option>
+                                                <option value="YES" {{ $val('disability') == 'YES' ? 'selected' : '' }}>YES</option>
+                                                <option value="NO" {{ $val('disability') == 'NO' ? 'selected' : '' }}>NO</option>
                                             </select>
                                             @error('disability')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -273,13 +289,14 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="row mb-4 align-items-center">
                                             <div class="col-auto">
-                                                <img id="photo-preview" src="{{ asset('images/default-avatar.svg') }}" 
+                                                <img id="photo-preview" src="{{ isset($onboardingFiles['photo']) ? $fileUrl('photo') : asset('images/default-avatar.svg') }}" 
                                                     class="rounded-circle border" width="90" height="90" style="object-fit: cover;">
                                             </div>
                                             <div class="col-md-5">
                                                 <label class="form-label fw-semibold small mb-1">Staff Profile Photo</label>
                                                 <input type="file" name="photo" id="photo-input" class="form-control form-control-sm" accept="image/*">
                                                 <small class="text-muted">Square ratio (JPG, PNG). Check the current upload limit above.</small>
+                                                @if(isset($onboardingFiles['photo']))<small class="d-block text-success">Photo received from onboarding. Upload a new one only to replace it.</small>@endif
                                             </div>
                                         </div>
                                     </div>
@@ -293,7 +310,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <select class="form-select @error('department_id') is-invalid @enderror" id="department_id" name="department_id">
                                                 <option value="">Select Department</option>
                                                 @foreach($departments as $dept)
-                                                <option value="{{ $dept->id }}" {{ old('department_id') == $dept->id ? 'selected' : '' }}>
+                                                <option value="{{ $dept->id }}" {{ $val('department_id') == $dept->id ? 'selected' : '' }}>
                                                     {{ $dept->department_name }}
                                                 </option>
                                                 @endforeach
@@ -305,12 +322,12 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 
                                         <div class="col-md-4 mb-3">
                                             <label for="position_id" class="form-label">Position</label>
-                                            <select class="form-select @error('position_id') is-invalid @enderror" id="position_id" name="position_id" {{ old('department_id') ? '' : 'disabled' }}>
+                                            <select class="form-select @error('position_id') is-invalid @enderror" id="position_id" name="position_id" {{ $val('department_id') ? '' : 'disabled' }}>
                                                 <option value="">Select Position</option>
                                                 @foreach($positions as $position)
                                                 <option value="{{ $position->id }}" 
                                                         data-department="{{ $position->department_id }}"
-                                                        {{ old('position_id') == $position->id ? 'selected' : '' }}>
+                                                        {{ $val('position_id') == $position->id ? 'selected' : '' }}>
                                                     {{ $position->position_name }}
                                                 </option>
                                                 @endforeach
@@ -322,7 +339,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 
                                         <div class="col-md-4 mb-3">
                                             <label for="hire_date" class="form-label">Hire Date</label>
-                                            <input type="date" class="form-control @error('hire_date') is-invalid @enderror" id="hire_date" name="hire_date" value="{{ old('hire_date') }}">
+                                            <input type="date" class="form-control @error('hire_date') is-invalid @enderror" id="hire_date" name="hire_date" value="{{ $val('hire_date') }}">
                                             @error('hire_date')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -334,7 +351,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <select class="form-select @error('zone_id') is-invalid @enderror" id="zone_id" name="zone_id">
                                                     <option value="">Select Zone</option>
                                                     @foreach($zones as $zone)
-                                                    <option value="{{ $zone->id }}" {{ old('zone_id') == $zone->id ? 'selected' : '' }}>
+                                                    <option value="{{ $zone->id }}" {{ $val('zone_id') == $zone->id ? 'selected' : '' }}>
                                                         {{ $zone->zone_name }}
                                                     </option>
                                                     @endforeach
@@ -389,7 +406,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
                                             <label for="mobile_number" class="form-label">Mobile Number</label>
-                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ old('mobile_number') }}">
+                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ $val('mobile_number') }}">
                                             @error('mobile_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -408,42 +425,42 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="personal_email" class="form-label">Personal Email</label>
-                                            <input type="email" class="form-control @error('personal_email') is-invalid @enderror" id="personal_email" name="personal_email" value="{{ old('personal_email') }}">
+                                            <input type="email" class="form-control @error('personal_email') is-invalid @enderror" id="personal_email" name="personal_email" value="{{ $val('personal_email') }}">
                                             @error('personal_email')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-12 mb-3">
                                             <label for="address" class="form-label">Address</label>
-                                            <textarea class="form-control @error('address') is-invalid @enderror" id="address" name="address" rows="2">{{ old('address') }}</textarea>
+                                            <textarea class="form-control @error('address') is-invalid @enderror" id="address" name="address" rows="2">{{ $val('address') }}</textarea>
                                             @error('address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="district" class="form-label">District</label>
-                                            <input type="text" class="form-control @error('district') is-invalid @enderror" id="district" name="district" value="{{ old('district') }}">
+                                            <input type="text" class="form-control @error('district') is-invalid @enderror" id="district" name="district" value="{{ $val('district') }}">
                                             @error('district')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="location" class="form-label">Location</label>
-                                            <input type="text" class="form-control @error('location') is-invalid @enderror" id="location" name="location" value="{{ old('location') }}">
+                                            <input type="text" class="form-control @error('location') is-invalid @enderror" id="location" name="location" value="{{ $val('location') }}">
                                             @error('location')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="sub_location" class="form-label">Sub Location</label>
-                                            <input type="text" class="form-control @error('sub_location') is-invalid @enderror" id="sub_location" name="sub_location" value="{{ old('sub_location') }}">
+                                            <input type="text" class="form-control @error('sub_location') is-invalid @enderror" id="sub_location" name="sub_location" value="{{ $val('sub_location') }}">
                                             @error('sub_location')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-12 mb-3">
                                             <label for="kins_names" class="form-label">Next of Kin Names</label>
-                                            <input type="text" class="form-control @error('kins_names') is-invalid @enderror" id="kins_names" name="kins_names" value="{{ old('kins_names') }}">
+                                            <input type="text" class="form-control @error('kins_names') is-invalid @enderror" id="kins_names" name="kins_names" value="{{ $val('kins_names') }}">
                                             @error('kins_names')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -459,7 +476,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <select class="form-select @error('bank_name') is-invalid @enderror" id="bank_name" name="bank_name" required>
                                                 <option value="">Select Bank</option>
                                                 @foreach($banks as $bank)
-                                                <option value="{{ $bank->id }}" {{ old('bank_name') == $bank->id ? 'selected' : '' }}>
+                                                <option value="{{ $bank->id }}" {{ $val('bank_name') == $bank->id ? 'selected' : '' }}>
                                                     {{ $bank->bank_name }}
                                                 </option>
                                                 @endforeach
@@ -470,35 +487,35 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="account_name" class="form-label">Account Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('account_name') is-invalid @enderror" id="account_name" name="account_name" value="{{ old('account_name') }}" required>
+                                            <input type="text" class="form-control @error('account_name') is-invalid @enderror" id="account_name" name="account_name" value="{{ $val('account_name') }}" required>
                                             @error('account_name')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="account_number" class="form-label">Account Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('account_number') is-invalid @enderror" id="account_number" name="account_number" value="{{ old('account_number') }}" required>
+                                            <input type="text" class="form-control @error('account_number') is-invalid @enderror" id="account_number" name="account_number" value="{{ $val('account_number') }}" required>
                                             @error('account_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="pin_number" class="form-label">KRA PIN Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ old('pin_number') }}" required>
+                                            <input type="text" class="form-control @error('pin_number') is-invalid @enderror" id="pin_number" name="pin_number" value="{{ $val('pin_number') }}" required>
                                             @error('pin_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="nhif_number" class="form-label">SHA Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ old('nhif_number') }}" required>
+                                            <input type="text" class="form-control @error('nhif_number') is-invalid @enderror" id="nhif_number" name="nhif_number" value="{{ $val('nhif_number') }}" required>
                                             @error('nhif_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="nssf_number" class="form-label">NSSF Number <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control @error('nssf_number') is-invalid @enderror" id="nssf_number" name="nssf_number" value="{{ old('nssf_number') }}" required>
+                                            <input type="text" class="form-control @error('nssf_number') is-invalid @enderror" id="nssf_number" name="nssf_number" value="{{ $val('nssf_number') }}" required>
                                             @error('nssf_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -519,7 +536,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <label class="form-label fw-semibold small mb-1">
                                                     National ID / Passport Copy <span class="text-danger">*</span>
                                                 </label>
-                                                <input type="file" name="documents[national_id]" class="form-control @error('documents.national_id') is-invalid @enderror" required accept=".pdf,.png,.jpg,.jpeg">
+                                                <input type="file" name="documents[national_id]" class="form-control @error('documents.national_id') is-invalid @enderror" @unless(isset($onboardingFiles['documents.national_id'])) required @endunless accept=".pdf,.png,.jpg,.jpeg">
+                                                @if(isset($onboardingFiles['documents.national_id']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.national_id']['name'] }} <a href="{{ $fileUrl('documents.national_id') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Scanned front/back copy or passport bio-page</small>
                                             </div>
                                         </div>
@@ -530,7 +548,8 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                 <label class="form-label fw-semibold small mb-1">
                                                     KRA PIN Certificate <span class="text-danger">*</span>
                                                 </label>
-                                                <input type="file" name="documents[kra_pin]" class="form-control @error('documents.kra_pin') is-invalid @enderror" required accept=".pdf,.png,.jpg,.jpeg">
+                                                <input type="file" name="documents[kra_pin]" class="form-control @error('documents.kra_pin') is-invalid @enderror" @unless(isset($onboardingFiles['documents.kra_pin'])) required @endunless accept=".pdf,.png,.jpg,.jpeg">
+                                                @if(isset($onboardingFiles['documents.kra_pin']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.kra_pin']['name'] }} <a href="{{ $fileUrl('documents.kra_pin') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">KRA PIN registration certificate</small>
                                             </div>
                                         </div>
@@ -542,6 +561,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                     Signed Employment Contract
                                                 </label>
                                                 <input type="file" name="documents[contract]" class="form-control" accept=".pdf">
+                                                @if(isset($onboardingFiles['documents.contract']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.contract']['name'] }} <a href="{{ $fileUrl('documents.contract') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Physical/counter-signed contract in PDF format</small>
                                             </div>
                                         </div>
@@ -552,6 +572,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                     Curriculum Vitae (CV / Resume)
                                                 </label>
                                                 <input type="file" name="documents[cv]" class="form-control" accept=".pdf,.doc,.docx">
+                                                @if(isset($onboardingFiles['documents.cv']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.cv']['name'] }} <a href="{{ $fileUrl('documents.cv') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Updated staff resume or CV (PDF or Word). Check the current upload limit above.</small>
                                             </div>
                                         </div>
@@ -562,8 +583,17 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                                     Academic & Professional Certificates
                                                 </label>
                                                 <input type="file" name="documents[academic]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
+                                                @if(isset($onboardingFiles['documents.academic']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.academic']['name'] }} <a href="{{ $fileUrl('documents.academic') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Degrees, diplomas, transcripts, or certifications</small>
                                             </div>
+                                        </div>
+                                        <!-- Staff signature -->
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold small mb-1">Staff Signature</label>
+                                            @include('staff.partials.signature-input', [
+                                                'currentSignatureUrl' => isset($onboardingFiles['signature']) ? $fileUrl('signature') : null,
+                                                'currentSignatureNote' => 'Received from onboarding. Draw or upload only to replace it.',
+                                            ])
                                         </div>
                                     </div>
                                 </div>
@@ -588,7 +618,7 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
                                             <select class="form-select @error('role_id') is-invalid @enderror" id="role_id" name="role_id" required>
                                                 <option value="">Select Role</option>
                                                 @foreach($roles as $role)
-                                                <option value="{{ $role->id }}" {{ old('role_id') == $role->id ? 'selected' : '' }}>{{ $role->display_name }}</option>
+                                                <option value="{{ $role->id }}" {{ $val('role_id') == $role->id ? 'selected' : '' }}>{{ $role->display_name }}</option>
                                                 @endforeach
                                             </select>
                                             @error('role_id')

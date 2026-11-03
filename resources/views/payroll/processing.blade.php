@@ -45,6 +45,8 @@
                                         <th>Total Gross</th>
                                         <th>Total Deductions</th>
                                         <th>Total Net</th>
+                                        <th>Run Status</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -76,7 +78,7 @@
                     </div>
                     <div class="alert alert-info small mb-3">
                         <span class="material-symbols-outlined" style="font-size:16px;">info</span>
-                        This will calculate payroll for all active employees in the selected period
+                        Salary and contract elements are prorated by calendar days when an active contract covers only part of this period.
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
@@ -102,6 +104,7 @@
 <script>
     $(document).ready(function() {
         let recentPeriodsTable;
+        const canApprovePayroll = @json(Auth::user()->isAbleTo('approve_payroll_processing'));
 
         // Initialize Recent Periods Table
         recentPeriodsTable = $('#recent-periods-table').DataTable({
@@ -144,12 +147,45 @@
                 {
                     data: 'total_net_salary',
                     render: data => '<strong>' + formatCurrency(data || 0) + '</strong>'
+                },
+                {
+                    data: 'run_status_id',
+                    render: status => Number(status) === 1
+                        ? '<span class="badge badge-light-warning">Pending review</span>'
+                        : '<span class="badge badge-light-success">Approved</span>'
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: row => canApprovePayroll && Number(row.run_status_id) === 1
+                        ? `<button type="button" class="btn btn-success btn-sm approve-payroll" data-period-id="${row.period_id}">Approve</button>`
+                        : '-'
                 }
             ],
             pageLength: 3,
             order: [
                 [1, 'desc']
             ]
+        });
+
+        $('#recent-periods-table').on('click', '.approve-payroll', function() {
+            const $button = $(this);
+            if (!confirm('Approve this payroll run and make its payslips available?')) return;
+            $button.prop('disabled', true);
+            $.ajax({
+                url: `/ajax/payroll/periods/${$button.data('period-id')}/approve`,
+                type: 'POST',
+                data: { _token: '{{ csrf_token() }}' },
+                success: function(res) {
+                    toastr.success(res.message || 'Payroll approved');
+                    recentPeriodsTable.ajax.reload(null, false);
+                },
+                error: function(xhr) {
+                    $button.prop('disabled', false);
+                    toastr.error(xhr.responseJSON?.error || 'Could not approve payroll');
+                }
+            });
         });
 
         // Process New Period Button
@@ -172,7 +208,7 @@
                             options += `<option value="${period.id}">${period.formatted_period} (${period.period_month})</option>`;
                         });
                     } else {
-                        options = '<option value="">No unprocessed periods available</option>';
+                        options = '<option value="">No complete unprocessed periods. Set start and end dates in Payroll Calendar.</option>';
                     }
                     $('#period_id').html(options);
                 },
@@ -227,6 +263,12 @@
                         msg = Object.values(xhr.responseJSON.errors).join('<br>');
                     } else if (xhr.responseJSON && xhr.responseJSON.error) {
                         msg = xhr.responseJSON.error;
+                    }
+                    if (Array.isArray(xhr.responseJSON?.employees) && xhr.responseJSON.employees.length) {
+                        const employeeNames = xhr.responseJSON.employees
+                            .map(name => $('<span>').text(name).html())
+                            .join(', ');
+                        msg += `<br><strong>Affected employees:</strong> ${employeeNames}`;
                     }
                     toastr.error(msg);
                 }

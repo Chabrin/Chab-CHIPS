@@ -119,4 +119,9 @@ class PayrollSummary extends Model
     {
         return $this->belongsTo(Status::class, 'current_status_id');
     }
+
+    public function payrollPeriod()
+    {
+        return $this->belongsTo(PayrollPeriod::class, 'period_id');
+    }
 }
