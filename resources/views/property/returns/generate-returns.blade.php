@@ -37,6 +37,27 @@
                         <form id="generateReturnsForm" data-current-year="{{ date('Y') }}" data-current-month="{{ date('n') }}">
                             @csrf
                             <div class="row">
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            <span class="material-symbols-outlined align-middle" style="font-size: 18px;">receipt_long</span>
+                                            Return Type <span class="text-danger">*</span>
+                                        </label>
+                                        <div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="return_type" id="return_type_main" value="main" checked>
+                                                <label class="form-check-label" for="return_type_main">Main return</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="return_type" id="return_type_mini" value="mini">
+                                                <label class="form-check-label" for="return_type_mini">Mini return</label>
+                                            </div>
+                                        </div>
+                                        <small class="text-muted" id="return_type_help">The month's return for one property or all properties, from the month's invoices.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label class="form-label">
@@ -189,6 +210,21 @@
         $('#returns_month').attr('max', maxDate);
         $('#returns_month').val(maxDate);
 
+        // A mini return is for one property and carries only money that came in after the month's return was approved
+        $('input[name="return_type"]').on('change', function() {
+            const mini = $('input[name="return_type"]:checked').val() === 'mini';
+            if (mini) {
+                $('#one_property').prop('checked', true).trigger('change');
+                $('#all_properties').prop('disabled', true);
+                $('#return_type_help').text("Only the money that came in after the month's main return was approved (rent of earlier months and bills paid since) that is on no return yet. The main return of that month must already be approved.");
+                $('#generate-btn').contents().last().replaceWith(' Generate Mini Return');
+            } else {
+                $('#all_properties').prop('disabled', false);
+                $('#return_type_help').text("The month's return for one property or all properties, from the month's invoices.");
+                $('#generate-btn').contents().last().replaceWith(' Generate Returns');
+            }
+        });
+
         // Handle property selection radio buttons
         $('input[name="property_selection"]').on('change', function() {
             if ($(this).val() === 'one') {
@@ -292,6 +328,7 @@
         e.preventDefault();
 
         const propertySelection = $('input[name="property_selection"]:checked').val();
+        const returnType = $('input[name="return_type"]:checked').val();
         const propertyId = $('#property_id').val();
         const returnsMonth = $('#returns_month').val();
 
@@ -334,6 +371,7 @@
         let requestData = {
             _token: '{{ csrf_token() }}',
             property_selection: propertySelection,
+            return_type: returnType,
             returns_month: returnsMonth
         };
 

@@ -108,6 +108,103 @@ trait ReturnsSummaryTrait
     }
 
     /**
+     * Insert return summaries (MAINRETURN, or MINIRETURN for a mini return) using the original aggregation logic.
+     * Kept separate to ensure accurate calculations.
+     *
+     * @param string $returnPeriod YYYYMM format
+     * @param int $returnYear
+     * @param int $returnMonthNum
+     * @param string $monthName
+     * @param string $preparedByName name of the user who generated the returns
+     * @param int|null $propertyId Optional: summarise a single property only
+     * @param string $returnType MAINRETURN or MINIRETURN
+     * @param string|null $returnCode Optional: summarise the lines of this one return code only (a mini return)
+     * @return int Summaries inserted
+     */
+    protected function insertMainReturnSummariesLegacy(string $returnPeriod, int $returnYear, int $returnMonthNum, string $monthName, string $preparedByName, ?int $propertyId = null, string $returnType = 'MAINRETURN', ?string $returnCode = null): int {
+        $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
+        $codeFilter = $returnCode !== null ? " AND rc.return_code = ?" : "";
+
+        // The rent lines already carry their commission and VAT, and insertCommissionLines adds a DR 'COMMISSION' line
+        // that repeats the same two totals for the printed return. That line is left out of every total below, or the
+        // commission and the VAT would be taken off the landlord twice.
+        $netAmount = "SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
+                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
+                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END)";
+
+        $q3 = "
+            INSERT INTO cb_returns_summary (
+                return_code, landlord_code, property_code, year, month,
+                return_description, return_period, return_type,
+                commission_rate, total_credit, commission_total, vatable_total,
+                commission_amount, total_debit, net_amount,
+                transaction_amount, net_balance,
+                prepared_by, prepared_status, prepared_date,
+                approved_status, paid_status, return_id,
+                payable_amount, non_payable_amount, payable_units, total_units
+            )
+            SELECT
+                rc.return_code,
+                COALESCE(
+                    (SELECT cl.reference_number FROM sys_pm_clients cl WHERE cl.id = rc.client_id LIMIT 1),
+                    'UNKNOWN'
+                ) AS landlord_code,
+                rc.property_code,
+                ? AS year,
+                ? AS month,
+                COALESCE(
+                    (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.id = rc.property_id LIMIT 1),
+                    rc.property_code
+                ) || '-{$monthName} {$returnYear}' AS return_description,
+                ? AS return_period,
+                ? AS return_type,
+                CASE WHEN SUM(rc.commission_amount) > 0
+                          AND SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) > 0
+                    THEN ROUND(SUM(rc.commission_amount) / SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) * 100, 2)
+                    ELSE 0
+                END AS commission_rate,
+                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS total_credit,
+                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS commission_total,
+                0 AS vatable_total,
+                SUM(rc.commission_amount) AS commission_amount,
+                SUM(rc.commission_amount) + SUM(rc.vat_amount)
+                    + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
+                {$netAmount} AS net_amount,
+                0 AS transaction_amount,
+                {$netAmount} AS net_balance,
+                ? AS prepared_by,
+                1 AS prepared_status,
+                NOW() AS prepared_date,
+                0 AS approved_status,
+                0 AS paid_status,
+                rc.return_id,
+                SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.net_amount ELSE 0 END) AS payable_amount,
+                SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND (rc.payable_status = 0 OR rc.payable_status IS NULL) THEN rc.amount_payable_landlord ELSE 0 END) AS non_payable_amount,
+                COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.unit_id END) AS payable_units,
+                COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
+            FROM cb_returns_clients rc
+            WHERE rc.return_period = ?
+              AND COALESCE(rc.entry_type, '') <> 'COMMISSION'
+              {$propertyFilter}
+              {$codeFilter}
+              AND NOT EXISTS (
+                  SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code
+              )
+            GROUP BY rc.return_code, rc.property_code, rc.property_id, rc.client_id, rc.return_id
+        ";
+
+        $bindings = [$returnYear, $returnMonthNum, $returnPeriod, $returnType, $preparedByName, $returnPeriod];
+        if ($propertyId) {
+            $bindings[] = $propertyId;
+        }
+        if ($returnCode !== null) {
+            $bindings[] = $returnCode;
+        }
+
+        return DB::affectingStatement($q3, $bindings);
+    }
+
+    /**
      * Get return summary statistics for a period.
      *
      * @param string $returnPeriod YYYYMM format

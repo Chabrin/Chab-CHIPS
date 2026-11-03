@@ -7,7 +7,9 @@ use App\Models\Property;
 use Illuminate\Http\Request;
 use App\Services\ErrorDispatcher;
 use App\Services\ReturnApprovalWorkflowService;
+use App\Services\MiniReturnService;
 use App\Exceptions\ReturnApprovalException;
+use App\Exceptions\MiniReturnException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -38,12 +40,14 @@ class ClientReturnsController extends Controller
     use Reusables;
 
     protected ReturnApprovalWorkflowService $returnApprovals;
+    protected MiniReturnService $miniReturns;
 
     /**
-     * Inject the service that decides who approves a return.
+     * Inject the service that decides who approves a return and the one that generates mini returns.
      */
-    public function __construct(ReturnApprovalWorkflowService $returnApprovals) {
+    public function __construct(ReturnApprovalWorkflowService $returnApprovals, MiniReturnService $miniReturns) {
         $this->returnApprovals = $returnApprovals;
+        $this->miniReturns = $miniReturns;
     }
 
     /**
@@ -1052,7 +1056,8 @@ class ClientReturnsController extends Controller
         try {
             $request->validate([
                 'returns_month' => 'required|date_format:Y-m',
-                'property_id'   => 'nullable|integer|exists:sys_pm_properties,id'
+                'property_id'   => 'nullable|integer|exists:sys_pm_properties,id',
+                'return_type'   => 'nullable|in:main,mini'
             ]);
 
             // Parse input parameters
@@ -1081,6 +1086,11 @@ class ClientReturnsController extends Controller
             $generationRefusal = $this->generationRefusal($requestedPropertyId);
             if ($generationRefusal !== null) {
                 return response()->json(['success' => false, 'message' => $generationRefusal], 403);
+            }
+
+            // A mini return carries only the money that came in late for one property
+            if ($request->input('return_type') === 'mini') {
+                return $this->generateMiniReturn($requestedPropertyId, $returnsMonth, (int) $generatedBy);
             }
 
             // ═══════════════════════════════════════════════════════════════════
@@ -1413,92 +1423,39 @@ class ClientReturnsController extends Controller
     }
 
     /**
-     * Insert MAINRETURN summaries using original aggregation logic.
-     * Kept separate to ensure accurate calculations.
+     * Generate a mini return for one property and month (the money that came in late and is on no return yet) and
+     * answer the generate screen.
+     *
+     * @param int|null $propertyId the property chosen on the screen
+     * @param string $returnsMonth YYYY-MM
+     * @param int $userId the user generating it
      */
-    protected function insertMainReturnSummariesLegacy(
-        string $returnPeriod,
-        int $returnYear,
-        int $returnMonthNum,
-        string $monthName,
-        string $preparedByName,
-        ?int $propertyId = null
-    ): int {
-        $propertyFilter = $propertyId ? " AND rc.property_id = ?" : "";
-
-        // The rent lines already carry their commission and VAT, and insertCommissionLines adds a DR 'COMMISSION' line
-        // that repeats the same two totals for the printed return. That line is left out of every total below, or the
-        // commission and the VAT would be taken off the landlord twice.
-        $netAmount = "SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
-                    - SUM(rc.commission_amount) - SUM(rc.vat_amount)
-                    - SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END)";
-
-        $q3 = "
-            INSERT INTO cb_returns_summary (
-                return_code, landlord_code, property_code, year, month,
-                return_description, return_period, return_type,
-                commission_rate, total_credit, commission_total, vatable_total,
-                commission_amount, total_debit, net_amount,
-                transaction_amount, net_balance,
-                prepared_by, prepared_status, prepared_date,
-                approved_status, paid_status, return_id,
-                payable_amount, non_payable_amount, payable_units, total_units
-            )
-            SELECT
-                rc.return_code,
-                COALESCE(
-                    (SELECT cl.reference_number FROM sys_pm_clients cl WHERE cl.id = rc.client_id LIMIT 1),
-                    'UNKNOWN'
-                ) AS landlord_code,
-                rc.property_code,
-                ? AS year,
-                ? AS month,
-                COALESCE(
-                    (SELECT pp.property_name FROM sys_pm_properties pp WHERE pp.id = rc.property_id LIMIT 1),
-                    rc.property_code
-                ) || '-{$monthName} {$returnYear}' AS return_description,
-                ? AS return_period,
-                'MAINRETURN' AS return_type,
-                CASE WHEN SUM(rc.commission_amount) > 0
-                          AND SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) > 0
-                    THEN ROUND(SUM(rc.commission_amount) / SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) * 100, 2)
-                    ELSE 0
-                END AS commission_rate,
-                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS total_credit,
-                SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END) AS commission_total,
-                0 AS vatable_total,
-                SUM(rc.commission_amount) AS commission_amount,
-                SUM(rc.commission_amount) + SUM(rc.vat_amount)
-                    + SUM(CASE WHEN rc.dr_cr = 'DR' THEN rc.net_amount ELSE 0 END) AS total_debit,
-                {$netAmount} AS net_amount,
-                0 AS transaction_amount,
-                {$netAmount} AS net_balance,
-                ? AS prepared_by,
-                1 AS prepared_status,
-                NOW() AS prepared_date,
-                0 AS approved_status,
-                0 AS paid_status,
-                rc.return_id,
-                SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.net_amount ELSE 0 END) AS payable_amount,
-                SUM(CASE WHEN rc.entry_type = 'RENT CURRENT' AND (rc.payable_status = 0 OR rc.payable_status IS NULL) THEN rc.amount_payable_landlord ELSE 0 END) AS non_payable_amount,
-                COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' AND rc.payable_status IN (1, 2, 3) THEN rc.unit_id END) AS payable_units,
-                COUNT(DISTINCT CASE WHEN rc.entry_type = 'RENT CURRENT' THEN rc.unit_id END) AS total_units
-            FROM cb_returns_clients rc
-            WHERE rc.return_period = ?
-              AND COALESCE(rc.entry_type, '') <> 'COMMISSION'
-              {$propertyFilter}
-              AND NOT EXISTS (
-                  SELECT 1 FROM cb_returns_summary rs WHERE rs.return_code = rc.return_code
-              )
-            GROUP BY rc.return_code, rc.property_code, rc.property_id, rc.client_id, rc.return_id
-        ";
-
-        $bindings = [$returnYear, $returnMonthNum, $returnPeriod, $preparedByName, $returnPeriod];
-        if ($propertyId) {
-            $bindings[] = $propertyId;
+    protected function generateMiniReturn(?int $propertyId, string $returnsMonth, int $userId) {
+        if (!$propertyId) {
+            return response()->json(['success' => false, 'message' => 'A mini return is for one property: choose the property.'], 422);
         }
 
-        return DB::affectingStatement($q3, $bindings);
+        try {
+            $result = $this->miniReturns->generate($propertyId, $returnsMonth, $userId, request()->ip());
+        } catch (MiniReturnException|ReturnApprovalException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error generating mini return: ' . $e->getMessage());
+
+            return response()->json(['success' => false, 'message' => 'Failed to generate the mini return: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mini return ' . $result['return_code'] . ' generated for approval: ' . $result['lines'] . ' line(s), net ' . number_format($result['net_balance'], 2) . '.',
+            'count' => 1,
+            'properties_count' => 1,
+            'master_count' => 0,
+            'return_code' => $result['return_code'],
+            'property_id' => $propertyId,
+            'merge_batch' => null,
+        ]);
     }
 
     /**

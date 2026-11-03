@@ -33,21 +33,19 @@ trait ReturnsDeductionsTrait
      * @param int $returnYear
      * @param int $returnMonth
      * @param int|null $propertyId Optional: Generate for single property only
+     * @param string|null $returnCode Optional: the one return (a mini return) the debits are reserved for; without it the main returns (R1) of the period
      * @return int Lines inserted
      */
-    protected function insertAdvancePaymentLines(
-        string $returnPeriod,
-        string $transactionDate,
-        int $generatedBy,
-        int $returnYear,
-        int $returnMonth,
-        ?int $propertyId = null
-    ): int {
+    protected function insertAdvancePaymentLines(string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth, ?int $propertyId = null, ?string $returnCode = null): int {
         $propertyFilter = $propertyId ? "WHERE property_id = ?" : "";
+        $codeFilter = $returnCode !== null ? "return_code = ?" : "return_code LIKE 'R1%'";
 
-        // Bindings in the order the placeholders appear: return period, optional property, month, month, month index,
-        // return period (integer column), transaction date, user
+        // Bindings in the order the placeholders appear: return period, optional return code, optional property, month,
+        // month, month index, return period (integer column), transaction date, user
         $bindings = [$returnPeriod];
+        if ($returnCode !== null) {
+            $bindings[] = $returnCode;
+        }
         if ($propertyId) {
             $bindings[] = $propertyId;
         }
@@ -61,7 +59,7 @@ trait ReturnsDeductionsTrait
                        zone_id, field_officer_id, zone_supervisor_id, zone_manager_id
                 FROM cb_returns_clients
                 WHERE return_period = ?
-                  AND return_code LIKE 'R1%'
+                  AND {$codeFilter}
                 ORDER BY client_id, id
             ), base AS (
                 SELECT * FROM first_lines {$propertyFilter}
@@ -452,17 +450,17 @@ trait ReturnsDeductionsTrait
      * @param string $transactionDate Display date (DD-Mon-YYYY)
      * @param int $generatedBy User ID
      * @param int|null $propertyId Optional: Generate for single property only
+     * @param string|null $returnCode Optional: the one return (a mini return) to add the line to; without it the main returns (R1) of the period
      * @return int Commission lines inserted
      */
-    protected function insertCommissionLines(
-        string $returnPeriod,
-        string $transactionDate,
-        int $generatedBy,
-        ?int $propertyId = null
-    ): int {
+    protected function insertCommissionLines(string $returnPeriod, string $transactionDate, int $generatedBy, ?int $propertyId = null, ?string $returnCode = null): int {
         $propertyFilter = $propertyId ? "AND rc.property_id = ?" : "";
+        $codeFilter = $returnCode !== null ? "AND rc.return_code = ?" : "AND rc.return_code LIKE 'R1%'";
 
         $bindings = [$returnPeriod, $transactionDate, $generatedBy, $returnPeriod];
+        if ($returnCode !== null) {
+            $bindings[] = $returnCode;
+        }
         if ($propertyId) {
             $bindings[] = $propertyId;
         }
@@ -516,7 +514,7 @@ trait ReturnsDeductionsTrait
                 FROM cb_returns_clients rc
                 WHERE rc.return_period = ?
                   AND rc.is_commissionable = 'Yes'
-                  AND rc.return_code LIKE 'R1%'
+                  {$codeFilter}
                   {$propertyFilter}
                 GROUP BY rc.return_code, rc.property_code, rc.property_id, rc.client_id
                 HAVING SUM(rc.commission_amount) > 0
