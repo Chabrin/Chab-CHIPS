@@ -65,12 +65,24 @@
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">check_circle</span> Post Advance
                             </button>
                             @endif
+                            @if($advance->current_status_id == 6 && !$activeVoucher && $canPayOut)
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#payoutVoucherModal">
+                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">payments</span> Create Payment Voucher
+                            </button>
+                            @elseif($advance->current_status_id == 6 && !$activeVoucher)
+                            <span class="text-muted align-self-center" style="font-size:0.8rem;">Posted before GL posting &mdash; no payment voucher can be made</span>
+                            @endif
                             @if($advance->current_status_id != 6)
                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editAdvanceModal">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">edit</span> Edit
                             </button>
                             @endif
                             @endpermission
+                            @if($activeVoucher)
+                            <a href="{{ route('cheque.printing.details', encrypt($activeVoucher->id)) }}" class="btn btn-outline-primary btn-sm">
+                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">receipt_long</span> Voucher {{ $activeVoucher->voucher_number }} &mdash; {{ $activeVoucher->voucher_status }}
+                            </a>
+                            @endif
                             <a href="{{ route('client.advances.index') }}" class="btn btn-outline-primary btn-sm">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">arrow_back</span> Back
                             </a>
@@ -492,6 +504,42 @@
     </div>
 </div>
 
+@if($advance->current_status_id == 6 && !$activeVoucher && $canPayOut)
+@permission('update_client_advances')
+<!-- Payment voucher modal — pays the principal out of a company bank account. Interest and the charge are
+     recovered later through the monthly returns, so only the principal is paid. -->
+<div class="modal fade" id="payoutVoucherModal" tabindex="-1" aria-labelledby="payoutVoucherModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="payoutVoucherModalLabel" style="font-size:1rem;">Create Payment Voucher &mdash; {{ $advance->reference_number ?? '-' }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3" style="font-size:0.85rem;">
+                    Pays the principal of <strong>KSh {{ number_format((float) $advance->amount, 2) }}</strong> to {{ $advance->client->names ?? '-' }}.
+                    The interest and charge are recovered through the monthly returns.
+                </p>
+                <label class="form-label" for="payoutSourceAccount">Pay from bank account <span class="text-danger">*</span></label>
+                <select class="form-control form-control-sm" id="payoutSourceAccount">
+                    <option value="">-- Select bank account --</option>
+                    @foreach($bankAccounts as $acc)
+                        <option value="{{ $acc->id }}">{{ $acc->account_name }}{{ $acc->bank ? ' — ' . $acc->bank->bank_name : '' }} ({{ $acc->account_number }})</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnCreatePayoutVoucher">
+                    <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">payments</span> Create Voucher
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endpermission
+@endif
+
 @if($canRestructure)
 <!-- Restructure Modal — dates (and, for Overpayment, repayment months) only. Amount is locked;
      interest rate may only be held or lowered. Allowed only while nothing has been recovered
@@ -651,6 +699,33 @@
                         btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">check_circle</span> Post Advance');
                     }
                 });
+            });
+        });
+
+        // Create the payment voucher that pays the advance out
+        $('#btnCreatePayoutVoucher').on('click', function() {
+            var btn = $(this);
+            var sourceAccountId = $('#payoutSourceAccount').val();
+
+            if (!sourceAccountId) {
+                Swal.fire({ icon: 'warning', title: 'Choose a bank account', text: 'Select the bank account the money is paid from.', confirmButtonColor: '#3598db' });
+                return;
+            }
+
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Creating...');
+
+            $.ajax({
+                url: '/property/advances/' + encryptedId + '/voucher',
+                method: 'POST',
+                data: { _token: csrfToken, source_account_id: sourceAccountId },
+                success: function(response) {
+                    Swal.fire({ icon: 'success', title: 'Voucher created', text: response.message || 'Payment voucher created', confirmButtonColor: '#3598db' })
+                        .then(() => location.reload());
+                },
+                error: function(xhr) {
+                    Swal.fire({ icon: 'error', title: 'Error', text: (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to create the payment voucher', confirmButtonColor: '#3598db' });
+                    btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">payments</span> Create Voucher');
+                }
             });
         });
 

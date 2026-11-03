@@ -5,352 +5,161 @@
     <meta charset="utf-8">
     <title>Master Return {{ $return->return_code }}</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'DejaVu Sans', Arial, sans-serif;
-            font-size: 8.4pt;
-            margin: 0;
-            padding: 8px 10px 92px 10px;
-            color: #111;
-        }
-
-        .header-table,
-        .meta-table,
-        .data-table,
-        .totals-table,
-        .signoff-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .header-table {
-            margin-bottom: 5px;
-            border-bottom: 2px solid #000;
-        }
-
-        .header-table td {
-            vertical-align: top;
-            padding: 1px 3px;
-        }
-
-        .logo-col {
-            width: 18%;
-        }
-
-        .title-col {
-            width: 52%;
-            text-align: center;
-        }
-
-        .side-col {
-            width: 30%;
-            font-size: 7.4pt;
-        }
-
-        .company-name {
-            font-size: 13pt;
-            font-weight: bold;
-            margin: 0;
-        }
-
-        .company-tag {
-            font-size: 8.9pt;
-            font-weight: bold;
-            margin: 1px 0;
-        }
-
-        .company-address {
-            font-size: 7pt;
-            margin: 0;
-        }
-
-        .report-title {
-            margin: 6px 0 0 0;
-            font-size: 8.9pt;
-            font-weight: bold;
-        }
-
-        .meta-table {
-            margin-bottom: 4px;
-            font-size: 7.4pt;
-        }
-
-        .meta-table td {
-            padding: 1px 2px;
-        }
-
-        .meta-label {
-            font-weight: bold;
-            width: 22%;
-        }
-
-        .section-title {
-            font-weight: bold;
-            padding: 3px 0;
-            margin-top: 6px;
-            margin-bottom: 4px;
-        }
-
-        .data-table {
-            margin-bottom: 7px;
-            font-size: 7.5pt;
-            table-layout: fixed;
-        }
-
-        .data-table th,
-        .data-table td {
-            border: none;
-            padding: 2px 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: clip;
-            line-height: 1.22;
-        }
-
-        .data-table th {
-            text-align: left;
-            font-weight: bold;
-            padding-bottom: 3px;
-        }
-
-        .amount {
-            text-align: right;
-            white-space: nowrap;
-        }
-
-        .subtotal-row td {
-            font-weight: bold;
-            padding-top: 5px;
-        }
-
-        .less-section {
-            margin-top: 12px;
-        }
-
-        .totals-table {
-            margin-top: 6px;
-            width: 48%;
-            margin-left: auto;
-            font-size: 7.7pt;
-        }
-
-        .totals-table td {
-            border: none;
-            padding: 3px 4px;
-        }
-
-        .totals-table .label {
-            font-weight: bold;
-        }
-
-        .fixed-footer {
-            position: fixed;
-            left: 10px;
-            right: 10px;
-            bottom: 10px;
-            font-size: 6.8pt;
-        }
-
-        .signoff-table td {
-            width: 25%;
-            padding-right: 6px;
-            vertical-align: top;
-        }
-
-        .signoff-title {
-            font-weight: bold;
-            margin-bottom: 6px;
-        }
-
-        .signoff-meta {
-            margin-top: 2px;
-            line-height: 1.2;
-        }
-
-        .signoff-label {
-            display: inline-block;
-            width: 28px;
-        }
-
-        .signoff-value {
-            display: inline-block;
-            width: calc(100% - 34px);
-            border-bottom: 1px solid #000;
-            min-height: 10px;
-            vertical-align: bottom;
-            padding-left: 2px;
-        }
+        @include('property.processed-returns.partials.pdf-styles')
     </style>
 </head>
 
 <body>
     @php
+        $money = fn($v) => number_format((float) $v, 2);
         $amt = fn($v) => abs(round((float) ($v ?? 0), 2)) > 0 ? number_format((float) $v, 2) : '';
+        $balance = (float) $totals['balance'];
+        $landlordTitle = trim(preg_replace('/\(' . preg_quote((string) $return->landlord_code, '/') . '\)$/', '', $landlordName)) ?: $landlordName;
+        $signoffColumns = ['Prepared by' => 'prepared', 'Checked by' => 'checked', 'Approved by' => 'approved', 'Client name' => null];
     @endphp
-    <table class="header-table">
+
+    @include('pdf.partials.letterhead', [
+        'title' => 'MASTER RETURN',
+        'period' => $monthLabel,
+        'metaLines' => ['Return ID: ' . $return->return_code, 'Printed: ' . date('d M Y, H:i')],
+    ])
+
+    <table class="cards">
         <tr>
-            <td class="logo-col">
+            <td class="col-landlord">
+                <div class="card">
+                    <div class="card-label">LANDLORD</div>
+                    <div class="landlord-name">{{ $landlordTitle }}</div>
+                    <table class="kv">
+                        <tr><td class="k">Account no.</td><td><strong>{{ $return->landlord_code ?? '-' }}</strong></td></tr>
+                        <tr><td class="k">Property</td><td>{{ $propertyName }}</td></tr>
+                        <tr><td class="k">Return ID</td><td><strong>{{ $return->return_code }}</strong></td></tr>
+                        @if($return->voucher_number)
+                        <tr><td class="k">Voucher</td><td>{{ $return->voucher_number }}</td></tr>
+                        @endif
+                    </table>
+                </div>
             </td>
-            <td class="title-col">
-                <p class="company-name">CHABRIN AGENCIES LIMITED</p>
-                <p class="company-tag">PROPERTY MANAGING AGENTS</p>
-                <p class="company-address">5th Floor, Room 517, NACICO Plaza Landhies Road, PO Box 16659-00620 Nairobi, Kenya</p>
-                <p class="report-title">RETURNS FOR THE MONTH OF {{ strtoupper($monthLabel) }}</p>
-            </td>
-            <td class="side-col">
-                <table class="meta-table">
-                    <tr>
-                        <td class="meta-label">Landlord</td>
-                        <td>{{ $landlordName }}</td>
-                    </tr>
-                    <tr>
-                        <td class="meta-label">Property</td>
-                        <td>{{ $propertyName }}</td>
-                    </tr>
-                    <tr>
-                        <td class="meta-label">Return Code</td>
-                        <td>{{ $return->return_code }}</td>
-                    </tr>
-                </table>
+            <td class="col-summary">
+                <div class="card">
+                    <div class="card-label">RETURN SUMMARY</div>
+                    <table class="summary">
+                        <tr><td class="k">Return net sum</td><td class="v cr">{{ $money($totals['credits']) }}</td></tr>
+                        <tr><td class="k">Less deductions</td><td class="v dr">( {{ $money($totals['debits']) }} )</td></tr>
+                        <tr><td class="k">Other receipts from landlord acc</td><td class="v">{{ $money($totals['other_receipts']) }}</td></tr>
+                        <tr class="strong"><td class="k">Amount payable</td><td class="v">{{ $money($totals['amount_payable']) }}</td></tr>
+                        <tr><td class="k">Amount paid</td><td class="v">{{ $money($totals['amount_paid']) }}</td></tr>
+                        <tr class="closing"><td class="k">Balance</td><td class="v">{{ $money($balance) }}</td></tr>
+                    </table>
+                </div>
             </td>
         </tr>
     </table>
 
-    <div class="section-title">RETURN NET SUM</div>
-    <table class="data-table">
+    <div class="section">RETURN NET SUM</div>
+    <table class="txn">
         <thead>
             <tr>
-                <th style="width: 58%;">Narration</th>
-                <th style="width: 18%;">Ref</th>
-                <th style="width: 24%;">Amount</th>
+                <th style="width: 48%;">NARRATION</th>
+                <th style="width: 28%;">REFERENCE</th>
+                <th class="r" style="width: 24%;">AMOUNT</th>
             </tr>
         </thead>
         <tbody>
             @forelse($credits as $line)
-            <tr>
+            <tr class="{{ $loop->even ? 'alt' : '' }}">
                 <td>{{ $line['narration'] }}</td>
-                <td>{{ $line['ref'] }}</td>
-                <td class="amount">{{ $amt($line['amount']) }}</td>
+                <td class="ref">{{ $line['ref'] !== '-' ? $line['ref'] : '' }}</td>
+                <td class="r cr">{{ $amt($line['amount']) }}</td>
             </tr>
             @empty
             <tr>
-                <td colspan="3" style="text-align:center;">No credit lines found.</td>
+                <td colspan="3" class="empty">No credit lines found.</td>
             </tr>
             @endforelse
-            <tr class="subtotal-row">
+            <tr class="totals">
                 <td colspan="2">Subtotal</td>
-                <td class="amount">{{ number_format($totals['credits'], 2) }}</td>
+                <td class="r">{{ $money($totals['credits']) }}</td>
             </tr>
         </tbody>
     </table>
 
-    <div class="section-title less-section">LESS</div>
-    <table class="data-table">
+    <div class="section">LESS</div>
+    <table class="txn">
         <thead>
             <tr>
-                <th style="width: 16%;">Date</th>
-                <th style="width: 44%;">Narration</th>
-                <th style="width: 18%;">Ref</th>
-                <th style="width: 22%;">Amount</th>
+                <th style="width: 13%;">DATE</th>
+                <th style="width: 40%;">NARRATION</th>
+                <th style="width: 23%;">REFERENCE</th>
+                <th class="r" style="width: 24%;">AMOUNT</th>
             </tr>
         </thead>
         <tbody>
             @forelse($debits as $line)
-            <tr>
-                <td>{{ $line['date'] }}</td>
+            <tr class="{{ $loop->even ? 'alt' : '' }}">
+                <td>{{ $line['date'] !== '-' ? $line['date'] : '' }}</td>
                 <td>{{ $line['narration'] }}</td>
-                <td>{{ $line['ref'] }}</td>
-                <td class="amount">{{ $amt($line['amount']) }}</td>
+                <td class="ref">{{ $line['ref'] !== '-' ? $line['ref'] : '' }}</td>
+                <td class="r dr">{{ $amt($line['amount']) }}</td>
             </tr>
             @empty
             <tr>
-                <td colspan="4" style="text-align:center;">No deduction lines found.</td>
+                <td colspan="4" class="empty">No deduction lines found.</td>
             </tr>
             @endforelse
-            <tr class="subtotal-row">
-                <td></td>
-                <td colspan="2">Subtotal</td>
-                <td class="amount">{{ number_format($totals['debits'], 2) }}</td>
+            <tr class="totals">
+                <td colspan="3">Subtotal</td>
+                <td class="r">{{ $money($totals['debits']) }}</td>
             </tr>
         </tbody>
     </table>
 
-    <div class="section-title">OTHER RECEIPTS FROM LANDLORD ACC</div>
-    <table class="data-table">
+    <div class="section">OTHER RECEIPTS FROM LANDLORD ACC</div>
+    <table class="txn">
         <thead>
             <tr>
-                <th style="width: 58%;">Narration</th>
-                <th style="width: 18%;">Ref</th>
-                <th style="width: 24%;">Amount</th>
+                <th style="width: 48%;">NARRATION</th>
+                <th style="width: 28%;">REFERENCE</th>
+                <th class="r" style="width: 24%;">AMOUNT</th>
             </tr>
         </thead>
         <tbody>
             @forelse($otherReceipts as $line)
-            <tr>
+            <tr class="{{ $loop->even ? 'alt' : '' }}">
                 <td>{{ $line['narration'] }}</td>
-                <td>{{ $line['ref'] }}</td>
-                <td class="amount">{{ $amt($line['amount']) }}</td>
+                <td class="ref">{{ $line['ref'] !== '-' ? $line['ref'] : '' }}</td>
+                <td class="r">{{ $amt($line['amount']) }}</td>
             </tr>
             @empty
             <tr>
-                <td colspan="3" style="text-align:center;">No other landlord receipts found.</td>
+                <td colspan="3" class="empty">No other landlord receipts found.</td>
             </tr>
             @endforelse
-            <tr class="subtotal-row">
+            <tr class="totals">
                 <td colspan="2">Subtotal</td>
-                <td class="amount">{{ number_format($totals['other_receipts'], 2) }}</td>
+                <td class="r">{{ $money($totals['other_receipts']) }}</td>
             </tr>
         </tbody>
     </table>
 
-    <table class="totals-table">
-        <tr>
-            <td class="label">Amount Payable</td>
-            <td class="amount">{{ number_format($totals['amount_payable'], 2) }}</td>
-        </tr>
-        <tr>
-            <td class="label">Amount Paid</td>
-            <td class="amount">{{ number_format($totals['amount_paid'], 2) }}</td>
-        </tr>
-        <tr>
-            <td class="label">Balance</td>
-            <td class="amount">{{ number_format($totals['balance'], 2) }}</td>
-        </tr>
+    <table class="txn" style="margin-top: 14px;">
+        <tbody>
+            <tr class="totals">
+                <td style="width: 76%;">Amount payable</td>
+                <td class="r" style="width: 24%;">{{ $money($totals['amount_payable']) }}</td>
+            </tr>
+            <tr class="totals">
+                <td style="border-top: none;">Amount paid</td>
+                <td class="r" style="border-top: none;">{{ $money($totals['amount_paid']) }}</td>
+            </tr>
+            <tr class="final">
+                <td>Balance</td>
+                <td class="r">{{ $money($balance) }}</td>
+            </tr>
+        </tbody>
     </table>
 
-    <div class="fixed-footer">
-        <table class="signoff-table">
-            <tr>
-                <td>
-                    <div class="signoff-title">Prepared By</div>
-                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value">{{ (($signoff['prepared']['name'] ?? '') !== '-' && !empty($signoff['prepared']['name'])) ? $signoff['prepared']['name'] : '' }}</span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value">{{ (($signoff['prepared']['date'] ?? '') !== '-' && !empty($signoff['prepared']['date'])) ? $signoff['prepared']['date'] : '' }}</span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
-                </td>
-                <td>
-                    <div class="signoff-title">Checked By</div>
-                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value">{{ (($signoff['checked']['name'] ?? '') !== '-' && !empty($signoff['checked']['name'])) ? $signoff['checked']['name'] : '' }}</span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value">{{ (($signoff['checked']['date'] ?? '') !== '-' && !empty($signoff['checked']['date'])) ? $signoff['checked']['date'] : '' }}</span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
-                </td>
-                <td>
-                    <div class="signoff-title">Approved By</div>
-                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value">{{ (($signoff['approved']['name'] ?? '') !== '-' && !empty($signoff['approved']['name'])) ? $signoff['approved']['name'] : '' }}</span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value">{{ (($signoff['approved']['date'] ?? '') !== '-' && !empty($signoff['approved']['date'])) ? $signoff['approved']['date'] : '' }}</span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
-                </td>
-                <td>
-                    <div class="signoff-title">Client Name</div>
-                    <div class="signoff-meta"><span class="signoff-label">Name:</span><span class="signoff-value"></span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Date:</span><span class="signoff-value"></span></div>
-                    <div class="signoff-meta"><span class="signoff-label">Sign:</span><span class="signoff-value"></span></div>
-                </td>
-            </tr>
-        </table>
-    </div>
+    @include('property.processed-returns.partials.pdf-signoff')
 </body>
 
 </html>

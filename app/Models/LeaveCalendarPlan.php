@@ -33,6 +33,8 @@ class LeaveCalendarPlan extends Model
         'date_time' => 'datetime',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
+        'entitled_days' => 'float',
+        'balance' => 'float',
     ];
 
     //relationships

@@ -56,6 +56,18 @@ class LeaseAgreement extends Model
     ];
 
     /**
+     * Leases that can be invoiced: Active and not rejected at approval. A rejected lease keeps lease_status
+     * Active, and legacy leases are Active with status 1, so the test is "not rejected", not "approved".
+     */
+    public function scopeBillable($query) {
+        $table = $query->getModel()->getTable();
+
+        return $query->where($table . '.lease_status', 'Active')->where(function ($inner) use ($table) {
+            $inner->whereNull($table . '.current_status_id')->orWhere($table . '.current_status_id', '!=', \App\Services\LeaseAgreementApprovalService::STATUS_REJECTED);
+        });
+    }
+
+    /**
      * The service agreement linked directly on this lease, if any.
      */
     public function serviceAgreement() {

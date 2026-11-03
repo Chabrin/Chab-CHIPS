@@ -26,6 +26,7 @@
                             @endpermission
                         </div>
                     </div>
+
                     <div class="card-body">
                         @permission('read_leave_applications')
                         <div id="leave-applications-export-status" class="small text-muted mb-2" role="status" aria-live="polite"></div>
@@ -50,12 +51,32 @@
                         <div class="tab-content" id="leaveTabsContent">
                             <!-- Applications List Tab -->
                             <div class="tab-pane fade show active" id="list" role="tabpanel" aria-labelledby="list-tab">
+                                <div class="row g-2 align-items-end mb-3">
+                                    <div class="col-md-3"><label class="form-label mb-1" for="leave-filter-status">Status</label>
+                                        <select id="leave-filter-status" class="form-select form-select-sm">
+                                            <option value="">All statuses</option><option value="1">Pending HOD</option><option value="24">Pending HR</option><option value="5">Approved</option><option value="41">Rejected</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3"><label class="form-label mb-1" for="leave-filter-department">Department</label>
+                                        <select id="leave-filter-department" class="form-select form-select-sm"><option value="">All departments</option>
+                                            @foreach($departments as $department)<option value="{{ $department->id }}">{{ $department->department_name }}</option>@endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3"><label class="form-label mb-1" for="leave-filter-from">Leave overlaps from</label><input type="date" id="leave-filter-from" class="form-control form-control-sm"></div>
+                                    <div class="col-md-3"><label class="form-label mb-1" for="leave-filter-to">Through</label><input type="date" id="leave-filter-to" class="form-control form-control-sm"></div>
+                                    <div class="col-md-3 d-flex gap-2"><button type="button" id="apply-leave-filters" class="btn btn-primary btn-sm">Apply filters</button><button type="button" id="clear-leave-filters" class="btn btn-light btn-sm">Clear</button></div>
+                                </div>
+                                <div class="card border mb-3" id="department-leave-panel">
+                                    <div class="card-header py-2 d-flex justify-content-between align-items-center"><strong>Who is on approved leave</strong><span class="small text-muted" id="department-leave-period"></span></div>
+                                    <div class="card-body py-2" id="department-leave-results"><span class="text-muted">Loading leave schedule…</span></div>
+                                </div>
                                 <div class="table-responsive custom-scrollbar">
                                     <table class="display" id="leave-applications-table" style="width:100%">
                                         <thead>
                                             <tr>
                                                 <th>#</th>
                                                 <th>Staff</th>
+                                                <th>Department</th>
                                                 <th>Designation</th>
                                                 <th>Leave Type</th>
                                                 <th>Start Date</th>
@@ -124,6 +145,10 @@
                                 <small class="text-muted">Dates and working days will automatically populate from your approved annual calendar plan.</small>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="row mb-3 d-none" id="annualReservedDateNotice">
+                        <div class="col-12"><div class="alert alert-warning py-2 mb-0" id="annualReservedDateText"></div></div>
                     </div>
 
                     <!-- Sick Leave Pay Tier Notice -->
@@ -365,6 +390,22 @@ $(document).ready(function() {
         }
     });
 
+    const initialFilters = new URLSearchParams(window.location.search);
+    $('#leave-filter-status').val(initialFilters.get('status') || '');
+    $('#leave-filter-department').val(initialFilters.get('department_id') || '');
+    $('#leave-filter-from').val(initialFilters.get('date_from') || '');
+    $('#leave-filter-to').val(initialFilters.get('date_to') || '');
+
+    function persistLeaveFilters() {
+        const params = new URLSearchParams(window.location.search);
+        [['status', '#leave-filter-status'], ['department_id', '#leave-filter-department'], ['date_from', '#leave-filter-from'], ['date_to', '#leave-filter-to']].forEach(function(pair) {
+            const value = $(pair[1]).val();
+            if (value) params.set(pair[0], value); else params.delete(pair[0]);
+        });
+        const query = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
+    }
+
     // DataTable initialization
     let table = $('#leave-applications-table').DataTable({
         processing: true,
@@ -377,7 +418,40 @@ $(document).ready(function() {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             },
             dataType: 'json',
-            dataSrc: 'leave_applications'
+            data: function(params) {
+                params.status = $('#leave-filter-status').val();
+                params.department_id = $('#leave-filter-department').val();
+                params.date_from = $('#leave-filter-from').val();
+                params.date_to = $('#leave-filter-to').val();
+            },
+            dataSrc: function(json) {
+                const period = json.staff_on_leave_period || {};
+                $('#department-leave-period').text(period.from === period.to ? period.from : (period.from + ' to ' + period.to));
+                const rows = json.staff_on_leave || [];
+                const escapeHtml = value => $('<div>').text(value == null ? '' : value).html();
+                const threshold = json.department_recall_threshold;
+                if (threshold) {
+                    const thresholdText = 'Today — Active Staff: ' + threshold.active_staff + ' of ' + threshold.staff_total + ' staff available (' + threshold.active_percentage + '% active). On approved leave: ' + threshold.on_leave + '. ';
+                    const thresholdStatus = threshold.met
+                        ? '<strong>Status: At or above 80% threshold — Staffing level is healthy.</strong>'
+                        : '<strong>⚠ Understaffing Warning:</strong> Active staff at ' + threshold.active_percentage + '% (below 80% threshold). Approval or recall required!';
+                    $('#department-leave-results').html('<div class="alert ' + (threshold.met ? 'alert-success' : 'alert-danger') + ' py-2 mb-2">' + escapeHtml(thresholdText) + thresholdStatus + '</div>');
+                } else {
+                    $('#department-leave-results').empty();
+                }
+                if (!rows.length) {
+                    $('#department-leave-results').append('<span class="text-muted">No approved leave matches the selected department and date(s).</span>');
+                } else {
+                    const items = rows.map(function(staff) {
+                        const staffNumber = staff.staff_number ? ' · #' + escapeHtml(staff.staff_number) : '';
+                        const department = staff.department_name ? ' · ' + escapeHtml(staff.department_name) : '';
+                        const position = staff.position_name ? ' · ' + escapeHtml(staff.position_name) : '';
+                        return '<span class="badge bg-warning text-dark me-1 mb-1">' + escapeHtml(staff.staff_name) + staffNumber + department + position + '</span>';
+                    }).join('');
+                    $('#department-leave-results').append('<div class="mb-1"><strong>' + rows.length + '</strong> staff member(s) on approved leave</div><div>' + items + '</div>');
+                }
+                return json.leave_applications || [];
+            }
         },
         columns: [
             {
@@ -390,6 +464,11 @@ $(document).ready(function() {
                 data: 'employee',
                 title: 'Staff',
                 render: data => data && data.name ? data.name : '-'
+            },
+            {
+                data: 'employee',
+                title: 'Department',
+                render: data => data && data.department_name ? data.department_name : 'Unassigned'
             },
             {
                 data: 'position',
@@ -417,6 +496,11 @@ $(document).ready(function() {
     title: 'Current Status',
     render: function(data, type, row) {
         data = parseInt(data);
+
+        if (data === 5 && row.recalled_at) {
+            if (type !== 'display') return 'Approved · Recalled';
+            return '<span class="badge bg-dark">Approved · Recalled</span>';
+        }
 
         const color = [3, 5].includes(data) ? 'success' : data === 41 ? 'danger' : row.waiting_on === 'hr' ? 'info' : 'warning';
         const label = row.stage_label || 'Pending approval';
@@ -480,6 +564,13 @@ $(document).ready(function() {
         paging: true,
         info: true,
         lengthChange: true
+    });
+
+    $('#apply-leave-filters').on('click', function() { persistLeaveFilters(); table.ajax.reload(); });
+    $('#clear-leave-filters').on('click', function() {
+        $('#leave-filter-status, #leave-filter-department, #leave-filter-from, #leave-filter-to').val('');
+        persistLeaveFilters();
+        table.ajax.reload();
     });
 
     window.LeaveCsvExport.bind(table, 'applications', 'export-leave-applications', 'leave-applications-export-status');
@@ -744,9 +835,11 @@ $(document).ready(function() {
         let isAnnual = selectedText.includes('annual') || selectedText.includes('normal');
 
         $('#annualSlotPickerContainer').addClass('d-none');
+        $('#annualReservedDateNotice').addClass('d-none');
         $('#sickLeaveTierAlert').addClass('d-none');
 
         if (!staffId || !leaveTypeId) return;
+        window.annualReservedLeaveSlots = [];
 
         if (isAnnual) {
             $('#annualSlotPickerContainer').removeClass('d-none');
@@ -769,6 +862,18 @@ $(document).ready(function() {
                         toastr.warning(res.message || 'You must first schedule your 21 days in the Leave Calendar Plan.');
                     }
                 }
+            });
+        } else {
+            $.get("{{ url('/ajax/leave-management/staff-annual-slots') }}", {
+                staff_id: staffId,
+                year: new Date().getFullYear()
+            }).done(function(res) {
+                let slots = (res.slots || []).filter(slot => slot.start_date && slot.end_date);
+                if (!slots.length) return;
+                window.annualReservedLeaveSlots = slots;
+                let dates = slots.map(slot => `${slot.display}`).join('; ');
+                $('#annualReservedDateText').text(`Dates reserved for annual leave cannot be used for another leave type: ${dates}`);
+                $('#annualReservedDateNotice').removeClass('d-none');
             });
         }
 
@@ -813,6 +918,17 @@ $(document).ready(function() {
     }
 
     $('#staff_id, #leave_type_id').on('change', handleLeaveTypeSpecifics);
+    window.annualReservedLeaveSlots = [];
+    $(document).on('change', '#start_date, #leave_date_hours, #start_date_combined, #end_date_combined', function() {
+        let selectedDate = $(this).val();
+        let selectedType = $('#leave_type_id option:selected').text().toLowerCase();
+        if (!selectedDate || selectedType.includes('annual') || selectedType.includes('normal')) return;
+        let reserved = (window.annualReservedLeaveSlots || []).find(slot => selectedDate >= slot.start_date && selectedDate <= slot.end_date);
+        if (reserved) {
+            toastr.warning('That date is reserved for annual leave. Choose a different date.');
+            $(this).val('');
+        }
+    });
     $('#start_date, #requested_days, input[name="leave_duration_type"]').on('change input', showTierBreakdown);
 
     $('#scheduled_slot_select').on('change', function() {

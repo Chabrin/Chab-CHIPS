@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Services\ErrorDispatcher;
 use App\Services\ApprovalService;
+use App\Exceptions\ClientAccountException;
 use App\Models\ApprovalRequest;
 
 class ApprovalRequestsController extends Controller
@@ -178,6 +179,9 @@ class ApprovalRequestsController extends Controller
             }
 
             return response()->json($result);
+        } catch (ClientAccountException $e) {
+            // The approval was rolled back; the message says what has to be fixed (for example a missing GL account).
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error approving request: ' . $e->getMessage());

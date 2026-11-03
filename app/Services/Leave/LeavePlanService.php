@@ -4,6 +4,7 @@ namespace App\Services\Leave;
 
 use App\Models\LeaveCalendarPlan;
 use App\Models\LeaveRequest;
+use App\Models\LeaveRequestDaysTaken;
 use App\Models\LeaveType;
 use App\Models\Staff;
 use Illuminate\Support\Facades\DB;
@@ -58,11 +59,36 @@ class LeavePlanService
      * @return float
      */
     public function usedDays(int $staffId, int $leaveTypeId, int $year): float {
-        return (float) LeaveRequest::whereYear('start_date', $year)
+        $requests = LeaveRequest::whereYear('start_date', $year)
             ->where('leave_type_id', $leaveTypeId)
             ->where('staff_id', $staffId)
             ->whereIn('current_status_id', [5, 49])
-            ->sum('days');
+            ->get(['id', 'days', 'used_days']);
+
+        if ($requests->isEmpty()) {
+            return 0.0;
+        }
+
+        $daysByRequest = LeaveRequestDaysTaken::whereIn('parent_id', $requests->pluck('id'))
+            ->whereYear('leave_date', $year)
+            ->get(['parent_id', 'current_status_id', 'day_fraction'])
+            ->groupBy('parent_id');
+
+        $used = 0.0;
+        foreach ($requests as $request) {
+            $dailyRecords = $daysByRequest->get($request->id, collect());
+            if ($dailyRecords->isNotEmpty()) {
+                $used += (float) $dailyRecords->where('current_status_id', 5)->sum('day_fraction');
+                continue;
+            }
+
+            // Older approved requests may not have day-level records; retain their recorded total.
+            $recordedUsed = $request->getRawOriginal('used_days');
+            $recorded = is_numeric($recordedUsed) ? $recordedUsed : $request->days;
+            $used += (float) $recorded;
+        }
+
+        return round($used, 2);
     }
 
     /**

@@ -179,6 +179,9 @@
                     @else
                         <span class="badge bg-warning text-dark">Action Required ({{ $scheduledDays }}/{{ $requiredDays }} Days Scheduled)</span>
                     @endif
+                    @if($annualPlan->balance !== null)
+                        <span class="badge bg-info text-dark ms-2">Balance: {{ number_format((float) $annualPlan->balance, 2) }} days</span>
+                    @endif
                 </p>
             </div>
             <div>
@@ -464,6 +467,17 @@ $(function () {
         render: function (s, type, row) {
             s = parseInt(s);
 
+            if (row.recalled_at) {
+                if (type !== 'display') return 'Recalled';
+                const effectiveDate = row.recall_effective_date ? row.recall_effective_date.substring(0, 10) : 'Not specified';
+                const reason = $('<div>').text(row.recall_reason || 'No reason provided').html();
+                const refundedDays = Number(row.recalled_days || 0).toFixed(2);
+                return '<span class="badge bg-dark">Recalled</span>' +
+                    '<div class="small mt-1"><strong>Return date:</strong> ' + effectiveDate + '</div>' +
+                    '<div class="small"><strong>Days returned to balance:</strong> ' + refundedDays + '</div>' +
+                    '<div class="small text-muted">' + reason + '</div>';
+            }
+
             const label = row.stage_label || 'Pending approval';
             const color = [3, 5].includes(s) ? 'success' : s === 41 ? 'danger' : row.waiting_on === 'hr' ? 'info' : 'secondary';
             if (type !== 'display') return label;
@@ -477,7 +491,7 @@ $(function () {
             var status = parseInt(row.current_status_id);
 
             // Enable Leave Pass when status is Approved (3 or 5)
-            if (status === 3 || status === 5) {
+            if ((status === 3 || status === 5) && !row.recalled_at) {
                 var url = "{{ url('/hr/leave-management/leave-pass') }}/" + row.encrypted_leave_application_id;
                 return '<a href="' + url + '" target="_blank" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center" title="Download Leave Pass">' +
                     '<span class="material-symbols-outlined" style="font-size: 16px;">download</span>' +

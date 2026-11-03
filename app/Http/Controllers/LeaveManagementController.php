@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Staff;
+use App\Models\Department;
 use App\Models\WorkDay;
 use Carbon\Carbon;
 use App\Models\PublicHoliday;
@@ -10,8 +11,12 @@ use App\Models\LeaveType;
 use Illuminate\Support\Facades\DB;
 use App\Models\ConfirmationLog;
 use App\Models\LeaveRequest;
+use App\Models\LeaveRequestDaysTaken;
+use App\Models\Notification;
+use App\Models\User;
 use Illuminate\Http\Request;
 use App\Models\LeaveCalendarPlan;
+use App\Models\LeaveCalendarSlot;
 use App\Services\ErrorDispatcher;
 use App\Services\Leave\LeaveApprovalRouter;
 use App\Services\Leave\LeaveApprovalService;
@@ -20,6 +25,7 @@ use App\Services\Leave\LeaveCalendarService;
 use App\Services\Leave\LeavePlanService;
 use App\Services\Leave\LeaveTierService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
@@ -137,10 +143,29 @@ class LeaveManagementController extends Controller
             return response()->json(['success' => false, 'error' => 'You can only schedule your own annual leave.'], 403);
         }
 
+        if ($plan->slots()->exists()) {
+            return response()->json(['success' => false, 'error' => 'This annual leave schedule has already been submitted and cannot be rescheduled.'], 422);
+        }
+
         $totalDays = 0;
         $slotsToCreate = [];
+        $ranges = [];
 
         foreach ($validated['slots'] as $slot) {
+            $slotStart = Carbon::parse($slot['start_date'])->toDateString();
+            $slotEnd = Carbon::parse($slot['end_date'])->toDateString();
+            foreach ($ranges as [$existingStart, $existingEnd]) {
+                if ($slotStart <= $existingEnd && $slotEnd >= $existingStart) {
+                    return response()->json(['success' => false, 'error' => 'Scheduled leave blocks cannot use the same date. Adjust the overlapping blocks.'], 422);
+                }
+            }
+            $ranges[] = [$slotStart, $slotEnd];
+
+            if ($this->overlapsActiveLeave((int) $plan->employee_id, $slotStart . ' 00:00:00', $slotEnd . ' 23:59:59')
+                || $this->overlapsScheduledAnnualLeave((int) $plan->employee_id, $slotStart, $slotEnd, null)) {
+                return response()->json(['success' => false, 'error' => 'These dates overlap an existing leave application or scheduled leave block. Choose different dates.'], 422);
+            }
+
             $deductibleDays = $this->calendar->countDeductibleDays(
                 $slot['start_date'],
                 $slot['end_date'],
@@ -177,12 +202,20 @@ $requiredDays = floor((float) $plan->entitled_days * 2) / 2;
             ], 422);
         }
 
-        DB::transaction(function () use ($plan, $slotsToCreate) {
-            $plan->slots()->delete();
-            foreach ($slotsToCreate as $slotData) {
-                $plan->slots()->create($slotData);
+        $saved = DB::transaction(function () use ($plan, $slotsToCreate) {
+            $lockedPlan = LeaveCalendarPlan::whereKey($plan->id)->lockForUpdate()->firstOrFail();
+            if ($lockedPlan->slots()->exists()) {
+                return false;
             }
+            foreach ($slotsToCreate as $slotData) {
+                $lockedPlan->slots()->create($slotData);
+            }
+            return true;
         });
+
+        if (!$saved) {
+            return response()->json(['success' => false, 'error' => 'This annual leave schedule has already been submitted and cannot be rescheduled.'], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -196,6 +229,7 @@ $requiredDays = floor((float) $plan->entitled_days * 2) / 2;
             $currentYear = date('Y');
             
             $plans = LeaveCalendarPlan::with(['createdBy', 'employee', 'leaveType'])
+                ->withCount('slots')
                 ->whereYear('start_date', $currentYear)
                 ->orderBy('id', 'desc')
                 ->get()
@@ -221,6 +255,7 @@ $requiredDays = floor((float) $plan->entitled_days * 2) / 2;
                         'entitled_days' => round((float) ($plan->entitled_days ?? 0), 2),
                         'balance' => round((float) ($plan->balance ?? 0), 2),
                         'current_status_id' => $plan->current_status_id,
+                        'has_schedule' => (int) $plan->slots_count > 0,
                     ];
                 })->values();
                 
@@ -531,6 +566,50 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             ->exists();
     }
 
+    /** A scheduled annual block reserves those calendar dates for this employee across leave types. */
+    private function overlapsScheduledAnnualLeave(int $staffId, $start, $end, ?LeaveType $leaveType, ?float $requestedDays = null): bool {
+        if (!Schema::hasTable('sys_hr_leave_calendar_slots')) {
+            return false;
+        }
+
+        $startDate = \Carbon\Carbon::parse($start)->toDateString();
+        $endDate = \Carbon\Carbon::parse($end)->toDateString();
+
+        $annualPlanIds = LeaveCalendarPlan::with('leaveType')
+            ->where('employee_id', $staffId)
+            ->get()
+            ->filter(fn ($plan) => $this->calendar->isAnnualLeaveType($plan->leaveType?->type_name))
+            ->pluck('id');
+
+        if ($annualPlanIds->isEmpty()) {
+            return false;
+        }
+
+        $reserved = LeaveCalendarSlot::query()
+            ->whereIn('leave_calendar_plan_id', $annualPlanIds)
+            ->whereDate('start_date', '<=', $endDate)
+            ->whereDate('end_date', '>=', $startDate)
+            ->get(['start_date', 'end_date', 'days_count']);
+
+        if ($reserved->isEmpty()) {
+            return false;
+        }
+
+        // Annual applications use the scheduled block picker. Accept only the chosen block's start,
+        // and reject any annual request that spills beyond its scheduled dates.
+        if ($leaveType && $this->calendar->isAnnualLeaveType($leaveType->type_name)) {
+            foreach ($reserved as $slot) {
+                if ($startDate === \Carbon\Carbon::parse($slot->start_date)->toDateString()
+                    && $endDate <= \Carbon\Carbon::parse($slot->end_date)->toDateString()
+                    && ($requestedDays === null || abs((float) $slot->days_count - $requestedDays) < 0.001)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     /**
      * Days a leave request really charges between its start and end dates (a Saturday is half a day).
      * Falls back to the requested days when the dates charge nothing.
@@ -819,7 +898,10 @@ private function syncPublicHolidays(array $holidays, int $year): void {
 
     public function leaveApplications()
     {
-        return view('leave_management.leave_applications', ['handoverStaff' => app(LeaveApplicationNotifications::class)->handoverStaff()]);
+        return view('leave_management.leave_applications', [
+            'handoverStaff' => app(LeaveApplicationNotifications::class)->handoverStaff(),
+            'departments' => Department::orderBy('department_name')->get(['id', 'department_name']),
+        ]);
     }
 
     public function handoverDetails(int $id)
@@ -845,11 +927,30 @@ private function syncPublicHolidays(array $holidays, int $year): void {
         ]]);
     }
 
-    public function leaveApplicationsList()
+    public function leaveApplicationsList(?Request $request = null)
     {
+        $request ??= request();
+        $validated = $request->validate([
+            'status' => 'nullable|integer|in:1,24,5,41',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'department_id' => 'nullable|integer|exists:sys_set_departments,id',
+        ]);
+        if (!empty($validated['date_from']) && !empty($validated['date_to']) && $validated['date_to'] < $validated['date_from']) {
+            return response()->json(['error' => 'The end date must be on or after the start date.'], 422);
+        }
+
         try {
+            // The list is scoped by the approval router; the on-leave panel below shows everyone's leave to those who can read it, everyone else only their own
+            $canReadAll = Auth::user()->isAbleTo('read_leave_applications');
+            $ownStaffId = Auth::user()->linkedStaff()?->id;
+
             $requests = $this->router->visibleFor(Auth::user())
-                ->with('createdBy', 'employee', 'leaveType', 'position', 'handoverEmployee:id,full_names')
+                ->with('createdBy', 'employee.department', 'leaveType', 'position', 'handoverEmployee:id,full_names')
+                ->when(isset($validated['status']), fn ($query) => $query->where('current_status_id', $validated['status']))
+                ->when(isset($validated['department_id']), fn ($query) => $query->whereHas('employee', fn ($employee) => $employee->where('department_id', $validated['department_id'])))
+                ->when(isset($validated['date_from']), fn ($query) => $query->whereDate('end_date', '>=', $validated['date_from']))
+                ->when(isset($validated['date_to']), fn ($query) => $query->whereDate('start_date', '<=', $validated['date_to']))
                 ->orderBy('date_time', 'desc')
                 ->get()
                 ->map(function ($request) {
@@ -886,7 +987,13 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                         'employee'                       => $request->employee ? [
                             'id'   => $request->employee->id,
                             'name' => $request->employee->full_names,
+                            'department_id' => $request->employee->department_id,
+                            'department_name' => $request->employee->department?->department_name,
                         ] : null,
+                        'recalled_at'                    => $request->recalled_at,
+                        'recall_effective_date'           => $request->recall_effective_date,
+                        'recall_reason'                   => $request->recall_reason,
+                        'recalled_days'                   => $request->recalled_days,
                         'leave_type'                     => $request->leaveType ? [
                             'id'        => $request->leaveType->id,
                             'type_name' => $request->leaveType->type_name,
@@ -902,7 +1009,37 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                     ];
                 });
     
-            return response()->json(['leave_applications' => $requests]);
+            $selectedDate = $validated['date_from'] ?? $validated['date_to'] ?? now()->toDateString();
+            $rangeStart = $validated['date_from'] ?? $selectedDate;
+            $rangeEnd = $validated['date_to'] ?? $selectedDate;
+            $staffOnLeave = LeaveRequest::with(['employee.department', 'employee.position'])
+                ->where('current_status_id', LeaveRequest::STATUS_APPROVED)
+                ->where(fn ($query) => $query->whereNull('recalled_at')->orWhereDate('recall_effective_date', '>', $rangeStart))
+                ->whereDate('start_date', '<=', $rangeEnd)
+                ->whereDate('end_date', '>=', $rangeStart)
+                ->when(!$canReadAll, fn ($query) => $query->where('staff_id', $ownStaffId ?? 0))
+                ->when(isset($validated['department_id']), fn ($query) => $query->whereHas('employee', fn ($employee) => $employee->where('department_id', $validated['department_id'])))
+                ->get()
+                ->unique('staff_id')
+                ->map(fn ($leave) => [
+                    'staff_id' => $leave->staff_id,
+                    'staff_name' => $leave->employee?->full_names ?? 'Unknown staff',
+                    'staff_number' => $leave->employee?->staff_number,
+                    'department_name' => $leave->employee?->department?->department_name ?? 'Unassigned',
+                    'position_name' => $leave->employee?->position?->position_name,
+                    'start_date' => $leave->start_date?->format('Y-m-d'),
+                    'end_date' => $leave->end_date?->format('Y-m-d'),
+                ])->values();
+            $departmentRecallThreshold = isset($validated['department_id'])
+                ? $this->departmentLeaveThreshold((int) $validated['department_id'], now()->toDateString())
+                : null;
+
+            return response()->json([
+                'leave_applications' => $requests,
+                'staff_on_leave' => $staffOnLeave,
+                'staff_on_leave_period' => ['from' => $rangeStart, 'to' => $rangeEnd],
+                'department_recall_threshold' => $departmentRecallThreshold,
+            ]);
         } catch (\Exception $e) {
             try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
@@ -923,7 +1060,7 @@ private function syncPublicHolidays(array $holidays, int $year): void {
         try {
             $leaveApplicationId = Crypt::decrypt($encryptedLeaveApplicationId);
 
-            $requests = LeaveRequest::with('createdBy', 'employee', 'leaveType', 'position', 'handoverEmployee:id,full_names')
+            $requests = LeaveRequest::with('createdBy', 'employee.department', 'leaveType', 'position', 'handoverEmployee:id,full_names')
                 ->where('id', $leaveApplicationId)
                 ->orderBy('date_time', 'desc')
                 ->get();
@@ -934,16 +1071,168 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                 }
             }
 
+            $application = $requests->first();
+            $staffingDate = request()->query('staffing_date', optional($application?->start_date)->format('Y-m-d') ?? now()->toDateString());
+            if (!is_string($staffingDate) || !Carbon::hasFormat($staffingDate, 'Y-m-d')) $staffingDate = optional($application?->start_date)->format('Y-m-d') ?? now()->toDateString();
+            $department = $application?->employee?->department;
+            $departmentStaff = collect();
+            if ($department) {
+                $departmentStaff = Staff::where('department_id', $department->id)
+                    ->whereIn('current_status_id', [1, 4])
+                    ->with('position')
+                    ->orderBy('full_names')
+                    ->get()
+                    ->unique('id')
+                    ->values();
+            }
+            $onLeaveStaffIds = $departmentStaff->isEmpty() ? collect() : LeaveRequest::where('current_status_id', LeaveRequest::STATUS_APPROVED)
+                ->where(fn ($query) => $query->whereNull('recalled_at')->orWhereDate('recall_effective_date', '>', $staffingDate))
+                ->whereDate('start_date', '<=', $staffingDate)
+                ->whereDate('end_date', '>=', $staffingDate)
+                ->whereHas('employee', fn ($query) => $query->where('department_id', $department->id)->whereIn('current_status_id', [1, 4]))
+                ->pluck('staff_id')->unique();
+            $staffingThreshold = $department ? $this->departmentLeaveThreshold((int) $department->id, $staffingDate) : null;
+            $todayThreshold = $department ? $this->departmentLeaveThreshold((int) $department->id, now()->toDateString()) : null;
+
             return view('leave_management.leave_application_details', [
                 'leave_applications' => $requests,
                 'approvalRouter' => $this->router,
                 'actionableIds' => $requests->filter(fn ($application) => $this->router->canAct(Auth::user(), $application) === null)->modelKeys(),
+                'staffingDate' => $staffingDate,
+                'departmentStaff' => $departmentStaff,
+                'onLeaveStaffIds' => $onLeaveStaffIds,
+                'staffingThreshold' => $staffingThreshold,
+                'departmentStaffingHealthy' => (bool) ($todayThreshold['met'] ?? false),
             ]);
         } catch (\Exception $e) {
             try { ErrorDispatcher::dispatch($e); } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
             return response()->json(['error' => 'Failed to load leave applications for the specified staff'], 500);
+        }
+    }
+
+    /** Department is healthy when at least 80% of active employees are available on the given date. */
+    private function departmentLeaveThreshold(int $departmentId, string $date): array
+    {
+        $staffTotal = Staff::where('department_id', $departmentId)
+            ->whereIn('current_status_id', [1, 4])
+            ->count();
+
+        $onLeave = LeaveRequest::where('current_status_id', LeaveRequest::STATUS_APPROVED)
+            ->where(fn ($query) => $query->whereNull('recalled_at')->orWhereDate('recall_effective_date', '>', $date))
+            ->whereDate('start_date', '<=', $date)
+            ->whereDate('end_date', '>=', $date)
+            ->whereHas('employee', fn ($query) => $query->where('department_id', $departmentId)->whereIn('current_status_id', [1, 4]))
+            ->distinct('staff_id')
+            ->count('staff_id');
+
+        $activeStaff = max(0, $staffTotal - $onLeave);
+        $requiredActive = $staffTotal > 0 ? (int) ceil($staffTotal * 0.8) : 0;
+        return [
+            'staff_total' => $staffTotal,
+            'on_leave' => $onLeave,
+            'active_staff' => $activeStaff,
+            'required_active' => $requiredActive,
+            'percentage' => $staffTotal > 0 ? round(($onLeave / $staffTotal) * 100, 1) : 0.0,
+            'active_percentage' => $staffTotal > 0 ? round(($activeStaff / $staffTotal) * 100, 1) : 0.0,
+            'met' => $staffTotal > 0 && $activeStaff >= $requiredActive,
+        ];
+    }
+
+    public function recallApplication(Request $request, int $id)
+    {
+        if (!Auth::user()->isAbleTo('update_leave_applications')) {
+            return response()->json(['success' => false, 'error' => 'You are not allowed to recall leave applications.'], 403);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'required|string|max:2000',
+            'effective_date' => 'required|date|after_or_equal:today',
+        ]);
+
+        try {
+            $result = DB::transaction(function () use ($id, $validated) {
+                $leave = LeaveRequest::whereKey($id)->lockForUpdate()->firstOrFail();
+                if ((int) $leave->current_status_id !== LeaveRequest::STATUS_APPROVED) {
+                    throw new \DomainException('Only approved leave can be recalled.');
+                }
+                if ($leave->recalled_at) {
+                    throw new \DomainException('This leave has already been recalled.');
+                }
+                $today = now()->toDateString();
+                if (Carbon::parse($leave->start_date)->toDateString() > $today || Carbon::parse($leave->end_date)->toDateString() < $today) {
+                    throw new \DomainException('Recall is available only while the employee is within the approved leave period.');
+                }
+                if ($validated['effective_date'] > Carbon::parse($leave->end_date)->toDateString()) {
+                    throw new \DomainException('The effective recall date must fall within the approved leave period.');
+                }
+
+                $staff = Staff::find($leave->staff_id);
+                if (!$staff?->department_id) {
+                    throw new \DomainException('The employee must be assigned to a department before recall eligibility can be checked.');
+                }
+                $threshold = $this->departmentLeaveThreshold((int) $staff->department_id, $today);
+                if ($threshold['met']) {
+                    throw new \DomainException('Recall is available only when active staffing falls below 80% in this department. Current level: ' . $threshold['active_staff'] . ' of ' . $threshold['staff_total'] . ' active (' . $threshold['active_percentage'] . '%).');
+                }
+
+                $dayRows = LeaveRequestDaysTaken::where('parent_id', $leave->id)
+                    ->where('current_status_id', 5)
+                    ->whereDate('leave_date', '>=', $validated['effective_date'])
+                    ->lockForUpdate()
+                    ->get();
+                if ($dayRows->isEmpty()) {
+                    throw new \DomainException('There are no unused approved leave days to refund from that date.');
+                }
+                $refunded = round((float) $dayRows->sum('day_fraction'), 2);
+                foreach ($dayRows as $day) $day->update(['current_status_id' => 41]);
+
+                $leave->used_days = max(0, (float) $leave->used_days - $refunded);
+                $leave->days_balance = (float) $leave->days_balance + $refunded;
+                $leave->recalled_at = now();
+                $leave->recall_effective_date = $validated['effective_date'];
+                $leave->recall_reason = $validated['reason'];
+                $leave->recalled_by = Auth::id();
+                $leave->recalled_days = $refunded;
+                $leave->save();
+
+                $isAnnual = $this->calendar->isAnnualLeaveType(LeaveType::whereKey($leave->leave_type_id)->value('type_name'));
+                if ($isAnnual) {
+                    $plan = LeaveCalendarPlan::where('employee_id', $leave->staff_id)
+                        ->where('leave_type_id', $leave->leave_type_id)
+                        ->whereYear('start_date', Carbon::parse($leave->start_date)->year)
+                        ->where('current_status_id', 5)
+                        ->lockForUpdate()->first();
+                    if ($plan) {
+                        $plan->balance = (float) $plan->balance + $refunded;
+                        $plan->save();
+                    }
+                }
+
+                return ['leave' => $leave, 'refunded' => $refunded];
+            });
+
+            $staffUser = User::where('staff_id', $result['leave']->staff_id)->first()
+                ?? User::whereHas('staffLink', fn ($query) => $query->where('staff_id', $result['leave']->staff_id))->first();
+            if ($staffUser) {
+                Notification::create([
+                    'type' => 'LeaveRecall',
+                    'notifiable_type' => User::class,
+                    'notifiable_id' => $staffUser->id,
+                    'data' => ['leave_request_id' => $id, 'effective_date' => $validated['effective_date'], 'reason' => $validated['reason']],
+                    'title' => 'Leave recall notice',
+                    'message' => 'Your approved leave has been recalled effective ' . Carbon::parse($validated['effective_date'])->format('d M Y') . '. Reason: ' . $validated['reason'],
+                    'action_url' => route('leave-management.leave-applications.by-staff', Crypt::encrypt($id)),
+                ]);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Employee recalled and ' . $result['refunded'] . ' leave day(s) refunded.', 'refunded_days' => $result['refunded']]);
+        } catch (\DomainException $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            Log::error('Leave recall failed', ['leave_request_id' => $id, 'error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'error' => 'Failed to recall leave.'], 500);
         }
     }
     
@@ -1020,6 +1309,10 @@ private function syncPublicHolidays(array $holidays, int $year): void {
             $currentYear = (int) date('Y', strtotime($validated['start_date']));
 
             $targetLeaveType = LeaveType::find($validated['leave_type_id']);
+
+            if ($this->overlapsScheduledAnnualLeave((int) $validated['staff_id'], $requestModel->start_date, $requestModel->end_date, $targetLeaveType, (float) $requestModel->days)) {
+                return response()->json(['success' => false, 'error' => 'These dates are reserved in the employee\'s annual leave schedule. Choose a different date.'], 422);
+            }
 
             // Prevent overlapping applications for the employee
             if ($this->overlapsActiveLeave((int) $validated['staff_id'], $requestModel->start_date, $requestModel->end_date)) {
@@ -1146,6 +1439,10 @@ private function syncPublicHolidays(array $holidays, int $year): void {
                 
                 $requestModel->days           = $days;
                 $requestModel->requested_days = $days;
+            }
+
+            if ($this->overlapsScheduledAnnualLeave((int) $validated['staff_id'], $requestModel->start_date, $requestModel->end_date, LeaveType::find($validated['leave_type_id']), (float) $requestModel->days)) {
+                return response()->json(['success' => false, 'error' => 'These dates are reserved in the employee\'s annual leave schedule. Choose a different date.'], 422);
             }
     
             if ($this->overlapsActiveLeave((int) $validated['staff_id'], $requestModel->start_date, $requestModel->end_date, (int) $requestModel->id)) {
@@ -1290,20 +1587,23 @@ private function syncPublicHolidays(array $holidays, int $year): void {
 
             // 3. Find dates of existing active requests for this staff member
             // (1 = Pending, 24 = Partially Approved, 5 = Approved)
-            $activeRequestStartDates = LeaveRequest::where('staff_id', $staffId)
+            $activeRequestRanges = LeaveRequest::where('staff_id', $staffId)
                 ->whereIn('current_status_id', [1, 5, 24])
-                ->pluck('start_date')
-                ->map(fn($date) => \Carbon\Carbon::parse($date)->format('Y-m-d'))
+                ->get(['start_date', 'end_date'])
+                ->map(fn ($request) => [
+                    'start' => \Carbon\Carbon::parse($request->start_date)->toDateString(),
+                    'end' => \Carbon\Carbon::parse($request->end_date)->toDateString(),
+                ])
                 ->toArray();
 
-            $formattedSlots = $slots->map(function ($slot) use ($activeRequestStartDates) {
+            $formattedSlots = $slots->map(function ($slot) use ($activeRequestRanges) {
                 $start = \Carbon\Carbon::parse($slot->start_date)->format('Y-m-d');
                 $end   = \Carbon\Carbon::parse($slot->end_date)->format('Y-m-d');
                 $displayStart = \Carbon\Carbon::parse($slot->start_date)->format('d M Y');
                 $displayEnd   = \Carbon\Carbon::parse($slot->end_date)->format('d M Y');
 
                 // Check if this slot has already been applied for
-                $isBooked = in_array($start, $activeRequestStartDates);
+                $isBooked = collect($activeRequestRanges)->contains(fn ($range) => $start <= $range['end'] && $end >= $range['start']);
                 $label = "{$displayStart} to {$displayEnd} ({$slot->days_count} Working Days)";
                 if ($isBooked) {
                     $label .= ' — [Already Applied]';

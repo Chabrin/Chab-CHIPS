@@ -43,8 +43,8 @@
 
     .template-card {
         width: 100%;
-        max-width: 820px;          /* was 1060px */
-        min-height: 480px;         /* was 580px */
+        max-width: 820px;
+        min-height: 480px;
         display: flex;
         position: relative;
         overflow: hidden;
@@ -165,8 +165,8 @@
     .brand-logo {
         display: block;
         width: auto;
-        max-width: 150px;
-        max-height: 58px;
+        max-width: 220px !important; /* Forced larger size */
+        max-height: 95px !important;  /* Forced larger size */
         margin: 0 auto 18px;
         object-fit: contain;
     }
@@ -251,15 +251,17 @@
         font-size: 13px;
     }
 
-    .custom-input-group .show-hide {
+   .custom-input-group .manual-password-toggle {
         display: flex;
         align-items: center;
         justify-content: center;
         min-height: 32px;
-        padding-left: 6px;
-        color: #6880a5;
-        font-size: 11.5px;
+        padding-left: 8px;
+        color: #4a638c;          
+        font-size: 13.5px;       
+        font-weight: 600;        
         cursor: pointer;
+        user-select: none;
     }
 
     .login-options {
@@ -458,8 +460,8 @@
         }
         .brand-header { margin-bottom: 18px; }
         .brand-logo {
-            max-width: 130px;
-            max-height: 52px;
+            max-width: 180px !important;
+            max-height: 75px !important;
             margin-bottom: 14px;
         }
         .login-heading { font-size: 22px; }
@@ -568,15 +570,15 @@
                                 placeholder="Enter your password"
                                 autocomplete="current-password"
                             >
+                            {{-- Using unique class 'manual-password-toggle' so global scripts won't touch it and cause duplication --}}
                             <div
-                                class="show-hide position-absolute top-50 end-0 translate-middle-y me-3"
+                                class="manual-password-toggle position-absolute top-50 end-0 translate-middle-y me-3"
                                 style="z-index: 10;"
                                 role="button"
                                 tabindex="0"
                                 aria-label="Toggle password visibility"
-                                aria-controls="user_password"
                             >
-                                <span class="show small text-muted">Show</span>
+                                <span class="toggle-text text-muted small">Show</span>
                             </div>
                         </div>
                         @error('user_password')
@@ -626,16 +628,17 @@
 @push('scripts')
 <script>
     $(function() {
-        // Show/hide password toggle
-        $('.show-hide').on('click', function() {
+        // Clean manual password visibility toggle
+        $('.manual-password-toggle').on('click', function() {
             var passwordInput = $(this).closest('.position-relative').find('input');
-            var showIcon = $(this).find('.show');
+            var toggleTextSpan = $(this).find('.toggle-text');
+            
             if (passwordInput.attr('type') === 'password') {
                 passwordInput.attr('type', 'text');
-                showIcon.addClass('active');
+                toggleTextSpan.text('Hide');
             } else {
                 passwordInput.attr('type', 'password');
-                showIcon.removeClass('active');
+                toggleTextSpan.text('Show');
             }
         });
 

@@ -41,6 +41,7 @@ class PaymentVoucherLine extends Model
         'unlocked_by',
         'unlocked_date',
         'unlock_reason',
+        'source_account_id',
     ];
 
     protected $casts = [

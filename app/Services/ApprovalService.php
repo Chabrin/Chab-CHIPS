@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\ApprovalRequest;
 use App\Models\ApprovalRequestLog;
 use App\Models\ApprovalWorkflow;
+use App\Models\ClientAdvance;
 use App\Models\WorkflowApprover;
 use App\Models\PaymentVoucherHeader;
 use App\Models\PaymentVoucherLine;
@@ -22,6 +23,20 @@ use App\Traits\GlPostingTrait;
 class ApprovalService
 {
     use GlPostingTrait;
+
+    protected ClientAdvanceService $clientAdvances;
+    protected ReturnPostingService $returnPosting;
+
+    /**
+     * Inject the services that post an approved voucher: the bank side of an advance payout and the payout of a return.
+     *
+     * @param ClientAdvanceService $clientAdvances
+     * @param ReturnPostingService $returnPosting
+     */
+    public function __construct(ClientAdvanceService $clientAdvances, ReturnPostingService $returnPosting) {
+        $this->clientAdvances = $clientAdvances;
+        $this->returnPosting = $returnPosting;
+    }
 
     /**
      * Select the approver with the least pending workload at a given level.
@@ -543,7 +558,9 @@ class ApprovalService
                         PaymentVoucherLine::where('entry_id', $voucher->id)
                             ->update(['is_approved' => 'Yes']);
 
-                        // Post to landlord account and GL ONLY for client_returns vouchers
+                        // A return's payment voucher posts the payout: the FINAL PAYMENTS debit on the client's ledger
+                        // and the GL (Clients Account to Accounts Payable to the bank). The RETURNS credit was posted when
+                        // the return got its final approval.
                         $firstLine = PaymentVoucherLine::where('entry_id', $voucher->id)->first();
                         if ($firstLine && $firstLine->voucher_type === 'client_returns') {
                             $returnSummaryId = $firstLine->entry_number;
@@ -556,17 +573,28 @@ class ApprovalService
                                 throw new Exception("Return summary not found: ID {$returnSummaryId}");
                             }
 
-                            // Validate return has required landlord_code
-                            if (!$return->landlord_code) {
-                                throw new Exception(
-                                    "Return {$return->return_code} (ID: {$return->id}) is missing landlord_code. " .
-                                    "Cannot post to landlord account without landlord reference."
-                                );
-                            }
-
-                            // Post to landlord account and GL (will throw exception on failure)
-                            $this->postReturnToLandlordAccountAndGl($return, $voucher->voucher_number);
+                            $this->returnPosting->postPayout($return, $voucher, (int) Auth::id());
                         }
+
+                        // A client advance payout: the advance is already on the client account and the GL,
+                        // so approval only posts the bank side (debit Accounts Payable, credit the bank).
+                        // The advance is found by its link to the voucher first, so a voucher whose lines were
+                        // removed cannot be approved without posting the payout.
+                        $advance = ClientAdvance::where('voucher_id', $voucher->id)->first();
+                        if (!$advance && $firstLine && $firstLine->voucher_type === ClientAdvanceService::VOUCHER_TYPE) {
+                            $advance = ClientAdvance::find($firstLine->entry_number);
+                            if (!$advance) {
+                                throw new Exception("Advance not found: ID {$firstLine->entry_number}");
+                            }
+                        }
+                        if ($advance) {
+                            $this->clientAdvances->postPayout($advance, $voucher, (int) Auth::id());
+                        }
+                    }
+
+                    if ($status === 'rejected') {
+                        $this->clientAdvances->releaseVoucher($voucher);
+                        $this->returnPosting->releaseVoucher($voucher);
                     }
                 });
 
@@ -614,131 +642,5 @@ class ApprovalService
             // Re-throw to ensure the calling transaction is also rolled back
             throw $e;
         }
-    }
-
-    /**
-     * Post approved return to landlord account and GL entries.
-     * 
-     * This method is wrapped in a transaction to ensure atomicity.
-     * If any part fails (landlord account or GL), everything rolls back.
-     * 
-     * @param ReturnSummary $return
-     * @param string|null $voucherNumber Payment voucher number to link to landlord account
-     */
-    protected function postReturnToLandlordAccountAndGl(ReturnSummary $return, ?string $voucherNumber = null): void
-    {
-        DB::transaction(function () use ($return, $voucherNumber) {
-            // Get landlord (client) details by reference_number (landlord_code)
-            $landlord = Client::where('reference_number', $return->landlord_code)->first();
-            if (!$landlord) {
-                throw new Exception(
-                    "Client not found for return {$return->return_code}. " .
-                    "Landlord Code (reference_number): {$return->landlord_code}"
-                );
-            }
-
-            // Get property details - try by ID first, then by reference_number (property_code)
-            $property = $return->property_id 
-                ? Property::find($return->property_id)
-                : Property::where('reference_number', $return->property_code)->first();
-            
-            $propertyCode = $return->property_code ?? ($property->reference_number ?? '');
-
-            // Get current user (truncate to 20 chars for audit_user field)
-            $userName = Auth::user()->name ?? 'SYSTEM';
-            $userName = mb_substr($userName, 0, 20);
-
-            // Generate transaction number: A{max_id + 1}
-            $maxId = DB::table('cb_landlord_account')->max('id') ?? 0;
-            $transactionNumber = 'A' . ($maxId + 1);
-
-            // Format entry particulars
-            $monthName = date('F', mktime(0, 0, 0, $return->month, 1));
-            $propertyName = $property->property_name ?? '';
-            $entryParticulars = "RETURNS-{$propertyName} {$monthName} {$return->year}";
-
-            // Post to landlord account
-            LandlordAccount::create([
-                'year'                 => $return->year,
-                'month'                => $return->month,
-                'landlord_code'        => $return->landlord_code,
-                'landlord_name'        => mb_substr($landlord->names, 0, 50),  // Truncate to fit column
-                'property_code'        => $propertyCode,
-                'transaction_number'   => $transactionNumber,
-                'entry_type_code'      => '0005',  // Credit entry for returns
-                'entry_sequence'       => null,
-                'entry_description'    => 'RETURNS',
-                'entry_date'           => now(),
-                'debit_amount'         => 0.00,
-                'credit_amount'        => $return->net_balance,
-                'total_amount'         => $return->net_balance,
-                'account_status'       => 0,
-                'payment_ref'          => 'RETURN',
-                'payment_ref_type'     => 'RETURN',
-                'interest_rate'        => 0.00,
-                'audit_user'           => $userName,
-                'entry_particulars'    => mb_substr($entryParticulars, 0, 100),  // Truncate to fit column
-                'pv_number'            => $voucherNumber,
-                'gl_account'           => 'EXPENSE',
-                'vendor_id'            => null,
-                'is_recovered'         => 0,
-                'recovery_year'        => null,
-                'recovery_month'       => null,
-                'return_transaction'   => null,
-                'return_code'          => $return->return_code,
-                'client_id'            => $landlord->id,  // Use looked-up landlord's ID
-                'property_id'          => $property ? $property->id : $return->property_id,
-            ]);
-
-            // Post to GL entries using the reusable trait method
-            // Transaction type 2009 has the debit/credit accounts configured
-            $glHeaderId = $this->postGlByTransactionType('2009', [
-                'amount'        => $return->net_balance,
-                'date'          => now()->toDateString(),
-                'reference'     => $return->return_code,
-                'narration'     => "RETURNS - {$landlord->names} - {$entryParticulars}",
-                'trans_details' => "return_id:{$return->id}:code:{$return->return_code}",
-            ]);
-
-            if (!$glHeaderId) {
-                throw new Exception("Failed to post GL entry for return {$return->return_code}");
-            }
-
-            Log::info("Return posted to landlord account and GL successfully", [
-                'return_code'   => $return->return_code,
-                'return_id'     => $return->id,
-                'amount'        => $return->net_balance,
-                'gl_header_id'  => $glHeaderId,
-                'landlord_code' => $return->landlord_code,
-                'landlord_id'   => $landlord->id,
-                'landlord_name' => $landlord->names,
-                'property_code' => $propertyCode,
-                'property_id'   => $property ? $property->id : null,
-            ]);
-        });
-    }
-
-    /**
-     * Generate a unique transaction number for landlord account.
-     * Format: L{7-digit-sequential-number}
-     */
-    protected function generateLandlordTransactionNumber(int $landlordId): string
-    {
-        // Get the last transaction number for this landlord
-        $lastTransaction = LandlordAccount::where('client_id', $landlordId)
-            ->whereNotNull('transaction_number')
-            ->orderByRaw('CAST(SUBSTRING(transaction_number FROM 2) AS INTEGER) DESC')
-            ->first();
-
-        if ($lastTransaction && $lastTransaction->transaction_number) {
-            // Extract the numeric part and increment
-            $lastNumber = (int) substr($lastTransaction->transaction_number, 1);
-            $newNumber = $lastNumber + 1;
-        } else {
-            // Start from a base number
-            $newNumber = $landlordId * 10000 + 1;
-        }
-
-        return 'L' . str_pad($newNumber, 7, '0', STR_PAD_LEFT);
     }
 }
