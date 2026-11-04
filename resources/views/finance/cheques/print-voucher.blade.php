@@ -209,8 +209,8 @@
             @foreach($lines as $key => $line)
             <tr @if($loop->last) style="height:200px;" @endif>
                 <td style="border-right:none; text-align: center;">{{ $line->entry_description ?? '-' }}</td>
-                <td style="border-right:none;border-left:none; text-align: center;">{{ $line->account_bank ?? 'Co-op' }}</td>
-                <td style="border-left:none; text-align: center;">{{ $line->cheque_number ?? '162717' }}</td>
+                <td style="border-right:none;border-left:none; text-align: center;">{{ $line->account_bank ?: '-' }}</td>
+                <td style="border-left:none; text-align: center;">{{ $line->cheque_number ?: '-' }}</td>
                 <td class="amt">{{ number_format($line->amount ?? 0, 2) }}</td>
             </tr>
             @endforeach

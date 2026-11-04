@@ -1221,6 +1221,8 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/property/advances/{encryptedId}/schedule/email', [App\Http\Controllers\ClientAdvanceController::class, 'emailSchedule'])->name('property.advances.schedule.email');
     Route::post('/property/advances/{encryptedId}/confirm', [App\Http\Controllers\ClientAdvanceController::class, 'confirmAdvance'])->name('property.advances.confirm');
     Route::post('/property/advances/{encryptedId}/post', [App\Http\Controllers\ClientAdvanceController::class, 'postAdvance'])->name('property.advances.post');
+    Route::post('/property/advances/{encryptedId}/loan-form', [App\Http\Controllers\ClientAdvanceController::class, 'uploadLoanForm'])->name('property.advances.loan-form.upload');
+    Route::get('/property/advances/{encryptedId}/loan-form', [App\Http\Controllers\ClientAdvanceController::class, 'downloadLoanForm'])->name('property.advances.loan-form.download');
     Route::post('/property/advances/{encryptedId}/voucher', [App\Http\Controllers\ClientAdvanceController::class, 'createVoucher'])->name('property.advances.voucher');
     Route::post('/property/advances/{encryptedId}/restructure', [App\Http\Controllers\ClientAdvanceController::class, 'restructure'])->name('property.advances.restructure');
 

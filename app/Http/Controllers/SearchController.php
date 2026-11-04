@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\ClientAdvance;
+use App\Models\PaymentVoucherHeader;
+use App\Models\ReturnSummary;
 use App\Models\DebtorInvoice;
 use App\Models\Property;
 use App\Models\Staff;
@@ -28,6 +31,9 @@ class SearchController extends Controller
                 'staff' => collect(),
                 'properties' => collect(),
                 'invoices' => collect(),
+                'returns' => collect(),
+                'vouchers' => collect(),
+                'advances' => collect(),
             ]);
         }
 
@@ -77,12 +83,66 @@ class SearchController extends Controller
             ->limit(25)
             ->get(['id', 'reference_number', 'total_amount', 'current_balance', 'tenant_id', 'client_id', 'date_time']);
 
+        $returns = $this->searchReturns($needle);
+        $vouchers = $this->searchVouchers($needle);
+        $advances = $this->searchAdvances($needle);
+
         return view('search.index', [
             'term' => $term,
+            'returns' => $returns,
+            'vouchers' => $vouchers,
+            'advances' => $advances,
             'clients' => $clients,
             'staff' => $staff,
             'properties' => $properties,
             'invoices' => $invoices,
         ]);
+    }
+
+    /**
+     * Find returns by return code (e.g. MAINRETURN / MINIRETURN codes).
+     *
+     * @param string $needle lower-cased search term
+     */
+    private function searchReturns($needle) {
+        return ReturnSummary::whereRaw('LOWER(return_code) LIKE ?', ["%{$needle}%"])
+            ->orderByDesc('id')
+            ->limit(25)
+            ->get(['id', 'return_code', 'return_type', 'landlord_code', 'property_code', 'year', 'month', 'net_balance', 'approved_status', 'paid_status'])
+            ->each(function ($return) {
+                $return->encrypted_id = Crypt::encrypt($return->id);
+            });
+    }
+
+    /**
+     * Find payment vouchers by voucher number.
+     *
+     * @param string $needle lower-cased search term
+     */
+    private function searchVouchers($needle) {
+        return PaymentVoucherHeader::whereRaw('LOWER(voucher_number) LIKE ?', ["%{$needle}%"])
+            ->where('is_deleted', 0)
+            ->orderByDesc('id')
+            ->limit(25)
+            ->get(['id', 'voucher_number', 'vendor_name', 'debit_amount', 'voucher_status', 'voucher_date'])
+            ->each(function ($voucher) {
+                $voucher->encrypted_id = Crypt::encrypt($voucher->id);
+            });
+    }
+
+    /**
+     * Find client advances by reference number.
+     *
+     * @param string $needle lower-cased search term
+     */
+    private function searchAdvances($needle) {
+        return ClientAdvance::with('client:id,names')
+            ->whereRaw('LOWER(reference_number) LIKE ?', ["%{$needle}%"])
+            ->orderByDesc('id')
+            ->limit(25)
+            ->get(['id', 'reference_number', 'client_id', 'amount', 'current_balance', 'current_status_id'])
+            ->each(function ($advance) {
+                $advance->encrypted_id = Crypt::encrypt($advance->id);
+            });
     }
 }

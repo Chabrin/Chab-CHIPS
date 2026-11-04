@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Storage;
 use App\Services\ClientAdvanceService;
 use App\Services\ErrorDispatcher;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -1548,6 +1549,48 @@ class ClientAdvanceController extends Controller
         } catch (\Exception $e) {
             Log::error('Error calculating amortization schedule: ' . $e->getMessage());
             return [];
+        }
+    }
+
+    /**
+     * Attach or replace the signed loan form (PDF or image) on an advance.
+     */
+    public function uploadLoanForm(Request $request, $encryptedId) {
+        try {
+            if (!Auth::user()->isAbleTo('update_client_advances')) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to attach loan forms'], 403);
+            }
+
+            $request->validate(['loan_form' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240']);
+
+            $advance = ClientAdvance::findOrFail(Crypt::decrypt($encryptedId));
+            $this->advances->attachLoanForm($advance, $request->file('loan_form'), Auth::id());
+
+            return response()->json(['success' => true, 'message' => 'Loan form attached', 'name' => $advance->loan_form_name]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->flatten()->first()], 422);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            Log::error('Error attaching advance loan form: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to attach the loan form'], 500);
+        }
+    }
+
+    /**
+     * Download the loan form attached to an advance.
+     */
+    public function downloadLoanForm($encryptedId) {
+        try {
+            $advance = ClientAdvance::findOrFail(Crypt::decrypt($encryptedId));
+
+            if (!$advance->loan_form_path || !Storage::disk('local')->exists($advance->loan_form_path)) {
+                return redirect()->back()->with('error', 'No loan form is attached to this advance');
+            }
+
+            return Storage::disk('local')->download($advance->loan_form_path, $advance->loan_form_name);
+        } catch (\Exception $e) {
+            ErrorDispatcher::dispatch($e);
+            return redirect()->route('client.advances.index')->with('error', 'Failed to download the loan form');
         }
     }
 }
