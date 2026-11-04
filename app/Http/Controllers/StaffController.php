@@ -6,6 +6,7 @@ use App\Models\Bank;
 use App\Models\Role;
 use App\Models\Zone;
 use App\Models\Staff;
+use App\Models\StaffOnboardingInvitation;
 use App\Exports\StaffExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\DocumentType;
@@ -43,10 +44,13 @@ use Illuminate\Support\Str;
 use App\Models\EmployeeTerminationElement;
 use App\Models\StaffDisciplineDocumentTracker;
 use Illuminate\Validation\ValidationException;
+use App\Traits\HandlesStaffSignature;
 use App\Models\EmployeeTerminationDocumentTracker;
 
 class StaffController extends Controller
 {
+    use HandlesStaffSignature;
+
     public function __construct(private NssfCalculator $nssfCalculator) {
     }
 
@@ -324,7 +328,7 @@ class StaffController extends Controller
     /**
      * Show the form for creating new staff updated on 27th 
      */
-   public function create()
+   public function create(Request $request)
     {
         $departments = Department::orderBy('department_name')->get();
         $banks = Bank::orderBy('bank_name')->get();
@@ -332,12 +336,44 @@ class StaffController extends Controller
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
         $roles = Role::orderBy('display_name')->get();
-        
+
+        // Coming from an approved onboarding submission: prefill what the new staff member entered
+        $onboarding = null;
+        if ($request->filled('onboarding')) {
+            try {
+                $onboarding = $this->reviewedOnboarding((int) $request->query('onboarding'));
+            } catch (ValidationException $e) {
+                return redirect()->route('staff.onboarding.index')->with('error', $e->validator->errors()->first());
+            }
+        }
+        $prefill = [];
+        $onboardingFiles = [];
+        if ($onboarding) {
+            $prefill = collect($onboarding->submission)->except(['onboarding_documents', 'staff_photo_path'])->all();
+            // Company details from invitations sent before HR moved them onto this form
+            foreach (['employment_type', 'department_id', 'position_id', 'hire_date', 'zone_id', 'role_id'] as $field) {
+                if (filled($onboarding->$field)) $prefill[$field] = $onboarding->$field;
+            }
+            $onboardingFiles = $onboarding->submittedFiles();
+        }
+
         // Default to Permanent on initial load
-        $defaultCategory = 'Permanent';
+        $defaultCategory = $prefill['employment_type'] ?? 'Permanent';
         $nextStaffNumber = Staff::nextStaffNumber($defaultCategory);
 
-        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles', 'nextStaffNumber'));
+        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles', 'nextStaffNumber', 'onboarding', 'prefill', 'onboardingFiles'));
+    }
+
+    /** An onboarding submission HR has approved but not yet turned into a staff record. */
+    private function reviewedOnboarding(int $id, bool $lock = false): StaffOnboardingInvitation
+    {
+        $query = StaffOnboardingInvitation::whereKey($id);
+        if ($lock) $query->lockForUpdate();
+        $invitation = $query->first();
+        if (!$invitation || $invitation->status !== 'reviewed') {
+            throw ValidationException::withMessages(['onboarding_invitation_id' => 'This onboarding submission is not awaiting a staff record. It may already have been used or cancelled.']);
+        }
+        return $invitation;
     }
 
     /**
@@ -369,7 +405,16 @@ class StaffController extends Controller
                 return redirect()->back()->with('error', 'You need the create users permission to add staff, because permanent and temporary staff members get a system login.')->withInput();
             }
 
-            $validated = $request->validate([
+            // Files the staff member already uploaded through an approved onboarding link stand in
+            // for the required uploads; anything HR uploads here replaces the onboarding copy.
+            $onboarding = $request->filled('onboarding_invitation_id') ? $this->reviewedOnboarding((int) $request->input('onboarding_invitation_id')) : null;
+            $submittedFiles = $onboarding ? $onboarding->submittedFiles() : [];
+            $onboardingSignature = $this->hasSignatureInput($request) ? null : ($submittedFiles['signature'] ?? null);
+            unset($submittedFiles['signature']);
+            $carriedFiles = array_filter($submittedFiles, fn ($file, $field) => !$request->hasFile($field), ARRAY_FILTER_USE_BOTH);
+            $requiredUpload = fn (string $field) => isset($carriedFiles[$field]) ? 'nullable' : 'required';
+
+            $validated = $request->validate($this->signatureRules() + [
                 'full_names' => 'required|string|max:255',
                 'employment_type' => 'required|string|in:Permanent,Temporary,Casual,Intern', //edited on 27th
                 'mobile_number' => 'nullable|string|max:255',
@@ -405,18 +450,19 @@ class StaffController extends Controller
                 'disability' => 'required|string',
                 'photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
                 'documents' => 'nullable|array',
-                'documents.national_id' => 'required|file|mimes:pdf,png,jpg,jpeg|max:5120',
-                'documents.kra_pin'     => 'required|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'documents.national_id' => $requiredUpload('documents.national_id') . '|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'documents.kra_pin'     => $requiredUpload('documents.kra_pin') . '|file|mimes:pdf,png,jpg,jpeg|max:5120',
                 'documents.contract'    => 'nullable|file|mimes:pdf|max:5120',
                 'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
                 'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
+                'onboarding_invitation_id' => 'nullable|integer',
                 // Make login details required ONLY if not Casual
                 'login_email' => 'required_unless:employment_type,Casual|nullable|email|max:255',
                 'role_id' => 'required_unless:employment_type,Casual|nullable|integer|exists:cb_roles,id',
                 'password' => 'nullable|string|min:8|max:255',
             ], self::UPLOAD_MESSAGES, self::STATUTORY_ATTRIBUTES);
 
-            $this->validateStaffUploads($request);
+            $this->validateStaffUploads($request, null, $carriedFiles, $onboarding?->id);
             $isCasual = $validated['employment_type'] === 'Casual';
 
             $managedZoneIds = $validated['managed_zone_ids'] ?? [];
@@ -430,7 +476,7 @@ class StaffController extends Controller
                 'role_id' => $validated['role_id'] ?? null,
                 'password' => $validated['password'] ?? null,
             ];
-            unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password']);
+            unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password'], $validated['onboarding_invitation_id'], $validated['signature_file'], $validated['signature_data']);
 
             $validated = $this->applyPositionDepartment($validated);
 
@@ -457,7 +503,10 @@ class StaffController extends Controller
                 }
             }
 
-            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword, $isCasual) {
+            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword, $isCasual, $onboarding, $carriedFiles, $onboardingSignature) {
+                // Lock the submission so a double submit cannot create two staff records from it
+                if ($onboarding) $this->reviewedOnboarding($onboarding->id, true);
+
                 $staff = new Staff();
                 $staff->fill($validated);
                 $staff->date_time = now();
@@ -475,6 +524,21 @@ class StaffController extends Controller
 
                 // Save the uploaded documents (REQ-01)
                 $this->storeStaffDocuments($request, $staff);
+                $signature = $this->storeSignature($request, "staff_signatures/{$staff->id}");
+                if (!$signature && $onboardingSignature) {
+                    $signature = "staff_signatures/{$staff->id}/" . basename($onboardingSignature['path']);
+                    if (!Storage::disk('local')->copy($onboardingSignature['path'], $signature)) {
+                        throw new \RuntimeException('Could not save the onboarding signature.');
+                    }
+                }
+                if ($signature) {
+                    $staff->signature = $signature;
+                    $staff->save();
+                }
+                if ($onboarding) {
+                    $this->attachOnboardingFiles($staff, $carriedFiles);
+                    $onboarding->update(['status' => 'approved', 'staff_id' => $staff->id, 'submission' => null]);
+                }
 
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
@@ -513,6 +577,10 @@ class StaffController extends Controller
                 return $staff;
             });
 
+            if ($onboarding) {
+                Storage::disk('local')->deleteDirectory("staff_onboarding/{$onboarding->id}");
+            }
+
             $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member created successfully');
             if ($generatedPassword) {
                 $redirect->with('generated_password', $generatedPassword);
@@ -544,13 +612,80 @@ class StaffController extends Controller
     /**
      * Save the documents uploaded on the create-staff form (REQ-01).
      */
-    private function validateStaffUploads(Request $request, ?int $staffId = null): void
+    private function validateStaffUploads(Request $request, ?int $staffId = null, array $carriedFiles = [], ?int $ignoreInvitationId = null): void
     {
+        $fingerprints = [];
         $files = ['photo' => $request->file('photo')];
         foreach (array_keys(self::DOCUMENT_MAP) as $key) {
             $files["documents.$key"] = $request->file("documents.$key");
         }
-        app(EmployeeUploadGuard::class)->validate($files, $staffId);
+        foreach ($files as $field => $file) {
+            if ($file instanceof UploadedFile && $file->isValid()) {
+                $fingerprints[$field] = hash_file('sha256', $file->getRealPath());
+            }
+        }
+        // Onboarding files being moved onto this record are checked the same way as fresh uploads
+        foreach ($carriedFiles as $field => $file) {
+            if (!Storage::disk('local')->exists($file['path'])) {
+                throw ValidationException::withMessages([$field => 'The file submitted through onboarding could not be found. Upload it here instead.']);
+            }
+            $fingerprints[$field] = hash_file('sha256', Storage::disk('local')->path($file['path']));
+        }
+        app(EmployeeUploadGuard::class)->validateHashes($fingerprints, $staffId, $ignoreInvitationId);
+    }
+
+    /**
+     * Show a staff member's signature image (stored privately, so it is served through here).
+     */
+    public function signature($id)
+    {
+        abort_unless(auth()->user()->hasPermission('read_staff'), 403);
+        $staff = Staff::findOrFail($id);
+        abort_unless($staff->signature && Storage::disk('local')->exists($staff->signature), 404);
+
+        return Storage::disk('local')->response($staff->signature, 'signature.' . pathinfo($staff->signature, PATHINFO_EXTENSION), [
+            'Content-Disposition' => 'inline',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
+    /**
+     * Copy the photo and documents submitted through onboarding onto the new staff record.
+     * The onboarding originals are removed after the transaction commits.
+     */
+    private function attachOnboardingFiles(Staff $staff, array $carriedFiles): void
+    {
+        $types = DocumentType::pluck('id', 'name');
+
+        foreach ($carriedFiles as $field => $file) {
+            if ($field === 'photo') {
+                $staff->photo = 'staff_photos/' . basename($file['path']);
+                if (!Storage::disk('public')->put($staff->photo, Storage::disk('local')->get($file['path']))) {
+                    throw new \RuntimeException('Could not save staff profile photo.');
+                }
+                $staff->save();
+                continue;
+            }
+
+            if (!isset($types[$file['type_name']])) {
+                throw new \RuntimeException("Document type missing: {$file['type_name']}");
+            }
+            $path = "employee_documents/{$staff->id}/" . basename($file['path']);
+            if (!Storage::disk('local')->copy($file['path'], $path)) {
+                throw new \RuntimeException('Could not move onboarding document into the staff document store.');
+            }
+            EmployeeDocument::create([
+                'employee_id' => $staff->id,
+                'document_type_id' => $types[$file['type_name']],
+                'title' => $file['type_name'],
+                'file_path' => $path,
+                'file_name' => $file['name'],
+                'file_size' => $file['size'],
+                'mime_type' => $file['mime'],
+                'uploaded_by' => auth()->id(),
+            ]);
+        }
     }
 
     private function storeStaffDocuments(Request $request, Staff $staff): void {
@@ -728,7 +863,8 @@ private function syncStaffFiles(Request $request, Staff $staff): array
     Log::info("Updating staff member with ID: " . $id);
     try {
 
-        $validated = $request->validate([
+        $validated = $request->validate($this->signatureRules() + [
+            'remove_signature' => 'nullable|boolean',
             'staff_number' => 'required|string|max:255|unique:sys_staff,staff_number,' . $id,
             'full_names' => 'required|string|max:255',
             'mobile_number' => 'nullable|string|max:255',
@@ -781,7 +917,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         $this->assertNoOverlappingZoneRoles($managedZoneIds, $supervisedZoneIds);
 
         // keep uploaded files and flags out of the mass-assigned columns
-        unset($validated['photo'], $validated['documents'], $validated['remove_documents']);
+        unset($validated['photo'], $validated['documents'], $validated['remove_documents'], $validated['signature_file'], $validated['signature_data'], $validated['remove_signature']);
 
         $validated = $this->applyPositionDepartment($validated);
 
@@ -800,6 +936,12 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             $staff->update($validated);
             $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
             $obsoleteFiles = $this->syncStaffFiles($request, $staff);
+            // A new signature replaces the old one; "remove" with nothing new clears it
+            if ($this->hasSignatureInput($request) || $request->boolean('remove_signature')) {
+                if ($staff->signature) $obsoleteFiles[] = ['local', $staff->signature];
+                $staff->signature = $this->storeSignature($request, "staff_signatures/{$staff->id}");
+                $staff->save();
+            }
         });
 
         // Only delete replaced/removed files after the DB changes have committed

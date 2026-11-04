@@ -14,9 +14,9 @@ class SelfServiceController extends Controller
     public function myPayslip()
     {
         try {
-            $link = auth()->user()->staffLink;
+            $staff = auth()->user()->linkedStaff();
 
-            if (!$link) {
+            if (!$staff) {
                 return view('self-service.my-payslip', [
                     'staffLinked' => false,
                     'staffId'     => null,
@@ -26,8 +26,8 @@ class SelfServiceController extends Controller
 
             return view('self-service.my-payslip', [
                 'staffLinked' => true,
-                'staffId'     => $link->staff_id,
-                'staffName'   => $link->staff->full_names ?? auth()->user()->name,
+                'staffId'     => $staff->id,
+                'staffName'   => $staff->full_names ?? auth()->user()->name,
             ]);
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);

@@ -53,7 +53,7 @@ class PayslipEmailJob implements ShouldQueue
             }
 
             // Get payslip elements
-            $elements = $this->getPayslipElements($payrollSummary->payslip_elements);
+            $elements = $this->getPayslipElements($payrollSummary->payslip_elements, $payrollSummary);
 
             // Check if encryption is enabled
             $encryptPayslips = (int)(DB::table('cb_system_configs')
@@ -118,7 +118,7 @@ class PayslipEmailJob implements ShouldQueue
     /**
      * Get payslip elements with details from PayrollElement
      */
-    private function getPayslipElements($payslipElementsJson)
+    private function getPayslipElements($payslipElementsJson, PayrollSummary $payrollSummary)
     {
         if (empty($payslipElementsJson)) {
             return collect();
@@ -130,18 +130,48 @@ class PayslipEmailJob implements ShouldQueue
             return collect();
         }
 
-        $elementIds = array_column($payslipElements, 'element_id');
+        $elementIds = array_filter(array_column($payslipElements, 'element_id'));
 
-        // Get element details
+        // Get element details (only needed for older lines that do not carry their name inline)
         $elementDetails = PayrollElement::whereIn('id', $elementIds)
             ->get()
             ->keyBy('id');
 
+        // Legacy contracts stored NET SALARY as a type-1 deduction. Exclude it
+        // and correct the values shown on this payslip without changing the
+        // approved payroll summary in the database.
+        $legacyNetSalaryDeduction = 0.0;
+        $payslipElements = array_values(array_filter($payslipElements, function ($item) use ($elementDetails, &$legacyNetSalaryDeduction) {
+            $element = $elementDetails->get($item['element_id'] ?? null);
+            $isNetSalaryDeduction = (string) ($item['element_type'] ?? $element?->element_type ?? '1') === '1'
+                && strtolower((string) $element?->element_key) === 'net_salary';
+            if ($isNetSalaryDeduction) {
+                $legacyNetSalaryDeduction += (float) ($item['amount'] ?? 0);
+            }
+            return !$isNetSalaryDeduction;
+        }));
+        if ($legacyNetSalaryDeduction > 0) {
+            $payrollSummary->total_deductions = max(0, (float) $payrollSummary->total_deductions - $legacyNetSalaryDeduction);
+            $payrollSummary->net_pay = (float) $payrollSummary->net_pay + $legacyNetSalaryDeduction;
+        }
+
         // Merge amount with element details
         $result = collect($payslipElements)->map(function ($item) use ($elementDetails) {
-            $element = $elementDetails->get($item['element_id']);
+            // Current format stores name/type/position inline on each line (e.g. "NSSF Tier I",
+            // "Sick Leave Pay Adjustment"); the PDF and preview use these, so the email must too.
+            if (isset($item['element_name'])) {
+                return [
+                    'element_id' => $item['element_id'] ?? null,
+                    'element_name' => $item['element_name'],
+                    'element_type' => $item['element_type'] ?? '1',
+                    'payslip_position' => $item['payslip_position'] ?? 999,
+                    'amount' => $item['amount']
+                ];
+            }
+
+            $element = $elementDetails->get($item['element_id'] ?? null);
             return [
-                'element_id' => $item['element_id'],
+                'element_id' => $item['element_id'] ?? null,
                 'element_name' => $element->element_name ?? 'Unknown',
                 'element_type' => $element->element_type ?? '1',
                 'payslip_position' => $element->payslip_position ?? 999,

@@ -27,6 +27,9 @@ trait ReturnsDeductionsTrait
      * for this return (return_code is set, is_recovered stays 0) and are recovered when the return gets its final
      * approval (ReturnPostingService). Regenerating the return frees them again.
      *
+     * Advances are recovered by main returns only, and only once they were paid to the client (see advancePaidSql). A mini
+     * return, which is for money that came in late, never takes an advance row.
+     *
      * @param string $returnPeriod YYYYMM format
      * @param string $transactionDate Display date (DD-Mon-YYYY)
      * @param int $generatedBy User ID
@@ -39,6 +42,7 @@ trait ReturnsDeductionsTrait
     protected function insertAdvancePaymentLines(string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth, ?int $propertyId = null, ?string $returnCode = null): int {
         $propertyFilter = $propertyId ? "WHERE property_id = ?" : "";
         $codeFilter = $returnCode !== null ? "return_code = ?" : "return_code LIKE 'R1%'";
+        $advanceFilter = $returnCode !== null ? "AND la.advance_id IS NULL" : $this->advancePaidSql('la');
 
         // Bindings in the order the placeholders appear: return period, optional return code, optional property, month,
         // month, month index, return period (integer column), transaction date, user
@@ -78,6 +82,7 @@ trait ReturnsDeductionsTrait
                   AND la.debit_amount > 0
                   AND COALESCE(la.is_recovered, 0) != 1
                   AND la.return_code IS NULL
+                  {$advanceFilter}
                   AND la.entry_type_code IN ('0007','0008','0009','0010','0012','0013','0014','0015','0016','0019','0020','0023','0024','0026','0030','0036')
                   AND (
                         (la.year = ? AND la.month = ?)
@@ -145,6 +150,25 @@ trait ReturnsDeductionsTrait
         ]);
 
         return $advancesInserted;
+    }
+
+    /**
+     * SQL condition that keeps an advance's client ledger rows off a return until the advance has been paid to the client:
+     * its payment voucher is Approved. An advance with no voucher is only taken when it was posted before advances were
+     * posted to the GL (no principal journal), as those were paid under the old process and have no voucher to wait for.
+     * Rows that are not advance rows are not affected.
+     *
+     * @param string $alias the cb_landlord_account table or alias in the query
+     */
+    protected function advancePaidSql(string $alias): string {
+        return "AND ({$alias}.advance_id IS NULL OR EXISTS (
+            SELECT 1 FROM sys_pm_clients_advances_requisitions adv
+            WHERE adv.id = {$alias}.advance_id
+              AND (
+                  EXISTS (SELECT 1 FROM cb_payment_vouchers_headers_new pv WHERE pv.id = adv.voucher_id AND pv.voucher_status = 'Approved')
+                  OR (adv.voucher_id IS NULL AND NOT EXISTS (SELECT 1 FROM sys_gl_transactions g WHERE g.trans_details::text = 'advance_id:' || adv.id || ':principal'))
+              )
+        ))";
     }
 
     /**

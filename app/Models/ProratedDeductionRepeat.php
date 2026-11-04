@@ -25,6 +25,7 @@ class ProratedDeductionRepeat extends Model
         'current_status_id',
         'amount_balance',
         'total_amount',
+        'period_id',
     ];
 
     protected $casts = [

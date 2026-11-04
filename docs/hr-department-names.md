@@ -1,5 +1,11 @@
 # Shared department names
 
+> **Status (2026-11-04): the migration is disabled.** Its body is commented out because staging and
+> prod hold both `FIELD` and a separate `PROPERTY MANAGEMENT` department, which stops the rename.
+> The three names are changed by hand in HR Settings > Departments instead (after moving staff and
+> positions off the duplicate). The migration now records as run and changes nothing; the rest of
+> this document describes what it did when it was active.
+
 Migration `2026_10_28_000001_standardize_hr_department_names` renames existing departments:
 
 | Previous name | Shared name |

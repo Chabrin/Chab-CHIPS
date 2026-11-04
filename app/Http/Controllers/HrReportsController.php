@@ -73,6 +73,7 @@ class HrReportsController extends Controller
             )
                 ->join('sys_staff', 'sys_hr_payroll_summary.staff_id', '=', 'sys_staff.id')
                 ->whereYear('sys_hr_payroll_summary.period', '=', date('Y', strtotime($period)))
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', '=', date('m', strtotime($period)))
                 ->where('sys_hr_payroll_summary.' . $column, '>', 0)
                 ->orderBy('sys_staff.full_names', 'asc')
@@ -149,6 +150,7 @@ class HrReportsController extends Controller
             )
                 ->join('sys_staff', 'sys_hr_payroll_summary.staff_id', '=', 'sys_staff.id')
                 ->whereYear('sys_hr_payroll_summary.period', '=', date('Y', strtotime($period)))
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', '=', date('m', strtotime($period)))
                 ->where('sys_hr_payroll_summary.' . $column, '>', 0)
                 ->orderBy('sys_staff.full_names', 'asc')
@@ -391,6 +393,7 @@ class HrReportsController extends Controller
                     'sys_set_departments.department_name'
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->when($request->department_id, fn($q) => $q->where('sys_staff.department_id', $request->department_id))
                 ->orderBy('sys_staff.full_names')
@@ -458,6 +461,7 @@ class HrReportsController extends Controller
                     'sys_set_departments.department_name'
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->when($request->department_id, fn($q) => $q->where('sys_staff.department_id', $request->department_id))
                 ->orderBy('sys_staff.full_names')
@@ -554,6 +558,7 @@ class HrReportsController extends Controller
                     DB::raw("SUM(sys_hr_payroll_summary.net_pay) as total_net_pay")
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->groupBy('sys_set_departments.department_name', 'sys_staff.department_id')
                 ->orderBy('sys_set_departments.department_name')
@@ -618,6 +623,7 @@ class HrReportsController extends Controller
                     DB::raw("SUM(sys_hr_payroll_summary.net_pay) as total_net_pay")
                 )
                 ->whereYear('sys_hr_payroll_summary.period', $year)
+                ->where('sys_hr_payroll_summary.current_status_id', 5)
                 ->whereMonth('sys_hr_payroll_summary.period', $month)
                 ->groupBy('sys_set_departments.department_name', 'sys_staff.department_id')
                 ->orderBy('sys_set_departments.department_name')
@@ -1703,45 +1709,59 @@ class HrReportsController extends Controller
         return view('reports.hr.payroll-periods');
     }
 
+    /**
+     * Payroll runs per period (from the payroll periods table) with staff count and approval status.
+     */
+    private function payrollPeriodRows(Request $request)
+    {
+        return DB::table('sys_hr_payroll_summary as s')
+            ->join('sys_hr_payroll_periods as p', 'p.id', '=', 's.period_id')
+            ->select([
+                DB::raw("to_char(p.start_date, 'YYYY-MM') as period"),
+                'p.start_date as period_start',
+                'p.end_date as period_end',
+                DB::raw('COUNT(DISTINCT s.staff_id) as staff_count'),
+                DB::raw('MIN(s.current_status_id) as run_status'),
+            ])
+            ->when($request->date_from, fn($q) => $q->whereRaw("to_char(p.start_date, 'YYYY-MM') >= ?", [$request->date_from]))
+            ->when($request->date_to, fn($q) => $q->whereRaw("to_char(p.start_date, 'YYYY-MM') <= ?", [$request->date_to]))
+            ->groupBy('p.id', 'p.start_date', 'p.end_date')
+            ->orderByDesc('p.start_date')
+            ->get();
+    }
+
     public function getPayrollPeriods(Request $request): \Illuminate\Http\JsonResponse
     {
         try {
-            $rows = DB::table('sys_hr_payroll_summary')
-                ->select([
-                    DB::raw("CONCAT(period_year, '-', LPAD(period_month::text, 2, '0')) as period"),
-                    DB::raw('MIN(created_at) as period_start'),
-                    DB::raw('MAX(updated_at) as period_end'),
-                    DB::raw('COUNT(DISTINCT staff_id) as staff_count'),
-                    DB::raw("'Processed' as status"),
-                ])
-                ->when($request->date_from, fn($q) => $q->whereRaw("CONCAT(period_year,'-',LPAD(period_month::text,2,'0')) >= ?", [$request->date_from]))
-                ->when($request->date_to,   fn($q) => $q->whereRaw("CONCAT(period_year,'-',LPAD(period_month::text,2,'0')) <= ?", [$request->date_to]))
-                ->groupBy('period_year','period_month')
-                ->orderByDesc('period_year')->orderByDesc('period_month')
-                ->get();
-            $data = $rows->values()->map(fn($r,$i) => [
-                'no'          => $i+1,
-                'period'      => $r->period,
-                'period_start'=> $r->period_start ? substr($r->period_start,0,10) : '-',
-                'period_end'  => $r->period_end   ? substr($r->period_end,0,10)   : '-',
+            $rows = $this->payrollPeriodRows($request);
+            $data = $rows->values()->map(fn($r, $i) => [
+                'no' => $i + 1,
+                'period' => $r->period,
+                'period_start' => $r->period_start ? substr($r->period_start, 0, 10) : '-',
+                'period_end' => $r->period_end ? substr($r->period_end, 0, 10) : '-',
                 'staff_count' => $r->staff_count,
-                'status'      => $r->status,
+                'status' => (int) $r->run_status === 1 ? 'Pending review' : 'Approved',
             ]);
-            return response()->json(['success'=>true,'data'=>$data,'count'=>$data->count()]);
+            return response()->json(['success' => true, 'data' => $data, 'count' => $data->count()]);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
-            Log::error('getPayrollPeriods: '.$e->getMessage());
-            return response()->json(['success'=>false,'message'=>'Failed to load report']);
+            Log::error('getPayrollPeriods: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to load report']);
         }
     }
 
     public function exportPayrollPeriods(Request $request)
     {
-        $rows = DB::table('sys_hr_payroll_summary')
-            ->select([DB::raw("CONCAT(period_year,'-',LPAD(period_month::text,2,'0')) as period"),DB::raw('MIN(created_at) as period_start'),DB::raw('MAX(updated_at) as period_end'),DB::raw('COUNT(DISTINCT staff_id) as staff_count')])
-            ->groupBy('period_year','period_month')->orderByDesc('period_year')->orderByDesc('period_month')->get();
-        $dataRows = $rows->values()->map(fn($r,$i)=>[$i+1,$r->period,substr($r->period_start??'',0,10),substr($r->period_end??'',0,10),$r->staff_count,'Processed'])->all();
-        return Excel::download(GenericReportExport::build('Payroll Period Status',['#','Period','Start','End','Staff Count','Status'],$dataRows),'payroll-periods.xlsx');
+        $rows = $this->payrollPeriodRows($request);
+        $dataRows = $rows->values()->map(fn($r, $i) => [
+            $i + 1,
+            $r->period,
+            substr($r->period_start ?? '', 0, 10),
+            substr($r->period_end ?? '', 0, 10),
+            $r->staff_count,
+            (int) $r->run_status === 1 ? 'Pending review' : 'Approved',
+        ])->all();
+        return Excel::download(GenericReportExport::build('Payroll Period Status', ['#', 'Period', 'Start', 'End', 'Staff Count', 'Status'], $dataRows), 'payroll-periods.xlsx');
     }
 
     // =========================================================================

@@ -129,6 +129,12 @@
         <td class="val">{{ date('d/m/Y', strtotime($payroll->date_time)) }}</td>
     </tr>
     <tr>
+        <td class="lbl">Days Paid</td>
+        <td class="val">{{ ($payroll->worked_days ?? '') === '' ? '-' : rtrim(rtrim(number_format((float) $payroll->worked_days, 2, '.', ''), '0'), '.') }}</td>
+        <td class="lbl">Period Days</td>
+        <td class="val">{{ $payroll->payrollPeriod?->duration_days ?? '-' }}</td>
+    </tr>
+    <tr>
         <td class="lbl">Bank</td>
         <td class="val">{{ $bankName }}</td>
         <td class="lbl">Account No</td>

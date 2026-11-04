@@ -28,22 +28,33 @@ class PayslipsController extends Controller
      */
     public function searchEmployees(Request $request)
     {
+        if (!Auth::user()?->isAbleTo('read_all_payslips')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You do not have permission to search employee payslips.',
+            ], 403);
+        }
         try {
-            $search = $request->input('search');
+            $search = trim((string) $request->input('search', ''));
+            if (mb_strlen($search) < 2) {
+                return response()->json(['success' => true, 'employees' => []]);
+            }
 
             $employees = Staff::where(function ($query) use ($search) {
                 $query->where('staff_number', 'ILIKE', "%{$search}%")
+                    ->orWhere('full_names', 'ILIKE', "%{$search}%")
                     ->orWhere('email_address', 'ILIKE', "%{$search}%")
-                    ->orWhere('national_id', 'ILIKE', "%{$search}%")
-                    ->orWhere('full_names', 'ILIKE', "%{$search}%");
+                    ->orWhere('national_id', 'ILIKE', "%{$search}%");
             })
+                ->orderBy('full_names')
+                ->limit(20)
                 ->get([
                     'id as staff_id',
                     'staff_number',
-                    'email_address',
+                    'full_names as full_name',
                     'national_id',
-                    'mobile_number',
-                    'full_names as full_name'
+                    'email_address',
+                    'mobile_number'
                 ]);
 
             return response()->json(['success' => true, 'employees' => $employees]);
@@ -59,10 +70,6 @@ class PayslipsController extends Controller
     public function viewPayslip(Request $request)
     {
         try {
-            if (!Auth::user()->isAbleTo('read_all_payslips')) {
-                return response()->json(['success' => false, 'message' => 'You do not have permission to view payslips.'], 403);
-            }
-
             $validated = $request->validate([
                 'staff_id' => 'required|integer',
                 'payroll_month' => 'required|date_format:Y-m',
@@ -70,9 +77,13 @@ class PayslipsController extends Controller
 
             $staffId = $validated['staff_id'];
             $month = $validated['payroll_month'];
+            if (!$this->canViewPayslipForStaff((int) $staffId)) {
+                return response()->json(['success' => false, 'message' => 'You do not have permission to view this payslip.'], 403);
+            }
 
             // Get payroll summary
-            $payrollSummary = PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department'])
+            $payrollSummary = PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department', 'payrollPeriod'])
+                ->where('current_status_id', 5)
                 ->where('staff_id', $staffId)
                 ->whereYear('period', substr($month, 0, 4))
                 ->whereMonth('period', substr($month, 5, 2))
@@ -115,7 +126,7 @@ class PayslipsController extends Controller
         // Returned directly (not abort()) — the try/catch below catches
         // \Exception broadly, which would swallow an aborted HttpException
         // and mask this 403 behind a generic 500 "Failed to generate payslip".
-        if (!Auth::user()->isAbleTo('read_all_payslips')) {
+        if (!$this->canViewPayslipForStaff((int) $staffId)) {
             return response('You do not have permission to download payslips.', 403);
         }
 
@@ -186,11 +197,27 @@ class PayslipsController extends Controller
      */
     private function getPayrollSummary($staffId, $month)
     {
-        return PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department'])
+        return PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department', 'payrollPeriod'])
+            ->where('current_status_id', 5)
             ->where('staff_id', $staffId)
             ->whereYear('period', substr($month, 0, 4))
             ->whereMonth('period', substr($month, 5, 2))
             ->first();
+    }
+
+    /** HR may view any payslip; a linked employee may view only their own. */
+    private function canViewPayslipForStaff(int $staffId): bool
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->isAbleTo('read_all_payslips')) {
+            return true;
+        }
+
+        return (int) ($user->linkedStaff()?->id ?? 0) === $staffId;
     }
 
     /**
@@ -219,6 +246,27 @@ class PayslipsController extends Controller
 
         if (!empty($payslipElementsJson)) {
             $payslipElements = is_array($payslipElementsJson) ? $payslipElementsJson : json_decode($payslipElementsJson, true);
+        }
+
+        // Older processed runs persisted the contract's NET SALARY target as a
+        // type-1 deduction. Remove that invalid row and repair the displayed
+        // totals in memory, so preview/PDF/email agree without rewriting an
+        // already-approved payroll record.
+        $netSalaryElementId = (int) PayrollElement::where('element_key', 'net_salary')->value('id');
+        $legacyNetSalaryDeduction = 0.0;
+        if (is_array($payslipElements) && $netSalaryElementId > 0) {
+            $payslipElements = array_values(array_filter($payslipElements, function ($item) use ($netSalaryElementId, &$legacyNetSalaryDeduction) {
+                $isNetSalaryDeduction = (string) ($item['element_type'] ?? '1') === '1'
+                    && (int) ($item['element_id'] ?? 0) === $netSalaryElementId;
+                if ($isNetSalaryDeduction) {
+                    $legacyNetSalaryDeduction += (float) ($item['amount'] ?? 0);
+                }
+                return !$isNetSalaryDeduction;
+            }));
+        }
+        if ($legacyNetSalaryDeduction > 0 && $payrollSummary) {
+            $payrollSummary->total_deductions = max(0, (float) $payrollSummary->total_deductions - $legacyNetSalaryDeduction);
+            $payrollSummary->net_pay = (float) $payrollSummary->net_pay + $legacyNetSalaryDeduction;
         }
 
         if (!empty($payslipElements)) {

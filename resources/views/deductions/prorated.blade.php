@@ -142,6 +142,7 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
+        const canCreateProratedDeduction = @json(Auth::user()->isAbleTo('create_prorated_deductions'));
         let proratedTable;
         let staffSelect, elementSelect;
 
@@ -199,8 +200,10 @@
             });
         }
 
-        loadStaffList();
-        loadElementsList();
+        if (canCreateProratedDeduction) {
+            loadStaffList();
+            loadElementsList();
+        }
 
         // Initialize Prorated Table
         proratedTable = $('#prorated-table').DataTable({

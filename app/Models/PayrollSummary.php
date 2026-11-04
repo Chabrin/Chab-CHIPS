@@ -55,9 +55,13 @@ class PayrollSummary extends Model
         'period_id',
         'negligence',
         'payslip_elements',
+        'processed_by',
+        'approved_by',
+        'approved_at',
     ];
 
     protected $casts = [
+        'approved_at' => 'datetime',
         'date_time' => 'datetime',
         'period' => 'datetime',
         'basic_salary' => 'decimal:2',
@@ -118,5 +122,10 @@ class PayrollSummary extends Model
     public function status()
     {
         return $this->belongsTo(Status::class, 'current_status_id');
+    }
+
+    public function payrollPeriod()
+    {
+        return $this->belongsTo(PayrollPeriod::class, 'period_id');
     }
 }
