@@ -1024,6 +1024,8 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/returns/{id}/excel', [App\Http\Controllers\ClientReturnsController::class, 'downloadUnprocessedExcel'])->name('returns.excel');
     Route::post('/ajax/returns/lines/{lineId}/recovery', [App\Http\Controllers\ClientReturnsController::class, 'setRecoveryStatus'])->name('ajax.returns.lines.recovery');
 
+    Route::post('/ajax/returns/{id}/lines/{lineId}/remarks', [App\Http\Controllers\ClientReturnsController::class, 'saveStatementRemarks'])->name('returns.remarks');
+
     // Returns Approval Routes (Batch-level)
     Route::get('/ajax/returns/batches/{id}/approvals', [App\Http\Controllers\ReturnsApprovalController::class, 'getBatchApprovals'])->name('ajax.returns.batches.approvals');
     Route::post('/ajax/returns/batches/{id}/approvals/comment', [App\Http\Controllers\ReturnsApprovalController::class, 'addApprovalComment'])->name('ajax.returns.batches.approvals.comment');

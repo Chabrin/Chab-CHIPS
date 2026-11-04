@@ -7,15 +7,15 @@
     <style>
         @include('property.processed-returns.partials.pdf-styles')
 
-        /* Twelve columns on a landscape page: tighter cells than the default table */
+        /* Fixed column widths leave room for editable remarks in the exported statement. */
         .txn td {
             padding: 4px 4px;
-            font-size: 7pt;
+            font-size: 6.5pt;
         }
 
         .txn thead th {
             padding: 5px 4px;
-            font-size: 6.5pt;
+            font-size: 6pt;
             letter-spacing: 0.2px;
         }
     </style>
@@ -39,12 +39,15 @@
 
     <table class="cards">
         <tr>
-            <td class="col-landlord">
+            <td class="col-landlord" style="width:100%;padding-right:0;">
                 <div class="card">
+                    <table style="width:100%;"><tr><td style="width:42%;vertical-align:top;">
                     <div class="card-label">LANDLORD</div>
                     <div class="landlord-name">{{ $landlordTitle }}</div>
+                        <span class="ref">Account: {{ $return->landlord_code ?? '-' }}</span>
+                    </td><td style="width:58%;vertical-align:top;">
                     <table class="kv">
-                        <tr><td class="k">Account no.</td><td><strong>{{ $return->landlord_code ?? '-' }}</strong></td></tr>
+
                         <tr><td class="k">Property</td><td>{{ $propertyDisplay ?? ($return->property_code ?? '-') }}</td></tr>
                         <tr><td class="k">Return ID</td><td><strong>{{ $return->return_code }}</strong></td></tr>
                         <tr><td class="k">Type</td><td>{{ $return->return_type ?? '-' }}</td></tr>
@@ -52,42 +55,29 @@
                         <tr><td class="k">Voucher</td><td>{{ $return->voucher_number }}</td></tr>
                         @endif
                     </table>
+                    </td></tr></table>
                 </div>
             </td>
-            <td class="col-summary">
-                <div class="card">
-                    <div class="card-label">FINANCIAL SUMMARY</div>
-                    <table class="summary">
-                        <tr><td class="k">Total rent</td><td class="v">{{ $money($summary['total_rent']) }}</td></tr>
-                        <tr><td class="k">Commissionable amount</td><td class="v">{{ $money($summary['comm_total']) }}</td></tr>
-                        <tr class="sub"><td class="k">Less commission ({{ number_format($return->commission_rate ?? 0, 2) }}%)</td><td class="v dr">( {{ $money($summary['commission']) }} )</td></tr>
-                        <tr class="strong"><td class="k">Balance after commission</td><td class="v">{{ $money($summary['bal_after_comm']) }}</td></tr>
-                        <tr class="sub"><td class="k">Less VAT on commission</td><td class="v dr">( {{ $money($summary['vat']) }} )</td></tr>
-                        <tr class="strong"><td class="k">Balance less VAT &amp; commission</td><td class="v">{{ $money($summary['bal_less_vat']) }}</td></tr>
-                        <tr><td class="k">Add house deposits</td><td class="v cr">{{ $money($summary['house_deposits']) }}</td></tr>
-                        <tr><td class="k">Add water &amp; elec bills</td><td class="v cr">{{ $money($summary['water_elec_bills']) }}</td></tr>
-                        <tr class="closing"><td class="k">Net income</td><td class="v">{{ $money($summary['net_income']) }}</td></tr>
-                    </table>
-                </div>
-            </td>
+
         </tr>
     </table>
 
     <table class="txn">
         <thead>
             <tr>
-                <th style="width: 6%;">ROOM</th>
-                <th style="width: 17%;">TENANT</th>
-                <th class="r" style="width: 7.7%;">PAYABLE</th>
-                <th class="r" style="width: 7.7%;">ARREARS</th>
-                <th class="r" style="width: 7.7%;">VAT</th>
-                <th class="r" style="width: 7.7%;">HOUSE DEP.</th>
-                <th class="r" style="width: 7.7%;">ELEC DEP.</th>
-                <th class="r" style="width: 7.7%;">WATER DEP.</th>
-                <th class="r" style="width: 7.7%;">ELEC BILL</th>
-                <th class="r" style="width: 7.7%;">WATER BILL</th>
-                <th class="r" style="width: 7.7%;">SVC CHARGE</th>
-                <th class="r" style="width: 7.7%;">MONTHLY RENT</th>
+                <th class="" style="width: 5%;">ROOM</th>
+                <th class="" style="width: 14%;">TENANT</th>
+                <th class="r" style="width: 6.5%;">PAYABLE</th>
+                <th class="r" style="width: 8%;">ARREARS / PREPAYMENTS</th>
+                <th class="r" style="width: 5.5%;">VAT</th>
+                <th class="r" style="width: 6.5%;">HOUSE DEP.</th>
+                <th class="r" style="width: 6%;">ELEC DEP.</th>
+                <th class="r" style="width: 6%;">WATER DEP.</th>
+                <th class="r" style="width: 6.5%;">ELEC BILL</th>
+                <th class="r" style="width: 6.5%;">WATER BILL</th>
+                <th class="r" style="width: 6.5%;">SVC CHARGE</th>
+                <th class="r" style="width: 7.5%;">MONTHLY RENT</th>
+                <th class="" style="width: 15%;">REMARKS</th>
             </tr>
         </thead>
         <tbody>
@@ -105,10 +95,11 @@
                 <td class="r">{{ $amt($row['water_bill']) }}</td>
                 <td class="r">{{ $amt($row['service_charge']) }}</td>
                 <td class="r">{{ $money($row['monthly_rent'] ?? 0) }}</td>
+                <td class="remarks">{{ $row['remarks'] ?? '' }}</td>
             </tr>
             @empty
             <tr>
-                <td colspan="12" class="empty">No tenant lines found for this return.</td>
+                <td colspan="13" class="empty">No tenant lines found for this return.</td>
             </tr>
             @endforelse
 
@@ -117,21 +108,43 @@
                 <td></td>
                 <td>TOTALS</td>
                 <td class="r">{{ $money($totals['monthly_rent']) }}</td>
-                <td class="r">{{ $totals['rent_arrears'] > 0 ? $money($totals['rent_arrears']) : '' }}</td>
-                <td class="r">{{ $totals['vat'] > 0 ? $money($totals['vat']) : '' }}</td>
-                <td class="r">{{ $totals['house_deposit'] > 0 ? $money($totals['house_deposit']) : '' }}</td>
-                <td class="r">{{ $totals['elec_deposit'] > 0 ? $money($totals['elec_deposit']) : '' }}</td>
-                <td class="r">{{ $totals['water_deposit'] > 0 ? $money($totals['water_deposit']) : '' }}</td>
-                <td class="r">{{ $totals['elec_bill'] > 0 ? $money($totals['elec_bill']) : '' }}</td>
-                <td class="r">{{ $totals['water_bill'] > 0 ? $money($totals['water_bill']) : '' }}</td>
-                <td class="r">{{ $totals['service_charge'] > 0 ? $money($totals['service_charge']) : '' }}</td>
+                <td class="r">{{ $amt($totals['rent_arrears']) }}</td>
+                <td class="r">{{ $amt($totals['vat']) }}</td>
+                <td class="r">{{ $amt($totals['house_deposit']) }}</td>
+                <td class="r">{{ $amt($totals['elec_deposit']) }}</td>
+                <td class="r">{{ $amt($totals['water_deposit']) }}</td>
+                <td class="r">{{ $amt($totals['elec_bill']) }}</td>
+                <td class="r">{{ $amt($totals['water_bill']) }}</td>
+                <td class="r">{{ $amt($totals['service_charge']) }}</td>
                 <td class="r">{{ $money($totals['monthly_rent']) }}</td>
+                <td></td>
             </tr>
             @endif
         </tbody>
     </table>
 
+    <div class="statement-closing">
+    <table class="cards statement-summary"><tr><td style="width:48%;"></td>
+            <td class="col-summary">
+                <div class="card">
+                    <div class="card-label">FINANCIAL SUMMARY</div>
+                    <table class="summary">
+                        <tr><td class="k">Total rent</td><td class="v">{{ $money($summary['total_rent']) }}</td></tr>
+                        <tr><td class="k">Commissionable amount</td><td class="v">{{ $money($summary['comm_total']) }}</td></tr>
+                        <tr class="sub"><td class="k">Less commission ({{ number_format($return->commission_rate ?? 0, 2) }}%)</td><td class="v dr">( {{ $money($summary['commission']) }} )</td></tr>
+                        <tr class="strong"><td class="k">Balance after commission</td><td class="v">{{ $money($summary['bal_after_comm']) }}</td></tr>
+                        <tr class="sub"><td class="k">Less VAT on commission</td><td class="v dr">( {{ $money($summary['vat']) }} )</td></tr>
+                        <tr class="strong"><td class="k">Balance less VAT &amp; commission</td><td class="v">{{ $money($summary['bal_less_vat']) }}</td></tr>
+                        <tr><td class="k">Add house deposits</td><td class="v cr">{{ $money($summary['house_deposits']) }}</td></tr>
+                        <tr><td class="k">Add water &amp; elec bills</td><td class="v cr">{{ $money($summary['water_elec_bills']) }}</td></tr>
+                        <tr class="closing"><td class="k">Net income</td><td class="v">{{ $money($summary['net_income']) }}</td></tr>
+                    </table>
+                </div>
+            </td>
+    </tr></table>
+
     @include('property.processed-returns.partials.pdf-signoff')
+    </div>
 </body>
 
 </html>

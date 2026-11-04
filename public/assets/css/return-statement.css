@@ -1,0 +1,91 @@
+.statement-table {
+    table-layout: fixed;
+    min-width: 1320px;
+    font-size: .78rem;
+}
+
+.return-statement,
+.return-statement section > div {
+    background: #fff;
+}
+
+.return-statement table,
+#return-transaction-details table {
+    border-collapse: collapse;
+    --bs-table-bg: #fff;
+    --bs-table-color: #111;
+    --bs-table-striped-bg: #fff;
+    --bs-table-accent-bg: transparent;
+    --bs-table-hover-bg: #fff;
+}
+
+.return-statement table th,
+.return-statement table td,
+#return-transaction-details #details-table th,
+#return-transaction-details #details-table td,
+#return-transaction-details .summary-table td {
+    background: #fff !important;
+    color: #111;
+    box-shadow: none !important;
+    border: 1px solid #666 !important;
+}
+
+.return-statement .statement-table th,
+.return-statement .statement-table td {
+    padding: 4px 6px !important;
+    line-height: 1.25;
+    vertical-align: middle;
+}
+
+.return-statement .statement-table thead th {
+    background: #0b1b63 !important;
+    color: #fff;
+    border-color: #8795bc !important;
+    font-weight: 700;
+    white-space: normal;
+}
+
+.statement-table tfoot td {
+    font-weight: 700;
+    border-top: 2px solid #0b1b63 !important;
+}
+
+.statement-amount {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.statement-remarks-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 5px;
+    align-items: start;
+    margin: 0;
+}
+
+.return-statement .statement-remarks {
+    height: 26px;
+    min-height: 26px;
+    padding: 3px 5px;
+    font-size: 12px;
+    line-height: 18px;
+    resize: vertical;
+    background: #fff;
+}
+
+.return-statement .statement-save {
+    min-height: 26px;
+    padding: 3px 7px;
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.statement-save-status {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.statement-save-status:empty {
+    display: none;
+}
