@@ -97,7 +97,7 @@ class PayrollReviewController extends Controller
 
             PayrollSummary::where('period_id', $run->period_id)
                 ->where('current_status_id', 1)
-                ->update(['current_status_id' => 5]);
+                ->update(['current_status_id' => 5, 'approved_by' => Auth::id(), 'approved_at' => now()]);
             $this->applyLoanDeductions($run);
 
             $run->update([
@@ -349,7 +349,7 @@ class PayrollReviewController extends Controller
 
         $multipleContracts = $contractStaffIds->countBy()->filter(fn ($count) => $count > 1)->count();
         if ($multipleContracts) {
-            $warnings[] = "{$multipleContracts} staff have more than one active contract. Only the latest overlapping contract was paid.";
+            $warnings[] = "{$multipleContracts} staff have more than one active contract. Only the latest contract was paid.";
         }
 
         if ($this->taxBandsOverlap()) {
@@ -446,6 +446,7 @@ class PayrollReviewController extends Controller
                         'amount' => $info['deduction_amount'],
                         'loan_balance' => $balance,
                         'current_status_id' => 5,
+                        'period_id' => $run->period_id,
                     ]);
                     $loan->loan_balance = $balance;
                     $loan->cleared = $balance <= 0 ? 1 : $loan->cleared;
@@ -472,6 +473,7 @@ class PayrollReviewController extends Controller
                     'total_amount' => $amount,
                     'amount_balance' => max(0, $balance),
                     'current_status_id' => 5,
+                    'period_id' => $run->period_id,
                 ]);
 
                 if ($balance <= 0) {
@@ -490,7 +492,7 @@ class PayrollReviewController extends Controller
                 $info = $deductions['helb'];
                 $loan = HelbDeduction::find($info['parent_id']);
                 if ($loan) {
-                    HelbDeductionRepeat::where('parent_id', $loan->id)->whereDate('deduction_date', $info['deduction_date'])->delete();
+                    HelbDeductionRepeat::where('parent_id', $loan->id)->where('period_id', $run->period_id)->delete();
                     $loan->loan_balance = (float) $loan->loan_balance + (float) $info['deduction_amount'];
                     $loan->cleared = 0;
                     $loan->save();
@@ -498,7 +500,7 @@ class PayrollReviewController extends Controller
             }
 
             foreach ($deductions['prorated'] ?? [] as $info) {
-                ProratedDeductionRepeat::where('parent_id', $info['parent_id'])->whereDate('deduction_date', $info['deduction_date'])->delete();
+                ProratedDeductionRepeat::where('parent_id', $info['parent_id'])->where('period_id', $run->period_id)->delete();
                 ProratedDeduction::where('id', $info['parent_id'])->update(['cleared' => 0]);
             }
         }

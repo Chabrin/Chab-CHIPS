@@ -98,6 +98,11 @@
             return '<span class="badge bg-secondary">' + data + '</span>';
         }
 
+        // Only a Pending advance can be deleted, so the icon is shown on Pending rows only.
+        function deleteIcon(row) {
+            return '<a href="javascript:void(0)" class="text-danger ms-2 delete-advance" data-id="' + row.encrypted_id + '" data-client="' + $('<div>').text(row.client_name).html().replace(/"/g, '&quot;') + '" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>';
+        }
+
         var table = $('#advances-table').DataTable({
             processing: true,
             serverSide: false,
@@ -171,9 +176,9 @@
                             actions += '<a href="javascript:void(0)" class="text-primary me-2 post-advance" data-id="' + row.encrypted_id + '" title="Post to landlord ledger"><span class="material-symbols-outlined" style="font-size:18px;">send</span></a>';
                         }
 
-                        // if (row.can_delete) {
-                        //     actions += '<a href="javascript:void(0)" class="text-danger delete-advance" data-id="' + row.encrypted_id + '" data-client="' + row.client_name + '" title="Delete"><span class="material-symbols-outlined" style="font-size:18px;">delete</span></a>';
-                        // }
+                        if (row.can_delete && parseInt(row.status_id, 10) === 1) {
+                            actions += deleteIcon(row);
+                        }
 
                         return actions;
                     }
@@ -238,6 +243,10 @@
                             actions += '<span class="text-muted small">You created this - another user must confirm it</span>';
                         }
 
+                        if (row.can_delete) {
+                            actions += deleteIcon(row);
+                        }
+
                         return actions;
                     }
                 }
@@ -298,7 +307,7 @@
         });
 
         // Delete Advance
-        $('#advances-table').on('click', '.delete-advance', function() {
+        $('#advances-table, #confirm-table').on('click', '.delete-advance', function() {
             var id = $(this).data('id');
             var client = $(this).data('client');
 
@@ -311,6 +320,7 @@
                     },
                     success: function(response) {
                         table.ajax.reload();
+                        confirmTable.ajax.reload();
                         toastr.success(response.message || 'Advance deleted successfully');
                     },
                     error: function(xhr) {

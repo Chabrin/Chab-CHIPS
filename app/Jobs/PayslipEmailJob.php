@@ -130,9 +130,9 @@ class PayslipEmailJob implements ShouldQueue
             return collect();
         }
 
-        $elementIds = array_column($payslipElements, 'element_id');
+        $elementIds = array_filter(array_column($payslipElements, 'element_id'));
 
-        // Get element details
+        // Get element details (only needed for older lines that do not carry their name inline)
         $elementDetails = PayrollElement::whereIn('id', $elementIds)
             ->get()
             ->keyBy('id');
@@ -157,9 +157,21 @@ class PayslipEmailJob implements ShouldQueue
 
         // Merge amount with element details
         $result = collect($payslipElements)->map(function ($item) use ($elementDetails) {
-            $element = $elementDetails->get($item['element_id']);
+            // Current format stores name/type/position inline on each line (e.g. "NSSF Tier I",
+            // "Sick Leave Pay Adjustment"); the PDF and preview use these, so the email must too.
+            if (isset($item['element_name'])) {
+                return [
+                    'element_id' => $item['element_id'] ?? null,
+                    'element_name' => $item['element_name'],
+                    'element_type' => $item['element_type'] ?? '1',
+                    'payslip_position' => $item['payslip_position'] ?? 999,
+                    'amount' => $item['amount']
+                ];
+            }
+
+            $element = $elementDetails->get($item['element_id'] ?? null);
             return [
-                'element_id' => $item['element_id'],
+                'element_id' => $item['element_id'] ?? null,
                 'element_name' => $element->element_name ?? 'Unknown',
                 'element_type' => $element->element_type ?? '1',
                 'payslip_position' => $element->payslip_position ?? 999,

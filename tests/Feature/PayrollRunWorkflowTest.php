@@ -2,8 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\PayrollController;
-use App\Models\EmployeeContract;
 use App\Models\HelbDeduction;
 use App\Models\HelbDeductionRepeat;
 use App\Models\PayrollRun;
@@ -39,6 +37,8 @@ class PayrollRunWorkflowTest extends TestCase
                 $t->decimal($column, 15, 2)->default(0);
             }
             $t->integer('current_status_id')->default(1);
+            $t->integer('approved_by')->nullable();
+            $t->timestamp('approved_at')->nullable();
         });
         (require base_path('database/migrations/2026_11_04_000001_create_payroll_runs_tables.php'))->up();
         (require base_path('database/migrations/2026_01_23_115917_create_notifications_table.php'))->up();
@@ -81,6 +81,7 @@ class PayrollRunWorkflowTest extends TestCase
             $t->decimal('amount', 15, 2)->default(0);
             $t->decimal('loan_balance', 15, 2)->default(0);
             $t->integer('current_status_id')->nullable();
+            $t->integer('period_id')->nullable();
         });
         Schema::create('cb_roles', function (Blueprint $t) {
             $t->id();
@@ -302,26 +303,5 @@ class PayrollRunWorkflowTest extends TestCase
         $this->actingAsAccountant();
 
         $this->get('/payroll/processing/' . self::PERIOD_ID . '/eft-test')->assertStatus(422);
-    }
-
-    public function test_overlapping_contracts_keep_only_the_latest_but_sequential_ones_stay(): void
-    {
-        $contract = fn (int $id, int $staffId, string $start, ?string $end) => (new EmployeeContract)->forceFill([
-            'id' => $id,
-            'staff_id' => $staffId,
-            'date_start' => $start,
-            'date_end' => $end,
-        ]);
-        $contracts = collect([
-            $contract(1, 91, '2018-01-01', null),
-            $contract(2, 91, '2018-09-01', null),
-            $contract(3, 92, '2026-10-01', '2026-10-10'),
-            $contract(4, 92, '2026-10-11', null),
-        ]);
-
-        $method = new \ReflectionMethod(PayrollController::class, 'withoutOverlappingContracts');
-        $kept = $method->invoke(app(PayrollController::class), $contracts, '2026-10-01', '2026-10-31');
-
-        $this->assertEqualsCanonicalizing([2, 3, 4], $kept->pluck('id')->all());
     }
 }

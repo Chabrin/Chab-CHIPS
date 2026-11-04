@@ -59,7 +59,6 @@
     </div>
 </div>
 
-<!-- Process Period Modal -->
 <div class="modal fade" id="processPeriodModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md">
         <div class="modal-content">
@@ -150,7 +149,8 @@
                 },
                 {
                     data: 'run_status',
-                    render: status => `<span class="badge ${status === 'approved' ? 'badge-light-success' : 'badge-light-warning'}">${runStatusLabels[status] || 'Draft'}</span>`
+                    render: (status, type, row) => `<span class="badge ${status === 'approved' ? 'badge-light-success' : 'badge-light-warning'}">${runStatusLabels[status] || 'Draft'}</span>`
+                        + (row.processed_by_name ? `<div class="small text-muted">Processed by ${$('<span>').text(row.processed_by_name).html()}</div>` : '')
                 },
                 {
                     data: null,
@@ -159,7 +159,7 @@
                     render: row => `<a class="btn btn-primary btn-sm" href="/payroll/processing/${row.period_id}/review">View Employees</a>`
                 }
             ],
-            pageLength: 3,
+            pageLength: 6,
             order: [
                 [1, 'desc']
             ]
@@ -223,7 +223,10 @@
                     $btn.prop('disabled', false);
 
                     if (res.success) {
-                        toastr.success('Payroll processed successfully');
+                        toastr.success(res.message || 'Payroll processed successfully');
+                        (res.warnings || []).forEach(function(warning) {
+                            toastr.warning($('<span>').text(warning).html(), 'Check this', { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+                        });
                         $('#processPeriodModal').modal('hide');
                         $('#processPeriodForm')[0].reset();
                         window.location = res.review_url;

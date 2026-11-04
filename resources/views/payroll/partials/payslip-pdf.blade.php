@@ -130,7 +130,7 @@
     </tr>
     <tr>
         <td class="lbl">Days Paid</td>
-        <td class="val">{{ rtrim(rtrim(number_format((float) ($payroll->worked_days ?? 0), 2, '.', ''), '0'), '.') }}</td>
+        <td class="val">{{ ($payroll->worked_days ?? '') === '' ? '-' : rtrim(rtrim(number_format((float) $payroll->worked_days, 2, '.', ''), '0'), '.') }}</td>
         <td class="lbl">Period Days</td>
         <td class="val">{{ $payroll->payrollPeriod?->duration_days ?? '-' }}</td>
     </tr>

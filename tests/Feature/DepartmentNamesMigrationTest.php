@@ -13,6 +13,10 @@ class DepartmentNamesMigrationTest extends TestCase
     {
         parent::setUp();
 
+        // The migration's body is commented out (department names are edited by hand in HR Settings).
+        // Remove this skip if the migration logic is restored.
+        $this->markTestSkipped('standardize_hr_department_names migration is intentionally disabled.');
+
         // Use a separate, explicitly in-memory connection; never migrate the local PostgreSQL database.
         config(['database.default' => 'department_names_test']);
         config(['database.connections.department_names_test' => [
