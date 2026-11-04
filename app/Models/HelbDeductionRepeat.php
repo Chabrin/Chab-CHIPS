@@ -23,6 +23,7 @@ class HelbDeductionRepeat extends Model
         'amount',
         'loan_balance',
         'current_status_id',
+        'period_id',
     ];
 
     protected $casts = [

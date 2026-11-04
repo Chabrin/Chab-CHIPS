@@ -368,6 +368,8 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/payroll/unprocessed-periods', [PayrollController::class, 'getUnprocessedPeriods'])->name('ajax.payroll.unprocessedPeriods');
     Route::post('/ajax/payroll/process', [PayrollController::class, 'processPayroll'])->name('ajax.payroll.process');
     Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollController::class, 'approvePayroll'])->name('ajax.payroll.approve');
+    Route::post('/ajax/payroll/periods/{periodId}/reject', [PayrollController::class, 'rejectPayroll'])->name('ajax.payroll.reject');
+    Route::get('/ajax/payroll/periods/{periodId}/details', [PayrollController::class, 'periodDetails'])->name('ajax.payroll.details');
 
     // Payslips
     Route::get('/payroll/payslips', [PayslipsController::class, 'index'])->name('payroll.payslips');
