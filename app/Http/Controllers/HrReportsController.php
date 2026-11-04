@@ -42,7 +42,7 @@ class HrReportsController extends Controller
     {
         try {
             $request->validate([
-                'deduction_type' => 'required|in:NSSF,SHIF,Housing Levy',
+                'deduction_type' => 'required|in:NSSF,SHA,Housing Levy',
                 'period' => 'required|date_format:Y-m'
             ]);
 
@@ -52,7 +52,7 @@ class HrReportsController extends Controller
             // Map deduction type to column name
             $columnMap = [
                 'NSSF' => 'nssf',
-                'SHIF' => 'nhif', // SHIF is NHIF in the database
+                'SHA' => 'nhif', // SHA is stored in the nhif column
                 'Housing Levy' => 'housing_levy'
             ];
 
@@ -120,7 +120,7 @@ class HrReportsController extends Controller
     {
         try {
             $request->validate([
-                'deduction_type' => 'required|in:NSSF,SHIF,Housing Levy',
+                'deduction_type' => 'required|in:NSSF,SHA,Housing Levy',
                 'period' => 'required|date_format:Y-m'
             ]);
 
@@ -130,7 +130,7 @@ class HrReportsController extends Controller
             // Map deduction type to column name
             $columnMap = [
                 'NSSF' => 'nssf',
-                'SHIF' => 'nhif',
+                'SHA' => 'nhif',
                 'Housing Levy' => 'housing_levy'
             ];
 
@@ -509,7 +509,7 @@ class HrReportsController extends Controller
             return Excel::download(
                 GenericReportExport::build(
                     title:     'Payroll Register — ' . $periodLabel,
-                    headings:  ['#', 'Staff No', 'Name', 'Department', 'Basic Salary', 'Allowances', 'Gross', 'PAYE', 'NSSF', 'SHIF', 'Housing Levy', 'Total Deductions', 'Net Pay'],
+                    headings:  ['#', 'Staff No', 'Name', 'Department', 'Basic Salary', 'Allowances', 'Gross', 'PAYE', 'NSSF', 'SHA', 'Housing Levy', 'Total Deductions', 'Net Pay'],
                     dataRows:  $rows,
                     meta:      ['Period: ' . $periodLabel, 'Generated: ' . now()->format('d/m/Y H:i:s')],
                     colWidths: ['A' => 5, 'B' => 13, 'C' => 26, 'D' => 20, 'E' => 14, 'F' => 13, 'G' => 13, 'H' => 12, 'I' => 12, 'J' => 12, 'K' => 14, 'L' => 16, 'M' => 13],
@@ -661,7 +661,7 @@ class HrReportsController extends Controller
             return Excel::download(
                 GenericReportExport::build(
                     title:     'Payroll Summary — ' . $periodLabel,
-                    headings:  ['#', 'Department', 'Staff Count', 'Total Basic', 'Total Gross', 'Total PAYE', 'Total NSSF', 'Total SHIF', 'Total Housing Levy', 'Total Deductions', 'Total Net Pay'],
+                    headings:  ['#', 'Department', 'Staff Count', 'Total Basic', 'Total Gross', 'Total PAYE', 'Total NSSF', 'Total SHA', 'Total Housing Levy', 'Total Deductions', 'Total Net Pay'],
                     dataRows:  $rows,
                     meta:      ['Period: ' . $periodLabel, 'Generated: ' . now()->format('d/m/Y H:i:s')],
                     colWidths: ['A' => 5, 'B' => 22, 'C' => 12, 'D' => 15, 'E' => 14, 'F' => 13, 'G' => 12, 'H' => 12, 'I' => 18, 'J' => 16, 'K' => 14],

@@ -118,6 +118,22 @@ class PayslipsController extends Controller
         }
     }
 
+    /** Payslip for the payroll review page, including runs not yet approved. */
+    public function reviewPayslip($summaryId)
+    {
+        abort_unless(Auth::user()?->isAbleTo('read_payroll_processing'), 403);
+
+        $payrollSummary = PayrollSummary::with(['staff.bank', 'staff.position', 'staff.department', 'position', 'department', 'payrollPeriod'])
+            ->findOrFail($summaryId);
+
+        return response()->json([
+            'html' => view('payroll.partials.payslip-preview', [
+                'payroll' => $payrollSummary,
+                'elements' => $this->getPayslipElements($payrollSummary->payslip_elements, $payrollSummary),
+            ])->render(),
+        ]);
+    }
+
     /**
      * Download payslip as PDF
      */
@@ -328,7 +344,7 @@ class PayslipsController extends Controller
         // Akiba/Social Welfare are read directly from columns in the Blade to avoid duplicates.
         $map = [
             'nssf'         => ['col' => 'nssf',        'name' => 'NSSF',         'pos' => 10],
-            'nhif'         => ['col' => 'nhif',         'name' => 'SHIF (NHIF)', 'pos' => 20],
+            'nhif'         => ['col' => 'nhif',         'name' => 'SHA',         'pos' => 20],
             'housing_levy' => ['col' => 'housing_levy', 'name' => 'Housing Levy', 'pos' => 30],
             'payee'        => ['col' => 'tax_payable',  'name' => 'PAYE',         'pos' => 40],
             'helb_loans'   => ['col' => 'helb_loans',   'name' => 'HELB Loan',   'pos' => 50],

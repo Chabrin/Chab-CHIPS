@@ -47,7 +47,7 @@ return new class extends Migration
     }
 
     /**
-     * Create the approve permission if missing and grant payroll permissions to the HR and director roles.
+     * Create the approve permission if missing and grant the HR and director roles their payroll permissions.
      */
     private function grantPermissions(): void
     {
@@ -62,10 +62,10 @@ return new class extends Migration
             ['display_name' => 'approve_payroll_processing', 'module_id' => $moduleId, 'created_at' => $now, 'updated_at' => $now]
         );
 
-        // HR runs payroll; directors approve it and can see every payslip.
+        // HR runs payroll; directors can see every payslip. The accountant approves.
         $grants = [
             'hr_manager' => self::HR_PERMISSIONS,
-            'directors' => ['approve_payroll_processing', 'read_all_payslips'],
+            'directors' => ['read_all_payslips'],
         ];
 
         foreach ($grants as $roleName => $permissionNames) {

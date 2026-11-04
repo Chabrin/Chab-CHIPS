@@ -23,14 +23,18 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Recent Payroll Runs</h5>
-                        @permission('create_payroll_processing')
-                        <div class="ms-auto">
+                        <div class="ms-auto d-flex gap-2">
+                            <a href="{{ route('payroll.monthly') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined me-1" style="font-size:18px;">fact_check</span>
+                                Monthly Items &amp; Checks
+                            </a>
+                            @permission('create_payroll_processing')
                             <button class="btn btn-primary btn-sm d-flex align-items-center" id="processNewPeriodBtn">
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">autorenew</span>
                                 Run Payroll
                             </button>
+                            @endpermission
                         </div>
-                        @endpermission
                     </div>
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
@@ -59,30 +63,6 @@
     </div>
 </div>
 
-<!-- Run details modal: per-employee breakdown for audit before approval -->
-<div class="modal fade" id="runDetailsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Payroll Run Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr><th>Staff No</th><th>Name</th><th class="text-end">Basic</th><th class="text-end">Gross</th><th class="text-end">Deductions</th><th class="text-end">Net</th></tr>
-                        </thead>
-                        <tbody id="run-details-body"></tbody>
-                        <tfoot id="run-details-foot"></tfoot>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Process Period Modal -->
 <div class="modal fade" id="processPeriodModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md">
         <div class="modal-content">
@@ -102,6 +82,9 @@
                     <div class="alert alert-info small mb-3">
                         <span class="material-symbols-outlined" style="font-size:16px;">info</span>
                         Salary and contract elements are prorated by calendar days when an active contract covers only part of this period.
+                    </div>
+                    <div class="alert alert-light border small mb-3">
+                        Before running, look at <a href="{{ route('payroll.monthly') }}">Monthly Items &amp; Checks</a> for staff who would be left out, what changed since last month, and to enter one-time items such as a bonus.
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
@@ -127,8 +110,7 @@
 <script>
     $(document).ready(function() {
         let recentPeriodsTable;
-        const canApprovePayroll = @json(Auth::user()->isAbleTo('approve_payroll_processing'));
-        const currentUserId = {{ (int) Auth::id() }};
+        const runStatusLabels = @json(\App\Models\PayrollRun::STATUS_LABELS);
 
         // Initialize Recent Periods Table
         recentPeriodsTable = $('#recent-periods-table').DataTable({
@@ -173,100 +155,21 @@
                     render: data => '<strong>' + formatCurrency(data || 0) + '</strong>'
                 },
                 {
-                    data: 'run_status_id',
-                    render: (status, type, row) => Number(status) === 1
-                        ? '<span class="badge badge-light-warning">Pending review</span>'
-                            + (row.processed_by_name ? `<div class="small text-muted">Processed by ${$('<span>').text(row.processed_by_name).html()}</div>` : '')
-                        : '<span class="badge badge-light-success">Approved</span>'
+                    data: 'run_status',
+                    render: (status, type, row) => `<span class="badge ${status === 'approved' ? 'badge-light-success' : 'badge-light-warning'}">${runStatusLabels[status] || 'Draft'}</span>`
+                        + (row.processed_by_name ? `<div class="small text-muted">Processed by ${$('<span>').text(row.processed_by_name).html()}</div>` : '')
                 },
                 {
                     data: null,
                     orderable: false,
                     searchable: false,
-                    render: row => {
-                        const id = row.period_id;
-                        const pending = Number(row.run_status_id) === 1;
-                        const ownRun = row.processed_by && Number(row.processed_by) === currentUserId;
-                        let html = `<button type="button" class="btn btn-light btn-sm view-payroll me-1" data-period-id="${id}">View</button>`;
-                        if (canApprovePayroll && pending) {
-                            html += ownRun
-                                ? '<span class="small text-muted me-1">Needs another approver</span>'
-                                : `<button type="button" class="btn btn-success btn-sm approve-payroll me-1" data-period-id="${id}">Approve</button>`;
-                            html += `<button type="button" class="btn btn-outline-danger btn-sm reject-payroll" data-period-id="${id}">Reject</button>`;
-                        }
-                        return html;
-                    }
+                    render: row => `<a class="btn btn-primary btn-sm" href="/payroll/processing/${row.period_id}/review">View Employees</a>`
                 }
             ],
             pageLength: 6,
             order: [
                 [1, 'desc']
             ]
-        });
-
-        // View the per-employee breakdown of a run (audit before approval)
-        $('#recent-periods-table').on('click', '.view-payroll', function() {
-            const periodId = $(this).data('period-id');
-            $('#run-details-body').html('<tr><td colspan="6" class="text-center">Loading...</td></tr>');
-            $('#run-details-foot').empty();
-            $('#runDetailsModal').modal('show');
-            $.get(`/ajax/payroll/periods/${periodId}/details`, function(res) {
-                const esc = text => $('<span>').text(text ?? '').html();
-                const rows = res.rows.map(r => `<tr>
-                    <td>${esc(r.staff_number)}</td><td>${esc(r.name)}</td>
-                    <td class="text-end">${formatCurrency(r.basic_salary)}</td>
-                    <td class="text-end">${formatCurrency(r.gross)}</td>
-                    <td class="text-end">${formatCurrency(r.deductions)}</td>
-                    <td class="text-end"><strong>${formatCurrency(r.net)}</strong></td></tr>`).join('');
-                $('#run-details-body').html(rows || '<tr><td colspan="6" class="text-center">No rows</td></tr>');
-                $('#run-details-foot').html(`<tr class="fw-bold"><td colspan="2">Totals (${res.rows.length} employees)</td>
-                    <td class="text-end">${formatCurrency(res.totals.basic_salary)}</td>
-                    <td class="text-end">${formatCurrency(res.totals.gross)}</td>
-                    <td class="text-end">${formatCurrency(res.totals.deductions)}</td>
-                    <td class="text-end">${formatCurrency(res.totals.net)}</td></tr>`);
-            }).fail(function(xhr) {
-                $('#runDetailsModal').modal('hide');
-                toastr.error(xhr.responseJSON?.message || 'Could not load the payroll run');
-            });
-        });
-
-        // Reject a pending run (deletes it and restores deduction balances)
-        $('#recent-periods-table').on('click', '.reject-payroll', function() {
-            const $button = $(this);
-            if (!confirm('Reject this payroll run? It will be deleted, HELB and loan deduction balances restored, and the period can be processed again.')) return;
-            $button.prop('disabled', true);
-            $.ajax({
-                url: `/ajax/payroll/periods/${$button.data('period-id')}/reject`,
-                type: 'POST',
-                data: { _token: '{{ csrf_token() }}' },
-                success: function(res) {
-                    toastr.success(res.message || 'Payroll run rejected');
-                    recentPeriodsTable.ajax.reload(null, false);
-                },
-                error: function(xhr) {
-                    $button.prop('disabled', false);
-                    toastr.error(xhr.responseJSON?.error || 'Could not reject the payroll run');
-                }
-            });
-        });
-
-        $('#recent-periods-table').on('click', '.approve-payroll', function() {
-            const $button = $(this);
-            if (!confirm('Approve this payroll run and make its payslips available?')) return;
-            $button.prop('disabled', true);
-            $.ajax({
-                url: `/ajax/payroll/periods/${$button.data('period-id')}/approve`,
-                type: 'POST',
-                data: { _token: '{{ csrf_token() }}' },
-                success: function(res) {
-                    toastr.success(res.message || 'Payroll approved');
-                    recentPeriodsTable.ajax.reload(null, false);
-                },
-                error: function(xhr) {
-                    $button.prop('disabled', false);
-                    toastr.error(xhr.responseJSON?.error || 'Could not approve payroll');
-                }
-            });
         });
 
         // Process New Period Button
@@ -328,12 +231,10 @@
 
                     if (res.success) {
                         toastr.success(res.message || 'Payroll processed successfully');
-                        (res.warnings || []).forEach(function(warning) {
-                            toastr.warning($('<span>').text(warning).html(), 'Check this', { timeOut: 0, extendedTimeOut: 0, closeButton: true });
-                        });
+                        // Warnings are shown on the review page this redirects to.
                         $('#processPeriodModal').modal('hide');
                         $('#processPeriodForm')[0].reset();
-                        recentPeriodsTable.ajax.reload(null, false);
+                        window.location = res.review_url;
                     } else {
                         toastr.error(res.error || 'Error processing payroll');
                     }

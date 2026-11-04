@@ -142,7 +142,7 @@
                         <div class="card-body py-3">
                             <div class="d-flex align-items-start gap-2">
                                 <span class="material-symbols-outlined report-icon" style="color:#e67e22;">account_balance</span>
-                                <div><div class="rc-title">Statutory Deductions</div><div class="rc-desc">NSSF, SHIF and Housing Levy deductions by period.</div></div>
+                                <div><div class="rc-title">Statutory Deductions</div><div class="rc-desc">NSSF, SHA and Housing Levy deductions by period.</div></div>
                             </div>
                         </div>
                     </div>

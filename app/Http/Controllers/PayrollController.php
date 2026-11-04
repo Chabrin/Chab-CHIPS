@@ -11,15 +11,18 @@ use App\Models\PayrollElement;
 use App\Models\PayrollSummary;
 use App\Models\PayrollCalendar;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollRun;
+use App\Models\PayrollPeriodItem;
 use App\Models\ContractElement;
 use App\Models\EmployeeContract;
 use App\Models\HelbDeduction;
-use App\Models\HelbDeductionRepeat;
 use App\Models\ProratedDeduction;
 use App\Models\ProratedDeductionRepeat;
 use App\Models\LeaveRequestDaysTaken;
 use App\Services\ErrorDispatcher;
 use App\Services\NssfCalculator;
+use App\Services\PayrollPreRunCheck;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -262,12 +265,23 @@ class PayrollController extends Controller
         }
     }
 
-    public function payrollElementsListSimpler()
+    /**
+     * Plain element list for the forms. "?for=contract" keeps only what a contract can hold (recurring, not
+     * calculated by the run); "?for=monthly" keeps only the one-time elements. Without it, every element is listed.
+     */
+    public function payrollElementsListSimpler(Request $request)
     {
         $this->requirePayrollPermission('read_payroll_elements');
         try {
-            $elements = PayrollElement::select('id', 'element_name')->orderBy('element_name', 'asc')
+            $elements = PayrollElement::select('id', 'element_name', 'element_key', 'element_type', 'formula_id', 'amount', 'recurrence', 'applies_to')
+                ->orderBy('element_name', 'asc')
                 ->get();
+
+            if ($request->query('for') === 'contract') {
+                $elements = $elements->filter(fn ($element) => $element->canBeOnContract())->values();
+            } elseif ($request->query('for') === 'monthly') {
+                $elements = $elements->filter(fn ($element) => $element->canBeOneTimeItem())->values();
+            }
 
             return response()->json(['elements' => $elements]);
         } catch (\Exception $e) {
@@ -279,6 +293,52 @@ class PayrollController extends Controller
             Log::error('Error loading payroll elements: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to load payroll elements'], 500);
         }
+    }
+
+    /**
+     * What the items that apply to every staff member come to for a given pay, shown on the contract form. The
+     * statutory items are calculated exactly as the payroll run calculates them.
+     */
+    public function allStaffPreview(Request $request)
+    {
+        $basic = max(0, (float) $request->query('basic', 0));
+        $gross = $basic + max(0, (float) $request->query('allowances', 0));
+
+        $nssf = $this->nssfCalculator->calculate($gross)['total'];
+        $sha = $this->calculateNHIF($gross);
+        $levy = $this->calculateHousingLevy($gross);
+        $paye = $this->calculatePAYE($gross - $nssf - $sha - $levy);
+
+        $elements = PayrollElement::approved()
+            ->where('applies_to', PayrollElement::ALL_STAFF)
+            ->where('recurrence', PayrollElement::RECURRING)
+            ->orderBy('payslip_position')->orderBy('element_name')
+            ->get()
+            ->reject(fn ($element) => $element->isSystem())
+            ->map(function ($element) use ($basic, $gross, $nssf, $sha, $levy, $paye) {
+                [$amount, $how] = match (strtolower((string) $element->element_key)) {
+                    'nssf' => [$nssf, 'Tier I and Tier II on gross pay'],
+                    'nhif' => [$sha, 'Calculated from gross pay'],
+                    'housing_levy' => [$levy, 'Calculated from gross pay'],
+                    'payee' => [$paye, 'From the tax bands, after the items above'],
+                    default => [$element->defaultAmount($basic, $gross), match ((int) $element->formula_id) {
+                        2 => (float) $element->amount . '% of basic salary',
+                        3 => (float) $element->amount . '% of gross pay',
+                        default => 'Fixed amount',
+                    }],
+                };
+
+                return [
+                    'id' => $element->id,
+                    'name' => $element->element_name,
+                    'type' => (string) $element->element_type,
+                    'statutory' => $element->isStatutory(),
+                    'how' => $how,
+                    'amount' => $gross > 0 ? $amount : null,
+                ];
+            })->values();
+
+        return response()->json(['elements' => $elements]);
     }
 
 
@@ -332,6 +392,27 @@ class PayrollController extends Controller
         }
     }
 
+    /**
+     * Why an element's "how often" and "applies to" settings can't be saved, or null when they can: the built-in
+     * statutory items stay recurring for all staff, and an item that repeats for all staff needs a formula the run can use.
+     */
+    private function elementSettingsError(array $validated, ?PayrollElement $existing): ?string
+    {
+        if ($existing?->isStatutory()) {
+            return $validated['recurrence'] !== PayrollElement::RECURRING || $validated['applies_to'] !== PayrollElement::ALL_STAFF
+                ? $existing->element_name . ' is calculated by the payroll run for every staff member, so it must stay recurring for all staff.'
+                : null;
+        }
+
+        if ($validated['recurrence'] === PayrollElement::RECURRING
+            && $validated['applies_to'] === PayrollElement::ALL_STAFF
+            && !in_array((int) $validated['formula'], PayrollElement::AMOUNT_FORMULAS, true)) {
+            return 'An item that repeats for all staff needs the Fixed, Percent of basic salary or Percent of gross payment formula.';
+        }
+
+        return null;
+    }
+
     public function payrollElementsStore(Request $request)
     {
         $this->requirePayrollPermission('create_payroll_elements');
@@ -341,14 +422,20 @@ class PayrollController extends Controller
                 'element_type'      => 'required|in:1,2', // 1: Deduction, 2: Allowance
                 'formula'           => 'required|in:1,2,3,4,5,6,7,8', // Formula options
                 'amount'            => 'required|numeric|min:0',
+                'recurrence'        => 'required|in:recurring,one_time',
+                'applies_to'        => 'required|in:all,specific',
                 'account'           => 'nullable',
                 'staff_positions' => 'nullable',
                 'payslip_position'  => 'nullable|integer',
             ]);
 
-            Log::info('Validated payroll element data: ', $validated);
+            if ($error = $this->elementSettingsError($validated, null)) {
+                return response()->json(['success' => false, 'errors' => ['applies_to' => [$error]]], 422);
+            }
 
             $element = new PayrollElement();
+            $element->recurrence          = $validated['recurrence'];
+            $element->applies_to          = $validated['applies_to'];
             $element->element_name        = $validated['element_name'];
             $element->element_type        = $validated['element_type'];
             $element->formula_id          = $validated['formula'];
@@ -383,12 +470,21 @@ class PayrollController extends Controller
                 'element_type'      => 'required|in:1,2', // 1: Deduction, 2: Allowance
                 'formula'           => 'required|in:1,2,3,4,5,6,7,8', // Formula options
                 'amount'            => 'required|numeric|min:0',
+                'recurrence'        => 'required|in:recurring,one_time',
+                'applies_to'        => 'required|in:all,specific',
                 'account'           => 'nullable',
                 'staff_positions'   => 'nullable',
                 'payslip_position'  => 'nullable|integer',
             ]);
 
             $element = PayrollElement::findOrFail($id);
+
+            if ($error = $this->elementSettingsError($validated, $element)) {
+                return response()->json(['success' => false, 'errors' => ['applies_to' => [$error]]], 422);
+            }
+
+            $element->recurrence          = $validated['recurrence'];
+            $element->applies_to          = $validated['applies_to'];
             $element->element_name        = $validated['element_name'];
             $element->element_type        = $validated['element_type'];
             $element->formula_id          = $validated['formula'];
@@ -780,6 +876,8 @@ class PayrollController extends Controller
         $this->requirePayrollPermission('read_payroll_processing');
         try {
             $recentPeriods = PayrollSummary::join('sys_hr_payroll_periods as p', 'sys_hr_payroll_summary.period_id', '=', 'p.id')
+                ->leftJoin('payroll_runs as r', 'r.period_id', '=', 'p.id')
+                ->leftJoin('josya_users as u', 'u.id', '=', 'r.processed_by')
                 ->select(
                     'p.id as period_id',
                     'p.start_date',
@@ -790,11 +888,10 @@ class PayrollController extends Controller
                     DB::raw('SUM(sys_hr_payroll_summary.total_deductions) as total_deductions'),
                     DB::raw('SUM(sys_hr_payroll_summary.net_pay) as total_net_salary'),
                     DB::raw('COUNT(sys_hr_payroll_summary.id) as employee_count'),
-                    DB::raw('MIN(sys_hr_payroll_summary.current_status_id) as run_status_id'),
-                    DB::raw('MIN(sys_hr_payroll_summary.processed_by) as processed_by'),
-                    DB::raw('(SELECT u.name FROM josya_users u WHERE u.id = MIN(sys_hr_payroll_summary.processed_by)) as processed_by_name')
+                    'r.status as run_status',
+                    'u.name as processed_by_name'
                 )
-                ->groupBy('p.id', 'p.start_date', 'p.end_date', 'p.period_number')
+                ->groupBy('p.id', 'p.start_date', 'p.end_date', 'p.period_number', 'r.status', 'u.name')
                 ->orderBy('p.start_date', 'desc')
                 ->limit(60)
                 ->get();
@@ -865,6 +962,21 @@ class PayrollController extends Controller
                 ], 422);
             }
 
+            // Loan balances only change when a run is approved, so a second unapproved run would read the same
+            // balances and deduct the last installments twice. One run can be in progress at a time.
+            $pendingRun = PayrollRun::with('period')
+                ->where('period_id', '!=', $period->id)
+                ->whereIn('status', [PayrollRun::STATUS_DRAFT, PayrollRun::STATUS_WITH_ACCOUNTANT, PayrollRun::STATUS_RETURNED])
+                ->first();
+            if ($pendingRun) {
+                $pendingLabel = $pendingRun->period?->start_date?->format('F Y') ?? 'another period';
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'The payroll for ' . $pendingLabel . ' is still ' . $pendingRun->status_label . '. Approve or discard it before processing another period, so loan balances are not deducted twice.'
+                ], 422);
+            }
+
             if (!$period->start_date || !$period->end_date) {
                 return response()->json([
                     'success' => false,
@@ -890,17 +1002,22 @@ class PayrollController extends Controller
                 ->keyBy('element_key');
 
             // Get active employee contracts
+            // Active (1) and On Leave (4) staff are both paid; suspended/terminated are not.
             $contracts = EmployeeContract::with('staff')
                 ->active()
-                ->where(function ($query) use ($endDate) {
-                    $query->whereNull('date_start')->orWhereDate('date_start', '<=', $endDate);
-                })
-                ->where(function ($query) use ($startDate) {
-                    $query->whereNull('date_end')->orWhereDate('date_end', '>=', $startDate);
-                })
-                // Active (1) and On Leave (4) staff are both paid; suspended/terminated are not.
-                ->whereHas('staff', fn ($query) => $query->whereIn('current_status_id', [1, 4]))
+                ->coveringPeriod($startDate, $endDate)
                 ->get();
+
+            // Items that repeat for every staff member without being on a contract, and the one-time items entered for this period
+            $recurringAll = PayrollElement::approved()
+                ->where('applies_to', PayrollElement::ALL_STAFF)
+                ->where('recurrence', PayrollElement::RECURRING)
+                ->get()
+                ->reject(fn ($element) => $element->isStatutory() || $element->isSystem() || $element->element_key === 'helb_loans')
+                ->values();
+            $periodItems = PayrollPeriodItem::with('element')->where('period_id', $period->id)->get();
+            $itemsForEveryone = $periodItems->whereNull('staff_id');
+            $itemsByStaff = $periodItems->whereNotNull('staff_id')->groupBy('staff_id');
 
             $periodDays = (int) $period->start_date->diffInDays($period->end_date) + 1;
             //count contracts
@@ -920,6 +1037,8 @@ class PayrollController extends Controller
                 $warnings[] = ($duplicate->staff->full_names ?? 'Staff #' . $duplicate->staff_id) . ' has overlapping active contracts; contract #' . $duplicate->id . ' was skipped so they are paid once.';
             }
             $contracts = $uniqueContracts;
+
+            $warnings = array_merge($warnings, app(PayrollPreRunCheck::class)->processWarnings($contracts, $period->id));
 
             if ($contracts->isEmpty()) {
                 Log::info('No active employee contracts found during payroll processing');
@@ -967,7 +1086,9 @@ class PayrollController extends Controller
                         $periodDays,
                         $endDate,
                         $contract->date_start?->toDateString(),
-                        $contract->date_end?->toDateString()
+                        $contract->date_end?->toDateString(),
+                        $recurringAll,
+                        $itemsForEveryone->merge($itemsByStaff->get($contract->staff_id, collect()))
                     );
 
                     $results[] = $payrollData;
@@ -976,12 +1097,28 @@ class PayrollController extends Controller
                     $this->savePayrollSummary($payrollData, $startDate, $endDate, $period->id);
                 }
 
+                $run = PayrollRun::updateOrCreate(['period_id' => $period->id], [
+                    'status' => PayrollRun::STATUS_DRAFT,
+                    'processed_by' => Auth::id(),
+                    'processed_at' => now(),
+                    'submitted_by' => null,
+                    'submitted_at' => null,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                    'return_comment' => null,
+                ]);
+                $run->record('processed', Auth::id());
+
                 // Commit transaction if all successful
                 DB::commit();
 
+                // Kept for the review page, which this request redirects to.
+                session()->put('payroll_process_warnings.' . $period->id, $warnings);
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Payroll processed for ' . count($results) . ' employees. It is pending review until it is approved.',
+                    'review_url' => route('payroll.review', $period->id),
+                    'message' => 'Payroll processed for ' . count($results) . ' employees. It stays a draft until it is submitted to the accountant.',
                     'warnings' => $warnings,
                     'results' => $results
                 ]);
@@ -1001,141 +1138,6 @@ class PayrollController extends Controller
             Log::error('Error processing payroll: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to process payroll'], 500);
         }
-    }
-
-    /** Approve a processed payroll run so payslips become available. */
-    public function approvePayroll($periodId)
-    {
-        $this->requirePayrollPermission('approve_payroll_processing');
-
-        $period = PayrollPeriod::findOrFail($periodId);
-        $summaries = PayrollSummary::where('period_id', $period->id);
-        if (!$summaries->exists()) {
-            return response()->json(['success' => false, 'error' => 'This period has no payroll results to approve.'], 422);
-        }
-        if (PayrollSummary::where('period_id', $period->id)->where('current_status_id', '!=', 1)->exists()) {
-            return response()->json(['success' => false, 'error' => 'This payroll run is not awaiting approval.'], 422);
-        }
-
-        // Maker-checker: the person who processed the run cannot approve it.
-        if (PayrollSummary::where('period_id', $period->id)->where('processed_by', Auth::id())->exists()) {
-            return response()->json(['success' => false, 'error' => 'You processed this payroll run, so another user must approve it.'], 403);
-        }
-
-        $approvedRows = DB::transaction(function () use ($period) {
-            return PayrollSummary::where('period_id', $period->id)
-                ->where('current_status_id', 1)
-                ->update(['current_status_id' => 5, 'approved_by' => Auth::id(), 'approved_at' => now()]);
-        });
-
-        Log::info('Payroll run approved', ['period_id' => $period->id, 'approved_by' => Auth::id(), 'rows' => $approvedRows]);
-
-        return response()->json(['success' => true, 'message' => 'Payroll approved. Payslips are now available.']);
-    }
-
-    /**
-     * Reject a pending payroll run: restore the HELB and prorated deduction balances it reduced,
-     * delete its rows, and make the period available to process again.
-     */
-    public function rejectPayroll($periodId)
-    {
-        $this->requirePayrollPermission('approve_payroll_processing');
-
-        $period = PayrollPeriod::findOrFail($periodId);
-
-        try {
-            $result = DB::transaction(function () use ($period) {
-                PayrollPeriod::whereKey($period->id)->lockForUpdate()->first();
-
-                $rows = PayrollSummary::where('period_id', $period->id)->get(['id', 'current_status_id', 'net_pay']);
-                if ($rows->isEmpty()) {
-                    return ['error' => 'This period has no payroll results to reject.'];
-                }
-                if ($rows->contains(fn ($row) => (int) $row->current_status_id !== 1)) {
-                    return ['error' => 'Only a run that is pending review can be rejected. Approved runs are final.'];
-                }
-
-                // Restore HELB loan balances reduced by this run.
-                foreach (HelbDeductionRepeat::where('period_id', $period->id)->get() as $repeat) {
-                    $parent = HelbDeduction::find($repeat->parent_id);
-                    if ($parent) {
-                        $parent->loan_balance = (float) $parent->loan_balance + (float) $repeat->amount;
-                        if ($parent->loan_balance > 0) {
-                            $parent->cleared = 0;
-                        }
-                        $parent->save();
-                    }
-                    $repeat->delete();
-                }
-
-                // Remove prorated deduction repeats created by this run and re-open any loan they cleared.
-                $proratedParentIds = ProratedDeductionRepeat::where('period_id', $period->id)->pluck('parent_id')->unique();
-                ProratedDeductionRepeat::where('period_id', $period->id)->get()->each->delete();
-                foreach (ProratedDeduction::whereIn('id', $proratedParentIds)->get() as $parent) {
-                    $remaining = (float) $parent->total_amount - (float) ($parent->initial_deduction ?? 0)
-                        - (float) ProratedDeductionRepeat::where('parent_id', $parent->id)->sum('total_amount');
-                    if ($remaining > 0 && $parent->cleared) {
-                        $parent->cleared = 0;
-                        $parent->save();
-                    }
-                }
-
-                PayrollSummary::where('period_id', $period->id)->delete();
-
-                return ['rows' => $rows->count(), 'net' => (float) $rows->sum('net_pay')];
-            });
-        } catch (\Throwable $e) {
-            try {
-                ErrorDispatcher::dispatch($e);
-            } catch (\Throwable $ex) {
-                Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
-            }
-            Log::error('Error rejecting payroll run: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => 'Failed to reject the payroll run.'], 500);
-        }
-
-        if (isset($result['error'])) {
-            return response()->json(['success' => false, 'error' => $result['error']], 422);
-        }
-
-        Log::warning('Payroll run rejected and deleted', ['period_id' => $period->id, 'rejected_by' => Auth::id(), 'rows' => $result['rows'], 'net_pay_total' => $result['net']]);
-
-        return response()->json(['success' => true, 'message' => 'Payroll run rejected. The period can be processed again.']);
-    }
-
-    /**
-     * Per-employee breakdown of a processed run so it can be audited before approval.
-     */
-    public function periodDetails($periodId)
-    {
-        $this->requirePayrollPermission('read_payroll_processing');
-
-        $period = PayrollPeriod::findOrFail($periodId);
-        $rows = PayrollSummary::with('staff:id,full_names,staff_number')
-            ->where('period_id', $period->id)
-            ->get()
-            ->map(fn ($row) => [
-                'staff_number' => $row->staff->staff_number ?? $row->staff_number_id,
-                'name' => $row->staff->full_names ?? 'Unknown',
-                'worked_days' => $row->worked_days,
-                'basic_salary' => (float) $row->basic_salary,
-                'gross' => (float) $row->total_earnings,
-                'deductions' => (float) $row->total_deductions,
-                'net' => (float) $row->net_pay,
-            ])
-            ->sortBy('name')
-            ->values();
-
-        return response()->json([
-            'period_id' => $period->id,
-            'rows' => $rows,
-            'totals' => [
-                'basic_salary' => $rows->sum('basic_salary'),
-                'gross' => $rows->sum('gross'),
-                'deductions' => $rows->sum('deductions'),
-                'net' => $rows->sum('net'),
-            ],
-        ]);
     }
 
     /**
@@ -1172,7 +1174,7 @@ class PayrollController extends Controller
     /**
      * Calculate payroll for a single employee
      */
-    private function calculatePayroll($employeeName, $basicSalary, $staffId, $staffNumber, $positionId, $departmentId, $payrollElements, $periodStartDate, $periodId, $contractId = null, int $activeDays = 0, int $periodDays = 0, ?string $periodEndDate = null, ?string $contractStartDate = null, ?string $contractEndDate = null)
+    private function calculatePayroll($employeeName, $basicSalary, $staffId, $staffNumber, $positionId, $departmentId, $payrollElements, $periodStartDate, $periodId, $contractId = null, int $activeDays = 0, int $periodDays = 0, ?string $periodEndDate = null, ?string $contractStartDate = null, ?string $contractEndDate = null, ?Collection $recurringAll = null, ?Collection $periodItems = null)
     {
         $periodDays = max(1, $periodDays);
         $activeDays = min($periodDays, max(1, $activeDays));
@@ -1188,7 +1190,9 @@ class PayrollController extends Controller
         $contractAllowances   = 0.0;
         $allowanceEntries     = [];
         $extraDeductionEntries = [];
+        $contractHelbAmount = 0.0;
         $statutoryKeys = ['nssf', 'nhif', 'housing_levy', 'payee', 'helb_loans'];
+        $onContract = []; // elements this person has their own contract amount for, so the all-staff amount is not added too
 
         if ($contractId) {
             $contractElements = ContractElement::with('payrollElement')
@@ -1200,12 +1204,21 @@ class PayrollController extends Controller
                 if (!$pe) {
                     continue;
                 }
-                // Net salary is an output/target value, never a deduction. Some
-                // older contracts have it stored as a type-1 contract element.
-                if (strtolower((string) $pe->element_key) === 'net_salary') {
+                // Net salary is an output and basic salary comes from the contract itself, so neither is ever an
+                // element row. Some older contracts have them stored that way.
+                if ($pe->isSystem()) {
                     continue;
                 }
-                if ($pe->element_type == '2') {
+                // One-time items are entered for a payroll month on Monthly Payroll Items; a contract row for one
+                // would repeat every month, so it is ignored (the check before the run lists these).
+                if ($pe->isOneTime()) {
+                    continue;
+                }
+                $onContract[$pe->id] = true;
+                if ($pe->element_key === 'helb_loans') {
+                    // Used below only when the staff member has no HELB loan record at all
+                    $contractHelbAmount += round((float) $el->amount, 2);
+                } elseif ($pe->element_type == '2') {
                     // Allowance — earned by days worked, so it is prorated like basic salary
                     $amount = round((float) $el->amount * $prorationFactor, 2);
                     $contractAllowances += $amount;
@@ -1216,6 +1229,52 @@ class PayrollController extends Controller
                     $extraDeductionEntries[] = $this->makePayslipEntry($pe, round((float) $el->amount, 2), '', '1');
                 }
             }
+        }
+
+        // Items that repeat for every staff member: the element's own amount, unless the contract has a row for it
+        // (that row is this person's amount). Fixed allowances follow the days worked like contract allowances;
+        // percentages already follow the pro-rated pay, and fixed deductions are charged in full.
+        $addForAllStaff = function (PayrollElement $pe, float $gross) use (&$contractAllowances, &$allowanceEntries, &$extraDeductionEntries, $basicSalary, $prorationFactor) {
+            $amount = $pe->defaultAmount((float) $basicSalary, $gross);
+            if ($amount <= 0) {
+                return;
+            }
+            if ($pe->element_type == '2') {
+                if (!in_array((int) $pe->formula_id, [2, 3], true)) {
+                    $amount = round($amount * $prorationFactor, 2);
+                }
+                $contractAllowances += $amount;
+                $allowanceEntries[] = $this->makePayslipEntry($pe, $amount, '', '2');
+            } else {
+                $extraDeductionEntries[] = $this->makePayslipEntry($pe, $amount, '', '1');
+            }
+        };
+        $allStaffElements = ($recurringAll ?? collect())->reject(fn ($pe) => isset($onContract[$pe->id]));
+
+        foreach ($allStaffElements->reject(fn ($pe) => (int) $pe->formula_id === 3) as $pe) {
+            $addForAllStaff($pe, 0.0);
+        }
+
+        // One-time items entered for this payroll month: taken exactly as entered, not pro-rated. Allowances join
+        // gross pay; deductions are charged after tax like the other non-statutory deductions.
+        foreach ($periodItems ?? collect() as $item) {
+            $pe = $item->element;
+            $amount = round((float) $item->amount, 2);
+            if (!$pe || $pe->isStatutory() || $pe->isSystem() || $amount <= 0) {
+                continue;
+            }
+            if ($pe->element_type == '2') {
+                $contractAllowances += $amount;
+                $allowanceEntries[] = $this->makePayslipEntry($pe, $amount, '', '2');
+            } else {
+                $extraDeductionEntries[] = $this->makePayslipEntry($pe, $amount, '', '1');
+            }
+        }
+
+        // Percent of gross payment: gross is everything earned above
+        $grossBeforePercent = (float) $basicSalary + $contractAllowances;
+        foreach ($allStaffElements->filter(fn ($pe) => (int) $pe->formula_id === 3) as $pe) {
+            $addForAllStaff($pe, $grossBeforePercent);
         }
 
         // Keep normal earnings visible; apply sick leave as a separate reduction
@@ -1256,7 +1315,7 @@ class PayrollController extends Controller
             [
                 $this->makePayslipEntry($nssfElement,       $nssfTier1,   'NSSF Tier I',  '1', 10, 'NSSF Tier I'),
                 $this->makePayslipEntry($nssfElement,       $nssfTier2,   'NSSF Tier II', '1', 11, 'NSSF Tier II'),
-                $this->makePayslipEntry($nhifElement,       $nhif,        'SHIF (NHIF)',  '1', 20),
+                $this->makePayslipEntry($nhifElement,       $nhif,        'SHA',          '1', 20),
                 $this->makePayslipEntry($housingLevyElement, $housingLevy, 'Housing Levy', '1', 30),
                 $this->makePayslipEntry($payeeElement,      $paye,        'PAYE',         '1', 40),
             ],
@@ -1275,6 +1334,7 @@ class PayrollController extends Controller
 
         // Arrays to store deduction repeats info for logging
         $helbDeductionInfo = null;
+        $helbAmount = 0.0;
         $proratedDeductionsInfo = [];
 
         // Handle HELB Loans (Post-tax deductions)
@@ -1304,6 +1364,11 @@ class PayrollController extends Controller
                 'deduction_amount' => $helbAmount,
                 'deduction_date'   => $periodStartDate,
             ];
+        } elseif ($contractHelbAmount > 0 && !HelbDeduction::where('staff_id', $staffId)->exists()) {
+            // A cleared, suspended or not-yet-started loan means no deduction; the stale contract amount must not replace it.
+            $helbAmount = $contractHelbAmount;
+            $totalDeductions += $helbAmount;
+            $payslipElements[] = $this->makePayslipEntry($helbElement, $helbAmount, 'HELB Loan', '1', 50);
         }
 
         // Handle Prorated/Amortized Deductions (Post-tax deductions)
@@ -1311,11 +1376,17 @@ class PayrollController extends Controller
             ->where('staff_id', $staffId)
             ->where('cleared', 0)
             ->where('suspended', 0)
+            ->whereDate('deduction_date', '<=', $periodEndDate ?? $periodStartDate)
             ->get();
 
         foreach ($proratedDeductions as $deduction) {
             if ($deduction->element) {
-                $deductionAmount = (float) $deduction->monthly_deduction;
+                $repaid = (float) ProratedDeductionRepeat::where('parent_id', $deduction->id)->sum('total_amount');
+                $remaining = (float) $deduction->total_amount - (float) ($deduction->initial_deduction ?? 0) - $repaid;
+                $deductionAmount = min((float) $deduction->monthly_deduction, $remaining);
+                if ($deductionAmount <= 0) {
+                    continue;
+                }
                 $totalDeductions += $deductionAmount;
                 $payslipElements[] = $this->makePayslipEntry($deduction->element, $deductionAmount);
 
@@ -1353,6 +1424,7 @@ class PayrollController extends Controller
             'total_deductions' => $totalDeductions,
             'net_salary' => $netSalary,
             'payslip_elements' => $payslipElements,
+            'helb_loans' => $helbAmount,
             'helb_deduction_info' => $helbDeductionInfo,
             'prorated_deductions_info' => $proratedDeductionsInfo,
         ];
@@ -1368,7 +1440,7 @@ class PayrollController extends Controller
             ->where('leave_request.current_status_id', 5)
             ->where('sys_hr_leave_requests_234_repeat.current_status_id', 5)
             ->whereBetween(DB::raw('DATE(sys_hr_leave_requests_234_repeat.leave_date)'), [$periodStart, $periodEnd])
-            ->whereRaw('leave_type.type_name ILIKE ?', ['%sick%'])
+            ->whereRaw('LOWER(leave_type.type_name) LIKE ?', ['%sick%'])
             ->selectRaw('COALESCE(SUM(COALESCE(sys_hr_leave_requests_234_repeat.day_fraction, 1) * (100 - COALESCE(sys_hr_leave_requests_234_repeat.pay_rate, 100)) / 100), 0) as unpaid_days')
             ->value('unpaid_days');
     }
@@ -1478,86 +1550,12 @@ class PayrollController extends Controller
             'department_id' => $payrollData['department_id'],
             'position_id' => $payrollData['position_id'],
             'payslip_elements' => $payrollData['payslip_elements'],
+            'helb_loans' => $payrollData['helb_loans'],
             'processed_by' => Auth::id(),
+            'loan_deductions' => [
+                'helb' => $payrollData['helb_deduction_info'],
+                'prorated' => $payrollData['prorated_deductions_info'],
+            ],
         ]);
-
-        // Log HELB deduction repeat if applicable
-        if ($payrollData['helb_deduction_info']) {
-            $helbInfo = $payrollData['helb_deduction_info'];
-            $helbParent = HelbDeduction::find($helbInfo['parent_id']);
-
-            if ($helbParent) {
-                // Calculate new balance
-                $newBalance = $helbParent->loan_balance - $helbInfo['deduction_amount'];
-
-                // Create repeat entry
-                HelbDeductionRepeat::create([
-                    'parent_id' => $helbInfo['parent_id'],
-                    'amount' => $helbInfo['deduction_amount'],
-                    'deduction_date' => $helbInfo['deduction_date'],
-                    'loan_balance' => max(0, $newBalance),
-                    'period_id' => $periodId,
-                ]);
-
-                // Update parent loan balance
-                $helbParent->loan_balance = max(0, $newBalance);
-
-                // Mark as cleared if balance is zero or negative
-                if ($newBalance <= 0) {
-                    $helbParent->cleared = 1;
-                }
-
-                $helbParent->save();
-
-                Log::info("HELB Repeat logged for parent_id {$helbInfo['parent_id']}: Deducted KSh " . number_format($helbInfo['deduction_amount'], 2) . ", New Balance: KSh " . number_format(max(0, $newBalance), 2));
-            }
-        }
-
-        // Log prorated deduction repeats if applicable
-        if (!empty($payrollData['prorated_deductions_info'])) {
-            foreach ($payrollData['prorated_deductions_info'] as $proratedInfo) {
-                $proratedParent = ProratedDeduction::find($proratedInfo['parent_id']);
-
-                if ($proratedParent) {
-                    // Calculate interest and principal portions
-                    $totalAmount = $proratedParent->total_amount;
-                    $initialDeduction = $proratedParent->initial_deduction ?? 0;
-                    $remainingAmount = $totalAmount - $initialDeduction;
-
-                    // Get previous repeats to calculate balance
-                    $totalDeducted = ProratedDeductionRepeat::where('parent_id', $proratedInfo['parent_id'])
-                        ->sum('total_amount');
-
-                    $currentBalance = $remainingAmount - $totalDeducted;
-                    $deductionAmount = $proratedInfo['deduction_amount'];
-
-                    // Calculate proportional principal and interest
-                    $principalRatio = $proratedParent->principal_amount / $totalAmount;
-                    $principalPortion = $deductionAmount * $principalRatio;
-                    $interestPortion = $deductionAmount - $principalPortion;
-
-                    $newBalance = $currentBalance - $deductionAmount;
-
-                    // Create repeat entry
-                    ProratedDeductionRepeat::create([
-                        'parent_id' => $proratedInfo['parent_id'],
-                        'amount' => $principalPortion,
-                        'interest_amount' => $interestPortion,
-                        'total_amount' => $deductionAmount,
-                        'amount_balance' => max(0, $newBalance),
-                        'deduction_date' => $proratedInfo['deduction_date'],
-                        'period_id' => $periodId,
-                    ]);
-
-                    // Mark as cleared if balance is zero or negative
-                    if ($newBalance <= 0) {
-                        $proratedParent->cleared = 1;
-                        $proratedParent->save();
-                    }
-
-                    Log::info("Prorated Repeat logged for parent_id {$proratedInfo['parent_id']}: Deducted KSh " . number_format($deductionAmount, 2) . " (Principal: " . number_format($principalPortion, 2) . ", Interest: " . number_format($interestPortion, 2) . "), New Balance: KSh " . number_format(max(0, $newBalance), 2));
-                }
-            }
-        }
     }
 }

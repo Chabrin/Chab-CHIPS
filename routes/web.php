@@ -26,6 +26,7 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\TenantsController;
 use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\PayslipsController;
+use App\Http\Controllers\PayrollReviewController;
 use App\Http\Controllers\RecoveryController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ApprovalsController;
@@ -66,6 +67,7 @@ use App\Http\Controllers\TenantExitController;
 use App\Http\Controllers\EmployeeDocumentController;
 use App\Http\Controllers\TrainingMaterialController;
 use App\Http\Controllers\LeaveManagementController;
+use App\Http\Controllers\PayrollMonthlyController;
 
 
 
@@ -126,6 +128,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Payroll Elements AJAX
     Route::get('/ajax/payroll/elements/list', [PayrollController::class, 'payrollElementsList'])->name('ajax.payroll.elements.list');
+    Route::get('/ajax/payroll/elements/all-staff-preview', [PayrollController::class, 'allStaffPreview'])->name('ajax.payroll.elements.all-staff-preview');
     Route::get('/ajax/payroll/elements/list/simpler', [PayrollController::class, 'payrollElementsListSimpler'])->name('ajax.payroll.elements.list.simpler');
     Route::get('/ajax/payroll/elements/{id}/breakdown', [StaffController::class, 'elementBreakdown']);
     Route::get('/ajax/payroll/elements/accounts/list', [PayrollController::class, 'payrollElementsListAccounts'])->name('ajax.payroll.elements.accounts.list');
@@ -367,9 +370,26 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/payroll/recent-periods', [PayrollController::class, 'getRecentPeriodsSummary'])->name('ajax.payroll.recentPeriods');
     Route::get('/ajax/payroll/unprocessed-periods', [PayrollController::class, 'getUnprocessedPeriods'])->name('ajax.payroll.unprocessedPeriods');
     Route::post('/ajax/payroll/process', [PayrollController::class, 'processPayroll'])->name('ajax.payroll.process');
-    Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollController::class, 'approvePayroll'])->name('ajax.payroll.approve');
-    Route::post('/ajax/payroll/periods/{periodId}/reject', [PayrollController::class, 'rejectPayroll'])->name('ajax.payroll.reject');
-    Route::get('/ajax/payroll/periods/{periodId}/details', [PayrollController::class, 'periodDetails'])->name('ajax.payroll.details');
+    Route::get('/payroll/processing/{periodId}/review', [PayrollReviewController::class, 'show'])->whereNumber('periodId')->name('payroll.review');
+    Route::get('/payroll/processing/{periodId}/export', [PayrollReviewController::class, 'exportRegister'])->whereNumber('periodId')->name('payroll.review.export');
+    Route::get('/payroll/processing/{periodId}/eft-test', [PayrollReviewController::class, 'eftTestFile'])->whereNumber('periodId')->name('payroll.review.eft');
+    Route::get('/ajax/payroll/periods/{periodId}/employees', [PayrollReviewController::class, 'employees'])->whereNumber('periodId')->name('ajax.payroll.employees');
+    Route::get('/ajax/payroll/summaries/{summaryId}/payslip', [PayslipsController::class, 'reviewPayslip'])->whereNumber('summaryId')->name('ajax.payroll.payslip');
+    Route::post('/ajax/payroll/periods/{periodId}/submit', [PayrollReviewController::class, 'submit'])->whereNumber('periodId')->name('ajax.payroll.submit');
+    Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollReviewController::class, 'approve'])->whereNumber('periodId')->name('ajax.payroll.approve');
+    Route::post('/ajax/payroll/periods/{periodId}/return', [PayrollReviewController::class, 'sendBack'])->whereNumber('periodId')->name('ajax.payroll.return');
+    Route::post('/ajax/payroll/periods/{periodId}/reverse', [PayrollReviewController::class, 'reverse'])->whereNumber('periodId')->name('ajax.payroll.reverse');
+
+    // Monthly payroll items: check before the run, one-time items and recurring items per staff
+    Route::get('/payroll/monthly-items', [PayrollMonthlyController::class, 'index'])->name('payroll.monthly');
+    Route::get('/ajax/payroll/monthly/{periodId}', [PayrollMonthlyController::class, 'data'])->whereNumber('periodId')->name('ajax.payroll.monthly.data');
+    Route::get('/ajax/payroll/monthly/{periodId}/recurring', [PayrollMonthlyController::class, 'recurring'])->whereNumber('periodId')->name('ajax.payroll.monthly.recurring');
+    Route::post('/ajax/payroll/monthly/{periodId}/items', [PayrollMonthlyController::class, 'storeItem'])->whereNumber('periodId')->name('ajax.payroll.monthly.items.store');
+    Route::post('/ajax/payroll/monthly/items/{itemId}', [PayrollMonthlyController::class, 'updateItem'])->whereNumber('itemId')->name('ajax.payroll.monthly.items.update');
+    Route::delete('/ajax/payroll/monthly/items/{itemId}', [PayrollMonthlyController::class, 'deleteItem'])->whereNumber('itemId')->name('ajax.payroll.monthly.items.delete');
+    Route::post('/ajax/payroll/monthly/contracts/{contractId}/elements', [PayrollMonthlyController::class, 'addContractElement'])->whereNumber('contractId')->name('ajax.payroll.monthly.contract.add');
+    Route::post('/ajax/payroll/monthly/contract-elements/{rowId}', [PayrollMonthlyController::class, 'updateContractElement'])->whereNumber('rowId')->name('ajax.payroll.monthly.contract.update');
+    Route::delete('/ajax/payroll/monthly/contract-elements/{rowId}', [PayrollMonthlyController::class, 'removeContractElement'])->whereNumber('rowId')->name('ajax.payroll.monthly.contract.remove');
 
     // Payslips
     Route::get('/payroll/payslips', [PayslipsController::class, 'index'])->name('payroll.payslips');
@@ -571,7 +591,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/hr/shif/rates/list', [HrSettingsController::class, 'shifRatesList'])->name('ajax.shifRates.list');
     Route::post('/ajax/hr/shif/rates', [HrSettingsController::class, 'shifRatesStore'])->name('ajax.shifRates.store');
     Route::post('/ajax/hr/shif/rates/{id}', [HrSettingsController::class, 'shifRatesUpdate'])->name('ajax.shifRates.update');
-    Route::delete('/ajax/hr/shif/rates/{id}', [HrReportsController::class, 'shifRatesDelete'])->name('ajax.shifRates.delete');
+    Route::delete('/ajax/hr/shif/rates/{id}', [HrSettingsController::class, 'shifRatesDelete'])->name('ajax.shifRates.delete');
 
 
     // HR Settings - NSSF Rates
