@@ -866,6 +866,21 @@ class PayrollController extends Controller
                 ], 422);
             }
 
+            // Loan balances only change when a run is approved, so a second unapproved run would read the same
+            // balances and deduct the last installments twice. One run can be in progress at a time.
+            $pendingRun = PayrollRun::with('period')
+                ->where('period_id', '!=', $period->id)
+                ->whereIn('status', [PayrollRun::STATUS_DRAFT, PayrollRun::STATUS_WITH_ACCOUNTANT, PayrollRun::STATUS_RETURNED])
+                ->first();
+            if ($pendingRun) {
+                $pendingLabel = $pendingRun->period?->start_date?->format('F Y') ?? 'another period';
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'The payroll for ' . $pendingLabel . ' is still ' . $pendingRun->status_label . '. Approve or discard it before processing another period, so loan balances are not deducted twice.'
+                ], 422);
+            }
+
             if (!$period->start_date || !$period->end_date) {
                 return response()->json([
                     'success' => false,
@@ -992,6 +1007,9 @@ class PayrollController extends Controller
                 // Commit transaction if all successful
                 DB::commit();
 
+                // Kept for the review page, which this request redirects to.
+                session()->put('payroll_process_warnings.' . $period->id, $warnings);
+
                 return response()->json([
                     'success' => true,
                     'review_url' => route('payroll.review', $period->id),
@@ -1086,7 +1104,7 @@ class PayrollController extends Controller
                     continue;
                 }
                 if ($pe->element_key === 'helb_loans') {
-                    // Used below when the staff member has no HELB loan record
+                    // Used below only when the staff member has no HELB loan record at all
                     $contractHelbAmount += round((float) $el->amount, 2);
                 } elseif ($pe->element_type == '2') {
                     // Allowance — earned by days worked, so it is prorated like basic salary
@@ -1188,7 +1206,8 @@ class PayrollController extends Controller
                 'deduction_amount' => $helbAmount,
                 'deduction_date'   => $periodStartDate,
             ];
-        } elseif ($contractHelbAmount > 0) {
+        } elseif ($contractHelbAmount > 0 && !HelbDeduction::where('staff_id', $staffId)->exists()) {
+            // A cleared, suspended or not-yet-started loan means no deduction; the stale contract amount must not replace it.
             $helbAmount = $contractHelbAmount;
             $totalDeductions += $helbAmount;
             $payslipElements[] = $this->makePayslipEntry($helbElement, $helbAmount, 'HELB Loan', '1', 50);
@@ -1263,7 +1282,7 @@ class PayrollController extends Controller
             ->where('leave_request.current_status_id', 5)
             ->where('sys_hr_leave_requests_234_repeat.current_status_id', 5)
             ->whereBetween(DB::raw('DATE(sys_hr_leave_requests_234_repeat.leave_date)'), [$periodStart, $periodEnd])
-            ->whereRaw('leave_type.type_name ILIKE ?', ['%sick%'])
+            ->whereRaw('LOWER(leave_type.type_name) LIKE ?', ['%sick%'])
             ->selectRaw('COALESCE(SUM(COALESCE(sys_hr_leave_requests_234_repeat.day_fraction, 1) * (100 - COALESCE(sys_hr_leave_requests_234_repeat.pay_rate, 100)) / 100), 0) as unpaid_days')
             ->value('unpaid_days');
     }

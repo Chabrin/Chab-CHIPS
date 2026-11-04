@@ -21,6 +21,9 @@ class PayrollRun extends Model
         self::STATUS_REVERSED => 'Reversed',
     ];
 
+    /**
+     * Log changes to payroll runs in the audit trail.
+     */
     protected static function boot()
     {
         parent::boot();
@@ -47,17 +50,25 @@ class PayrollRun extends Model
         'approved_at' => 'datetime',
     ];
 
-    // Relationships
+    /**
+     * The payroll period this run belongs to.
+     */
     public function period()
     {
         return $this->belongsTo(PayrollPeriod::class, 'period_id');
     }
 
+    /**
+     * The run's history, newest first.
+     */
     public function logs()
     {
         return $this->hasMany(PayrollRunLog::class, 'payroll_run_id')->orderByDesc('id');
     }
 
+    /**
+     * Add an entry to the run's history.
+     */
     public function record(string $action, ?int $userId, ?string $comment = null): void
     {
         $this->logs()->create([
@@ -68,6 +79,9 @@ class PayrollRun extends Model
         ]);
     }
 
+    /**
+     * The status as shown to users, for example "With Accountant".
+     */
     public function getStatusLabelAttribute(): string
     {
         return self::STATUS_LABELS[$this->status] ?? $this->status;

@@ -21,7 +21,9 @@ class PayrollRunLog extends Model
         'created_at' => 'datetime',
     ];
 
-    // Relationships
+    /**
+     * The user who performed the action.
+     */
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');

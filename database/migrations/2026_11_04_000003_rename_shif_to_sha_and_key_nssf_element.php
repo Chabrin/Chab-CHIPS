@@ -5,6 +5,9 @@ use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
+    /**
+     * Rename SHIF to SHA in the payroll elements and menu, and give the NSSF element its key.
+     */
     public function up(): void
     {
         DB::table('sys_hr_payroll_elements')->where('element_key', 'nhif')->update(['element_name' => 'SHA']);
@@ -17,6 +20,9 @@ return new class extends Migration
             ->update(['element_key' => 'nssf']);
     }
 
+    /**
+     * Put the old SHIF/NHIF names back and clear the NSSF element key.
+     */
     public function down(): void
     {
         DB::table('sys_hr_payroll_elements')->where('element_key', 'nhif')->update(['element_name' => 'NHIF']);

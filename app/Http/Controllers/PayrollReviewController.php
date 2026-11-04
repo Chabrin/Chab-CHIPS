@@ -25,6 +25,9 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class PayrollReviewController extends Controller
 {
+    /**
+     * Stop the request with a 403 unless the signed-in user holds the given payroll permission.
+     */
     private function requirePayrollPermission(string $permission): void
     {
         abort_unless(Auth::check() && Auth::user()->isAbleTo($permission), 403, 'You do not have permission to perform this payroll action.');
@@ -46,7 +49,7 @@ class PayrollReviewController extends Controller
             'period' => $period,
             'run' => $run,
             'totals' => $this->runTotals($period->id),
-            'warnings' => $this->runWarnings($period->id),
+            'warnings' => array_merge(session()->pull('payroll_process_warnings.' . $period->id, []), $this->runWarnings($period->id)),
             'userNames' => User::whereIn('id', array_filter([$run->processed_by, $run->submitted_by, $run->approved_by]))->pluck('name', 'id'),
             'canSubmit' => $canProcess && $isEditable,
             'canDiscard' => $canProcess && $isEditable,
@@ -253,6 +256,9 @@ class PayrollReviewController extends Controller
         }, 'TEST-NOT-FOR-BANK-payroll-' . $period->start_date->format('Y-m') . '.csv', ['Content-Type' => 'text/csv']);
     }
 
+    /**
+     * Why a payslip cannot be paid in the EFT file, or null when it can.
+     */
     private function eftExclusionReason(PayrollSummary $summary): ?string
     {
         if (!$summary->staff) {
@@ -295,6 +301,9 @@ class PayrollReviewController extends Controller
         }
     }
 
+    /**
+     * Throw a DomainException (reported as 422) unless the run is in one of the given statuses.
+     */
     private function requireStatus(PayrollRun $run, array $statuses, string $message): void
     {
         if (!in_array($run->status, $statuses, true)) {
@@ -302,11 +311,17 @@ class PayrollReviewController extends Controller
         }
     }
 
+    /**
+     * Whether the signed-in user processed or submitted this run.
+     */
     private function isOwnRun(PayrollRun $run): bool
     {
         return in_array(Auth::id(), [$run->processed_by, $run->submitted_by], false);
     }
 
+    /**
+     * Maker-checker: throw a DomainException when the user is reviewing a run they processed or submitted.
+     */
     private function rejectOwnRun(PayrollRun $run): void
     {
         if ($this->isOwnRun($run)) {
@@ -314,6 +329,9 @@ class PayrollReviewController extends Controller
         }
     }
 
+    /**
+     * Headcount and summed earnings, statutory deductions and net pay for a period's run.
+     */
     private function runTotals(int $periodId): object
     {
         return PayrollSummary::where('period_id', $periodId)
@@ -359,6 +377,9 @@ class PayrollReviewController extends Controller
         return $warnings;
     }
 
+    /**
+     * Whether the tax bands overlap or continue after the last band, which would make PAYE wrong.
+     */
     private function taxBandsOverlap(): bool
     {
         $previousTo = null;
@@ -375,6 +396,9 @@ class PayrollReviewController extends Controller
         return false;
     }
 
+    /**
+     * One row per employee in the run, sorted by name, with flags and the change from the previous approved payroll.
+     */
     private function employeeRows(int $periodId): Collection
     {
         $summaries = PayrollSummary::with(['staff.bank', 'staff.department'])
@@ -506,6 +530,9 @@ class PayrollReviewController extends Controller
         }
     }
 
+    /**
+     * The loan repayments parked on the run's summary rows, one entry per employee that has any.
+     */
     private function runLoanDeductions(PayrollRun $run): Collection
     {
         return PayrollSummary::where('period_id', $run->period_id)
@@ -526,6 +553,9 @@ class PayrollReviewController extends Controller
         }
     }
 
+    /**
+     * Create an in-app notification for one user that links to the run's review page.
+     */
     private function notifyUser(PayrollRun $run, ?int $userId, string $title, string $message): void
     {
         if (!$userId) {

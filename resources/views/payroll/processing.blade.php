@@ -224,9 +224,7 @@
 
                     if (res.success) {
                         toastr.success(res.message || 'Payroll processed successfully');
-                        (res.warnings || []).forEach(function(warning) {
-                            toastr.warning($('<span>').text(warning).html(), 'Check this', { timeOut: 0, extendedTimeOut: 0, closeButton: true });
-                        });
+                        // Warnings are shown on the review page this redirects to.
                         $('#processPeriodModal').modal('hide');
                         $('#processPeriodForm')[0].reset();
                         window.location = res.review_url;

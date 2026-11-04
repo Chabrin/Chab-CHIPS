@@ -8,22 +8,26 @@ return new class extends Migration
     private const ACCOUNTANT_PERMISSIONS = ['read_payroll_processing', 'approve_payroll_processing', 'read_all_payslips'];
     private const ACCOUNTANT_PAGES = ['/payroll/processing', '/payroll/payslips'];
 
+    /**
+     * Make the accountant role the only payroll approver and give it the payroll pages it needs.
+     * Does nothing when there is no accountant role, so approval is never removed from every role.
+     */
     public function up(): void
     {
         $now = now();
         $accountantRoleId = DB::table('cb_roles')->where('name', 'accountant')->value('id');
         $approvePermissionId = DB::table('cb_permissions')->where('name', 'approve_payroll_processing')->value('id');
 
+        if (!$accountantRoleId) {
+            return;
+        }
+
         // The accountant is the only payroll approver; other roles process and submit.
         if ($approvePermissionId) {
             DB::table('cb_permission_role')
                 ->where('permission_id', $approvePermissionId)
-                ->when($accountantRoleId, fn ($query) => $query->where('role_id', '!=', $accountantRoleId))
+                ->where('role_id', '!=', $accountantRoleId)
                 ->delete();
-        }
-
-        if (!$accountantRoleId) {
-            return;
         }
 
         foreach (DB::table('cb_permissions')->whereIn('name', self::ACCOUNTANT_PERMISSIONS)->pluck('id') as $permissionId) {
@@ -41,6 +45,9 @@ return new class extends Migration
         }
     }
 
+    /**
+     * Take the payroll grants back from the accountant and give approval back to the directors.
+     */
     public function down(): void
     {
         $accountantRoleId = DB::table('cb_roles')->where('name', 'accountant')->value('id');
