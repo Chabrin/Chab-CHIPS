@@ -67,6 +67,7 @@ use App\Http\Controllers\TenantExitController;
 use App\Http\Controllers\EmployeeDocumentController;
 use App\Http\Controllers\TrainingMaterialController;
 use App\Http\Controllers\LeaveManagementController;
+use App\Http\Controllers\PayrollMonthlyController;
 
 
 
@@ -127,6 +128,7 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
 
     // Payroll Elements AJAX
     Route::get('/ajax/payroll/elements/list', [PayrollController::class, 'payrollElementsList'])->name('ajax.payroll.elements.list');
+    Route::get('/ajax/payroll/elements/all-staff-preview', [PayrollController::class, 'allStaffPreview'])->name('ajax.payroll.elements.all-staff-preview');
     Route::get('/ajax/payroll/elements/list/simpler', [PayrollController::class, 'payrollElementsListSimpler'])->name('ajax.payroll.elements.list.simpler');
     Route::get('/ajax/payroll/elements/{id}/breakdown', [StaffController::class, 'elementBreakdown']);
     Route::get('/ajax/payroll/elements/accounts/list', [PayrollController::class, 'payrollElementsListAccounts'])->name('ajax.payroll.elements.accounts.list');
@@ -377,6 +379,17 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollReviewController::class, 'approve'])->whereNumber('periodId')->name('ajax.payroll.approve');
     Route::post('/ajax/payroll/periods/{periodId}/return', [PayrollReviewController::class, 'sendBack'])->whereNumber('periodId')->name('ajax.payroll.return');
     Route::post('/ajax/payroll/periods/{periodId}/reverse', [PayrollReviewController::class, 'reverse'])->whereNumber('periodId')->name('ajax.payroll.reverse');
+
+    // Monthly payroll items: check before the run, one-time items and recurring items per staff
+    Route::get('/payroll/monthly-items', [PayrollMonthlyController::class, 'index'])->name('payroll.monthly');
+    Route::get('/ajax/payroll/monthly/{periodId}', [PayrollMonthlyController::class, 'data'])->whereNumber('periodId')->name('ajax.payroll.monthly.data');
+    Route::get('/ajax/payroll/monthly/{periodId}/recurring', [PayrollMonthlyController::class, 'recurring'])->whereNumber('periodId')->name('ajax.payroll.monthly.recurring');
+    Route::post('/ajax/payroll/monthly/{periodId}/items', [PayrollMonthlyController::class, 'storeItem'])->whereNumber('periodId')->name('ajax.payroll.monthly.items.store');
+    Route::post('/ajax/payroll/monthly/items/{itemId}', [PayrollMonthlyController::class, 'updateItem'])->whereNumber('itemId')->name('ajax.payroll.monthly.items.update');
+    Route::delete('/ajax/payroll/monthly/items/{itemId}', [PayrollMonthlyController::class, 'deleteItem'])->whereNumber('itemId')->name('ajax.payroll.monthly.items.delete');
+    Route::post('/ajax/payroll/monthly/contracts/{contractId}/elements', [PayrollMonthlyController::class, 'addContractElement'])->whereNumber('contractId')->name('ajax.payroll.monthly.contract.add');
+    Route::post('/ajax/payroll/monthly/contract-elements/{rowId}', [PayrollMonthlyController::class, 'updateContractElement'])->whereNumber('rowId')->name('ajax.payroll.monthly.contract.update');
+    Route::delete('/ajax/payroll/monthly/contract-elements/{rowId}', [PayrollMonthlyController::class, 'removeContractElement'])->whereNumber('rowId')->name('ajax.payroll.monthly.contract.remove');
 
     // Payslips
     Route::get('/payroll/payslips', [PayslipsController::class, 'index'])->name('payroll.payslips');

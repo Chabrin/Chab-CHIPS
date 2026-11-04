@@ -64,7 +64,7 @@
                                 
                                 <div class="mb-3 col-12">
                                     <label for="basic_salary" class="form-label">Basic Salary</label>
-                                    <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0">
+                                    <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" step="0.01">
                                 </div>
                                 <div class="mb-3 col-12">
                                     <label for="signed_contract" class="form-label">Signed Contract (PDF)</label>
@@ -73,6 +73,22 @@
                                     @error('signed_contract')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <h3>Recurring for all staff</h3>
+                                <hr class="mb-3 mt-3">
+                                <p class="text-muted small mb-2">These apply to every staff member automatically when payroll runs, worked out from the pay on this contract. They can't be edited here.</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0" id="allStaffItems">
+                                        <thead>
+                                            <tr><th>Item</th><th>Type</th><th>How it is worked out</th><th class="text-end">Amount</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td colspan="4" class="text-muted">Enter a basic salary to see the amounts.</td></tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
 
@@ -97,12 +113,11 @@
                                         </div>
                                         <div class="mb-3 col-10">
                                             <label class="form-label">Amount</label>
-                                            <input type="number" class="form-control" name="elements[0][amount]" min="0">
+                                            <input type="number" class="form-control" name="elements[0][amount]" min="0" step="0.01">
                                         </div>
                                         <div class="mb-3 col-2 d-flex align-items-end">
                                             <button type="button" class="btn btn-light btn-sm d-flex align-items-center remove-element-row"><span class="material-symbols-outlined me-2">remove</span> Remove</button>
                                         </div>
-                                        <div class="col-12 tier-breakdown mb-3"></div>
                                     </div>
                                 </div>
                                 <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addElementRow"><span class="material-symbols-outlined">add</span> Add Element</button>
@@ -208,195 +223,7 @@
             }
         });
 
-        $.ajax({
-            url: "{{ url('/ajax/payroll/elements/list/simpler') }}",
-            type: 'GET',
-            dataType: 'json',
-            success: function(response) {
-                let $element = $('#element');
-                $element.empty();
-                $element.append($('<option>', {
-                    value: '',
-                    text: 'Select element',
-                    disabled: true,
-                    selected: true
-                }));
-                if (response.elements && Array.isArray(response.elements)) {
-                    response.elements.forEach(function(el) {
-                        $element.append($('<option>', {
-                            value: el.id,
-                            text: el.element_name
-                        }));
-                    });
-                }
-        
-                // Check if Select2 is already initialized and destroy it
-                if ($element.hasClass("select2-hidden-accessible")) {
-                    $element.select2('destroy');
-                }
-                
-                // Initialize Select2
-                $element.select2({
-                    placeholder: 'Select Element',
-                    allowClear: true
-                });
-            },
-            error: function() {
-                toastr.error('Failed to load elements.');
-            }
-        });
-
-        function populateElementSelect($select) {
-            $.ajax({
-                url: "{{ url('/ajax/payroll/elements/list/simpler') }}",
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $select.empty();
-                    $select.append($('<option>', {
-                        value: '',
-                        text: 'Select element',
-                        disabled: true,
-                        selected: true
-                    }));
-                    if (response.elements && Array.isArray(response.elements)) {
-                        response.elements.forEach(function(el) {
-                            $select.append($('<option>', {
-                                value: el.id,
-                                text: el.element_name
-                            }));
-                        });
-                    }
-                    if ($select.hasClass("select2-hidden-accessible")) {
-                        $select.select2('destroy');
-                    }
-                    $select.select2({
-                        placeholder: 'Select Element',
-                        allowClear: true
-                    });
-                },
-                error: function() {
-                    toastr.error('Failed to load payroll elements.');
-                }
-            });
-
-            $('.entry-type-select').select2({
-                placeholder: 'Select entry type',
-                allowClear: true,
-                width: '100%'
-            });
-        }
-
-        $('.entry-type-select').select2({
-            placeholder: 'Select entry type',
-            allowClear: true,
-            width: '100%'
-        });
-
-        // Initial population for the first row
-        populateElementSelect($('.element-select').first());
-
-        // Add new element row
-        $('#addElementRow').on('click', function() {
-            let index = $('#elementsRepeater .element-row').length;
-            let $newRow = $(`
-                <div class="row element-row mb-2">
-                    <div class="mb-3 col-6">
-                        <label class="form-label">Element</label>
-                        <select class="form-select element-select" name="elements[${index}][element]"></select>
-                    </div>
-                    <div class="mb-3 col-6">
-                        <label class="form-label">Entry Type</label>
-                        <select class="form-select entry-type-select" name="elements[${index}][entry_type]">
-                            <option value="" disabled selected>Select entry type</option>
-                            <option value="2">Allowance</option>
-                            <option value="1">Deduction</option>
-                        </select>
-                    </div>
-                    <div class="mb-3 col-10">
-                        <label class="form-label">Amount</label>
-                        <input type="number" class="form-control" name="elements[${index}][amount]" min="0">
-                    </div>
-                    <div class="mb-3 col-2 d-flex align-items-end">
-                        <button type="button" class="btn btn-light btn-sm d-flex align-items-center remove-element-row"><span class="material-symbols-outlined me-2">remove</span> Remove</button>
-                    </div>
-                    <div class="col-12 tier-breakdown mb-3"></div>
-                </div>
-            `);
-            $('#elementsRepeater').append($newRow);
-            populateElementSelect($newRow.find('.element-select'));
-        });
-
-        // Remove element row
-        $(document).on('click', '.remove-element-row', function() {
-            $(this).closest('.element-row').remove();
-            // Optionally, re-index names if needed for backend
-        });
-
-        const breakdownUrl = "{{ url('/ajax/payroll/elements') }}/";
-        let breakdownTimer;
-
-        function currentGross() {
-            let gross = parseFloat($('#basic_salary').val()) || 0;
-            $('.element-row').each(function () {
-                const $row = $(this);
-                if ($row.data('tiered')) return; // skip the NSSF row itself
-                if ($row.find('.entry-type-select').val() === '2') {
-                    gross += parseFloat($row.find('input[name$="[amount]"]').val()) || 0;
-                }
-            });
-            return gross;
-        }
-
-        function loadBreakdown($row, gross) {
-            const elementId = $row.find('.element-select').val();
-            if (!elementId || $row.data('tiered') === false) return;
-
-            const $box    = $row.find('.tier-breakdown');
-            const $amount = $row.find('input[name$="[amount]"]');
-            const $type   = $row.find('.entry-type-select');
-
-            $.getJSON(breakdownUrl + elementId + '/breakdown', { gross: gross })
-                .done(function (res) {
-                    if (!res.tiers || !res.tiers.length) {
-                        $row.data('tiered', false);
-                        $box.empty();
-                        $amount.prop('readonly', false);
-                        return;
-                    }
-                    $row.data('tiered', true);
-                    const fmt = n => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    let html = '<table class="table table-sm mb-0"><tbody>';
-                    res.tiers.forEach(t => {
-                        html += `<tr><td>${t.name}</td><td class="text-end">${fmt(t.amount)}</td></tr>`;
-                    });
-                    html += `<tr class="fw-bold"><td>Total deduction</td><td class="text-end">${fmt(res.total)}</td></tr></tbody></table>`;
-                    $box.html(html);
-                    $amount.val(res.total).prop('readonly', true);
-                    if ($type.val() !== '1') {
-                        $type.val('1').trigger('change.select2'); // NSSF is always a deduction
-                    }
-                });
-        }
-
-        function refreshBreakdowns() {
-            clearTimeout(breakdownTimer);
-            breakdownTimer = setTimeout(function () {
-                const gross = currentGross();
-                $('.element-row').each(function () { loadBreakdown($(this), gross); });
-            }, 300);
-        }
-
-        $(document).on('change', '.element-select', function () {
-            const $row = $(this).closest('.element-row');
-            $row.removeData('tiered');
-            $row.find('.tier-breakdown').empty();
-            $row.find('input[name$="[amount]"]').prop('readonly', false);
-            refreshBreakdowns();
-        });
-
-        $(document).on('input change', '#basic_salary, .entry-type-select, input[name$="[amount]"]', refreshBreakdowns);
-        $(document).on('click', '.remove-element-row', refreshBreakdowns);
+        @include('staff.contracts.partials.element-scripts')
 
         // Handle form submission
         $('#staffContractCreateForm').on('submit', function() {

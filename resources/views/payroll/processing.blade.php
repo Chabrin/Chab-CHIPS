@@ -23,14 +23,18 @@
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h5 class="mb-0">Recent Payroll Runs</h5>
-                        @permission('create_payroll_processing')
-                        <div class="ms-auto">
+                        <div class="ms-auto d-flex gap-2">
+                            <a href="{{ route('payroll.monthly') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined me-1" style="font-size:18px;">fact_check</span>
+                                Monthly Items &amp; Checks
+                            </a>
+                            @permission('create_payroll_processing')
                             <button class="btn btn-primary btn-sm d-flex align-items-center" id="processNewPeriodBtn">
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">autorenew</span>
                                 Run Payroll
                             </button>
+                            @endpermission
                         </div>
-                        @endpermission
                     </div>
                     <div class="card-body">
                         <div class="table-responsive custom-scrollbar">
@@ -78,6 +82,9 @@
                     <div class="alert alert-info small mb-3">
                         <span class="material-symbols-outlined" style="font-size:16px;">info</span>
                         Salary and contract elements are prorated by calendar days when an active contract covers only part of this period.
+                    </div>
+                    <div class="alert alert-light border small mb-3">
+                        Before running, look at <a href="{{ route('payroll.monthly') }}">Monthly Items &amp; Checks</a> for staff who would be left out, what changed since last month, and to enter one-time items such as a bonus.
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
