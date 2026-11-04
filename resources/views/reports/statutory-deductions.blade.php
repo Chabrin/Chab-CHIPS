@@ -19,7 +19,7 @@
                                     <select class="form-select" id="deduction_type" name="deduction_type" required>
                                         <option value="">-- Select Deduction Type --</option>
                                         <option value="NSSF">NSSF</option>
-                                        <option value="SHIF">SHIF</option>
+                                        <option value="SHA">SHA</option>
                                         <option value="Housing Levy">Housing Levy</option>
                                     </select>
                                 </div>

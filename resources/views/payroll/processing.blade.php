@@ -104,7 +104,7 @@
 <script>
     $(document).ready(function() {
         let recentPeriodsTable;
-        const canApprovePayroll = @json(Auth::user()->isAbleTo('approve_payroll_processing'));
+        const runStatusLabels = @json(\App\Models\PayrollRun::STATUS_LABELS);
 
         // Initialize Recent Periods Table
         recentPeriodsTable = $('#recent-periods-table').DataTable({
@@ -149,43 +149,20 @@
                     render: data => '<strong>' + formatCurrency(data || 0) + '</strong>'
                 },
                 {
-                    data: 'run_status_id',
-                    render: status => Number(status) === 1
-                        ? '<span class="badge badge-light-warning">Pending review</span>'
-                        : '<span class="badge badge-light-success">Approved</span>'
+                    data: 'run_status',
+                    render: status => `<span class="badge ${status === 'approved' ? 'badge-light-success' : 'badge-light-warning'}">${runStatusLabels[status] || 'Draft'}</span>`
                 },
                 {
                     data: null,
                     orderable: false,
                     searchable: false,
-                    render: row => canApprovePayroll && Number(row.run_status_id) === 1
-                        ? `<button type="button" class="btn btn-success btn-sm approve-payroll" data-period-id="${row.period_id}">Approve</button>`
-                        : '-'
+                    render: row => `<a class="btn btn-primary btn-sm" href="/payroll/processing/${row.period_id}/review">View Employees</a>`
                 }
             ],
             pageLength: 3,
             order: [
                 [1, 'desc']
             ]
-        });
-
-        $('#recent-periods-table').on('click', '.approve-payroll', function() {
-            const $button = $(this);
-            if (!confirm('Approve this payroll run and make its payslips available?')) return;
-            $button.prop('disabled', true);
-            $.ajax({
-                url: `/ajax/payroll/periods/${$button.data('period-id')}/approve`,
-                type: 'POST',
-                data: { _token: '{{ csrf_token() }}' },
-                success: function(res) {
-                    toastr.success(res.message || 'Payroll approved');
-                    recentPeriodsTable.ajax.reload(null, false);
-                },
-                error: function(xhr) {
-                    $button.prop('disabled', false);
-                    toastr.error(xhr.responseJSON?.error || 'Could not approve payroll');
-                }
-            });
         });
 
         // Process New Period Button
@@ -249,7 +226,7 @@
                         toastr.success('Payroll processed successfully');
                         $('#processPeriodModal').modal('hide');
                         $('#processPeriodForm')[0].reset();
-                        recentPeriodsTable.ajax.reload(null, false);
+                        window.location = res.review_url;
                     } else {
                         toastr.error(res.error || 'Error processing payroll');
                     }

@@ -26,6 +26,7 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\TenantsController;
 use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\PayslipsController;
+use App\Http\Controllers\PayrollReviewController;
 use App\Http\Controllers\RecoveryController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ApprovalsController;
@@ -367,7 +368,15 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/payroll/recent-periods', [PayrollController::class, 'getRecentPeriodsSummary'])->name('ajax.payroll.recentPeriods');
     Route::get('/ajax/payroll/unprocessed-periods', [PayrollController::class, 'getUnprocessedPeriods'])->name('ajax.payroll.unprocessedPeriods');
     Route::post('/ajax/payroll/process', [PayrollController::class, 'processPayroll'])->name('ajax.payroll.process');
-    Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollController::class, 'approvePayroll'])->name('ajax.payroll.approve');
+    Route::get('/payroll/processing/{periodId}/review', [PayrollReviewController::class, 'show'])->whereNumber('periodId')->name('payroll.review');
+    Route::get('/payroll/processing/{periodId}/export', [PayrollReviewController::class, 'exportRegister'])->whereNumber('periodId')->name('payroll.review.export');
+    Route::get('/payroll/processing/{periodId}/eft-test', [PayrollReviewController::class, 'eftTestFile'])->whereNumber('periodId')->name('payroll.review.eft');
+    Route::get('/ajax/payroll/periods/{periodId}/employees', [PayrollReviewController::class, 'employees'])->whereNumber('periodId')->name('ajax.payroll.employees');
+    Route::get('/ajax/payroll/summaries/{summaryId}/payslip', [PayslipsController::class, 'reviewPayslip'])->whereNumber('summaryId')->name('ajax.payroll.payslip');
+    Route::post('/ajax/payroll/periods/{periodId}/submit', [PayrollReviewController::class, 'submit'])->whereNumber('periodId')->name('ajax.payroll.submit');
+    Route::post('/ajax/payroll/periods/{periodId}/approve', [PayrollReviewController::class, 'approve'])->whereNumber('periodId')->name('ajax.payroll.approve');
+    Route::post('/ajax/payroll/periods/{periodId}/return', [PayrollReviewController::class, 'sendBack'])->whereNumber('periodId')->name('ajax.payroll.return');
+    Route::post('/ajax/payroll/periods/{periodId}/reverse', [PayrollReviewController::class, 'reverse'])->whereNumber('periodId')->name('ajax.payroll.reverse');
 
     // Payslips
     Route::get('/payroll/payslips', [PayslipsController::class, 'index'])->name('payroll.payslips');
@@ -569,7 +578,7 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/hr/shif/rates/list', [HrSettingsController::class, 'shifRatesList'])->name('ajax.shifRates.list');
     Route::post('/ajax/hr/shif/rates', [HrSettingsController::class, 'shifRatesStore'])->name('ajax.shifRates.store');
     Route::post('/ajax/hr/shif/rates/{id}', [HrSettingsController::class, 'shifRatesUpdate'])->name('ajax.shifRates.update');
-    Route::delete('/ajax/hr/shif/rates/{id}', [HrReportsController::class, 'shifRatesDelete'])->name('ajax.shifRates.delete');
+    Route::delete('/ajax/hr/shif/rates/{id}', [HrSettingsController::class, 'shifRatesDelete'])->name('ajax.shifRates.delete');
 
 
     // HR Settings - NSSF Rates

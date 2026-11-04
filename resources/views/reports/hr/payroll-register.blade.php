@@ -70,7 +70,7 @@
                             <th class="text-end">Gross</th>
                             <th class="text-end">PAYE</th>
                             <th class="text-end">NSSF</th>
-                            <th class="text-end">SHIF</th>
+                            <th class="text-end">SHA</th>
                             <th class="text-end">Housing Levy</th>
                             <th class="text-end">Total Deductions</th>
                             <th class="text-end">Net Pay</th>
