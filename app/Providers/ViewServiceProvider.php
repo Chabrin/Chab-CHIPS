@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\View;
@@ -24,11 +25,7 @@ class ViewServiceProvider extends ServiceProvider
             $userRole = DB::table('cb_role_user')->where('user_id', $userId)->value('role_id');
 
             // Get allowed submenus for this role
-            $allowedSubmenus = DB::table('cb_sub_modules')
-                ->join('cb_sub_module_permissions', 'cb_sub_modules.id', '=', 'cb_sub_module_permissions.sub_module_id')
-                ->where('cb_sub_module_permissions.role_id', $userRole)
-                ->orderBy('cb_sub_modules.order')
-                ->get();
+            $allowedSubmenus = $this->allowedSubmenus($userRole);
             $submenusGrouped = $allowedSubmenus->groupBy('module_id');
             $modules = DB::table('cb_modules')->orderBy('module_order')->get();
 
@@ -80,5 +77,21 @@ class ViewServiceProvider extends ServiceProvider
             $view->with('superModuleMenus', $superModuleMenus);
             $view->with('forcePasswordChange', (bool) ($user->requireReset ?? false));
         });
+    }
+
+    /**
+     * The menu entries a role may open, each once, in menu order. Only the entry's own columns are read, so a
+     * role granted the same entry twice does not show it twice and the id is the entry's, not the grant's.
+     */
+    private function allowedSubmenus($roleId): Collection
+    {
+        return DB::table('cb_sub_modules')
+            ->join('cb_sub_module_permissions', 'cb_sub_modules.id', '=', 'cb_sub_module_permissions.sub_module_id')
+            ->where('cb_sub_module_permissions.role_id', $roleId)
+            ->select('cb_sub_modules.*')
+            ->orderBy('cb_sub_modules.order')
+            ->get()
+            ->unique('id')
+            ->values();
     }
 }

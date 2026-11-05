@@ -103,6 +103,7 @@ class RolesController extends Controller
             $selectedSubmodules = $request->input('submodules', []);
             // Use Eloquent sync for module_child permissions
             $role->moduleChildren()->sync($selectedSubmodules);
+            $this->removeDuplicateModuleAccess((int) $roleId);
 
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
@@ -110,6 +111,27 @@ class RolesController extends Controller
             Log::info('Error saving modules access: ' . $e);
             Log::error('Error saving modules access: ' . $e->getMessage());
             return response()->json(['error' => 'Failed to update modules access.'], 500);
+        }
+    }
+
+    /**
+     * Keep one access row per menu item for a role. sync() leaves an earlier double grant alone, and each copy
+     * shows as its own entry in the sidebar.
+     */
+    private function removeDuplicateModuleAccess(int $roleId): void
+    {
+        $seen = [];
+        $repeats = [];
+
+        foreach (DB::table('cb_sub_module_permissions')->where('role_id', $roleId)->orderBy('id')->get(['id', 'sub_module_id']) as $row) {
+            if (isset($seen[$row->sub_module_id])) {
+                $repeats[] = $row->id;
+            }
+            $seen[$row->sub_module_id] = true;
+        }
+
+        if ($repeats) {
+            DB::table('cb_sub_module_permissions')->whereIn('id', $repeats)->delete();
         }
     }
 
