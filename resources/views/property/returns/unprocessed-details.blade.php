@@ -64,6 +64,32 @@
                             <span class="mx-1 text-muted">|</span>
                             <span class="text-muted">Type:</span> <strong id="hdr-type">{{ $headerInfo['return_type'] }}</strong>
                         </div>
+                        @if(!empty($headerInfo['merged']))
+                        <!-- Merged return: the property returns it covers -->
+                        <div id="merged-summary" class="border rounded p-2 mb-2" style="font-size:0.72rem;">
+                            <div class="fw-bold mb-1">Merged return{{ $headerInfo['merged']['batch_reference'] ? ' &middot; batch ' . $headerInfo['merged']['batch_reference'] : '' }}</div>
+                            <table class="table table-sm table-bordered mb-1" style="font-size:0.72rem;">
+                                <thead class="table-light"><tr><th>Property</th><th>Return</th><th class="text-end">Net</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    @foreach($headerInfo['merged']['properties'] as $row)
+                                    <tr>
+                                        <td>{{ $row['property'] }}</td>
+                                        <td><a href="{{ $row['url'] }}">{{ $row['return_code'] }}</a></td>
+                                        <td class="text-end">{{ number_format($row['net'], 2) }}</td>
+                                        <td>{{ $row['status'] }}</td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot>
+                                    <tr><td colspan="2" class="text-end">Total of property returns</td><td class="text-end">{{ number_format($headerInfo['merged']['total'], 2) }}</td><td></td></tr>
+                                    <tr><td colspan="2" class="text-end">Less landlord deductions (listed below)</td><td class="text-end">{{ number_format($headerInfo['merged']['deductions'], 2) }}</td><td></td></tr>
+                                    <tr class="fw-bold"><td colspan="2" class="text-end">Net payable</td><td class="text-end">{{ number_format($headerInfo['merged']['net'], 2) }}</td><td></td></tr>
+                                </tfoot>
+                            </table>
+                            <div class="text-muted">Paid into: {{ $headerInfo['merged']['bank'] ? trim(($headerInfo['merged']['bank']['bank_name'] ?? '') . ' ' . ($headerInfo['merged']['bank']['account_name'] ?? '') . ' ' . ($headerInfo['merged']['bank']['account_number'] ?? '')) : 'no bank account chosen for this batch: paid by cheque' }}</div>
+                        </div>
+                        @endif
+
 
                         <!-- Financial Summary -->
                         <style>
@@ -544,6 +570,7 @@
             $('#hdr-landlord').text(r.landlord_label || r.landlord_code || '-');
             $('#hdr-period').text(r.period);
             $('#hdr-type').text(r.return_type);
+            $('#merged-summary').toggle(r.return_type === 'MASTERRETURN');
 
             $('#val-rent').text(lt.rent_total);
             if (lt.add_back_raw > 0) {
