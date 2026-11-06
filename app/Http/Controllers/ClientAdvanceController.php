@@ -1503,7 +1503,8 @@ class ClientAdvanceController extends Controller
             // The final grace month (immediately before principal start) is intentionally
             // excluded here: the principal loop's first installment already charges interest
             // for that same month, so looping the full $gracePeriodMonths would double-charge it.
-            $currentDate = $disbursement->copy();
+            // From the 1st of the disbursement month: adding a month to the 31st would jump over the next month
+            $currentDate = $disbursement->copy()->startOfMonth();
             for ($i = 0; $i < $gracePeriodMonths - 1; $i++) {
                 $currentDate->addMonth()->startOfMonth();
                 $interest = round(($balance * $interestRate) / 100, 2);

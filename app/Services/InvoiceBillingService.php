@@ -37,6 +37,41 @@ class InvoiceBillingService
     }
 
     /**
+     * SQL for the name of an invoice's item. Invoices raised by this app point at the item through item_type_id;
+     * migrated legacy invoices name it in return_type_id or, when that is blank, before " FOR " in the narration.
+     *
+     * @param string $inv the invoice table alias
+     * @param string $itemName SQL for the joined item name, or NULL when there is no join
+     */
+    public static function itemNameSql(string $inv, string $itemName = 'NULL'): string {
+        return "UPPER(COALESCE({$itemName}, NULLIF({$inv}.return_type_id, ''), split_part({$inv}.narration, ' FOR ', 1)))";
+    }
+
+    /**
+     * The name of an invoice's item, upper-cased, the same way itemNameSql() works it out.
+     *
+     * @param object $invoice an invoice row; item_name is used when it was joined in
+     */
+    public static function itemName(object $invoice): string {
+        foreach ([$invoice->item_name ?? null, $invoice->return_type_id ?? null] as $name) {
+            if (trim((string) $name) !== '') {
+                return strtoupper(trim((string) $name));
+            }
+        }
+
+        return strtoupper(trim(explode(' FOR ', (string) ($invoice->narration ?? ''))[0]));
+    }
+
+    /**
+     * Whether an invoice is for rent. Everything else (water, electricity, service charge, deposit) is a bill.
+     *
+     * @param object $invoice an invoice row
+     */
+    public static function isRentInvoice(object $invoice): bool {
+        return self::itemName($invoice) === 'RENT';
+    }
+
+    /**
      * The first day of the month of a date, as Y-m-d. Returns are keyed by the first of the month, so every
      * invoice's returns_period is normalised to it, whatever day the invoice was raised.
      *
