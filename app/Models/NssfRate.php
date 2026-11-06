@@ -27,12 +27,34 @@ class NssfRate extends Model
         'employer_perc',
         'maximum_contribution',
         'taxable',
+        'lower_earnings_limit',
+        'upper_earnings_limit',
+        'tier1_name',
+        'tier2_name',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
         'from_date' => 'datetime',
+        'employee_perc' => 'float',
+        'lower_earnings_limit' => 'float',
+        'upper_earnings_limit' => 'float',
     ];
+
+    public const ACTIVE = 5;
+
+    /** The row payroll uses on a date: the latest active one that has started and has everything the calculation needs. */
+    public static function inForceOn(string $date): ?self
+    {
+        return static::where('current_status_id', self::ACTIVE)
+            ->whereNotNull('employee_perc')
+            ->whereNotNull('lower_earnings_limit')
+            ->whereNotNull('upper_earnings_limit')
+            ->whereDate('from_date', '<=', $date)
+            ->orderByDesc('from_date')
+            ->orderByDesc('id')
+            ->first();
+    }
 
     //relationships
     public function createdBy()

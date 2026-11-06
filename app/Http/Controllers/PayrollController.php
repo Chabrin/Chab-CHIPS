@@ -1298,8 +1298,8 @@ class PayrollController extends Controller
         $housingLevyElement = $payrollElements->get('housing_levy');
         $payeeElement      = $payrollElements->get('payee');
 
-        // NSSF (Tier I + Tier II) on gross pay, same calculation as the contract form
-        $nssfBreakdown = $this->nssfCalculator->calculate($statutoryGrossPay);
+        // NSSF (Tier I + Tier II) on gross pay, at the rates in force for this pay period
+        $nssfBreakdown = $this->nssfCalculator->calculate($statutoryGrossPay, $periodStartDate);
         $nssf = $nssfBreakdown['total'];
         $nssfTier1 = $nssfBreakdown['tiers'][0]['amount'];
         $nssfTier2 = $nssfBreakdown['tiers'][1]['amount'];

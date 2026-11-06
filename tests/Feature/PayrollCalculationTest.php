@@ -104,6 +104,18 @@ class PayrollCalculationTest extends TestCase
             $t->decimal('total_amount', 15, 2)->default(0);
         });
 
+        // HR Settings > NSSF Rates, empty here so the standard figures apply unless a test adds rows
+        Schema::create('sys_hr_nssf_rates', function (Blueprint $t) {
+            $t->id();
+            $t->dateTime('from_date')->nullable();
+            $t->decimal('employee_perc', 8, 2)->nullable();
+            $t->decimal('lower_earnings_limit', 12, 2)->nullable();
+            $t->decimal('upper_earnings_limit', 12, 2)->nullable();
+            $t->string('tier1_name')->nullable();
+            $t->string('tier2_name')->nullable();
+            $t->integer('current_status_id')->nullable();
+        });
+
         DB::table('sys_staff')->insert(['id' => self::STAFF_ID, 'disability' => 'no']);
         DB::table('um_tax_bands')->insert(['range_from' => 0, 'range_to' => null, 'tax_rate' => 10, 'is_last' => true]);
         DB::table('sys_hr_payroll_elements')->insert([
@@ -115,17 +127,18 @@ class PayrollCalculationTest extends TestCase
     }
 
     /**
-     * Run calculatePayroll for the test employee on a 50,000 basic salary for the whole of October 2026.
+     * Run calculatePayroll for the test employee on a 50,000 basic salary for the whole of a month (October 2026 unless given).
      */
-    private function calculate(): array
+    private function calculate(string $periodStart = self::PERIOD_START, string $periodEnd = self::PERIOD_END): array
     {
         $method = new ReflectionMethod(PayrollController::class, 'calculatePayroll');
         $method->setAccessible(true);
+        $days = (int) (new \DateTime($periodStart))->diff(new \DateTime($periodEnd))->days + 1;
 
         return $method->invoke(
             new PayrollController(new NssfCalculator()),
-            'Test Person', 50000, self::STAFF_ID, 'S1', 1, 1, collect(), self::PERIOD_START, 216,
-            self::CONTRACT_ID, 31, 31, self::PERIOD_END, null, null
+            'Test Person', 50000, self::STAFF_ID, 'S1', 1, 1, collect(), $periodStart, 216,
+            self::CONTRACT_ID, $days, $days, $periodEnd, null, null
         );
     }
 
@@ -156,6 +169,27 @@ class PayrollCalculationTest extends TestCase
         }
 
         return $id;
+    }
+
+    public function test_nssf_uses_the_rates_in_force_for_the_pay_period(): void
+    {
+        DB::table('sys_hr_nssf_rates')->insert([
+            ['from_date' => '2026-02-01 00:00:00', 'employee_perc' => 6, 'lower_earnings_limit' => 9000, 'upper_earnings_limit' => 108000, 'current_status_id' => 5],
+            ['from_date' => '2026-11-01 00:00:00', 'employee_perc' => 5, 'lower_earnings_limit' => 10000, 'upper_earnings_limit' => 120000, 'current_status_id' => 5],
+        ]);
+
+        $october = $this->calculate();
+        $november = $this->calculate('2026-11-01', '2026-11-30');
+
+        $this->assertEquals([540, 2460], [$october['nssf_tier1'], $october['nssf_tier2']]);   // 6% up to 9,000, then 6% up to 108,000
+        $this->assertEquals([500, 2000], [$november['nssf_tier1'], $november['nssf_tier2']]); // the new row: 5% up to 10,000, then 5% up to 120,000
+    }
+
+    public function test_nssf_uses_the_standard_figures_when_no_rate_has_been_entered(): void
+    {
+        $result = $this->calculate();
+
+        $this->assertEquals([540, 2460], [$result['nssf_tier1'], $result['nssf_tier2']]);
     }
 
     public function test_the_contract_helb_amount_is_deducted_when_the_staff_member_has_no_loan_record(): void
