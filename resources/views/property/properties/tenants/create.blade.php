@@ -69,7 +69,7 @@
                             <button type="submit" form="unitTenantForm" class="btn btn-primary btn-sm d-flex align-items-center" id="saveButton">
                                 <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Save</span>
+                                <span>{{ config('tenant_onboarding.enabled') ? 'Submit for Review' : 'Save' }}</span>
                             </button>
                             <a href="{{ $client ? route('property.clients.show', $client->encrypted_id) : route('property.properties.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
@@ -78,6 +78,11 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        @if(config('tenant_onboarding.enabled'))
+                        <div class="alert alert-info">Tenant onboarding test workflow. Submission by the assigned Field Officer records their sign-off. The lease starts and the first rent bill is raised when the Assistant Auditor confirms and effects.
+                            <a href="{{ route('tenant-onboarding.index') }}" class="ms-2">View pending submissions</a>
+                        </div>
+                        @endif
                         @if($errors->any())
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <strong>Error!</strong> Please correct the following errors:
@@ -92,6 +97,14 @@
 
                         <form action="{{ route('units.tenants.store') }}" method="POST" id="unitTenantForm" enctype="multipart/form-data">
                             @csrf
+                            @if(config('tenant_onboarding.enabled'))
+                            <input type="hidden" name="onboarding_id" value="{{ old('onboarding_id') }}">
+                            <input type="hidden" name="onboarding_revision" value="{{ old('onboarding_revision') }}">
+                            <div class="row mb-3">
+                                <div class="col-md-4"><label class="form-label" for="effective_month">Form month</label><input class="form-control" type="month" name="effective_month" id="effective_month" value="{{ old('effective_month', now()->format('Y-m')) }}"></div>
+                                <div class="col-md-4"><label class="form-label" for="previous_tenant_vacated">Previous tenant vacated on</label><input class="form-control" type="date" name="previous_tenant_vacated" id="previous_tenant_vacated" value="{{ old('previous_tenant_vacated') }}"></div>
+                            </div>
+                            @endif
 
                             <!-- Hidden client ID field -->
                             <input type="hidden" name="client_id" value="{{ $client->id ?? old('client_id') }}">
@@ -190,9 +203,9 @@
                                         </div>
 
                                         <div class="col-md-4 mb-3">
-                                            <label for="lease_start_date" class="form-label">Lease Start Date  <span class="text-danger">*</span></label>
+                                            <label for="lease_start_date" class="form-label">{{ config('tenant_onboarding.enabled') ? 'Requested move-in date (for review)' : 'Lease Start Date' }} <span class="text-danger">*</span></label>
                                             <input type="date" class="form-control @error('lease_start_date') is-invalid @enderror" 
-                                                   id="lease_start_date" name="lease_start_date" required> 
+                                                   id="lease_start_date" name="lease_start_date" value="{{ old('lease_start_date') }}" required>
                                             @error('lease_start_date')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror

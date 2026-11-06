@@ -1,7 +1,10 @@
 {{-- Units & tenants bulk upload sub-tab: download the template, upload, pick a batch to load its rows below, click a row for details. --}}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <p class="text-muted small mb-0">Upload units and their tenants together for the property selected above. Only clean files are staged; nothing is created until you submit.</p>
-    <div class="d-flex flex-shrink-0 ms-2 gap-2">
+<div class="client-upload-banner">
+    <div class="client-upload-intro">
+        <h3>Bulk Upload Units &amp; Tenants</h3>
+        <p>Use one spreadsheet to add new units with their tenants for the selected property. Review the uploaded records before submitting.</p>
+    </div>
+    <div class="client-upload-actions">
         <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" id="utuDownloadBtn" disabled>
             <span class="material-symbols-outlined me-1" style="font-size:18px;">download</span> Download Template
         </button>
@@ -10,6 +13,12 @@
         </button>
     </div>
 </div>
+<ol class="client-upload-steps" aria-label="Bulk upload steps">
+    <li><span aria-hidden="true">1</span> Download template</li>
+    <li><span aria-hidden="true">2</span> Upload file</li>
+    <li><span aria-hidden="true">3</span> Review records</li>
+    <li><span aria-hidden="true">4</span> Submit batch</li>
+</ol>
 
 <div class="table-responsive custom-scrollbar">
     <table id="utuBatchesTable" class="display" style="width:100%;">
@@ -148,7 +157,7 @@
                 {data: 'id', orderable: false, render: function(id) { return '<a href="#" class="text-primary utu-review-btn" data-id="' + id + '">View</a>'; }}
             ],
             createdRow: function(row) { $(row).css('cursor', 'pointer'); },
-            language: {emptyTable: 'Select a property above to see its uploads'}
+            language: {emptyTable: 'No uploaded files to display.'}
         });
 
         var utuListSeq = 0;

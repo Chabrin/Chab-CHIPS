@@ -6,6 +6,9 @@
         <div class="card">
             <div class="card-header card-no-border d-flex align-items-center">
                 <h4 class="mb-0">Property Management Confirmations</h4>
+                @if(config('tenant_onboarding.enabled'))
+                <a class="btn btn-primary ms-auto" href="{{ route('tenant-onboarding.index') }}">New Tenant Onboarding</a>
+                @endif
             </div>
             <div class="card-body">
                 <div class="mb-3">
@@ -868,4 +871,3 @@ $(document).ready(function() {
 });
 </script>
 @endsection
-           

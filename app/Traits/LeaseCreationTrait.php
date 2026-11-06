@@ -37,12 +37,15 @@ trait LeaseCreationTrait
      * $invoiceableItems: array of ['item' => id, 'amount' => x, 'cycle' => id, 'prepay_client' => 'Yes'|null],
      * matching the shape LeasesController::store() already validates and stores.
      */
-    private function createLeaseAgreementRecord(array $data, array $invoiceableItems = []): LeaseAgreement
+    private function createLeaseAgreementRecord(array $data, array $invoiceableItems = [], ?Property $authorizedProperty = null, ?\App\Models\TenantOnboarding $submission = null): LeaseAgreement
     {
         [$dateEnd, $years, $openEnded] = $this->resolveLeaseTerm($data);
 
-        $property = Property::findOrFail($data['property_id']);
-        $unit = Unit::findOrFail($data['unit_id']);
+        $property = $authorizedProperty ?? Property::findOrFail($data['property_id']);
+        $unit = Unit::lockForUpdate()->findOrFail($data['unit_id']);
+        if (config('tenant_onboarding.enabled')) {
+            app(\App\Services\TenantOnboardingService::class)->assertUnitAvailable($unit, $submission?->id);
+        }
 
         $leaseAgreement = LeaseAgreement::create([
             'date_time' => now(),
@@ -68,7 +71,7 @@ trait LeaseCreationTrait
             'ref_number' => null, // Set below, once the ID exists
         ]);
 
-        $tenant = Client::find($data['tenant_id']);
+        $tenant = $submission ? Client::withoutGlobalScopes()->find($data['tenant_id']) : Client::find($data['tenant_id']);
         $leaseAgreement->ref_number = $this->generateLeaseReferenceNumber(
             $data['unit_id'],
             $tenant->names ?? ''

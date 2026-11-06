@@ -298,6 +298,9 @@ class TenantsController extends Controller
      */
     public function store(Request $request)
     {
+        if (config('tenant_onboarding.enabled')) {
+            return $this->submitOnboarding($request);
+        }
         DB::beginTransaction();
         try {
             $validated = $this->validateTenantRequest($request);
@@ -975,6 +978,139 @@ class TenantsController extends Controller
     /**
      * Validate tenant request
      */
+    public function validateTenantOnboarding(Request $request): array
+    {
+        $validated = $this->validateTenantRequest($request);
+        $this->validateIndividualOrCompanyFields($validated);
+        $property = Property::findOrFail($validated['property_id']);
+        $unit = Unit::where('property_id', $property->id)->findOrFail($validated['unit_id']);
+        $validated['sla_ref'] = $this->resolveSlaId($property->id);
+        $validated['rent_amount'] = (float) $unit->rent_amount;
+        if (!$validated['sla_ref'] || $validated['rent_amount'] <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['unit_id' => 'Select a unit with rent configured and a property service agreement.']);
+        }
+        $extra = $request->validate([
+            'effective_month' => 'nullable|date_format:Y-m',
+            'previous_tenant_vacated' => 'nullable|date',
+            'inspection_date' => 'nullable|date', 'inspector_name' => 'nullable|string|max:255',
+            'inspection_notes' => 'nullable|string|max:5000',
+            'walls_condition' => 'nullable|string|max:255', 'floors_condition' => 'nullable|string|max:255',
+            'ceiling_condition' => 'nullable|string|max:255', 'doors_condition' => 'nullable|string|max:255',
+            'windows_condition' => 'nullable|string|max:255', 'plumbing_condition' => 'nullable|string|max:255',
+            'electrical_condition' => 'nullable|string|max:255', 'overall_condition' => 'nullable|string|max:255',
+            'inspection_photos.*' => 'image|max:5120', 'inspection_videos.*' => 'file|mimes:mp4,mov,webm|max:51200',
+            'tenant_files.*.file' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
+        ]);
+        $requiredInspection = DB::table('sys_pm_service_agreements')->where('id', $validated['sla_ref'])->value('move_in_inspection_required');
+        if ($requiredInspection && empty($extra['inspection_date'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['inspection_date' => 'This property requires a move-in inspection.']);
+        }
+        return $validated + $extra;
+    }
+
+    private function submitOnboarding(Request $request)
+    {
+        abort_unless($request->user()?->hasPermission('create_tenants'), 403);
+        $workflow = app(\App\Services\TenantOnboardingService::class);
+        $existing = null;
+        $revision = null;
+        if ($request->filled('onboarding_id')) {
+            $request->validate(['onboarding_id' => 'required|integer', 'onboarding_revision' => 'required|integer']);
+            $existing = \App\Models\TenantOnboarding::findOrFail($request->input('onboarding_id'));
+            abort_unless($existing->prepared_by === (int) $request->user()->id && $existing->state === 'changes_requested', 403);
+            $revision = (int) $request->input('onboarding_revision');
+        }
+        $payload = $this->validateTenantOnboarding($request);
+        if ($existing?->batch_tenant_id) {
+            $payload['lease_open_ended'] = $existing->payload['lease_open_ended'] ?? false;
+            $payload['lease_term_days'] = $existing->payload['lease_term_days'] ?? null;
+        }
+        // Uploaded files are held privately; the signed payload stores only form values.
+        foreach (array_keys(\Illuminate\Support\Arr::dot($request->allFiles())) as $field) {
+            \Illuminate\Support\Arr::forget($payload, $field);
+        }
+        $files = app(\App\Services\TenantOnboardingFiles::class)->stage($request, $existing?->documents ?? []);
+        try {
+            $submission = $workflow->submit($payload, $files, $request->user(), $existing, $revision);
+        } catch (\Throwable $e) {
+            $oldPaths = array_column($existing?->documents ?? [], 'path');
+            Storage::disk('local')->delete(array_values(array_diff(array_column($files, 'path'), $oldPaths)));
+            throw $e;
+        }
+        return redirect()->route('tenant-onboarding.show', $submission)->with('success', 'Tenant submitted for approval.');
+    }
+
+    public function effectOnboarding(Request $request, \App\Models\TenantOnboarding $submission)
+    {
+        $request->validate(['revision' => 'required|integer|min:1']);
+        $published = [];
+        try {
+            $submission = app(\App\Services\TenantOnboardingService::class)->effect(
+                $submission, $request->user(), (int) $request->input('revision'),
+                function ($approved, $effectedAt) use (&$published) {
+                    // The workflow has authorised this specific property for the Assistant Auditor.
+                    $property = Property::withoutGlobalScope('user_properties')->findOrFail($approved->property_id);
+                    $data = $approved->payload;
+                    $data['lease_start_date'] = $effectedAt->toDateString();
+                    if (DB::getDriverName() === 'pgsql') {
+                        DB::select('SELECT pg_advisory_xact_lock(?)', [7240041]);
+                    }
+                    $published = app(\App\Services\TenantOnboardingFiles::class)->publish($approved);
+                    $tenant = $this->createTenant($data, $this->generateTenantReferenceNumber(), $published['tenant_photo'] ?? null);
+                    $tenant->update(['current_status_id' => 5, 'created_by' => $approved->prepared_by]);
+                    $leaseData = [
+                        'client_id' => $property->client_id, 'property_id' => $property->id,
+                        'unit_id' => $approved->unit_id, 'tenant_id' => $tenant->id, 'sla_id' => $data['sla_ref'],
+                        'date_start' => $data['lease_start_date'], 'years' => $data['lease_years'],
+                        'escalation_rate' => $data['escalation_rate'] ?? 0,
+                        'escalation_frequency' => $data['frequency'],
+                    ];
+                    if (!empty($data['lease_open_ended'])) {
+                        $leaseData['open_ended'] = true;
+                    } elseif (!empty($data['lease_term_days'])) {
+                        $leaseData['date_end'] = $effectedAt->copy()->addDays($data['lease_term_days'])->toDateString();
+                    }
+                    $lease = $this->createLeaseAgreementRecord($leaseData, [], $property, $approved);
+                    $lease->update(['current_status_id' => 5, 'created_by_id' => $approved->prepared_by]);
+                    $tenant->update(['lease_years' => $lease->years]);
+                    $form = new Request($data);
+                    $this->saveBankAccounts($form, $tenant->id);
+                    $this->saveOtherContacts($form, $tenant->id);
+                    $this->saveNextOfKin($form, $tenant->id);
+                    foreach ($data['tenant_files'] ?? [] as $index => $document) {
+                        ClientDocument::create(['parent_id' => $tenant->id, 'file_type' => $document['type'] ?? null,
+                            'documents' => $published['tenant_files.'.$index.'.file'] ?? null]);
+                    }
+                    $this->saveMoveInInspection($form, $tenant, $data);
+                    if (!empty($data['inspection_date'])) {
+                        $photos = array_values(array_filter($published, fn ($field) => str_starts_with($field, 'inspection_photos.'), ARRAY_FILTER_USE_KEY));
+                        $videos = array_values(array_filter($published, fn ($field) => str_starts_with($field, 'inspection_videos.'), ARRAY_FILTER_USE_KEY));
+                        MoveInInspection::where('tenant_id', $tenant->id)->update(['photo_paths' => json_encode($photos), 'video_paths' => json_encode($videos), 'conducted_by' => $approved->prepared_by]);
+                    }
+                    $rentItem = \App\Models\InvoiceableItem::where('billing_code', \App\Services\InvoiceBillingService::RENT_CODE)->firstOrFail();
+                    $invoice = $this->createSingleDebtorInvoice([
+                        'tenant_id' => $tenant->id, 'property_id' => $property->id, 'unit_id' => $approved->unit_id,
+                        'lease_id' => $lease->id, 'item_type_id' => $rentItem->id,
+                        'date_due' => $data['lease_start_date'], 'returns_period' => $data['lease_start_date'],
+                        'total_amount' => $data['rent_amount'],
+                    ], $property);
+                    if ($approved->batch_tenant_id) {
+                        DB::table('temp_batch_tenants')->where('id', $approved->batch_tenant_id)->update(['tenant_id' => $tenant->id, 'lease_id' => $lease->id]);
+                    }
+                    return ['tenant_id' => $tenant->id, 'lease_id' => $lease->id, 'invoice_id' => $invoice->id];
+                }
+            );
+        } catch (\Throwable $e) {
+            Storage::disk('public')->delete(array_values($published));
+            if ($e instanceof \Illuminate\Validation\ValidationException || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+            report($e);
+            return back()->with('error', 'Effecting failed. The submission remains pending. Please check the billing setup and try again.');
+        }
+        return redirect()->route('tenant-onboarding.show', $submission)->with('success', 'Tenant confirmed and effected. The lease is active and the first rent bill has been raised.');
+    }
+
     private function validateTenantRequest(Request $request)
     {
         return $request->validate([

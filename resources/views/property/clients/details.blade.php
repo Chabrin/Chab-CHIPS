@@ -21,15 +21,31 @@ COPY PERMISSIONS (paste when re-enabling checks):
 @permission('read_repair_requests') ... @endpermission
 --}}
 @extends('layouts.main')
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/client-details.css') }}?v={{ filemtime(public_path('assets/css/client-details.css')) }}">
+@endsection
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="client-details" style="padding-top:10px;">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Landlord/Client - {{ $client->names }}</h5>
-                        <div class="ms-auto d-flex gap-2">
+                <div class="card client-details-card">
+                    <div class="card-header card-no-border client-details-header">
+                        <div class="client-details-identity">
+                            <span class="client-details-eyebrow">Landlord / Client</span>
+                            <h1 class="client-details-name">{{ $client->names }}</h1>
+                            <dl class="client-details-meta">
+                                <div><dt>Ref #:</dt><dd>{{ $client->reference_number ?? 'N/A' }}</dd></div>
+                                @if($client->client_type_id == 3)
+                                <div><dt>Reg No:</dt><dd>{{ $client->company_registration_number ?? '-' }}</dd></div>
+                                @else
+                                <div><dt>National ID:</dt><dd>{{ $client->national_id ?? '-' }}</dd></div>
+                                @endif
+                                <div><dt>Phone:</dt><dd>{{ $client->mobile_number ?? '-' }}</dd></div>
+                                <div><dt>Email:</dt><dd>{{ $client->email_address ?? '-' }}</dd></div>
+                            </dl>
+                        </div>
+                        <div class="client-details-header-actions">
                             <a href="{{ route('property.clients.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -44,25 +60,8 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                 <span class="material-symbols-outlined">edit_document</span>
                                 <span class="ms-1">Edit Client</span>
                             </a>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <!-- Summary Header -->
-                        <div class="mb-3 d-flex flex-row justify-content-between align-items-center">
-                            <p class="text-muted mb-0" style="font-size: 0.875rem;">
-                                <strong>Ref #:</strong> {{ $client->reference_number ?? 'N/A' }} |
-                                @if($client->client_type_id == 3)
-                                <strong>Reg No:</strong> {{ $client->company_registration_number ?? '-' }} |
-                                @else
-                                <strong>National ID:</strong> {{ $client->national_id ?? '-' }} |
-                                @endif
-                                <strong>Email:</strong> {{ $client->email_address ?? '-' }} |
-                                <strong>Phone:</strong> {{ $client->mobile_number ?? '-' }}
-                            </p>
-                            <!-- In the Properties tab section, add this button -->
-                            <div class="mb-3">
                                 <div class="dropdown">
-                                    <button class="btn btn-primary btn-sm dropdown-toggle d-flex align-items-center" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <button class="btn btn-outline-primary btn-sm dropdown-toggle d-flex align-items-center" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">more_vert</span>
                                         <span>Additional Actions</span>
                                     </button>
@@ -89,91 +88,45 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                         </li>
                                     </ul>
                                 </div>
-                            </div>
                         </div>
-
+                    </div>
+                    <div class="card-body client-details-body">
+                        @if(session('client_created'))
+                        <div class="client-created-confirmation" role="status" aria-live="polite">
+                            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+                            <div><strong>Client saved successfully</strong><p>{{ session('client_created.name') }} · Reference: {{ session('client_created.reference') }} · {{ session('client_created.status') }}</p><span>You can now add the client’s properties.</span></div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="clientCreatedAddProperty">Add Property</button>
+                        </div>
+                        @endif
                         <!-- Tabs Navigation -->
-                        <ul class="nav nav-tabs mb-4" id="clientTabs" role="tablist">
+                        @php
+                            $clientDetailTabs = [
+                                ['profile', 'Overview', 'person'],
+                                ['bank', 'Bank', 'account_balance'],
+                                ['properties', 'Properties', 'home'],
+                                ['related-properties', 'Related Properties', 'real_estate_agent'],
+                                ['sla', 'SLA', 'approval_delegation'],
+                                ['units', 'Units', 'apartment'],
+                                ['tenants', 'Tenants', 'group'],
+                                ['leases', 'Leases', 'description'],
+                                ['inspections', 'Inspections', 'fact_check'],
+                                ['invoicing', 'Invoicing', 'receipt_long'],
+                                ['generated-invoices', 'Generated Invoices', 'request_quote'],
+                                ['repairs', 'Repairs & Maintenance', 'build'],
+                                ['recoveries', 'Recoveries', 'payments'],
+                                ['tenant-history', 'Tenant History', 'history'],
+                                ['stats', 'Stats', 'analytics'],
+                                ['returns-config', 'Returns Config', 'settings'],
+                            ];
+                        @endphp
+                        <ul class="nav nav-tabs" id="clientTabs" role="tablist" aria-label="Client details">
+                            @foreach($clientDetailTabs as [$tabId, $tabLabel, $tabIcon])
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">person</span> Overview
+                                <button class="nav-link {{ $loop->first ? 'active' : '' }}" id="{{ $tabId }}-tab" data-bs-toggle="tab" data-bs-target="#{{ $tabId }}" type="button" role="tab" aria-controls="{{ $tabId }}" aria-selected="{{ $loop->first ? 'true' : 'false' }}">
+                                    <span class="material-symbols-outlined" aria-hidden="true">{{ $tabIcon }}</span> {{ $tabLabel }}
                                 </button>
                             </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="bank-tab" data-bs-toggle="tab" data-bs-target="#bank" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">account_balance</span> Bank
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">analytics</span> Stats
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="properties-tab" data-bs-toggle="tab" data-bs-target="#properties" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">home</span> Properties
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="related-properties-tab" data-bs-toggle="tab" data-bs-target="#related-properties" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">real_estate_agent</span> Related Properties
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="sla-tab" data-bs-toggle="tab" data-bs-target="#sla" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">approval_delegation</span> SLA
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="units-tab" data-bs-toggle="tab" data-bs-target="#units" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">apartment</span> Units
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tenants-tab" data-bs-toggle="tab" data-bs-target="#tenants" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">group</span> Tenants
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="invoicing-tab" data-bs-toggle="tab" data-bs-target="#invoicing" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">receipt_long</span> Invoicing
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="generated-invoices-tab" data-bs-toggle="tab" data-bs-target="#generated-invoices" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">request_quote</span> Generated Invoices
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tenant-history-tab" data-bs-toggle="tab" data-bs-target="#tenant-history" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">history</span> Tenant History
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="leases-tab" data-bs-toggle="tab" data-bs-target="#leases" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">description</span> Leases
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="recoveries-tab" data-bs-toggle="tab" data-bs-target="#recoveries" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">payments</span> Recoveries
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="inspections-tab" data-bs-toggle="tab" data-bs-target="#inspections" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">fact_check</span> Inspections
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="repairs-tab" data-bs-toggle="tab" data-bs-target="#repairs" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">build</span> Repairs &amp; Maintenance
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="returns-config-tab" data-bs-toggle="tab" data-bs-target="#returns-config" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;">settings</span> Returns Config
-                                </button>
-                            </li>
+                            @endforeach
                         </ul>
 
                         <!-- Tabs Content -->
@@ -706,23 +659,42 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                             <!-- Tenants Tab -->
                             <div class="tab-pane fade" id="tenants" role="tabpanel" aria-labelledby="tenants-tab">
-                                <div class="row mb-3 align-items-end">
-                                    <div class="col-5">
+                                <div class="client-section-heading">
+                                    <h2>Tenants</h2>
+                                    <p>View tenants for the selected property.</p>
+                                </div>
+                                <div class="client-property-toolbar">
+                                    <div class="client-property-field">
                                         <label for="tenantPropertySelect" class="form-label">Select Property</label>
-                                        <select id="tenantPropertySelect" class="form-select">
+                                        <select id="tenantPropertySelect" class="form-select" aria-describedby="tenantPropertyHelp">
                                             <option value="">-- Select Property --</option>
                                         </select>
                                     </div>
-                                    <div class="col-auto">
-                                        <div id="tenantSpinner" class="spinner-border text-primary" role="status" style="display:none;">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
+                                    <div id="tenantSpinner" class="spinner-border text-primary" role="status" style="display:none;">
+                                        <span class="visually-hidden">Loading tenants...</span>
                                     </div>
+                                    <div class="client-tenant-actions">
+                                        @permission('create_tenants')
+                                        <a href="{{ route('units.tenants.create', ['client' => Crypt::encrypt($client->id)]) }}" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                                            <span class="material-symbols-outlined" aria-hidden="true">person_add</span> Add Tenant
+                                        </a>
+                                        @endpermission
+                                        @permission('create_units')
+                                        @permission('create_tenants')
+                                        @permission('create_lease_agreements')
+                                        <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" id="openTenantBulkUploadBtn" aria-controls="tenants-bulk-upload-pane">
+                                            <span class="material-symbols-outlined" aria-hidden="true">upload_file</span> Bulk Upload Units &amp; Tenants
+                                        </button>
+                                        @endpermission
+                                        @endpermission
+                                        @endpermission
+                                    </div>
+                                    <p class="client-property-help" id="tenantPropertyHelp">Choose a property to view its tenants or upload new units and tenants together.</p>
                                 </div>
 
                                 <ul class="nav nav-tabs mb-3" id="tenantsSubTabs" role="tablist">
                                     <li class="nav-item" role="presentation">
-                                        <button class="nav-link active" id="tenants-listing-subtab" data-bs-toggle="tab" data-bs-target="#tenants-listing-pane" type="button" role="tab">
+                                        <button class="nav-link active" id="tenants-listing-subtab" data-bs-toggle="tab" data-bs-target="#tenants-listing-pane" type="button" role="tab" aria-controls="tenants-listing-pane" aria-selected="true">
                                             Tenants Listing
                                         </button>
                                     </li>
@@ -730,7 +702,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                     @permission('create_tenants')
                                     @permission('create_lease_agreements')
                                     <li class="nav-item" role="presentation">
-                                        <button class="nav-link" id="tenants-bulk-upload-subtab" data-bs-toggle="tab" data-bs-target="#tenants-bulk-upload-pane" type="button" role="tab">
+                                        <button class="nav-link" id="tenants-bulk-upload-subtab" data-bs-toggle="tab" data-bs-target="#tenants-bulk-upload-pane" type="button" role="tab" aria-controls="tenants-bulk-upload-pane" aria-selected="false">
                                             Bulk Upload
                                         </button>
                                     </li>
@@ -741,7 +713,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
                                 <div class="tab-content" id="tenantsSubTabsContent">
                                     <!-- Tenants Listing sub-tab -->
-                                    <div class="tab-pane fade show active" id="tenants-listing-pane" role="tabpanel">
+                                    <div class="tab-pane fade show active" id="tenants-listing-pane" role="tabpanel" aria-labelledby="tenants-listing-subtab">
                                         <div class="table-responsive custom-scrollbar">
                                             <table id="tenantsTable" class="display" style="width:100%;">
                                                 <thead>
@@ -765,7 +737,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                     @permission('create_tenants')
                                     @permission('create_lease_agreements')
                                     <!-- Bulk Upload sub-tab (units & tenants, staged) -->
-                                    <div class="tab-pane fade" id="tenants-bulk-upload-pane" role="tabpanel">
+                                    <div class="tab-pane fade" id="tenants-bulk-upload-pane" role="tabpanel" aria-labelledby="tenants-bulk-upload-subtab">
                                         @include('property.clients.include.unit-tenant-upload')
                                     </div>
                                     @endpermission
@@ -5448,4 +5420,5 @@ COPY PERMISSIONS (paste when re-enabling checks):
         });
     });
 </script>
+<script src="{{ asset('assets/js/client-details.js') }}?v={{ filemtime(public_path('assets/js/client-details.js')) }}"></script>
 @endsection

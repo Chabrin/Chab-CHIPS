@@ -143,6 +143,10 @@ class Unit extends Model
      */
     public function scopeVacant($query)
     {
+        if (config('tenant_onboarding.enabled')) {
+            $query->whereNotExists(fn ($reservation) => $reservation->selectRaw('1')->from('tenant_onboarding_submissions')
+                ->whereColumn('reserved_unit_id', 'sys_pm_units.id'));
+        }
         return $query->whereDoesntHave('activeLeaseAgreement');
     }
 
@@ -153,6 +157,9 @@ class Unit extends Model
      */
     public function isVacant(): bool
     {
+        if (config('tenant_onboarding.enabled') && TenantOnboarding::where('reserved_unit_id', $this->id)->exists()) {
+            return false;
+        }
         return !$this->activeLeaseAgreement()->exists();
     }
 

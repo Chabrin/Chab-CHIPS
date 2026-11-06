@@ -1338,6 +1338,13 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/property/recoveries/landlord-posting/data', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'getData'])->name('property.recoveries.landlord-posting.data');
     Route::post('/property/recoveries/landlord-posting/post', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'post'])->name('property.recoveries.landlord-posting.post');
 
+    Route::get('/approvals/tenant-onboarding', [App\Http\Controllers\TenantOnboardingController::class, 'index'])->name('tenant-onboarding.index');
+    Route::get('/approvals/tenant-onboarding/{submission}', [App\Http\Controllers\TenantOnboardingController::class, 'show'])->whereNumber('submission')->name('tenant-onboarding.show');
+    Route::post('/approvals/tenant-onboarding/{submission}/decision', [App\Http\Controllers\TenantOnboardingController::class, 'decide'])->whereNumber('submission')->name('tenant-onboarding.decide');
+    Route::post('/approvals/tenant-onboarding/{submission}/effect', [TenantsController::class, 'effectOnboarding'])->whereNumber('submission')->name('tenant-onboarding.effect');
+    Route::get('/approvals/tenant-onboarding/{submission}/correct', [App\Http\Controllers\TenantOnboardingController::class, 'correct'])->whereNumber('submission')->name('tenant-onboarding.correct');
+    Route::get('/approvals/tenant-onboarding/{submission}/documents/{index}', [App\Http\Controllers\TenantOnboardingController::class, 'document'])->whereNumber('submission')->whereNumber('index')->name('tenant-onboarding.document');
+
     // Approve SLA (Approval Control)
     Route::get('/approvals/sla', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'index'])->name('approvals.sla.index');
     Route::get('/ajax/approvals/sla/list', [App\Http\Controllers\ServiceAgreementApprovalController::class, 'list'])->name('approvals.sla.list');

@@ -213,6 +213,33 @@ class UnitTenantSubmitService
             throw new DomainException('Property has no service agreement (SLA), so a lease cannot be created');
         }
 
+        if (config('tenant_onboarding.enabled')) {
+            $isCompany = $tenantRow->sheet === 'corporate';
+            $form = new \Illuminate\Http\Request([
+                'tenant_type' => $isCompany ? 3 : 1, 'names' => $tenantRow->names,
+                'title' => $tenantRow->title, 'mobile_number' => $tenantRow->mobile_no,
+                'email_address' => $tenantRow->email, 'pin_number' => $tenantRow->kra_pin,
+                'national_id' => $tenantRow->national_id, 'passport_number' => $tenantRow->passport_no,
+                'nationality_id' => $this->lookups->id('countries', $tenantRow->nationality),
+                'gender' => $isCompany ? null : ucfirst(strtolower($this->lookups->name('genders', $tenantRow->gender) ?? '')),
+                'company_name' => $tenantRow->company_name, 'company_registration_number' => $tenantRow->registration_number,
+                'contact_person_name' => $tenantRow->contact_name, 'contact_person_mobile' => $tenantRow->contact_phone,
+                'contact_person_email' => $tenantRow->contact_email,
+                'property_id' => $property->id, 'unit_id' => $unit->id,
+                'registered_date' => now()->toDateString(), 'lease_start_date' => $tenantRow->lease_start_date,
+                'lease_years' => max(1, (int) ceil((float) $this->leaseYears($tenantRow))), 'frequency' => 'Annually',
+                'other_contacts' => [['name' => $tenantRow->other_contact_name, 'mobile' => $tenantRow->other_contact_phone, 'email' => $tenantRow->other_contact_email]],
+                'next_of_kin' => [['names' => $tenantRow->nok_name, 'mobile' => $tenantRow->nok_phone, 'email' => $tenantRow->nok_email, 'national_id' => $tenantRow->nok_id, 'relationship' => $tenantRow->nok_relationship]],
+            ]);
+            $payload = app(\App\Http\Controllers\TenantsController::class)->validateTenantOnboarding($form);
+            $payload['lease_open_ended'] = !$tenantRow->lease_end_date;
+            $payload['lease_term_days'] = $tenantRow->lease_end_date
+                ? (new \DateTime($tenantRow->lease_start_date))->diff(new \DateTime($tenantRow->lease_end_date))->days : null;
+            app(\App\Services\TenantOnboardingService::class)->submit($payload, [], \App\Models\User::findOrFail($userId), null, null, $tenantRow->id);
+            $tenantRow->update(['submitted_at' => now(), 'error' => null]);
+            return;
+        }
+
         $tenant = $this->createTenant($tenantRow, $property, $unit, $slaId, $userId);
         $lease = $this->createLeaseAgreementRecord([
             'client_id' => $property->client_id,

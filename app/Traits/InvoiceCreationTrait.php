@@ -41,12 +41,12 @@ trait InvoiceCreationTrait
      * (see RentInvoicingController::pushToMain()/createOneOff()/createRecurringItem())
      * rather than letting one bad row abort the whole run.
      */
-    protected function createSingleDebtorInvoice(array $data): DebtorInvoice
+    protected function createSingleDebtorInvoice(array $data, ?Property $authorizedProperty = null): DebtorInvoice
     {
         // Returns are keyed by the first of the month, so a one-off raised mid-month still belongs to that month's return.
         $data['returns_period'] = InvoiceBillingService::firstOfMonth($data['returns_period']);
 
-        $property = Property::find($data['property_id']);
+        $property = $authorizedProperty ?? Property::find($data['property_id']);
         $lease = LeaseAgreement::find($data['lease_id']);
         $unit = Unit::find($data['unit_id']);
         $invoiceableItem = InvoiceableItem::find($data['item_type_id']);
