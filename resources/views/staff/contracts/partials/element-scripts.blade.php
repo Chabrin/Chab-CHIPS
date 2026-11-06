@@ -66,12 +66,13 @@ function refreshAllStaff() {
         }).done(function (res) {
             const fmt = n => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const $body = $('#allStaffItems tbody').empty();
-            (res.elements || []).forEach(function (el) {
-                $body.append($('<tr>').append(
-                    $('<td>').text(el.name),
-                    $('<td>').text(el.type === '2' ? 'Allowance' : 'Deduction'),
-                    $('<td>').text(el.how),
-                    $('<td class="text-end">').text(el.amount === null ? '-' : fmt(el.amount))
+            const rowClass = { group: 'fw-semibold', total: 'fw-bold table-light' };
+            PayrollAllStaffRows.build(res.elements).forEach(function (row) {
+                $body.append($('<tr>').addClass(rowClass[row.kind] || '').append(
+                    $('<td>').toggleClass('ps-4', row.kind === 'tier').text(row.name),
+                    $('<td>').text(row.type),
+                    $('<td>').text(row.how),
+                    $('<td class="text-end">').text(row.kind === 'group' ? '' : row.amount === null ? '-' : fmt(row.amount))
                 ));
             });
             if (!res.elements || !res.elements.length) {

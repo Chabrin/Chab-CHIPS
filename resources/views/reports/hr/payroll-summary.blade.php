@@ -95,7 +95,7 @@ $(function () {
             { data: 'total_gross', className: 'text-end' },
             { data: 'total_paye', className: 'text-end' },
             { data: 'total_nssf', className: 'text-end' },
-            { data: 'total_shif', className: 'text-end' },
+            { data: 'total_sha', className: 'text-end' },
             { data: 'total_housing', className: 'text-end' },
             { data: 'total_deductions', className: 'text-end' },
             { data: 'total_net_pay', className: 'text-end' }
@@ -118,7 +118,7 @@ $(function () {
                 if (!res.success) { toastr.error(res.message || 'Failed to load report'); return; }
                 reportDT.clear().rows.add(res.data).draw();
                 var t = res.totals;
-                $('#reportFoot').html('<tr><td></td><td>GRAND TOTAL</td><td class="text-end">' + t.staff_count + '</td><td class="text-end">' + t.total_basic + '</td><td class="text-end">' + t.total_gross + '</td><td class="text-end">' + t.total_paye + '</td><td class="text-end">' + t.total_nssf + '</td><td class="text-end">' + t.total_shif + '</td><td class="text-end">' + t.total_housing + '</td><td class="text-end">' + t.total_deductions + '</td><td class="text-end">' + t.total_net_pay + '</td></tr>');
+                $('#reportFoot').html('<tr><td></td><td>GRAND TOTAL</td><td class="text-end">' + t.staff_count + '</td><td class="text-end">' + t.total_basic + '</td><td class="text-end">' + t.total_gross + '</td><td class="text-end">' + t.total_paye + '</td><td class="text-end">' + t.total_nssf + '</td><td class="text-end">' + t.total_sha + '</td><td class="text-end">' + t.total_housing + '</td><td class="text-end">' + t.total_deductions + '</td><td class="text-end">' + t.total_net_pay + '</td></tr>');
                 $('#resultsInfo').text(res.count + ' department(s) found');
                 $('#exportBtn').prop('disabled', false);
                 if (reportChart) { reportChart.destroy(); }

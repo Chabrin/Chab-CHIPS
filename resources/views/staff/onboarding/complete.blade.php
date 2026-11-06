@@ -26,7 +26,8 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
         <div class="col-md-4"><label class="form-label">District</label><input name="district" value="{{ old('district') }}" class="form-control">{!! $err('district') !!}</div>
         <div class="col-md-4"><label class="form-label">Location</label><input name="location" value="{{ old('location') }}" class="form-control">{!! $err('location') !!}</div>
         <div class="col-md-4"><label class="form-label">Sub location</label><input name="sub_location" value="{{ old('sub_location') }}" class="form-control">{!! $err('sub_location') !!}</div>
-        <div class="col-12"><label class="form-label">Next of kin names</label><input name="kins_names" value="{{ old('kins_names') }}" class="form-control">{!! $err('kins_names') !!}</div>
+        <div class="col-md-6"><label class="form-label">Next of kin names</label><input id="kins_names" name="kins_names" value="{{ old('kins_names') }}" class="form-control">{!! $err('kins_names') !!}</div>
+        <div class="col-md-6"><label class="form-label">Relationship to you</label><select id="kins_relationship" name="kins_relationship" class="form-select"><option value="">Select</option>@foreach(\App\Models\Staff::KIN_RELATIONSHIPS as $o)<option {{ $sel('kins_relationship',$o) }}>{{ $o }}</option>@endforeach</select><small>Needed once you enter a next of kin name.</small>{!! $err('kins_relationship') !!}</div>
     </div>
     <h5 class="mt-4">Staff photo</h5><div class="row g-3"><div class="col-md-6"><label class="form-label">Profile photo (JPG/PNG, max 2 MB)</label><input type="file" name="staff_photo" class="form-control" accept=".jpg,.jpeg,.png,image/jpeg,image/png"><small>Optional. HR will add this to your staff record.</small>{!! $err('staff_photo') !!}{!! $err('photo') !!}</div></div>
     <h5 class="mt-4">Signature</h5><p style="margin-top:0;color:#5c6b7a">Optional. Draw your signature or upload a clear image of it.</p>
@@ -48,4 +49,13 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
     </div>
     <div class="alert alert-info mt-4">Submitting this form shares your information with the company HR team to set up your employment and payroll records. Documents are stored privately. Do not use a shared device to complete it.</div>
     <button class="btn btn-primary" type="submit">Submit to HR</button></form>
-</div></div></main></body></html>
+</div></div></main>
+<script>
+// Choosing the relationship is checked here too, because a rejected form clears the files the staff member picked.
+(function () {
+    var name = document.getElementById('kins_names'), relationship = document.getElementById('kins_relationship');
+    function sync() { relationship.required = name.value.trim() !== ''; }
+    name.addEventListener('input', sync);
+    sync();
+})();
+</script></body></html>

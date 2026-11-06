@@ -855,7 +855,7 @@ public function positionsDropdowns(Request $request)
         }
     }
 
-    // Shift Rates Settings
+    // SHA Rates Settings
     public function shifRatesIndex()
     {
         return view('settings.hr.shif_rates');
@@ -880,14 +880,14 @@ public function positionsDropdowns(Request $request)
                 ];
             });
 
-            return response()->json(['shiftrates' => $rates]);
+            return response()->json(['sharates' => $rates]);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['error' => 'Failed to load shift rates'], 500);
+            return response()->json(['error' => 'Failed to load SHA rates'], 500);
         }
     }
 
@@ -907,7 +907,7 @@ public function positionsDropdowns(Request $request)
             $rate->date_time = now();
             $rate->save();
 
-            return response()->json(['success' => true, 'shiftrate' => $rate]);
+            return response()->json(['success' => true, 'sharate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -916,7 +916,7 @@ public function positionsDropdowns(Request $request)
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to save shift rate'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to save SHA rate'], 500);
         }
     }
 
@@ -933,7 +933,7 @@ public function positionsDropdowns(Request $request)
             $rate->from_date = $validated['from_date'] . ' 00:00:00';
             $rate->save();
 
-            return response()->json(['success' => true, 'shiftrate' => $rate]);
+            return response()->json(['success' => true, 'sharate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -942,7 +942,7 @@ public function positionsDropdowns(Request $request)
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to update shift rate'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to update SHA rate'], 500);
         }
     }
 
@@ -958,7 +958,7 @@ public function positionsDropdowns(Request $request)
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to delete shift rate'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to delete SHA rate'], 500);
         }
     }
 

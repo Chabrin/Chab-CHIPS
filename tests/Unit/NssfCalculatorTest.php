@@ -32,6 +32,26 @@ class NssfCalculatorTest extends TestCase
         $this->assertEquals(6480.0, $result['total']);
     }
 
+    public function test_each_tier_says_what_it_is_worked_out_from(): void
+    {
+        $tiers = (new NssfCalculator())->calculate(50000)['tiers'];
+
+        $this->assertSame('Tier I (NSSF)', $tiers[0]['name']);
+        $this->assertSame('6% of pay up to 9,000', $tiers[0]['basis']);
+        $this->assertSame('Tier II (Britam)', $tiers[1]['name']);
+        $this->assertSame('6% of pay from 9,000 up to 108,000', $tiers[1]['basis']);
+    }
+
+    public function test_the_wording_follows_the_nssf_settings(): void
+    {
+        config(['nssf.rate' => 0.05, 'nssf.lower_earnings_limit' => 7000, 'nssf.upper_earnings_limit' => 70000]);
+
+        $tiers = (new NssfCalculator())->calculate(50000)['tiers'];
+
+        $this->assertSame('5% of pay up to 7,000', $tiers[0]['basis']);
+        $this->assertSame('5% of pay from 7,000 up to 70,000', $tiers[1]['basis']);
+    }
+
     public function test_negative_gross_pays_nothing(): void
     {
         $this->assertEquals(0.0, (new NssfCalculator())->calculate(-100)['total']);

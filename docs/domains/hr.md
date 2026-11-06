@@ -46,7 +46,7 @@ Verified current line counts (`wc -l`), compared against the prior audit:
 audit — it now covers considerably more than the original 14-step case flow
 (appeals, suspensions, deadline extensions, termination paperwork — see
 Discipline section). `HrSettingsController` shrank slightly (likely
-refactoring), still handling Departments, Positions, Banks, SHIF/NSSF rate
+refactoring), still handling Departments, Positions, Banks, SHA/NSSF rate
 settings, Workdays, Public Holidays, Communication Templates, and Zone
 Assignments CRUD.
 
@@ -108,7 +108,7 @@ routing depends on Staff/User IDs set here.
 actual live calculation: it loads the staff's contract elements (allowances)
 and adds them to `basicSalary` to form `grossPay`; `calculateNSSF()` computes
 tiered NSSF on **basic salary only** (pensionable pay, min/max clamped);
-`calculateNHIF()` computes SHIF/NHIF at 2.75% of full gross pay (basic +
+`calculateSha()` computes SHA at 2.75% of full gross pay (basic +
 allowances); `calculateHousingLevy()` computes 1.5% of full gross pay; and
 `calculatePAYE()` reads live `TaxBand` rows from `sys_hr_tax_bands` and
 applies them progressively, with personal relief hardcoded at KSh 2,400 (per
@@ -121,8 +121,8 @@ any class in the codebase** — `grep -rln "TaxCalculator" app/` matches only
 the trait file itself. It's also internally stale: it queries a `tax_bands`
 DB table (no `sys_` prefix — doesn't match the live `TaxBand` model's
 `sys_hr_tax_bands`) and `cb_system_configs` keys the live PAYE path doesn't
-use at all. The real, live PAYE/NSSF/SHIF/Housing-Levy logic is 100% inline as
-private methods on `PayrollController` (`calculateNSSF`, `calculateNHIF`,
+use at all. The real, live PAYE/NSSF/SHA/Housing-Levy logic is 100% inline as
+private methods on `PayrollController` (`calculateNSSF`, `calculateSha`,
 `calculateHousingLevy`, `calculatePAYE`, lines ~1067–1166). Confirms the prior
 audit's flag: anyone editing `TaxCalculator` expecting it to affect real
 payroll runs would be editing dead code.
@@ -214,9 +214,9 @@ HR-specific).
 From `payslip-fix-summary.md` (root), all listed as **shipped**:
 - Deduction-breakdown fallback for historical payslips (reconstructs from
   individual columns when `payslip_elements` JSON is empty).
-- Contract allowances now included in gross pay, PAYE, NSSF/NHIF/Housing-Levy
+- Contract allowances now included in gross pay, PAYE, NSSF/SHA/Housing-Levy
   bases (previously hardcoded to basic salary only).
-- NHIF/Housing-Levy now correctly computed on full gross pay; NSSF correctly
+- SHA/Housing-Levy now correctly computed on full gross pay; NSSF correctly
   stays basic-salary-only.
 - Bank details and a PAYE breakdown (taxable earnings, tax before relief,
   personal relief, PAYE payable) added to payslip templates.

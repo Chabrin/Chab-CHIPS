@@ -46,6 +46,7 @@ class Staff extends Model
         'zone_id',
         'zone_area_id',
         'kins_names',
+        'kins_relationship',
         'staff_number',
         'district',
         'location',
@@ -70,6 +71,9 @@ class Staff extends Model
 
     /** Bootstrap badge classes matching STATUSES, keyed the same way. */
     public const STATUS_BADGE_CLASSES = [1 => 'badge-light-success', 2 => 'badge-light-warning', 3 => 'badge-light-danger', 4 => 'badge-light-info'];
+
+    /** How the next of kin is related to the staff member, for kins_relationship. */
+    public const KIN_RELATIONSHIPS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Guardian', 'Relative', 'Friend', 'Other'];
 
     /**
      * The hire date as a date, whatever format it was stored in (a plain datetime cast threw on day-first dates).

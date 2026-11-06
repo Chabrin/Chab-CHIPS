@@ -219,6 +219,8 @@ use Illuminate\Support\Facades\Crypt;
                                                 <div class="row g-1">
                                                     <div class="col-5"><small class="text-muted">Next of Kin:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->kins_names ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Relationship:</small></div>
+                                                    <div class="col-7"><small><strong>{{ $staff->kins_relationship ?? '-' }}</strong></small></div>
                                                     <div class="col-5"><small class="text-muted">Signature:</small></div>
                                                     <div class="col-7">
                                                         @if($staff->signature)

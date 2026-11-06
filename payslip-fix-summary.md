@@ -12,7 +12,7 @@ The payslip system generates PDF payslips for employees. The complaint was that 
 
 ### 1. Empty Deduction Breakdown on All Payslips
 
-When payroll is processed, the system tries to look up master `PayrollElement` records in the database (for NSSF, NHIF, Housing Levy, PAYE) before storing them in the payslip. If those master records weren't present or weren't marked as approved at the time payroll was run, the breakdown was saved as an empty array. The totals (NSSF amount, NHIF amount, etc.) were stored correctly in separate columns on the record — they just weren't being used for display.
+When payroll is processed, the system tries to look up master `PayrollElement` records in the database (for NSSF, SHA, Housing Levy, PAYE) before storing them in the payslip. If those master records weren't present or weren't marked as approved at the time payroll was run, the breakdown was saved as an empty array. The totals (NSSF amount, SHA amount, etc.) were stored correctly in separate columns on the record — they just weren't being used for display.
 
 **Effect:** Every historical payslip shows no individual deduction lines, only a lump-sum "TOTAL DEDUCTIONS" figure.
 
@@ -52,7 +52,7 @@ There was no section showing how PAYE was calculated — employees couldn't see 
 ### PayrollController.php (affects future payroll runs only)
 
 - The system now reads each employee's contract elements (allowances) before calculating deductions. Allowances are added to gross pay and appear as line items under Earnings on the payslip.
-- NHIF/SHIF (2.75%) and Housing Levy (1.5%) are now calculated on full gross pay (basic + allowances), which is correct per Kenya regulations. NSSF remains on basic salary only (pensionable pay).
+- SHA (2.75%) and Housing Levy (1.5%) are now calculated on full gross pay (basic + allowances), which is correct per Kenya regulations. NSSF remains on basic salary only (pensionable pay).
 - PAYE taxable income now correctly includes allowances — employees with allowances will pay the appropriate tax going forward.
 - Payslip element data is now stored with full details (name, type, display order) inside the JSON, removing the dependency on master PayrollElement records being present in the database.
 
@@ -82,6 +82,6 @@ The display of Akiba Sacco Loan, Akiba Share Contribution, and Social Welfare is
 | File | What Changed |
 |---|---|
 | `app/Http/Controllers/PayslipsController.php` | Fallback display for historical payslips; eager-load bank/position/department; Akiba/Social Welfare in fallback map |
-| `app/Http/Controllers/PayrollController.php` | Contract allowances included in gross pay; inline element storage; correct NHIF/Housing Levy base |
+| `app/Http/Controllers/PayrollController.php` | Contract allowances included in gross pay; inline element storage; correct SHA/Housing Levy base |
 | `resources/views/payroll/partials/payslip-pdf.blade.php` | Bank details, position/dept fallback, Akiba columns, PAYE tax breakdown section |
 | `resources/views/payroll/partials/payslip-preview.blade.php` | Same as PDF template |
