@@ -701,7 +701,7 @@ class ClientsController extends Controller
         try {
             $clientId = Crypt::decrypt($encryptedId);
 
-            $batches = ReturnsMergeBatch::with('items')
+            $batches = ReturnsMergeBatch::with(['items', 'bankDetail.bank'])
                 ->where('anchor_client_id', $clientId)
                 ->orderByDesc('id')
                 ->get()
@@ -712,6 +712,8 @@ class ClientsController extends Controller
                         'landlord_name' => $batch->landlord_name,
                         'landlord_ref' => $batch->landlord_ref,
                         'items_count' => $batch->items->count(),
+                        'bank_detail_id' => $batch->bank_detail_id,
+                        'bank_label' => $batch->bankDetail ? trim(($batch->bankDetail->bank->bank_name ?? '') . ' ' . $batch->bankDetail->account_name . ' ' . $batch->bankDetail->account_number) : null,
                         'notes' => $batch->notes ?? '-',
                         'items' => $batch->items->map(function ($item) {
                             return [
@@ -802,6 +804,7 @@ class ClientsController extends Controller
                     'id' => $batch->id,
                     'batch_reference' => $batch->batch_reference,
                     'property_ids' => $batch->items->pluck('property_id')->values(),
+                    'bank_detail_id' => $batch->bank_detail_id,
                     'notes' => $batch->notes,
                 ]
             ]);
@@ -824,8 +827,14 @@ class ClientsController extends Controller
             $validated = $request->validate([
                 'property_ids' => 'required|array|min:2',
                 'property_ids.*' => 'required|integer|distinct',
+                'bank_detail_id' => 'nullable|integer',
                 'notes' => 'nullable|string|max:500',
             ]);
+
+            // The merged properties are paid into one of this client's own bank accounts
+            if (!empty($validated['bank_detail_id']) && !\App\Models\ClientBankDetail::forClient($client->id)->whereKey($validated['bank_detail_id'])->exists()) {
+                return response()->json(['error' => 'The bank account chosen does not belong to this client.'], 422);
+            }
 
             $propertyIds = array_values(array_unique(array_map('intval', $validated['property_ids'])));
 
@@ -860,6 +869,7 @@ class ClientsController extends Controller
                 'landlord_id' => $client->id,
                 'landlord_ref' => $client->reference_number,
                 'notes' => $validated['notes'] ?? null,
+                'bank_detail_id' => $validated['bank_detail_id'] ?? null,
                 'created_by' => Auth::id(),
                 'date_time' => now(),
             ]);
@@ -907,8 +917,14 @@ class ClientsController extends Controller
             $validated = $request->validate([
                 'property_ids' => 'required|array|min:2',
                 'property_ids.*' => 'required|integer|distinct',
+                'bank_detail_id' => 'nullable|integer',
                 'notes' => 'nullable|string|max:500',
             ]);
+
+            // The merged properties are paid into one of this client's own bank accounts
+            if (!empty($validated['bank_detail_id']) && !\App\Models\ClientBankDetail::forClient($client->id)->whereKey($validated['bank_detail_id'])->exists()) {
+                return response()->json(['error' => 'The bank account chosen does not belong to this client.'], 422);
+            }
 
             $propertyIds = array_values(array_unique(array_map('intval', $validated['property_ids'])));
 
@@ -935,6 +951,7 @@ class ClientsController extends Controller
 
             $batch->update([
                 'notes' => $validated['notes'] ?? null,
+                'bank_detail_id' => $validated['bank_detail_id'] ?? null,
                 'updated_by' => Auth::id(),
                 'landlord_name' => $client->names ?? '-',
                 'landlord_name_normalized' => $this->normalizeLandlordName((string) $client->names),

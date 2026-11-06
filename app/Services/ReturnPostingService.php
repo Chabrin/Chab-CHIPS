@@ -106,6 +106,56 @@ class ReturnPostingService
     }
 
     /**
+     * Finalise a merged return (MASTERRETURN) once every property return in it has had its final approval. Each property
+     * return keeps its own approval and its own RETURNS credit, so the merged return posts no credit of its own (that would
+     * credit the client twice). What it settles is the landlord-level debits reserved for it at generation: they are
+     * flagged recovered here, and advances paid by them are updated. The merged return is then payable by one voucher.
+     * Does nothing when the return is not part of a merged return or a property return is still waiting.
+     *
+     * @param ReturnSummary $child the property return that has just had its final approval
+     * @param int $userId the approver
+     * @return bool whether the merged return was finalised
+     */
+    public function finaliseMasterIfReady(ReturnSummary $child, int $userId): bool {
+        $masterCode = (string) ($child->parent_return_code ?? '');
+
+        if ($masterCode === '') {
+            return false;
+        }
+
+        $master = ReturnSummary::where('return_code', $masterCode)->where('return_type', 'MASTERRETURN')->lockForUpdate()->first();
+
+        if (!$master || (int) $master->approved_status === 1) {
+            return false;
+        }
+
+        $children = ReturnSummary::where('parent_return_code', $masterCode)->where('return_type', 'MAINRETURN')->get();
+
+        if ($children->isEmpty() || $children->contains(fn ($c) => (int) $c->approved_status !== 1)) {
+            return false;
+        }
+
+        $totals = $this->lineTotals($masterCode);
+        $childNets = round((float) $children->sum('net_amount'), 2);
+        $expectedNet = round($childNets - $totals['ledger_deductions'], 2);
+
+        if (abs($totals['credits'] - $childNets) > 0.01 || abs($expectedNet - round((float) $master->net_balance, 2)) > 0.01) {
+            throw new ClientAccountException('Merged return ' . $masterCode . ' no longer adds up: its property returns give ' . number_format($childNets, 2) . ' less ' . number_format($totals['ledger_deductions'], 2) . ' of deductions, but it says ' . number_format((float) $master->net_balance, 2) . '. Generate the returns again.');
+        }
+
+        $recovered = $this->recoverReservedRows($master, $totals['ledger_deductions']);
+        $this->advances->recoverFromReturn($recovered, $masterCode, $userId);
+
+        ReturnSummary::where('id', $master->id)->update([
+            'approved_status' => 1,
+            'approved_by' => 'System (all properties approved)',
+            'approved_date' => now(),
+        ]);
+
+        return true;
+    }
+
+    /**
      * Post the payout of an approved return when its payment voucher gets its final approval.
      *
      * @param ReturnSummary $return the return the voucher pays
@@ -119,7 +169,13 @@ class ReturnPostingService
             throw new ClientAccountException('Return ' . $code . ' is not approved, so voucher ' . $voucher->voucher_number . ' cannot be paid.');
         }
 
-        if (!DB::table('cb_landlord_account')->where('entry_type_code', self::RETURNS_CODE)->where('return_code', $code)->exists()) {
+        // A merged return carries no credit of its own: each property return in it holds its credit
+        $isMaster = $return->return_type === 'MASTERRETURN';
+        $creditCodes = $isMaster ? ReturnSummary::where('parent_return_code', $code)->pluck('return_code')->all() : [$code];
+
+        $withCredit = DB::table('cb_landlord_account')->where('entry_type_code', self::RETURNS_CODE)->whereIn('return_code', $creditCodes)->distinct()->count('return_code');
+
+        if (empty($creditCodes) || $withCredit < count($creditCodes)) {
             throw new ClientAccountException('Return ' . $code . ' has no RETURNS credit on the client account: it was approved before returns posted at approval. Generate and approve it again.');
         }
 
@@ -153,8 +209,13 @@ class ReturnPostingService
 
         ReturnSummary::where('id', $return->id)->update(['paid_status' => 1, 'amount_paid' => $amount]);
 
+        // The property returns of a merged return are paid with it, as in the old system: each is flagged paid for its own net
+        if ($isMaster) {
+            ReturnSummary::where('parent_return_code', $code)->where('paid_status', 0)->update(['paid_status' => 1, 'amount_paid' => DB::raw('net_balance')]);
+        }
+
         DB::table('sys_pm_debtors_invoices')
-            ->whereIn('id', DB::table('cb_returns_clients')->where('return_code', $code)->whereNotNull('invoice_id')->select('invoice_id'))
+            ->whereIn('id', DB::table('cb_returns_clients')->whereIn('return_code', array_merge([$code], $creditCodes))->whereNotNull('invoice_id')->select('invoice_id'))
             ->update(['processed' => 'Yes']);
     }
 
@@ -255,11 +316,12 @@ class ReturnPostingService
         $client = $this->client($return);
         $property = DB::table('sys_pm_properties')->where('reference_number', $return->property_code)->first(['id', 'property_name']);
         $monthName = date('F', mktime(0, 0, 0, (int) $return->month, 1));
+        $label = $property->property_name ?? ($return->property_code ?: 'MERGED RETURN');
 
         LandlordAccount::create($this->ledgerRow($return, $client, $property, $userId, [
             'entry_type_code' => self::PAYMENT_CODE,
             'entry_description' => 'FINAL PAYMENTS',
-            'entry_particulars' => mb_substr('FINAL PAYMENTS-' . ($property->property_name ?? $return->property_code) . ' ' . $monthName . ' ' . $return->year, 0, 100),
+            'entry_particulars' => mb_substr('FINAL PAYMENTS-' . $label . ' ' . $monthName . ' ' . $return->year, 0, 100),
             'debit_amount' => $amount,
             'credit_amount' => 0.00,
             'total_amount' => $amount,

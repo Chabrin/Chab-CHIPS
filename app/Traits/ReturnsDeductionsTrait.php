@@ -37,9 +37,10 @@ trait ReturnsDeductionsTrait
      * @param int $returnMonth
      * @param int|null $propertyId Optional: Generate for single property only
      * @param string|null $returnCode Optional: the one return (a mini return) the debits are reserved for; without it the main returns (R1) of the period
+     * @param bool $batchProperty Only for a client whose properties are merged: take the debits tied to this property (an advance belongs to the property chosen when it was taken). The debits with no property go to the merged return (ReturnsMasterReturnTrait). Clients without a merge batch are handled with this off.
      * @return int Lines inserted
      */
-    protected function insertAdvancePaymentLines(string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth, ?int $propertyId = null, ?string $returnCode = null): int {
+    protected function insertAdvancePaymentLines(string $returnPeriod, string $transactionDate, int $generatedBy, int $returnYear, int $returnMonth, ?int $propertyId = null, ?string $returnCode = null, bool $batchProperty = false): int {
         $propertyFilter = $propertyId ? "WHERE property_id = ?" : "";
         $codeFilter = $returnCode !== null ? "return_code = ?" : "return_code LIKE 'R1%'";
         $advanceFilter = $returnCode !== null ? "AND la.advance_id IS NULL" : $this->advancePaidSql('la');
@@ -55,31 +56,37 @@ trait ReturnsDeductionsTrait
         }
         array_push($bindings, $returnYear, $returnMonth, $returnYear * 100 + $returnMonth, $returnPeriod, $transactionDate, $generatedBy);
 
-        // EXCLUDE clients in active merge batches - those get deductions on MASTERRETURN instead
+        // A client with a merge batch is left out of the normal path: the debits tied to a property go to that property's
+        // return ($batchProperty mode), the rest to the merged return
+        $baseKey = $batchProperty ? 'client_id, property_id' : 'client_id';
+        $scope = $batchProperty
+            ? "EXISTS (SELECT 1 FROM cb_returns_merge_batches mb WHERE mb.landlord_id = la.client_id) AND la.property_id = b.property_id"
+            : "NOT EXISTS (SELECT 1 FROM cb_returns_merge_batches mb WHERE mb.landlord_id = la.client_id)";
+
         $advancesInserted = DB::affectingStatement("
             WITH first_lines AS (
-                SELECT DISTINCT ON (client_id)
+                SELECT DISTINCT ON ({$baseKey})
                        return_code, return_id, property_code, property_id, client_id,
                        zone_id, field_officer_id, zone_supervisor_id, zone_manager_id
                 FROM cb_returns_clients
                 WHERE return_period = ?
                   AND {$codeFilter}
-                ORDER BY client_id, id
+                ORDER BY {$baseKey}, id
             ), base AS (
                 SELECT * FROM first_lines {$propertyFilter}
             ), available AS (
-                SELECT b.client_id,
+                SELECT b.client_id, b.property_id,
                        SUM(CASE WHEN rc.dr_cr = 'CR' THEN rc.net_amount ELSE 0 END)
                          - SUM(COALESCE(rc.commission_amount, 0)) - SUM(COALESCE(rc.vat_amount, 0)) AS amount
                 FROM base b
                 JOIN cb_returns_clients rc ON rc.return_code = b.return_code
-                GROUP BY b.client_id
+                GROUP BY b.client_id, b.property_id
             ), candidates AS (
-                SELECT la.id, la.client_id,
-                       SUM(la.debit_amount) OVER (PARTITION BY la.client_id ORDER BY la.id) AS running
+                SELECT la.id, la.client_id, b.property_id AS base_property,
+                       SUM(la.debit_amount) OVER (PARTITION BY la.client_id, b.property_id ORDER BY la.id) AS running
                 FROM cb_landlord_account la
-                WHERE la.client_id IN (SELECT client_id FROM base)
-                  AND la.debit_amount > 0
+                JOIN base b ON b.client_id = la.client_id
+                WHERE la.debit_amount > 0
                   AND COALESCE(la.is_recovered, 0) != 1
                   AND la.return_code IS NULL
                   {$advanceFilter}
@@ -88,14 +95,11 @@ trait ReturnsDeductionsTrait
                         (la.year = ? AND la.month = ?)
                         OR (la.year * 100 + la.month < ? AND (la.advance_id IS NOT NULL OR la.entry_type_code = '0023'))
                       )
-                  AND NOT EXISTS (
-                      SELECT 1 FROM cb_returns_merge_batches mb
-                      WHERE mb.landlord_id = la.client_id
-                  )
+                  AND {$scope}
             ), chosen AS (
-                SELECT c.id
+                SELECT c.id, c.base_property
                 FROM candidates c
-                JOIN available a ON a.client_id = c.client_id
+                JOIN available a ON a.client_id = c.client_id AND a.property_id = c.base_property
                 WHERE c.running <= a.amount
             ), reserved AS (
                 UPDATE cb_landlord_account la
@@ -103,8 +107,9 @@ trait ReturnsDeductionsTrait
                 FROM chosen ch, base b
                 WHERE la.id = ch.id
                   AND b.client_id = la.client_id
+                  AND b.property_id = ch.base_property
                 RETURNING la.id AS la_id, la.transaction_number, la.debit_amount, la.entry_type_code,
-                          la.entry_description, la.entry_particulars, la.client_id
+                          la.entry_description, la.entry_particulars, la.client_id, ch.base_property
             )
             INSERT INTO cb_returns_clients (
                 return_code, return_period, transaction_number, transaction_date,
@@ -139,7 +144,7 @@ trait ReturnsDeductionsTrait
                 NOW(),
                 ?
             FROM reserved r
-            JOIN base b ON b.client_id = r.client_id
+            JOIN base b ON b.client_id = r.client_id AND b.property_id = r.base_property
             LEFT JOIN sys_set_invoiceable_items ii ON ii.billing_code = r.entry_type_code
             ORDER BY r.la_id
         ", $bindings);

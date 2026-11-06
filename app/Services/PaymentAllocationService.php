@@ -221,6 +221,14 @@ class PaymentAllocationService
             return $results;
         }
 
+        // Pass 0 — money aimed at one invoice (the payment carries its invoice_id) goes there first, as in the old
+        // system. Only untagged money follows the order below: oldest month first, bills before rent.
+        if (!empty($payment->invoice_id)) {
+            $tagged = $this->getUnsettledInvoices((int) $payment->lease_id)->where('id', (int) $payment->invoice_id);
+            [$remaining, $results] = $this->allocateToInvoices($tagged, $payment, $remaining, $results);
+            if ($remaining <= 0) return $results;
+        }
+
         // Pass 1 — previous lease: if the tenant transferred units, clear old-lease arrears first
         $previousLease = $this->checkTenantMovement($payment->lease_id);
         if ($previousLease) {
@@ -303,10 +311,9 @@ class PaymentAllocationService
      *   (iii)  Insert row into sys_pm_tenants_payments_invoices
      *   (iv)   Update sys_pm_debtors_invoices (balance + status)
      *   (v)    Update sys_pm_tenants_payments (payment status)
-     *   (vi)   Mirror to sys_pm_bills
-     *   (vii)  Mirror to sys_pm_debtors_arrears
+     *   (vi)   Credit the tenant ledger (sys_pm_tenants_accounts_trans)
      *   (viii) Update return threshold and landlord ledger
-     *   (ix)   Post GL Journal 3 — non-fatal
+     *   (ix)   Post GL Journal 3 — fatal, rolls the allocation back
      *
      * @param  float|null $precomputedBalance  Caller's running balance — skips a re-query when provided.
      * @return array{allocated:bool, scenario:string|null, amount:float, invoice_status:int|null, return_updated:bool}
@@ -396,15 +403,8 @@ class PaymentAllocationService
             "Payment {$payment->id}"
         );
 
-        // (vi) Mirror the balance and status change into the bills table
-        $this->syncBillsRecord(
-            $invoice->id,
-            $scenario['new_invoice_balance'],
-            $scenario['invoice_status']
-        );
-
-        // (vii) Update the defaulter / arrears tracking row for this invoice
-        $this->syncArrearsRecord($invoice->id, $scenario['invoice_status']);
+        // (vi) Credit the tenant's ledger for the amount paid against this invoice, as the old system did
+        $this->postTenantLedgerCredit($payment, $invoice, $scenario['allocate_amount']);
 
         // (viii) Recalculate the return threshold and update the landlord ledger
         $returnUpdated = $this->executeThresholdUpdate($invoice->id, $payment->id);
@@ -434,50 +434,66 @@ class PaymentAllocationService
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * 4-A. Mirror invoice balance and status to the bills table.
-     * sys_pm_bills is a billing-view mirror of sys_pm_debtors_invoices.
-     * Silent on no-match — not every invoice has a corresponding bills row.
+     * 4-A. Credit the tenant's ledger with the amount allocated to one invoice.
+     * One row per allocation, like the old system: the narration is the invoice's ("RENT FOR July 2026"),
+     * pay_for is the item, and the receipt and invoice numbers tie the row to the payment and the invoice.
+     * The invoice's own debit row is written when the invoice is raised, so the ledger now nets.
+     *
+     * @param object $payment the payment row
+     * @param object $invoice the invoice row being paid
+     * @param float $amount the amount allocated to the invoice
      */
-    private function syncBillsRecord(int $invoiceId, float $newBalance, int $newStatusId): void
+    private function postTenantLedgerCredit(object $payment, object $invoice, float $amount): void
     {
-        DB::table('sys_pm_bills')
-            ->where('invoice_id', $invoiceId)
-            ->update([
-                'current_balance'   => $newBalance,
-                'current_status_id' => $newStatusId,
-            ]);
+        $item = InvoiceBillingService::itemName($invoice);
+        $receipt = trim((string) ($payment->receipt_number ?? ''));
+
+        DB::table('sys_pm_tenants_accounts_trans')->insert([
+            'date_time'          => $payment->payment_date ?: now(),
+            'narration'          => $invoice->narration ?: ($item . ' FOR ' . Carbon::parse($invoice->date_due ?? now())->format('F Y')),
+            'pay_for'            => $item,
+            'dr_cr'              => 'CR',
+            'debit_amount'       => 0,
+            'credit_amount'      => $amount,
+            // receipt_number on the ledger is numeric, so a text receipt is left out; entry_ref holds the reference
+            'receipt_number'     => ctype_digit($receipt) ? $receipt : null,
+            'entry_ref'          => $payment->reference ?? null,
+            'entry_by'           => $payment->created_by ?? null,
+            'invoice_number'     => $invoice->reference_number ?? null,
+            'invoice_id'         => $invoice->id,
+            'payment_id'         => $payment->id,
+            'zone_id'            => $payment->zone_id ?? null,
+            'property_id'        => $payment->property_id ?? null,
+            'unit_id'            => $payment->unit_id ?? null,
+            'lease_id'           => $payment->lease_id ?? null,
+            'client_id'          => $payment->client_id ?? null,
+            'tenant_id'          => $payment->tenant_id ?? null,
+            'sla_id'             => $payment->sla_id ?? null,
+            'field_officer_id'   => $payment->field_officer_id ?? null,
+            'zone_supervisor_id' => $payment->zone_supervisor_id ?? null,
+            'zone_manager_id'    => $payment->zone_manager_id ?? null,
+            'current_status_id'  => 1,
+        ]);
     }
 
     /**
-     * 4-B. Update the defaulter / arrears tracking row for this invoice.
-     * Marks the arrear record as cleared when the invoice is fully settled.
-     * Silent on no-match — not every invoice generates an arrears row.
-     */
-    private function syncArrearsRecord(int $invoiceId, int $newStatusId): void
-    {
-        DB::table('sys_pm_debtors_arrears')
-            ->where('invoice_id', $invoiceId)
-            ->update(['current_status_id' => $newStatusId]);
-    }
-
-    /**
-     * 4-C. Post GL Journal 3 — commission + client funds split.
+     * 4-B. Post GL Journal 3 — commission + client funds split.
      *
      * Journal 3 (per the allocation docs):
      *   DR  Earned Commission Account   [commission portion]
      *   DR  Client Bank / Trust Account [allocated amount − commission]
      *   CR  Channel Bank Account        [full allocated amount]
      *
-     * Commission is read from the SLA linked to the payment (falls back to 0 if absent).
+     * Commission is read from the SLA linked to the payment and applies to rent invoices only (0 for any other item).
      *
      * FATAL: any exception propagates up to the caller, causing the wrapping DB transaction
      * to roll back. The allocation row, invoice update, and GL entry are all-or-nothing.
      */
     private function postAllocationGl(object $payment, object $invoice, float $allocatedAmount): void
     {
-        // Look up the SLA commission percentage for this payment
+        // Commission is earned on rent only: water, service charge and deposits go to the landlord whole
         $commissionPct = 0.0;
-        if (!empty($payment->sla_id)) {
+        if (!empty($payment->sla_id) && InvoiceBillingService::isRentInvoice($invoice)) {
             $commissionPct = (float) DB::table('sys_pm_service_agreements')
                 ->where('id', $payment->sla_id)
                 ->value('commission_percentage');

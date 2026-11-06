@@ -674,6 +674,9 @@ class ReturnsApprovalController extends Controller
                     // The payment voucher is made from Payments > Payment Vouchers once the return is approved.
                     $this->returnPosting->postApproval($returnSummary->fresh(), (int) auth()->id());
 
+                    // The last property return of a merged return to be approved makes the merged return payable
+                    $this->returnPosting->finaliseMasterIfReady($returnSummary->fresh(), (int) auth()->id());
+
                     $message = 'Return approved successfully (Final Approval).';
                 } else {
                     // Refuses (and rolls back) when nobody can act at the next level, e.g. a zone with no manager login

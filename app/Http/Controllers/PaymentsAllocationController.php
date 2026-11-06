@@ -37,6 +37,23 @@ class PaymentsAllocationController extends Controller
     }
 
     /**
+     * Build the JSON answer for a batch run. A run where every payment failed is an error, not a success, and a run
+     * with some failures says how many, so the screen never reports success over rolled-back payments.
+     *
+     * @param array $results the counters from PaymentAllocationService
+     * @param string $okMessage the message for a clean run
+     */
+    private function batchResponse(array $results, string $okMessage) {
+        $failed = count($results['errors'] ?? []);
+
+        if ($failed > 0 && ($results['payments_processed'] ?? 0) === 0) {
+            return response()->json(['success' => false, 'message' => 'No payment could be allocated: ' . ($results['errors'][0]['error'] ?? 'unknown error'), 'results' => $results], 422);
+        }
+
+        return response()->json(['success' => true, 'message' => $failed > 0 ? $okMessage . " ({$failed} payment(s) failed and were left unallocated)" : $okMessage, 'results' => $results]);
+    }
+
+    /**
      * Process payments with optional filters
      */
     public function processPayments(Request $request)
@@ -46,11 +63,7 @@ class PaymentsAllocationController extends Controller
             $clientId = $request->input('client_id');
             $leaseId = $request->input('lease_id');
             $results = $this->allocationService->processPayments($unitId, $clientId, $leaseId);
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment allocation completed successfully',
-                'results' => $results
-            ]);
+            return $this->batchResponse($results, 'Payment allocation completed successfully');
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error processing payments: ' . $e->getMessage());
@@ -67,11 +80,7 @@ class PaymentsAllocationController extends Controller
         try {
             $results = $this->allocationService->processAllPayments();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'All unallocated payments processed successfully',
-                'results' => $results
-            ]);
+            return $this->batchResponse($results, 'All unallocated payments processed successfully');
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error processing all payments: ' . $e->getMessage());
@@ -92,11 +101,7 @@ class PaymentsAllocationController extends Controller
 
             $results = $this->allocationService->processPayments(null, null, $request->lease_id);
 
-            return response()->json([
-                'success' => true,
-                'message' => "Processed payments for lease {$request->lease_id}",
-                'results' => $results
-            ]);
+            return $this->batchResponse($results, "Processed payments for lease {$request->lease_id}");
         } catch (Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error processing lease payments: ' . $e->getMessage());

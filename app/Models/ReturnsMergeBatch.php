@@ -17,6 +17,7 @@ class ReturnsMergeBatch extends Model
         'landlord_id',
         'landlord_ref',
         'notes',
+        'bank_detail_id',
         'created_by',
         'updated_by',
         'date_time',
@@ -29,6 +30,11 @@ class ReturnsMergeBatch extends Model
     public function items()
     {
         return $this->hasMany(ReturnsMergeBatchItem::class, 'batch_id');
+    }
+
+    public function bankDetail()
+    {
+        return $this->belongsTo(ClientBankDetail::class, 'bank_detail_id');
     }
 
     public function anchorClient()

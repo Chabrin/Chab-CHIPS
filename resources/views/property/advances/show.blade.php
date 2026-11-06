@@ -778,16 +778,16 @@
 
             var currentDate = new Date(disbursement);
             for (var i = 0; i < gracePeriodMonths - 1; i++) {
+                currentDate.setDate(1); // day 1 first: stepping a month from the 31st would overflow past the next month
                 currentDate.setMonth(currentDate.getMonth() + 1);
-                currentDate.setDate(1);
                 var gInterest = Math.round(balance * rate / 100 * 100) / 100;
                 schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: 0, interest: gInterest, total_amount: gInterest });
             }
             currentDate = new Date(principalStart);
             for (var month = 1; month <= months; month++) {
                 if (month > 1) {
+                    currentDate.setDate(1); // day 1 first: stepping a month from the 31st would overflow past the next month
                     currentDate.setMonth(currentDate.getMonth() + 1);
-                    currentDate.setDate(1);
                 }
                 var pInterest = Math.round(balance * rate / 100 * 100) / 100;
                 var principal = Math.round(principalPerMonth * 100) / 100;
