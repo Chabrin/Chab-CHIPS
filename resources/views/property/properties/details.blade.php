@@ -1,38 +1,44 @@
 @extends('layouts.main')
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/property-details.css') }}?v={{ filemtime(public_path('assets/css/property-details.css')) }}">
+@endsection
+
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="property-details">
+    @include('property.properties.partials.detail-icons')
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">
-                            Property Details - {{ $property->property_name }}
+                <div class="card property-detail-card">
+                    <header class="property-detail-header">
+                        <div class="property-detail-heading">
+                            <p class="property-detail-eyebrow">Management / Property details</p>
+                            <h1>{{ $property->property_name }}</h1>
                             @unless($property->active)
-                            <span class="badge badge-light-danger ms-2" style="font-size:12px; font-weight:700;">INACTIVE</span>
+                                <span class="property-unit-status property-unit-status--vacant">Inactive</span>
                             @endunless
-                        </h5>
-                        <div class="ms-auto d-flex gap-2">
+                        </div>
+                        <div class="property-detail-actions">
                             @if($property->active)
                             <a href="{{ route('property.clients.show', Crypt::encrypt($property->client->id)) }}" class="btn btn-light btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">arrow_back</span>
+                                <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-arrow-left"></use></svg>
                                 <span class="ms-1">Back to Client</span>
                             </a>
                             @else
                             <a href="{{ route('property.properties.inactive.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">arrow_back</span>
+                                <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-arrow-left"></use></svg>
                                 <span class="ms-1">Back to Listing</span>
                             </a>
                             @endif
                             @if($property->active)
                             <a href="/property/properties/{{ Crypt::encrypt($property->id) }}/edit" class="btn btn-primary btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">edit_document</span>
+                                <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-edit"></use></svg>
                                 <span class="ms-1">Edit Property</span>
                             </a>
                             @endif
                         </div>
-                    </div>
-                    <div class="card-body">
+                    </header>
+                    <div class="card-body property-detail-body">
                         @if(session('success'))
                         <div class="alert alert-light-success alert-dismissible fade show" role="alert">
                             <strong>Success!</strong> {{ session('success') }}
@@ -46,28 +52,29 @@
                         </div>
                         @endif
 
-                        <!-- Summary Header -->
-                        <div class="d-flex justify-content-between align-items-center mb-4">
-                            <div class="mb-3">
-                                <p class="text-muted mb-0 d-flex align-items-center flex-wrap" style="font-size: 0.875rem;">
-                                    <strong class="me-1">Property Reference:</strong>
-                                    <span id="propRefSummary">{{ $property->reference_number ?? 'N/A' }}</span>
-                                    @if($property->reference_number)
-                                    <span class="material-symbols-outlined copy-icon ms-1 me-2" data-copy="{{ $property->reference_number }}" title="Copy">content_copy</span>
-                                    @endif
-                                    <span class="mx-1">|</span>
-                                    <strong class="ms-1 me-1">Client:</strong> {{ $property->client->names ?? '-' }}
-                                </p>
-                            </div>
+                        <div class="property-detail-summary">
+                            <dl class="property-detail-facts">
+                                <div>
+                                    <dt>Property reference</dt>
+                                    <dd>
+                                        <span id="propRefSummary">{{ $property->reference_number ?? '—' }}</span>
+                                        @if($property->reference_number)
+                                            <button type="button" class="copy-icon" data-copy="{{ $property->reference_number }}" title="Copy reference" aria-label="Copy property reference"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-copy"></use></svg></button>
+                                        @endif
+                                    </dd>
+                                </div>
+                                <div><dt>Client</dt><dd>{{ $property->client->names ?? '—' }}</dd></div>
+                                <div><dt>Zone</dt><dd>{{ $property->zone->zone_name ?? '—' }}</dd></div>
+                            </dl>
 
                             @if($property->active)
-                            <div class="d-flex flex-row">
-                                <a class="btn btn-sm btn-primary d-flex align-items-center me-2" href="{{ route('units.tenants.create', ['client' => Crypt::encrypt($property->client->id)]) }}" target="_blank" rel="noopener noreferrer">
-                                    <span class="material-symbols-outlined me-2" style="font-size:18px;">person</span>
+                            <div class="property-detail-actions">
+                                <a class="btn btn-sm btn-outline-primary d-flex align-items-center" href="{{ route('units.tenants.create', ['client' => Crypt::encrypt($property->client->id)]) }}" target="_blank" rel="noopener noreferrer">
+                                    <svg class="property-detail-icon me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-user"></use></svg>
                                     Add Tenant
                                 </a>
-                                <a class="btn btn-sm btn-primary d-flex align-items-center" href="{{ route('tenant.lease.create', ['client' => Crypt::encrypt($property->client->id)]) }}" target="_blank" rel="noopener noreferrer">
-                                    <span class="material-symbols-outlined me-2" style="font-size:18px;">document_scanner</span>
+                                <a class="btn btn-sm btn-outline-primary d-flex align-items-center" href="{{ route('tenant.lease.create', ['client' => Crypt::encrypt($property->client->id)]) }}" target="_blank" rel="noopener noreferrer">
+                                    <svg class="property-detail-icon me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-file-text"></use></svg>
                                     Add Lease
                                 </a>
                             </div>
@@ -76,42 +83,42 @@
 
 
                         <!-- Tabs Navigation -->
-                        <ul class="nav nav-tabs mb-4" id="propertyTabs" role="tablist">
+                        <ul class="nav nav-tabs mb-4" id="propertyTabs" role="tablist" aria-label="Property sections">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">home</span>
+                                <button class="nav-link active" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="true">
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-home"></use></svg>
                                     Property Information
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">analytics</span>
+                                <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab" aria-controls="stats" aria-selected="false">
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-bar-chart-2"></use></svg>
                                     Statistics
                                 </button>
                             </li>
 
                              <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="units-tab" data-bs-toggle="tab" data-bs-target="#units" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">apartment</span>
+                                <button class="nav-link" id="units-tab" data-bs-toggle="tab" data-bs-target="#units" type="button" role="tab" aria-controls="units" aria-selected="false">
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-grid"></use></svg>
                                     Units
                                 </button>
                             </li>
 
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="tenants-tab" data-bs-toggle="tab" data-bs-target="#tenants" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">groups</span>
+                                <button class="nav-link" id="tenants-tab" data-bs-toggle="tab" data-bs-target="#tenants" type="button" role="tab" aria-controls="tenants" aria-selected="false">
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-users"></use></svg>
                                     Tenants
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="leases-tab" data-bs-toggle="tab" data-bs-target="#leases" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">assignment</span>
+                                <button class="nav-link" id="leases-tab" data-bs-toggle="tab" data-bs-target="#leases" type="button" role="tab" aria-controls="leases" aria-selected="false">
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-clipboard"></use></svg>
                                     Leases
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="repairs-tab" data-bs-toggle="tab" data-bs-target="#repairs" type="button" role="tab">
-                                    <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">build</span>
+                                <button class="nav-link" id="repairs-tab" data-bs-toggle="tab" data-bs-target="#repairs" type="button" role="tab" aria-controls="repairs" aria-selected="false">
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-settings"></use></svg>
                                     Repairs & Maintenance
                                 </button>
                             </li>
@@ -123,7 +130,7 @@
                             <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
                                 <div class="info-panel">
                                     <div class="info-panel-header">
-                                        <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">home_work</span>
+                                        <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-home"></use></svg>
                                         Property Information
                                     </div>
                                     <div class="row">
@@ -138,7 +145,7 @@
                                                 <span class="info-value d-flex align-items-center">
                                                     {{ $property->reference_number ?? '-' }}
                                                     @if($property->reference_number)
-                                                    <span class="material-symbols-outlined copy-icon ms-2" data-copy="{{ $property->reference_number }}" title="Copy">content_copy</span>
+                                                    <button type="button" class="copy-icon ms-2" data-copy="{{ $property->reference_number }}" title="Copy reference" aria-label="Copy property reference"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-copy"></use></svg></button>
                                                     @endif
                                                 </span>
                                             </div>
@@ -229,7 +236,7 @@
                                 @endphp
 
                                 <style>
-                                .ps-card {
+                                #property-details .ps-card {
                                     background: #fff;
                                     border: 1px solid #d9ebf7;
                                     border-radius: 8px;
@@ -241,7 +248,7 @@
                                     gap: 10px;
                                     height: 100%;
                                 }
-                                .ps-card::before {
+                                #property-details .ps-card::before {
                                     content: '';
                                     position: absolute;
                                     top: 0; left: 0; bottom: 0;
@@ -249,7 +256,7 @@
                                     background: var(--ps-accent, #b7d7f0);
                                     border-radius: 8px 0 0 8px;
                                 }
-                                .ps-icon {
+                                #property-details .ps-icon {
                                     width: 30px;
                                     height: 30px;
                                     border-radius: 7px;
@@ -259,20 +266,20 @@
                                     justify-content: center;
                                     flex-shrink: 0;
                                 }
-                                .ps-icon .material-symbols-outlined {
+                                #property-details .ps-icon .property-detail-icon {
                                     font-size: 15px !important;
                                     color: #0a0a0a !important;
                                     font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
                                 }
-                                .ps-body { flex: 1; min-width: 0; }
-                                .ps-value {
+                                #property-details .ps-body { flex: 1; min-width: 0; }
+                                #property-details .ps-value {
                                     font-size: 18px;
                                     font-weight: 400;
                                     color: #0a0a0a;
                                     line-height: 1.1;
                                     margin-bottom: 1px;
                                 }
-                                .ps-label {
+                                #property-details .ps-label {
                                     font-size: 10px;
                                     font-weight: 600;
                                     color: #6b7280;
@@ -284,7 +291,7 @@
                                 <div class="row g-3">
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#5b9bd5; --ps-icon-bg:#b7d7f0;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">domain</span></div>
+                                            <div class="ps-icon"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-grid"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value">{{ $totalUnits }}</div>
                                                 <div class="ps-label">Total Units</div>
@@ -293,7 +300,7 @@
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#b7d7f0; --ps-icon-bg:#d9ebf7;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">check_circle</span></div>
+                                            <div class="ps-icon"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-check-circle"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value">{{ $occupiedUnits }}</div>
                                                 <div class="ps-label">Occupied</div>
@@ -302,7 +309,7 @@
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#8ab4cc; --ps-icon-bg:#d9ebf7;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">radio_button_unchecked</span></div>
+                                            <div class="ps-icon"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-circle"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value">{{ $vacantUnits }}</div>
                                                 <div class="ps-label">Vacant</div>
@@ -311,7 +318,7 @@
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#5b9bd5; background:#5b9bd5; border-color:#5b9bd5;">
-                                            <div class="ps-icon" style="background:rgba(255,255,255,0.25);"><span class="material-symbols-outlined" style="color:#fff !important;">percent</span></div>
+                                            <div class="ps-icon" style="background:rgba(255,255,255,0.25);"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-percent"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value" style="color:#fff;">{{ $occupancyRate }}%</div>
                                                 <div class="ps-label" style="color:rgba(255,255,255,0.8);">Occupancy Rate</div>
@@ -320,7 +327,7 @@
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#5b9bd5; --ps-icon-bg:#b7d7f0;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">description</span></div>
+                                            <div class="ps-icon"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-file-text"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value">{{ $activeLeases }}</div>
                                                 <div class="ps-label">Active Leases</div>
@@ -329,7 +336,7 @@
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#b7d7f0; --ps-icon-bg:#d9ebf7;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">group</span></div>
+                                            <div class="ps-icon"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-users"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value">{{ $totalTenants }}</div>
                                                 <div class="ps-label">Total Tenants</div>
@@ -338,7 +345,7 @@
                                     </div>
                                     <div class="col-lg-3 col-sm-6">
                                         <div class="ps-card" style="--ps-accent:#8ab4cc; --ps-icon-bg:#d9ebf7;">
-                                            <div class="ps-icon"><span class="material-symbols-outlined">schedule</span></div>
+                                            <div class="ps-icon"><svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-clock"></use></svg></div>
                                             <div class="ps-body">
                                                 <div class="ps-value">{{ $expiringLeases }}</div>
                                                 <div class="ps-label">Expiring in 3 Months</div>
@@ -350,22 +357,23 @@
 
                             <!-- Units Tab (AJAX Load) -->
                             <div class="tab-pane fade" id="units" role="tabpanel" aria-labelledby="units-tab">
-                                <div class="row mb-3 align-items-end">
+                                <div class="property-section-toolbar">
+                                    <div><h2>Units</h2><p>Review rent, occupancy, and tenants by unit.</p></div>
                                     <input type="hidden" id="propertySelect" value="{{ $property->id }}">
                                     <div class="col-auto">
                                         <div id="propertySpinner" class="spinner-border text-primary" role="status" style="display: none;">
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                     </div>
-                                    <div class="col-auto ms-auto d-flex gap-2">
+                                    <div class="property-detail-actions">
                                         @if($property->active)
                                         @permission('create_units')
                                         <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#bulkUploadUnitsModal">
-                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
+                                            <svg class="property-detail-icon me-1" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-upload"></use></svg>
                                             Bulk Upload Units
                                         </button>
                                         <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addUnitBtn">
-                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">add_circle</span>
+                                            <svg class="property-detail-icon me-1" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-plus-circle"></use></svg>
                                             Add Unit
                                         </button>
                                         @endpermission
@@ -385,7 +393,7 @@
                                                 <th>Zone</th>
                                                 <th>Status</th>
                                                 <th>Tenants</th>
-                                                <th>Action</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -396,6 +404,7 @@
 
                             <!-- Tenants Tab -->
                             <div class="tab-pane fade" id="tenants" role="tabpanel" aria-labelledby="tenants-tab">
+                                <div class="property-section-toolbar"><div><h2>Tenants</h2><p>Find tenants and their unit assignments.</p></div></div>
                                 <div class="mb-3">
                                     <div id="property-tenants-preloader" class="text-center my-4">
                                         <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
@@ -409,7 +418,7 @@
                                             <thead>
                                                 <tr>
                                                     <th>#</th>
-                                                    <th>Names</th>
+                                                    <th>Tenant</th>
                                                     <th>Phone</th>
                                                     <th>ID Number</th>
                                                     <th>Unit</th>
@@ -423,6 +432,7 @@
 
                             <!-- Leases Tab -->
                             <div class="tab-pane fade" id="leases" role="tabpanel" aria-labelledby="leases-tab">
+                                <div class="property-section-toolbar"><div><h2>Leases</h2><p>Review lease dates and service charges.</p></div></div>
                                 <div class="mb-3">
                                     <div id="property-leases-preloader" class="text-center my-4">
                                         <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
@@ -453,6 +463,7 @@
 
                             <!-- Repairs & Maintenance Tab -->
                             <div class="tab-pane fade" id="repairs" role="tabpanel" aria-labelledby="repairs-tab">
+                                <div class="property-section-toolbar"><div><h2>Repairs &amp; Maintenance</h2><p>Track repair visits and their status.</p></div></div>
                                 <div class="mb-3">
                                     <div id="property-repairs-preloader" class="text-center my-4">
                                         <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
@@ -491,7 +502,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="leaseDetailsModalLabel">
-                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">description</span>
+                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-file-text"></use></svg>
                     Lease Details
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -507,7 +518,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="unitLeaseModalLabel">
-                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align:middle;">home</span>
+                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-home"></use></svg>
                     <span id="unitLeaseModalUnitLabel"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -640,12 +651,12 @@
 
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
-                            <span class="material-symbols-outlined">close</span>
+                            <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-x"></use></svg>
                             <span class="ms-1">Cancel</span>
                         </button>
                         <button type="submit" class="btn btn-primary d-flex align-items-center" id="saveUnitBtn">
                             <span class="spinner-border spinner-border-sm me-2 d-none" id="saveUnitSpinner"></span>
-                            <span class="material-symbols-outlined" id="saveUnitIcon">check_circle</span>
+                            <svg class="property-detail-icon" id="saveUnitIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-check-circle"></use></svg>
                             <span class="ms-1" id="saveUnitText">Save</span>
                         </button>
                     </div>
@@ -764,12 +775,12 @@
 
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-secondary d-flex align-items-center" data-bs-dismiss="modal">
-                            <span class="material-symbols-outlined">close</span>
+                            <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-x"></use></svg>
                             <span class="ms-1">Cancel</span>
                         </button>
                         <button type="submit" class="btn btn-primary d-flex align-items-center" id="updateUnitBtn">
                             <span class="spinner-border spinner-border-sm me-2 d-none" id="updateUnitSpinner"></span>
-                            <span class="material-symbols-outlined" id="updateUnitIcon">check_circle</span>
+                            <svg class="property-detail-icon" id="updateUnitIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-check-circle"></use></svg>
                             <span class="ms-1" id="updateUnitText">Update</span>
                         </button>
                     </div>
@@ -785,7 +796,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="bulkUploadUnitsModalLabel">
-                    <span class="material-symbols-outlined" style="font-size:20px; vertical-align: middle;">upload_file</span>
+                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-upload"></use></svg>
                     Bulk Upload Units
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -798,11 +809,11 @@
 
                 <div class="modal-body">
                     <div class="alert alert-info d-flex align-items-start">
-                        <span class="material-symbols-outlined text-primary me-2" style="font-size:24px;">info</span>
+                        <svg class="property-detail-icon text-primary me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-info"></use></svg>
                         <div class="flex-grow-1">
                             <p class="mb-2 small">Every unit in this file will be added to <strong>{{ $property->property_name }} ({{ $property->reference_number }})</strong>, regardless of what's in the "Property Reference" column of the sample.</p>
                             <button type="button" class="btn btn-outline-primary btn-sm" id="downloadUnitsSampleBtn">
-                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">download</span>
+                                <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-download"></use></svg>
                                 Download Sample File
                             </button>
                         </div>
@@ -810,7 +821,7 @@
 
                     <div class="mb-3">
                         <label for="bulk_units_file" class="form-label fw-bold">
-                            <span class="material-symbols-outlined" style="font-size:18px; vertical-align: middle;">attach_file</span>
+                            <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-paperclip"></use></svg>
                             Upload File <span class="text-danger">*</span>
                         </label>
                         <input type="file" class="form-control" id="bulk_units_file" name="bulk_file" accept=".xlsx,.xls,.csv" required>
@@ -822,7 +833,7 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="uploadUnitsBtn">
                         <span class="spinner-border spinner-border-sm me-2 d-none" id="uploadUnitsSpinner"></span>
-                        <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">upload</span>
+                        <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-upload"></use></svg>
                         Upload &amp; Process
                     </button>
                 </div>
@@ -831,140 +842,22 @@
     </div>
 </div>
 
-<style>
-    .card-header {
-        border-bottom: 1px solid #e0e0e0;
-    }
-
-    .card-body .row.g-1>div {
-        padding-top: 0.25rem;
-        padding-bottom: 0.25rem;
-        line-height: 1.5;
-    }
-
-    .material-symbols-outlined {
-        font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
-    }
-
-    .nav-link {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
-    .card {
-        border: 1px solid #e0e0e0;
-    }
-
-    .info-panel {
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 16px 20px;
-        background: #fff;
-    }
-
-    .info-panel-header {
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: #333;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 10px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e0e0e0;
-    }
-
-    .info-row {
-        display: flex;
-        flex-wrap: wrap;
-        padding: 8px 0;
-        border-bottom: 1px solid #f0f0f0;
-        font-size: 0.85rem;
-    }
-
-    .info-row:last-child {
-        border-bottom: none;
-    }
-
-    .info-row.description-row {
-        align-items: flex-start;
-    }
-
-    #unitsTable td,
-    #unitsTable th {
-        padding-top: 0.45rem;
-        padding-bottom: 0.45rem;
-        vertical-align: middle;
-    }
-
-    .edit-unit-btn {
-        width: 24px;
-        height: 24px;
-        line-height: 1;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 4px;
-        color: #6c757d;
-        transition: background-color 0.15s ease, color 0.15s ease;
-    }
-
-    .edit-unit-btn:hover {
-        background-color: #eef3fb;
-        color: #3598db;
-    }
-
-    .edit-unit-btn .material-symbols-outlined {
-        font-size: 15px;
-    }
-
-    .info-label {
-        flex: 0 0 45%;
-        max-width: 45%;
-        color: #6b7280;
-    }
-
-    .info-value {
-        flex: 1;
-        min-width: 0;
-        color: #212529;
-        font-weight: 500;
-        word-break: break-word;
-    }
-
-    .copy-icon {
-        cursor: pointer;
-        color: #5aa9e0;
-        font-size: 16px;
-        line-height: 1;
-        transition: color 0.15s ease;
-    }
-
-    .copy-icon:hover {
-        color: #3598db;
-    }
-
-    .copy-icon.copied {
-        color: #3598db;
-    }
-</style>
 <script>
     $(function() {
         var unitsTable = null;
         var unitsLoaded = false;
 
         // Copy-to-clipboard for info fields
-        $(document).on('click', '.copy-icon', function() {
+        $('#property-details').on('click', '.copy-icon', function() {
             var $icon = $(this);
             var text = $icon.data('copy');
             if (!text) return;
 
             function showCopied() {
-                var original = $icon.text();
-                $icon.addClass('copied').text('check');
+                var $glyph = $icon.find('use');
+                $glyph.attr('href', '#property-icon-check');
                 setTimeout(function() {
-                    $icon.removeClass('copied').text(original);
+                    $glyph.attr('href', '#property-icon-copy');
                 }, 1200);
             }
 
@@ -1039,7 +932,7 @@
                     searchable: false,
                     render: function(data, type, row) {
                         return `<a href="#" class="view-lease-details-btn" data-id="${row.encrypted_id}" title="View Lease Details">
-                            <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span>
+                            <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-info"></use></svg>
                         </a>`;
                     }
                 }
@@ -1206,7 +1099,15 @@
                     data: 'zone'
                 },
                 {
-                    data: 'occupancy_status'
+                    data: 'occupancy_status',
+                    render: function(value, type) {
+                        if (type !== 'display') return value;
+                        var label = String(value || 'Unknown').trim();
+                        var status = label.toLowerCase();
+                        var variant = ['vacant', 'occupied'].includes(status) ? status : 'neutral';
+                        return $('<span>').addClass('property-unit-status property-unit-status--' + variant)
+                            .text(label).prop('outerHTML');
+                    }
                 },
                 {
                     data: null,
@@ -1215,7 +1116,7 @@
                     render: function(d, type, row) {
                         var count = (row.tenants || []).length;
                         return '<span class="d-flex align-items-center gap-1">' +
-                            '<span class="material-symbols-outlined text-primary" style="font-size:18px;">visibility</span>' +
+                            '<svg class="property-detail-icon text-primary" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-eye"></use></svg>' +
                             '<span class="small text-muted">' + count + ' tenant' + (count === 1 ? '' : 's') + '</span>' +
                             '</span>';
                     }
@@ -1229,8 +1130,8 @@
                             return '';
                         }
                         return `
-                            <button type="button" class="btn btn-link p-0 edit-unit-btn" title="Edit Unit" data-row='${JSON.stringify(row)}'>
-                                <span class="material-symbols-outlined">edit</span>
+                            <button type="button" class="btn btn-link p-0 edit-unit-btn" title="Edit Unit" aria-label="Edit unit" data-row='${JSON.stringify(row)}'>
+                                <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-edit-2"></use></svg>
                             </button>
                         `;
                     }
@@ -1600,13 +1501,13 @@
                         let buttons = '<div class="d-flex flex-row gap-1">';
                         buttons += `
                             <a href="/property/repairs/${encryptedId}" class="text-primary" title="View">
-                                <span class="material-symbols-outlined" style="font-size: 20px;">visibility</span>
+                                <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-eye"></use></svg>
                             </a>
                         `;
                         if (row.current_status_id == 1) {
                             buttons += `
                                 <a href="/property/repairs/${encryptedId}/edit" class="text-success" title="Edit">
-                                    <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                                    <svg class="property-detail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><use href="#property-icon-edit"></use></svg>
                                 </a>
                             `;
                         }

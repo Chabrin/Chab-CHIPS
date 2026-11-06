@@ -6,6 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="auth-user-id" content="{{ auth()->id() }}">
 
     <meta name="description" content="Property Management.">
     <meta name="keywords" content="Property administration, Property management system, Chabrin Agencies Ltd Property Manager, retirement fund software, Property fund administration, Property solution, member management, contributions, benefits">
@@ -46,9 +47,12 @@
 
     @yield('styles')
 
+    <link rel="stylesheet" href="{{ asset('assets/css/staff-messaging.css') }}?v={{ filemtime(public_path('assets/css/staff-messaging.css')) }}">
+
+    @vite('resources/js/app.js')
 </head>
 
-<body>
+<body class="@yield('body-class')">
     <!-- loader starts-->
     <div class="loader-wrapper">
         <div class="theme-loader">
@@ -114,6 +118,7 @@
                         </li>
 
 
+                        @include('layouts.staff-messaging-link')
                         @include('layouts.contract-notifications')
                         <li class="profile-nav dropdown pe-0 py-0">
                         <button type="button" class="d-flex align-items-center profile-trigger-btn" id="account-menu-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="account-menu" aria-label="Open account menu">

@@ -29,6 +29,34 @@ class ViewServiceProvider extends ServiceProvider
             $submenusGrouped = $allowedSubmenus->groupBy('module_id');
             $modules = DB::table('cb_modules')->orderBy('module_order')->get();
 
+            if (config('tenant_onboarding.enabled') && !$user->block) {
+                $canCreate = $user->hasPermission('create_tenants');
+                $reviewRoles = array_filter(config('tenant_onboarding.roles', []));
+                $isReviewer = DB::table('cb_role_user as ru')
+                    ->join('cb_roles as r', 'r.id', '=', 'ru.role_id')
+                    ->where('ru.user_id', $userId)
+                    ->where(fn ($q) => $q->whereIn('r.name', $reviewRoles)->orWhereIn('r.display_name', $reviewRoles))
+                    ->exists();
+                $links = [];
+                if ($canCreate) {
+                    $links[] = ['Management', 'Add New Tenant', 'units.tenants.create'];
+                }
+                if ($canCreate || $isReviewer || $user->hasPermission('update_approval_workflows')) {
+                    $links[] = ['Approval Control', 'New Tenant Onboarding', 'tenant-onboarding.index'];
+                }
+                foreach ($links as [$moduleName, $label, $route]) {
+                    $module = $modules->firstWhere('module_name', $moduleName);
+                    $path = route($route, [], false);
+                    if ($module && !$allowedSubmenus->contains('sub_module_url', $path)) {
+                        $entries = $submenusGrouped->get($module->id, collect());
+                        $submenusGrouped->put($module->id, $entries->push((object) [
+                            'sub_module_name' => $label,
+                            'sub_module_url' => $path,
+                        ]));
+                    }
+                }
+            }
+
             // Build menu data for each module the user has access to
             $menuData = [];
             foreach ($modules as $menu) {

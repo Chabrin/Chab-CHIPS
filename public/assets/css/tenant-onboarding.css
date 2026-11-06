@@ -1,0 +1,37 @@
+.tenant-onboarding-page .onboarding-heading {
+    align-items: center;
+    background: #f4f8fc;
+}
+
+.tenant-onboarding-page .onboarding-heading h4 { margin: 0 0 4px; }
+.tenant-onboarding-page .onboarding-stages,
+.tenant-onboarding-page .onboarding-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+    gap: 10px;
+    padding: 0;
+    margin: 0 0 16px;
+}
+
+.tenant-onboarding-page .onboarding-stages li,
+.tenant-onboarding-page .onboarding-facts > div {
+    list-style: none;
+    padding: 10px 12px;
+    border: 1px solid #dce6ef;
+    border-radius: 8px;
+    background: #fff;
+    color: #17304a;
+}
+
+.tenant-onboarding-page .onboarding-stages span {
+    display: block;
+    color: #526579;
+}
+
+.tenant-onboarding-page .onboarding-stages .is-complete { border-left: 3px solid #277451; }
+.tenant-onboarding-page .onboarding-stages .is-current { background: #edf5fd; border-color: #91b7dc; border-left: 3px solid #14589c; }
+.tenant-onboarding-page .onboarding-reviewer { padding: 8px 12px; border-left: 3px solid #14589c; color: #17304a; }
+.tenant-onboarding-page .onboarding-facts dt { color: #526579; }
+.tenant-onboarding-page .onboarding-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.tenant-onboarding-page .table :is(th, td) { color: #17304a; padding: 8px 10px; }
+.tenant-onboarding-page details summary { cursor: pointer; color: #14589c; font-weight: 600; }

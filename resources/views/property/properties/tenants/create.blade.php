@@ -1,20 +1,24 @@
 
 @extends('layouts.main')
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/tenant-create.css') }}?v={{ filemtime(public_path('assets/css/tenant-create.css')) }}">
+@endsection
+
 @section('content')
 <style>
     /* Individual is the default selection, so hide Company-only fields until
        toggleTenantTypeFields() runs (or immediately, if old('tenant_type') was 3). */
-    .company-only { display: none; }
+    #tenant-create .company-only { display: none; }
 
     /* Move-in Inspection accordion — same condensed look as the Permissions
        accordion (resources/views/roles/permissionsaccess.blade.php). */
-    .condensed-accordion .accordion-item {
+    #tenant-create .condensed-accordion .accordion-item {
         border: 1px solid #e9ecef;
         border-radius: 4px;
         background: white;
     }
 
-    .condensed-accordion .accordion-header {
+    #tenant-create .condensed-accordion .accordion-header {
         display: flex;
         align-items: center;
         background-color: #f8f9fa;
@@ -22,67 +26,61 @@
         border-radius: 4px 4px 0 0;
     }
 
-    .condensed-accordion .accordion-button {
+    #tenant-create .condensed-accordion .accordion-button {
         padding: 6px 10px;
         background-color: transparent;
         box-shadow: none;
     }
 
-    .condensed-accordion .accordion-button:not(.collapsed) {
+    #tenant-create .condensed-accordion .accordion-button:not(.collapsed) {
         background-color: transparent;
         color: #495057;
         box-shadow: none;
     }
 
-    .condensed-accordion .accordion-button:focus {
+    #tenant-create .condensed-accordion .accordion-button:focus {
         box-shadow: none;
         border-color: transparent;
     }
 
-    .condensed-accordion .accordion-button::after {
+    #tenant-create .condensed-accordion .accordion-button::after {
         display: none;
     }
 
-    .condensed-accordion .accordion-arrow {
+    #tenant-create .condensed-accordion .accordion-arrow {
         margin-left: auto;
         color: #6c757d;
         font-size: 20px;
         transition: transform 0.2s ease-in-out;
     }
 
-    .condensed-accordion .accordion-button:not(.collapsed) .accordion-arrow {
+    #tenant-create .condensed-accordion .accordion-button:not(.collapsed) .accordion-arrow {
         transform: rotate(180deg);
     }
 
-    .condensed-accordion .accordion-body {
+    #tenant-create .condensed-accordion .accordion-body {
         padding: 10px 12px;
     }
 </style>
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="tenant-create">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h4 class="mb-0">Add New Tenant</h4>
-                        <div class="ms-auto d-flex gap-2">
+                <div class="card tenant-create-card">
+                    <div class="card-header tenant-create-header">
+                        <div><h4 class="mb-0">Add New Tenant</h4><p>Choose a unit, then complete the tenant’s details.</p></div>
+                        <div class="tenant-create-actions">
                             <button type="submit" form="unitTenantForm" class="btn btn-primary btn-sm d-flex align-items-center" id="saveButton">
                                 <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
                                 <span>{{ config('tenant_onboarding.enabled') ? 'Submit for Review' : 'Save' }}</span>
                             </button>
                             <a href="{{ $client ? route('property.clients.show', $client->encrypted_id) : route('property.properties.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back</span>
                             </a>
                         </div>
                     </div>
                     <div class="card-body">
-                        @if(config('tenant_onboarding.enabled'))
-                        <div class="alert alert-info">Tenant onboarding test workflow. Submission by the assigned Field Officer records their sign-off. The lease starts and the first rent bill is raised when the Assistant Auditor confirms and effects.
-                            <a href="{{ route('tenant-onboarding.index') }}" class="ms-2">View pending submissions</a>
-                        </div>
-                        @endif
+                        <div class="alert alert-danger d-none" id="tenantFormError" role="alert"></div>
                         @if($errors->any())
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <strong>Error!</strong> Please correct the following errors:
@@ -100,61 +98,68 @@
                             @if(config('tenant_onboarding.enabled'))
                             <input type="hidden" name="onboarding_id" value="{{ old('onboarding_id') }}">
                             <input type="hidden" name="onboarding_revision" value="{{ old('onboarding_revision') }}">
-                            <div class="row mb-3">
-                                <div class="col-md-4"><label class="form-label" for="effective_month">Form month</label><input class="form-control" type="month" name="effective_month" id="effective_month" value="{{ old('effective_month', now()->format('Y-m')) }}"></div>
-                                <div class="col-md-4"><label class="form-label" for="previous_tenant_vacated">Previous tenant vacated on</label><input class="form-control" type="date" name="previous_tenant_vacated" id="previous_tenant_vacated" value="{{ old('previous_tenant_vacated') }}"></div>
-                            </div>
                             @endif
 
                             <!-- Hidden client ID field -->
                             <input type="hidden" name="client_id" value="{{ $client->id ?? old('client_id') }}">
 
                             <!-- Nav Tabs -->
-                            <ul class="nav nav-tabs" id="unitTenantTabs" role="tablist">
+                            <ul class="nav nav-tabs" id="unitTenantTabs" role="tablist" aria-label="Tenant form sections">
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="unit-details-tab" data-bs-toggle="tab" data-bs-target="#unit-details" type="button" role="tab" aria-controls="unit-details" aria-selected="true">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">home</span>
+
                                         Unit Details
-                                        <span id="inspectionBadge" class="badge bg-secondary ms-1" style="font-size:0.65rem;display:none;">Optional</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="tenants-tab" data-bs-toggle="tab" data-bs-target="#tenants" type="button" role="tab" aria-controls="tenants" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">person</span>
-                                        Tenants
+
+                                        Tenant Details
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="bank-details-tab" data-bs-toggle="tab" data-bs-target="#bank-details" type="button" role="tab" aria-controls="bank-details" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">account_balance</span>
+
                                         Bank Details
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="other-contacts-tab" data-bs-toggle="tab" data-bs-target="#other-contacts" type="button" role="tab" aria-controls="other-contacts" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">contact_phone</span>
+
                                         Other Contacts
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="tenant-files-tab" data-bs-toggle="tab" data-bs-target="#tenant-files" type="button" role="tab" aria-controls="tenant-files" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">folder</span>
-                                        Tenants Files
+
+                                        Tenant Files
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="next-of-kin-tab" data-bs-toggle="tab" data-bs-target="#next-of-kin" type="button" role="tab" aria-controls="next-of-kin" aria-selected="false">
-                                        <span class="material-symbols-outlined me-1" style="font-size:18px;">family_restroom</span>
+
                                         Next of Kin
                                     </button>
                                 </li>
                             </ul>
+                            @if(config('tenant_onboarding.enabled'))
+                            <div class="tenant-review-note">
+                                <p>The lease starts and the first rent bill is raised after the Assistant Auditor confirms and effects.</p>
+                                <a href="{{ route('tenant-onboarding.index') }}">View pending submissions</a>
+                            </div>
+                            @endif
                             <input type="hidden" name="inspection_required" id="inspectionRequired" value="0">
 
                             <!-- Tab Content -->
                             <div class="tab-content mt-3" id="unitTenantTabsContent">
                                 <!-- Unit Details Tab -->
                                 <div class="tab-pane fade show active" id="unit-details" role="tabpanel" aria-labelledby="unit-details-tab">
+                                    @if(config('tenant_onboarding.enabled'))
+                            <div class="row g-3 tenant-review-dates">
+                                <div class="col-md-4"><label class="form-label" for="effective_month">Form month</label><input class="form-control" type="month" name="effective_month" id="effective_month" value="{{ old('effective_month', now()->format('Y-m')) }}"></div>
+                                <div class="col-md-4"><label class="form-label" for="previous_tenant_vacated">Previous tenant vacated on</label><input class="form-control" type="date" name="previous_tenant_vacated" id="previous_tenant_vacated" value="{{ old('previous_tenant_vacated') }}"></div>
+                            </div>
+                                    @endif
                                     <div class="row">
                                         <div class="col-12 mb-3">
                                             <h6 class="text-muted border-bottom pb-2">Unit Information</h6>
@@ -307,6 +312,7 @@
                                                                 aria-expanded="false" aria-controls="moveInInspectionCollapse">
                                                             <span class="material-symbols-outlined me-2">search_check</span>
                                                             Move-in Inspection
+                                        <span id="inspectionBadge" class="badge bg-secondary ms-1" style="font-size:0.65rem;display:none;">Optional</span>
                                                             <span class="material-symbols-outlined accordion-arrow">expand_more</span>
                                                         </button>
                                                     </h2>
@@ -822,6 +828,10 @@
 
 
                             </div>
+                            <div class="tenant-section-navigation">
+                                <button class="btn btn-sm btn-light" type="button" id="tenantPreviousSection" disabled>Previous section</button>
+                                <button class="btn btn-sm btn-outline-primary" type="button" id="tenantNextSection">Next section</button>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -831,6 +841,82 @@
 </div>
 <script>
     $(document).ready(function() {
+        const tenantForm = document.getElementById('unitTenantForm');
+        const errorNotice = document.getElementById('tenantFormError');
+
+        function revealTenantField(field) {
+            if (!field) return;
+            const pane = field.closest('.tab-pane');
+            const tab = pane && document.getElementById(pane.getAttribute('aria-labelledby'));
+            const accordion = field.closest('.accordion-collapse');
+            function revealAccordion() {
+                if (accordion && !accordion.classList.contains('show')) {
+                    accordion.addEventListener('shown.bs.collapse', focusField, { once: true });
+                    bootstrap.Collapse.getOrCreateInstance(accordion, { toggle: false }).show();
+                } else {
+                    focusField();
+                }
+            }
+            function focusField() {
+                field.focus({ preventScroll: true });
+                field.scrollIntoView({ block: 'center' });
+            }
+            if (tab && !pane.classList.contains('active')) {
+                tab.addEventListener('shown.bs.tab', revealAccordion, { once: true });
+                bootstrap.Tab.getOrCreateInstance(tab).show();
+            } else {
+                revealAccordion();
+            }
+        }
+
+        function showTenantError(field, message) {
+            field.classList.add('is-invalid');
+            field.setAttribute('aria-invalid', 'true');
+            errorNotice.textContent = message;
+            errorNotice.classList.remove('d-none');
+            revealTenantField(field);
+        }
+
+        let reportedInvalid = false;
+        tenantForm.addEventListener('invalid', function (event) {
+            event.preventDefault();
+            if (reportedInvalid) return;
+            reportedInvalid = true;
+            queueMicrotask(() => { reportedInvalid = false; });
+            const field = event.target;
+            const label = field.labels?.[0]?.textContent.trim().replace(/\s*\*$/, '') || 'Required field';
+            showTenantError(field, label + ' — ' + field.validationMessage);
+        }, true);
+
+        function clearFieldError(event) {
+            if (event.target.validity?.valid) {
+                event.target.classList.remove('is-invalid');
+                event.target.removeAttribute('aria-invalid');
+            }
+        }
+        tenantForm.addEventListener('input', clearFieldError);
+        tenantForm.addEventListener('change', clearFieldError);
+
+        const sectionTabs = Array.from(document.querySelectorAll('#unitTenantTabs [role="tab"]'));
+        const previousSection = document.getElementById('tenantPreviousSection');
+        const nextSection = document.getElementById('tenantNextSection');
+        let activeSection = sectionTabs.findIndex(tab => tab.classList.contains('active'));
+
+        function moveSection(direction) {
+            const target = sectionTabs[activeSection + direction];
+            if (target) {
+                bootstrap.Tab.getOrCreateInstance(target).show();
+                target.focus();
+            }
+        }
+        previousSection.addEventListener('click', () => moveSection(-1));
+        nextSection.addEventListener('click', () => moveSection(1));
+        sectionTabs.forEach((tab, index) => tab.addEventListener('shown.bs.tab', () => {
+            activeSection = index;
+            previousSection.disabled = index === 0;
+            nextSection.disabled = index === sectionTabs.length - 1;
+        }));
+
         let banksData = [];
         let branchesData = [];
 
@@ -950,18 +1036,13 @@
         // blocked submit doesn't leave the Save button stuck disabled.
         $('#unitTenantForm').on('submit', function(e) {
             var isCompany = $('#tenant_type').val() === '3';
-            var $tabButton = document.getElementById('tenants-tab');
 
             // Individuals need a National ID or a Passport Number (server enforces the same rule).
             if (!isCompany && !$('#national_id').val().trim() && !$('#passport_number').val().trim()) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
-                if ($tabButton) {
-                    bootstrap.Tab.getOrCreateInstance($tabButton).show();
-                }
                 $('#national_id, #passport_number').addClass('is-invalid');
-                toastr.error('National ID or Passport Number is required.');
-                $('#national_id').focus();
+                showTenantError(document.getElementById('national_id'), 'Enter a National ID or Passport Number in Tenant Details.');
                 return;
             }
 
@@ -977,10 +1058,7 @@
                 if ($field.data('duplicate-flagged') === value && $field.data('duplicate-confirmed') !== value) {
                     e.preventDefault();
                     e.stopImmediatePropagation();
-                    if ($tabButton) {
-                        bootstrap.Tab.getOrCreateInstance($tabButton).show();
-                    }
-                    toastr.error('Please resolve the duplicate ' + identifiers[i][1] + ' before submitting.');
+                    showTenantError($field[0], 'Review the duplicate ' + identifiers[i][1] + ' warning before submitting.');
                     $field.trigger('blur');
                     return;
                 }
@@ -1031,7 +1109,7 @@
                 if (collapseEl && !collapseEl.classList.contains('show')) {
                     bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
                 }
-                $('html, body').animate({ scrollTop: $('#inspectionSection').offset().top - 100 }, 300);
+                showTenantError(document.getElementById('inspection_date'), 'Enter the required move-in inspection date.');
                 return false;
             }
             $('#submitSpinner').removeClass('d-none');
@@ -1487,19 +1565,9 @@
         //     }
         // });
 
-        // If there are validation errors, find which tab has errors and activate it
-        var firstErrorField = $('.is-invalid').first();
-        if (firstErrorField.length) {
-            var tabPane = firstErrorField.closest('.tab-pane');
-            if (tabPane.length) {
-                var tabId = tabPane.attr('id');
-                var tabButton = document.getElementById(tabId + '-tab');
-                if (tabButton) {
-                    var tab = new bootstrap.Tab(tabButton);
-                    tab.show();
-                }
-            }
-        }
+        // Server validation can also return errors for fields on another tab.
+        const firstServerField = tenantForm.querySelector('.is-invalid');
+        if (firstServerField) revealTenantField(firstServerField);
     });
 </script>
 @endsection

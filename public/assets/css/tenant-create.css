@@ -1,0 +1,62 @@
+#tenant-create {
+    --tenant-form-ink: #172e47;
+    --tenant-form-muted: #506477;
+    --tenant-form-border: #dce6ef;
+    --tenant-form-accent: #14589c;
+    padding-top: 16px;
+}
+
+#tenant-create .tenant-create-card {
+    border: 1px solid var(--tenant-form-border);
+    border-radius: 14px;
+    background: #fff;
+}
+
+#tenant-create .tenant-create-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    background: #fff;
+    padding: 18px clamp(14px, 2vw, 26px);
+    border-bottom: 1px solid var(--tenant-form-border);
+    border-radius: 14px 14px 0 0;
+}
+
+#tenant-create .tenant-create-header p { margin: 4px 0 0; color: var(--tenant-form-muted); }
+#tenant-create .tenant-create-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#tenant-create .tenant-create-card > .card-body { padding: clamp(14px, 2vw, 24px); }
+#tenant-create .tenant-create-actions .btn, #tenant-create .tenant-section-navigation .btn { border-radius: 8px; padding: 8px 12px; }
+
+#tenant-create #unitTenantTabs {
+    gap: 4px 12px;
+    border-bottom: 1px solid var(--tenant-form-border);
+}
+
+#tenant-create #unitTenantTabs .nav-link {
+    padding: 8px 10px;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 6px 6px 0 0;
+    color: var(--tenant-form-muted);
+}
+
+#tenant-create #unitTenantTabs .nav-link:hover {
+    background: #f4f7fa;
+    color: var(--tenant-form-ink);
+}
+
+#tenant-create #unitTenantTabs .nav-link.active {
+    background: #edf4fb;
+    border-bottom-color: var(--tenant-form-accent);
+    color: var(--tenant-form-accent);
+    font-weight: 600;
+}
+
+#tenant-create .tenant-review-note { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; padding: 8px 0; color: var(--tenant-form-muted); }
+#tenant-create .tenant-review-note p { margin: 0; }
+#tenant-create .tenant-review-note a { color: var(--tenant-form-accent); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+#tenant-create .tenant-review-dates { margin-bottom: 18px; }
+#tenant-create .tenant-section-navigation { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--tenant-form-border); }
+#tenant-create :is(a, button):focus-visible { outline: 2px solid var(--tenant-form-accent); outline-offset: 2px; }

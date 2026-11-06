@@ -1,0 +1,70 @@
+#property-listing {
+    --property-ink: #17304a;
+    --property-muted: #526579;
+    --property-border: #dce6ef;
+    --property-blue: #14589c;
+    padding-top: 16px;
+}
+
+#property-listing .property-directory {
+    background: #fff;
+    border: 1px solid var(--property-border);
+    border-radius: 16px;
+}
+
+#property-listing .property-directory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: clamp(16px, 2.4vw, 32px);
+    background: #f3f8fc;
+    border-bottom: 1px solid var(--property-border);
+    border-radius: 16px 16px 0 0;
+}
+
+#property-listing .property-directory-eyebrow {
+    margin: 0 0 6px;
+    color: var(--property-blue);
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+#property-listing h1 {
+    margin: 0;
+    color: var(--property-ink);
+    font-size: clamp(1.65rem, 2.5vw, 2.2rem);
+    font-weight: 750;
+}
+
+#property-listing .property-directory-description { margin: 8px 0 0; color: var(--property-muted); }
+#property-listing .property-directory-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+#property-listing .property-directory-actions .btn { border-radius: 9px; }
+#property-listing .property-directory-actions .btn-primary { background: var(--property-blue); border-color: var(--property-blue); }
+#property-listing .property-secondary-button { background: #fff; color: var(--property-ink); border: 1px solid var(--property-border); }
+#property-listing .property-directory-body { padding: clamp(12px, 1.6vw, 24px); }
+
+#property-listing :is(.dt-length, .dt-search, .dataTables_length, .dataTables_filter) { margin-bottom: 12px; color: var(--property-muted); }
+#property-listing :is(.dt-search, .dataTables_filter) input { width: min(16rem, 100%); max-width: 100%; }
+#property-listing :is(.dt-search, .dt-length, .dataTables_filter, .dataTables_length) :is(input, select) {
+    margin-inline: 6px;
+    border: 1px solid var(--property-border);
+    border-radius: 7px;
+    padding: 6px 8px;
+}
+
+#property-listing #propertiesTable { border-bottom: 1px solid var(--property-border); }
+#property-listing #propertiesTable thead { background: #f4f8fc; color: var(--property-ink); }
+#property-listing #propertiesTable :is(th, td) { padding: 10px 12px; border-color: var(--property-border); vertical-align: middle; }
+#property-listing #propertiesTable tbody td { background: #fff; box-shadow: none; color: var(--property-ink); font-size: .875rem; }
+#property-listing #propertiesTable tbody tr:hover td { background: #f3f8fe; }
+#property-listing #propertiesTable tbody td a { color: var(--property-blue); font-weight: 650; }
+#property-listing #propertiesTable .column-filters input { min-width: 76px; height: 32px; border-color: var(--property-border); border-radius: 6px; font-weight: 400; }
+#property-listing .property-row-actions { display: flex; align-items: center; gap: 5px; }
+#property-listing .property-row-actions a { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 7px; background: #eef5fc; }
+#property-listing .property-row-actions a:hover { background: #dcecfb; }
+#property-listing .property-row-actions .material-symbols-outlined { font-size: 18px; }
+#property-listing :is(a, button, input, select):focus-visible { outline: 2px solid var(--property-blue); outline-offset: 2px; }

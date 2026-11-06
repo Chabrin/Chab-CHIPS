@@ -1,28 +1,37 @@
 @extends('layouts.main')
+
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/property-listing.css') }}?v={{ filemtime(public_path('assets/css/property-listing.css')) }}">
+@endsection
+
 @section('content')
-<div class="page-body" style="padding-top:10px;">
+<div class="page-body" id="property-listing">
     <div class="container-fluid">
         <div class="row">
             <div class="col-sm-12">
-                <div class="card">
-                    <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Property Listings</h5>
-                        <div class="ms-auto d-flex gap-2">
+                <section class="card property-directory" aria-labelledby="property-directory-title">
+                    <header class="property-directory-header">
+                        <div>
+                            <p class="property-directory-eyebrow">Management</p>
+                            <h1 id="property-directory-title">Properties</h1>
+                            <p class="property-directory-description">Find properties by reference, name, zone, or client.</p>
+                        </div>
+                        <div class="property-directory-actions">
                             @permission('update_properties')
-                            <a href="{{ route('property.activation.index') }}" class="btn btn-outline-secondary btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined">toggle_on</span>
+                            <a href="{{ route('property.activation.index') }}" class="btn property-secondary-button d-flex align-items-center">
+                                <span class="material-symbols-outlined" aria-hidden="true">toggle_on</span>
                                 <span class="ms-1">Manage Activation</span>
                             </a>
                             @endpermission
                             @permission('create_properties')
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
-                                <span class="material-symbols-outlined">add_circle</span>
+                            <button type="button" class="btn btn-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
+                                <span class="material-symbols-outlined" aria-hidden="true">add_circle</span>
                                 <span class="ms-1">Add Property</span>
                             </button>
                             @endpermission
                         </div>
-                    </div>
-                    <div class="card-body">
+                    </header>
+                    <div class="property-directory-body">
                         @if(session('success'))
                         <div class="alert alert-light-success alert-dismissible fade show" role="alert">
                             <strong>Success!</strong> {{ session('success') }}
@@ -41,19 +50,18 @@
                                 <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Reference Number</th>
-                                        <th>Property Name</th>
-                                        {{-- <th>Description</th> --}}
+                                        <th>Reference</th>
+                                        <th>Property</th>
                                         <th>Zone</th>
-                                        <th>Client Name</th>
+                                        <th>Client</th>
                                         <th>Actions</th>
                                     </tr>
                                     <tr class="column-filters">
                                         <th></th>
                                         <th></th>
-                                        <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
-                                        <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
-                                        <th><input type="text" class="form-control form-control-sm" placeholder="-- Search --" /></th>
+                                        <th><input type="search" class="form-control form-control-sm" aria-label="Filter by property name" placeholder="Property name"></th>
+                                        <th><input type="search" class="form-control form-control-sm" aria-label="Filter by zone" placeholder="Zone"></th>
+                                        <th><input type="search" class="form-control form-control-sm" aria-label="Filter by client name" placeholder="Client name"></th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -61,7 +69,7 @@
                             </table>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>
@@ -117,8 +125,8 @@
 
                         if (row.can_read) {
                             actions += `
-                                <a href="/property/listings/${encryptedId}" class="text-primary property-link" title="View Details">
-                                    <span class="material-symbols-outlined view-icon" style="font-size: 20px;">visibility</span>
+                                <a href="/property/listings/${encryptedId}" class="property-link" title="View details" aria-label="View details">
+                                    <span class="material-symbols-outlined view-icon" aria-hidden="true">visibility</span>
                                 </a>
                                 <span class="spinner-border spinner-border-sm text-primary row-spinner ms-2" style="display:none;" role="status">
                                     <span class="visually-hidden">Loading...</span>
@@ -128,32 +136,41 @@
 
                         if (row.can_update) {
                             actions += `
-                                <a href="/property/properties/${encryptedId}/edit" class="text-success property-link" title="Edit Property">
-                                    <span class="material-symbols-outlined" style="font-size:18px;">edit_document</span>
+                                <a href="/property/properties/${encryptedId}/edit" class="property-link" title="Edit property" aria-label="Edit property">
+                                    <span class="material-symbols-outlined" aria-hidden="true">edit_document</span>
                                 </a>
                             `;
                         }
 
-                        return actions || '-';
+                        return actions ? `<div class="property-row-actions">${actions}</div>` : '—';
                     }
                 }
             ],
             pageLength: 10,
             responsive: true,
             orderCellsTop: true,
+            language: {
+                search: 'Search properties',
+                searchPlaceholder: 'Name, reference, zone or client',
+                lengthMenu: 'Rows per page _MENU_',
+                info: '_START_–_END_ of _TOTAL_ properties',
+                infoEmpty: '0 properties',
+                emptyTable: 'No properties are available.',
+                zeroRecords: 'No properties match your filters.'
+            },
             order: [
                 [2, 'asc']
             ]
         });
 
         // Client-side column filters
-        $('#propertiesTable thead .column-filters input').on('keyup change', function() {
+        $('#propertiesTable thead .column-filters input').on('input', function() {
             var colIdx = $(this).closest('th').index();
             table.column(colIdx).search(this.value).draw();
         });
 
         // Handle clicks on property links
-        $(document).on('click', '.property-link', function(e) {
+        $('#property-listing').on('click', '.property-link', function(e) {
             e.preventDefault();
 
             var $row = $(this).closest('tr');
