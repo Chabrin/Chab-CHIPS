@@ -153,4 +153,20 @@ class InvoiceBillingServiceTest extends TestCase
             $this->assertEquals(round($debits, 2), round($credits, 2));
         }
     }
+
+    public function test_item_name_comes_from_the_item_then_return_type_then_the_narration(): void
+    {
+        $this->assertSame('RENT', InvoiceBillingService::itemName((object) ['item_name' => 'Rent', 'return_type_id' => 'Water Bill', 'narration' => 'x']));
+        $this->assertSame('WATER BILL', InvoiceBillingService::itemName((object) ['item_name' => null, 'return_type_id' => 'Water Bill', 'narration' => 'x']));
+        $this->assertSame('SERVICE CHARGE', InvoiceBillingService::itemName((object) ['item_name' => null, 'return_type_id' => '', 'narration' => 'Service Charge FOR August 2026']));
+    }
+
+    public function test_only_rent_is_rent_so_every_bill_is_matched_before_it(): void
+    {
+        $this->assertTrue(InvoiceBillingService::isRentInvoice((object) ['narration' => 'RENT FOR July 2026']));
+        $this->assertTrue(InvoiceBillingService::isRentInvoice((object) ['return_type_id' => 'RENT']));
+        $this->assertFalse(InvoiceBillingService::isRentInvoice((object) ['narration' => 'Water Bill FOR July 2026']));
+        $this->assertFalse(InvoiceBillingService::isRentInvoice((object) ['return_type_id' => 'House Deposit']));
+        $this->assertFalse(InvoiceBillingService::isRentInvoice((object) []));
+    }
 }

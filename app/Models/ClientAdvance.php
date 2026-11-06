@@ -39,6 +39,10 @@ class ClientAdvance extends Model
         'current_balance',
         'one_off',
         'voucher_id',
+        'loan_form_path',
+        'loan_form_name',
+        'loan_form_uploaded_by',
+        'loan_form_uploaded_at',
     ];
 
     protected $casts = [
@@ -47,6 +51,7 @@ class ClientAdvance extends Model
         'principal_start_date' => 'datetime',
         'disbursement_date' => 'datetime',
         'approved_at' => 'datetime',
+        'loan_form_uploaded_at' => 'datetime',
     ];
 
     public function client()

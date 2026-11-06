@@ -1182,6 +1182,13 @@ COPY PERMISSIONS (paste when re-enabling checks):
                                                         <span id="returnsSelectedCount" class="badge bg-primary text-white">0 selected</span>
                                                     </div>
 
+                                                    <div class="mb-2">
+                                                        <label class="form-label small mb-1" for="returnsBatchBank">Pay the merged properties into this bank account</label>
+                                                        <select id="returnsBatchBank" class="form-select form-select-sm">
+                                                            <option value="">No bank account (pay by cheque)</option>
+                                                        </select>
+                                                    </div>
+
                                                     <div class="d-flex flex-wrap gap-2 mb-3">
                                                         <button type="button" id="btnCreateReturnsBatchInline" class="btn btn-primary btn-sm">
                                                             <span class="material-symbols-outlined" style="font-size:16px; vertical-align: middle;">add_circle</span>
@@ -2672,6 +2679,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
         });
 
         $('#returns-config-tab').on('click', function() {
+            loadReturnsBatchBanks();
             if (!returnsConfigLoaded) {
                 loadReturnsConfig();
                 returnsConfigLoaded = true;
@@ -4142,14 +4150,35 @@ COPY PERMISSIONS (paste when re-enabling checks):
                     '</button>' +
                     '</div>' +
                     '</div>' +
+                    '<div class="small text-muted mb-1">Paid into: ' + (batch.bank_label ? $('<span>').text(batch.bank_label).html() : 'no bank account (cheque)') + '</div>' +
                     '<ul class="mb-0 ps-3">' + itemsHtml + '</ul>' +
                     '</div>'
                 );
             });
         }
 
+        // The client's own bank accounts, for the merged properties to be paid into
+        function loadReturnsBatchBanks() {
+            $.ajax({
+                url: "{{ route('ajax.clients.bank-details', $client->encrypted_id) }}",
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    var select = $('#returnsBatchBank');
+                    var keep = select.val();
+                    select.find('option:not(:first)').remove();
+                    (response.data || []).forEach(function(b) {
+                        select.append($('<option>').val(b.id).text((b.bank_name || '') + ' - ' + (b.account_name || '') + ' - ' + (b.account_number || '') + (b.is_default ? ' (default)' : '')));
+                    });
+                    select.val(keep);
+                }
+            });
+        }
+
         function openReturnsConfigInlineEdit(batchId) {
             editingReturnsBatchId = Number(batchId);
+            var editing = returnsConfigBatches.find(function(b) { return b.id == editingReturnsBatchId; });
+            $('#returnsBatchBank').val(editing && editing.bank_detail_id ? editing.bank_detail_id : '');
             $('#btnCreateReturnsBatchInline').addClass('d-none');
             $('#btnUpdateReturnsBatchInline').removeClass('d-none');
             $('#btnCancelReturnsBatchEdit').removeClass('d-none');
@@ -4158,6 +4187,7 @@ COPY PERMISSIONS (paste when re-enabling checks):
 
         function resetReturnsConfigEditState() {
             editingReturnsBatchId = null;
+            $('#returnsBatchBank').val('');
             $('#btnCreateReturnsBatchInline').removeClass('d-none');
             $('#btnUpdateReturnsBatchInline').addClass('d-none');
             $('#btnCancelReturnsBatchEdit').addClass('d-none');
@@ -4202,7 +4232,8 @@ COPY PERMISSIONS (paste when re-enabling checks):
             var url = "{{ route('property.clients.returns-config.store', $client->encrypted_id) }}";
             var payload = {
                 _token: "{{ csrf_token() }}",
-                property_ids: propertyIds
+                property_ids: propertyIds,
+                bank_detail_id: $('#returnsBatchBank').val()
             };
 
             if (editingReturnsBatchId) {

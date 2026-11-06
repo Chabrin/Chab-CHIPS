@@ -6,7 +6,7 @@
             <div class="col-sm-12">
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
-                        <h5 class="mb-0">Shif Rates Settings</h5>
+                        <h5 class="mb-0">SHA Rates Settings</h5>
                         <div class="ms-auto d-flex gap-2">
                             @permission('create_shif_rates')
                             <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addShifRateModal">

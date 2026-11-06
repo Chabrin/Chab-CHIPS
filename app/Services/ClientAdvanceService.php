@@ -16,6 +16,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 
 /**
  * Posts an advance to the client's account and to the GL when it is posted.
@@ -610,5 +612,31 @@ class ClientAdvanceService
         $accounts['receivable_code'] = ChartAccount::whereKey($accounts['receivable_id'])->value('account_code');
 
         return $accounts;
+    }
+
+    /**
+     * Attach (or replace) the signed loan form on an advance. The file goes on the private local
+     * disk, the old file is removed, and who attached it and when is recorded on the advance.
+     *
+     * @param ClientAdvance $advance
+     * @param UploadedFile $file
+     * @param int $userId
+     */
+    public function attachLoanForm(ClientAdvance $advance, UploadedFile $file, int $userId): ClientAdvance {
+        $oldPath = $advance->loan_form_path;
+        $path = $file->store('advance_loan_forms/' . $advance->id, 'local');
+
+        $advance->update([
+            'loan_form_path' => $path,
+            'loan_form_name' => $file->getClientOriginalName(),
+            'loan_form_uploaded_by' => $userId,
+            'loan_form_uploaded_at' => Carbon::now(),
+        ]);
+
+        if ($oldPath && $oldPath !== $path && Storage::disk('local')->exists($oldPath)) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        return $advance;
     }
 }

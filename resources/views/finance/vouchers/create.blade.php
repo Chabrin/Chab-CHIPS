@@ -459,9 +459,9 @@
                             {{-- Bank Details (Read-only) --}}
                             <div class="entry-section-label">
                                 Bank Details (Landlord)
-                                <span id="returnBankWarning" class="text-danger ms-2" style="font-size:0.72rem; display:none;">
-                                    <span class="material-symbols-outlined" style="font-size:12px;vertical-align:middle;">warning</span>
-                                    Missing Bank details
+                                <span id="returnBankWarning" class="text-muted ms-2" style="font-size:0.72rem; display:none;">
+                                    <span class="material-symbols-outlined" style="font-size:12px;vertical-align:middle;">info</span>
+                                    No bank details (cheque client)
                                 </span>
                             </div>
                             <div class="row g-2 mb-3">
@@ -1464,11 +1464,17 @@ $(document).ready(function () {
                 {
                     data: 'landlord_name',
                     render: function(data, type, row) {
-                        return '<a href="#" class="return-landlord-link" data-return=\'' + JSON.stringify(row) + '\' style="text-decoration:underline; color:#3598db; cursor:pointer;">' + escHtml(data) + '</a>';
+                        var merged = row.is_master ? ' <span class="badge bg-info text-dark">Merged</span>' : '';
+                        return '<a href="#" class="return-landlord-link" data-return=\'' + JSON.stringify(row).replace(/'/g, '&#39;') + '\' style="text-decoration:underline; color:#3598db; cursor:pointer;">' + escHtml(data) + '</a>' + merged;
                     }
                 },
                 { data: 'landlord_code' },
-                { data: 'property_name' },
+                {
+                    data: 'property_name',
+                    render: function(data, type, row) {
+                        return row.is_master ? escHtml(row.merged_properties || 'Merged properties') : escHtml(data);
+                    }
+                },
                 {
                     data: 'net_balance',
                     className: 'text-end'
@@ -1541,8 +1547,19 @@ $(document).ready(function () {
         var netBalance = parseFloat(returnData.net_balance_raw) || 0;
         $('#returnNetBalance').val(fmtNum(netBalance));
         
-        // Load property bank details
-        loadPropertyBankDetails(returnData.property_id, netBalance);
+        if (returnData.is_master) {
+            // A merged return is paid into the one bank account chosen for the merged properties (none: paid by cheque)
+            var bank = returnData.merged_bank || {};
+            $('#returnBankName').val(bank.bank_name || '');
+            $('#returnAccountName').val(bank.account_name || '');
+            $('#returnAccountNumber').val(bank.account_number || '');
+            $('#returnBankWarning').toggle(!bank.bank_name);
+            displayReturnLineItems(netBalance);
+            validateReturnVoucherForm();
+        } else {
+            // Load property bank details
+            loadPropertyBankDetails(returnData.property_id, netBalance);
+        }
     });
 
     // Load property bank details
@@ -1580,7 +1597,7 @@ $(document).ready(function () {
                 $('#returnAccountName').val('');
                 $('#returnAccountNumber').val('');
                 $('#returnBankWarning').show();
-                toastr.error('Failed to load bank details');
+                toastr.warning('Could not load bank details. The voucher can still be created for a cheque payment.');
                 validateReturnVoucherForm();
             }
         });
@@ -1925,11 +1942,7 @@ $(document).ready(function () {
             isValid = false;
         }
         
-        // Check if landlord bank details exist
-        if (!$('#returnBankName').val()) {
-            isValid = false;
-        }
-        
+        // Bank details are optional: cheque clients have none
         // Check if voucher date is set
         if (!$('#returnVoucherDate').val()) {
             isValid = false;
@@ -2020,12 +2033,7 @@ $(document).ready(function () {
             return;
         }
         
-        // Validate all required fields
-        if (!$('#returnBankName').val()) {
-            toastr.error('Landlord bank details are missing. Please assign bank details to this property first.');
-            return;
-        }
-        
+        // Bank details are optional (cheque clients): the voucher is paid by cheque either way
         var netBalance = parseFloat(currentReturnData.net_balance_raw) || 0;
         var voucherData = {
             return_summary_id: currentReturnData.id,

@@ -55,12 +55,14 @@ class PayrollSummary extends Model
         'period_id',
         'negligence',
         'payslip_elements',
+        'loan_deductions',
         'processed_by',
         'approved_by',
         'approved_at',
     ];
 
     protected $casts = [
+        'loan_deductions' => 'array',
         'approved_at' => 'datetime',
         'date_time' => 'datetime',
         'period' => 'datetime',

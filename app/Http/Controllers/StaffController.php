@@ -20,6 +20,7 @@ use App\Services\EmployeeContractExpiry;
 use App\Services\EmployeeContractReport;
 use App\Models\User;
 use App\Models\Contract;
+use App\Models\ContractChange;
 use App\Models\Incident;
 use App\Models\Position;
 use App\Models\ZoneArea;
@@ -242,38 +243,43 @@ class StaffController extends Controller
     }
 
     /**
-     * Recalculate NSSF rows on the server so the saved amount can't be edited in the browser.
+     * Check the elements submitted for a contract and turn them into rows to save. A contract holds only recurring
+     * items: one-time items are entered on Monthly Payroll Items, and the items the payroll run calculates itself
+     * (NSSF, SHA, Housing Levy, PAYE) and the basic and net salary elements are never kept on a contract. The entry
+     * type comes from the element, since that is what the run uses.
+     *
+     * @param array $elements rows with 'element' (the element id) and 'amount'
+     * @return array<int, array{element_id: int, entry_type_id: int, amount: mixed}>
+     * @throws ValidationException
      */
-    private function applyNssfAmounts(array $validated): array {
-        if (empty($validated['elements'])) {
-            return $validated;
-        }
+    private function contractElementRows(array $elements): array {
+        $found = PayrollElement::whereIn('id', array_column($elements, 'element'))->get()->keyBy('id');
+        $rows = [];
+        $errors = [];
 
-        $nssfIds = PayrollElement::whereIn('id', array_column($validated['elements'], 'element'))
-            ->where('formula_id', config('nssf.formula_id'))
-            ->pluck('id')->map(fn ($v) => (int) $v)->all();
+        foreach ($elements as $row) {
+            $element = $found->get((int) $row['element']);
 
-        if (empty($nssfIds)) {
-            return $validated;
-        }
-
-        $gross = (float) $validated['basic_salary'];
-        foreach ($validated['elements'] as $e) {
-            if (!in_array((int) $e['element'], $nssfIds, true) && (int) $e['entry_type'] === 2) {
-                $gross += (float) $e['amount'];
+            if (!$element) {
+                $errors[] = 'One of the selected elements no longer exists.';
+            } elseif ($element->isOneTime()) {
+                $errors[] = "{$element->element_name} is a one-time item. Enter it on Monthly Payroll Items instead of the contract.";
+            } elseif ($element->isStatutory()) {
+                $errors[] = "{$element->element_name} is calculated by the payroll run for every staff member, so it is not added to a contract.";
+            } elseif ($element->isSystem()) {
+                $errors[] = "{$element->element_name} comes from the contract's basic salary, so it is not added as an element.";
+            } elseif (isset($rows[$element->id])) {
+                $errors[] = "{$element->element_name} is added more than once.";
+            } else {
+                $rows[$element->id] = ['element_id' => $element->id, 'entry_type_id' => (int) $element->element_type, 'amount' => $row['amount']];
             }
         }
 
-        $total = $this->nssfCalculator->calculate($gross)['total'];
-
-        foreach ($validated['elements'] as $i => $e) {
-            if (in_array((int) $e['element'], $nssfIds, true)) {
-                $validated['elements'][$i]['amount'] = $total;
-                $validated['elements'][$i]['entry_type'] = 1; // always a deduction
-            }
+        if ($errors) {
+            throw ValidationException::withMessages(['elements' => array_values(array_unique($errors))]);
         }
 
-        return $validated;
+        return array_values($rows);
     }
 
     /**
@@ -1041,9 +1047,12 @@ private function syncStaffFiles(Request $request, Staff $staff): array
     {
         $id = Crypt::decrypt($encryptedId);
         $contract = Contract::with('elements.payrollElement')->where('staff_id', $id)->first();
+        abort_unless($contract, 404);
 
+        // Rows the run no longer reads from a contract are shown as a notice, and cleared when the contract is saved
+        [$visibleElements, $hiddenElements] = $contract->elements->partition(fn ($row) => $row->payrollElement?->canBeOnContract());
 
-        return view('staff.contracts.contracts_edit', compact('contract'));
+        return view('staff.contracts.contracts_edit', compact('contract', 'visibleElements', 'hiddenElements'));
     }
 
    public function contractList()
@@ -1129,12 +1138,12 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 'basic_salary' => 'required|numeric|min:0',
                 'elements' => 'nullable|array',
                 'elements.*.element' => 'required|integer',
-                'elements.*.entry_type' => 'required|in:1,2',
+                'elements.*.entry_type' => 'nullable|in:1,2',
                 'elements.*.amount' => 'required|numeric|min:0',
                 'signed_contract' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
-            $validated = $this->applyNssfAmounts($validated);
+            $elementRows = $this->contractElementRows($validated['elements'] ?? []);
             $staff = Staff::find($validated['staff_id']);
 
             // Create contract
@@ -1151,15 +1160,11 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             $contract->save();
 
             // Store contract elements
-            if (!empty($validated['elements'])) {
-                foreach ($validated['elements'] as $elementData) {
-                    $contract->elements()->create([
-                        'element_id' => $elementData['element'],
-                        'entry_type_id' => $elementData['entry_type'],
-                        'amount' => $elementData['amount'],
-                    ]);
-                }
+            foreach ($elementRows as $row) {
+                $contract->elements()->create($row);
             }
+
+            ContractChange::contractCreated($contract, Auth::id());
 
             if ($request->hasFile('signed_contract')) {
                 $this->saveSignedContract($contract, $request->file('signed_contract'));
@@ -1190,13 +1195,15 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 'basic_salary' => 'required|numeric|min:0',
                 'elements' => 'nullable|array',
                 'elements.*.element' => 'required|integer',
-                'elements.*.entry_type' => 'required|in:1,2',
+                'elements.*.entry_type' => 'nullable|in:1,2',
                 'elements.*.amount' => 'required|numeric|min:0',
                 'signed_contract' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
-            $validated = $this->applyNssfAmounts($validated);
-            $contract = Contract::findOrFail($id);
+            $elementRows = $this->contractElementRows($validated['elements'] ?? []);
+            $contract = Contract::with('elements')->findOrFail($id);
+            $oldSalary = $contract->basic_salary;
+            $oldElements = ContractChange::elementAmounts($contract->elements);
             $staff = Staff::find($validated['staff_id']);
 
             // Update contract fields
@@ -1212,17 +1219,15 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             $contract->save();
 
             // Update contract elements: delete old, insert new
-            $contract->elements()->delete();
-
-            if (!empty($validated['elements'])) {
-                foreach ($validated['elements'] as $elementData) {
-                    $contract->elements()->create([
-                        'element_id' => $elementData['element'],
-                        'entry_type_id' => $elementData['entry_type'],
-                        'amount' => $elementData['amount'],
-                    ]);
+            DB::transaction(function () use ($contract, $elementRows) {
+                $contract->elements()->delete();
+                foreach ($elementRows as $row) {
+                    $contract->elements()->create($row);
                 }
-            }
+            });
+
+            ContractChange::salary($contract, $oldSalary, $contract->basic_salary, Auth::id());
+            ContractChange::elements($contract, $oldElements, array_map('floatval', array_column($elementRows, 'amount', 'element_id')), Auth::id());
 
             if ($request->hasFile('signed_contract')) {
                 $this->saveSignedContract($contract, $request->file('signed_contract'));
@@ -2050,6 +2055,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 }
 
                 $contract = Contract::findOrFail($id);
+                $oldSalary = $contract->basic_salary;
 
                 if (!empty($data['date_start'])) {
                     $contract->date_start = $data['date_start'] . ' 00:00:00';
@@ -2068,6 +2074,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                 }
 
                 $contract->save();
+                ContractChange::salary($contract, $oldSalary, $contract->basic_salary, Auth::id());
                 $results[] = ['id' => $id, 'ok' => true];
             } catch (\Exception $e) {
                 Log::error("Bulk contract update failed for ID {$id}: " . $e->getMessage());
@@ -2093,25 +2100,26 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         try {
             $contract = Contract::findOrFail($contractId);
 
-            $elements = $request->input('elements', []);
+            $submitted = collect($request->input('elements', []))
+                ->filter(fn ($element) => !empty($element['element_id']))
+                ->map(fn ($element) => ['element' => $element['element_id'], 'amount' => $element['amount'] ?? 0])
+                ->all();
+            $rows = $this->contractElementRows($submitted);
 
-            // Delete existing elements
-            $contract->elements()->delete();
+            $before = ContractChange::elementAmounts($contract->elements);
 
-            // Insert new elements
-            foreach ($elements as $element) {
-                if (empty($element['element_id'])) {
-                    continue;
+            DB::transaction(function () use ($contract, $rows) {
+                $contract->elements()->delete();
+                foreach ($rows as $row) {
+                    $contract->elements()->create($row);
                 }
-                \App\Models\ContractElement::create([
-                    'parent_id'     => $contract->id,
-                    'element_id'    => $element['element_id'],
-                    'entry_type_id' => $element['entry_type_id'] ?? 1,
-                    'amount'        => $element['amount'] ?? 0,
-                ]);
-            }
+            });
+
+            ContractChange::elements($contract, $before, array_map('floatval', array_column($rows, 'amount', 'element_id')), Auth::id());
 
             return response()->json(['success' => true]);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'error' => collect($e->errors())->flatten()->first()], 422);
         } catch (\Exception $e) {
             Log::error("Error updating elements for contract {$contractId}: " . $e->getMessage());
             return response()->json(['success' => false, 'error' => 'Failed to update elements'], 500);

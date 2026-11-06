@@ -144,8 +144,9 @@ trait PaymentAllocationTrait
 
     /**
      * C-2. Fetch all unsettled invoices for a lease, pre-sorted in allocation priority order:
-     *   1. Oldest billing month first (arrears before current — DATE_TRUNC for PostgreSQL)
-     *   2. Then by payment_priority on the invoiceable item (e.g. rent before water)
+     *   1. Oldest billing month first (what is overdue, arrears before current)
+     *   2. Within a month, bills (water, electricity, service charge) before rent
+     *   2b. Then by payment_priority on the invoiceable item, if one is set
      *   3. Then by date_due (tiebreak within same month + priority)
      *
      * Only includes invoices with current_balance > 0 (outstanding only).
@@ -155,13 +156,16 @@ trait PaymentAllocationTrait
      */
     protected function getUnsettledInvoices(int $leaseId, int $debtorTypeId = 2): Collection
     {
+        $item = \App\Services\InvoiceBillingService::itemNameSql('i', 'si.item_name');
+
         return DB::table('sys_pm_debtors_invoices as i')
             ->select(['i.*', 'si.item_name', 'si.payment_priority', 'si.advance_payable'])
             ->leftJoin('sys_set_invoiceable_items as si', 'i.item_type_id', '=', 'si.id')
             ->where('i.lease_id',       $leaseId)
             ->where('i.debtor_type_id', $debtorTypeId)
             ->where('i.current_balance', '>', 0)
-            ->orderByRaw("DATE_TRUNC('month', i.date_due)") // Oldest billing month first
+            ->orderByRaw("DATE_TRUNC('month', COALESCE(i.returns_period::date, i.date_due::date))") // Oldest billing month first (arrears)
+            ->orderByRaw("CASE WHEN {$item} = 'RENT' THEN 1 ELSE 0 END")                             // Bills (water, service charge) before rent
             ->orderBy('si.payment_priority')                // Lower number = higher priority
             ->orderBy('i.date_due')                         // Tiebreak within same month
             ->get();

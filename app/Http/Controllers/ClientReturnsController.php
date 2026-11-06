@@ -342,6 +342,38 @@ class ClientReturnsController extends Controller
             'landlord_label' => $landlordLabel !== '' ? $landlordLabel : '-',
             'period'         => $period,
             'return_type'    => $return->return_type ?? '-',
+            'merged'         => $isMaster ? $this->mergedSummary($return) : null,
+        ];
+    }
+
+    /**
+     * The summary of a merged return for its details page: one row per property return with its net and state, what the
+     * landlord-level deductions take off, the net payable and the bank account it is paid into.
+     *
+     * @param ReturnSummary $master
+     */
+    protected function mergedSummary(ReturnSummary $master): array {
+        $service = app(\App\Services\MergedReturnService::class);
+        $rows = $service->propertyReturns($master)->map(function ($r) {
+            return [
+                'property' => trim($r->property_code . ' ' . ($r->property_name ?? '')),
+                'return_code' => $r->return_code,
+                'net' => (float) $r->net_balance,
+                'status' => (int) $r->paid_status === 1 ? 'Paid' : ((int) $r->approved_status === 1 ? 'Approved' : 'Waiting approval'),
+                'url' => route('returns.details', encrypt($r->id)),
+            ];
+        })->all();
+
+        $total = round((float) array_sum(array_column($rows, 'net')), 2);
+        $batch = $service->batchOf($master);
+
+        return [
+            'properties' => $rows,
+            'total' => $total,
+            'deductions' => round($total - (float) $master->net_balance, 2),
+            'net' => (float) $master->net_balance,
+            'bank' => $service->payeeBank($master),
+            'batch_reference' => $batch->batch_reference ?? null,
         ];
     }
 
@@ -995,6 +1027,19 @@ class ClientReturnsController extends Controller
                     $returnYear,
                     $returnMonthNum,
                     $propertyId
+                );
+
+                // A client whose properties are merged: the debits tied to this property (its advances) go on this
+                // property's return, the rest on the merged return
+                $advancesInserted += $this->insertAdvancePaymentLines(
+                    $returnPeriod,
+                    $transactionDate,
+                    $generatedBy,
+                    $returnYear,
+                    $returnMonthNum,
+                    $propertyId,
+                    null,
+                    true
                 );
 
                 $recoveriesInserted += $this->insertRecoveryLines(

@@ -70,6 +70,22 @@ class EmployeeContract extends Model
     }
 
     /**
+     * Scope for contracts that pay in a period: dates overlap it and the staff member is Active or On Leave
+     * (suspended and terminated staff are not paid).
+     */
+    public function scopeCoveringPeriod($query, string $startDate, string $endDate)
+    {
+        return $query
+            ->where(function ($q) use ($endDate) {
+                $q->whereNull('date_start')->orWhereDate('date_start', '<=', $endDate);
+            })
+            ->where(function ($q) use ($startDate) {
+                $q->whereNull('date_end')->orWhereDate('date_end', '>=', $startDate);
+            })
+            ->whereHas('staff', fn ($staff) => $staff->whereIn('current_status_id', [1, 4]));
+    }
+
+    /**
      * Scope for approved contracts
      */
     public function scopeApproved($query)

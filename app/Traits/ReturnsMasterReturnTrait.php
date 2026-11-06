@@ -76,12 +76,9 @@ trait ReturnsMasterReturnTrait
             $childDebitSum = (float) $batch->child_total_debit_sum;
             $childCommSum  = (float) $batch->child_commission_sum;
 
-            $deductionAggregate = $this->aggregateMasterLandlordDeductions(
-                (int) $batch->batch_client_id,
-                $returnYear,
-                $returnMonth
-            );
-            $deductionsTotal = (float) $deductionAggregate['total'];
+            // The landlord-level debits (no property) this merged return takes, up to what the property returns pay
+            $deductionRows = $this->pickMasterDeductionRows((int) $batch->batch_client_id, $returnYear, $returnMonth, $childNetSum);
+            $deductionsTotal = round((float) array_sum(array_column($deductionRows, 'debit_amount')), 2);
 
             $masterNetAmount = round($childNetSum - $deductionsTotal, 2);
 
@@ -159,9 +156,7 @@ trait ReturnsMasterReturnTrait
                 $returnPeriod,
                 $masterTransactionDate,
                 $nextReturnId,
-                (int) $batch->batch_client_id,
-                $returnYear,
-                $returnMonth,
+                $deductionRows,
                 $generatedBy
             );
 
@@ -243,31 +238,52 @@ trait ReturnsMasterReturnTrait
     }
 
     /**
-     * Pre-compute the landlord-account deduction total so that it can be
-     * subtracted from the master's net_amount before the summary is inserted.
+     * The landlord-level debits on the client's account that the merged return takes: debits with no property (the
+     * registration fee, cheque and banking charges, advances not tied to a property), the same ones a normal return takes
+     * (this month's, and earlier advances and the registration fee), advances only once paid out to the client, oldest
+     * first, and no more than the property returns pay. A debit tied to a property is on that property's own return.
+     *
+     * @param int $clientId
+     * @param int $returnYear
+     * @param int $returnMonth
+     * @param float $available the sum of the property returns' nets
+     * @return array rows of id, debit_amount and the columns the deduction line needs, in ledger order
      */
-    protected function aggregateMasterLandlordDeductions(int $clientId, int $returnYear, int $returnMonth): array
-    {
+    protected function pickMasterDeductionRows(int $clientId, int $returnYear, int $returnMonth, float $available): array {
         $placeholders = implode(',', array_fill(0, count($this->masterLandlordDeductionCodes), '?'));
 
-        $row = DB::selectOne("
-            SELECT
-                COALESCE(SUM(la.debit_amount), 0) AS total_amount,
-                COUNT(*) AS line_count
+        $rows = DB::select("
+            SELECT la.id, la.debit_amount, la.entry_particulars, la.entry_description, la.payment_ref, la.payment_ref_type,
+                   la.entry_date, la.property_code, la.property_id, la.client_id
             FROM cb_landlord_account la
             WHERE la.client_id = ?
+              AND la.property_id IS NULL
               AND la.debit_amount > 0
               AND COALESCE(la.is_recovered, 0) != 1
-              AND la.year  = ?
-              AND la.month = ?
+              AND la.return_code IS NULL
               AND la.entry_type_code IN ({$placeholders})
-              {$advancePaid}
-        ", array_merge([$clientId, $returnYear, $returnMonth], $this->masterLandlordDeductionCodes));
+              AND (
+                    (la.year = ? AND la.month = ?)
+                    OR (la.year * 100 + la.month < ? AND (la.advance_id IS NOT NULL OR la.entry_type_code = '0023'))
+                  )
+              {$this->advancePaidSql('la')}
+            ORDER BY la.id
+        ", array_merge([$clientId], $this->masterLandlordDeductionCodes, [$returnYear, $returnMonth, $returnYear * 100 + $returnMonth]));
 
-        return [
-            'total' => (float) ($row->total_amount ?? 0),
-            'count' => (int)   ($row->line_count   ?? 0),
-        ];
+        $chosen = [];
+        $running = 0.0;
+
+        foreach ($rows as $row) {
+            $running = round($running + (float) $row->debit_amount, 2);
+
+            if ($running > round($available, 2)) {
+                break;
+            }
+
+            $chosen[] = (array) $row;
+        }
+
+        return $chosen;
     }
 
     /**
@@ -338,108 +354,66 @@ trait ReturnsMasterReturnTrait
     }
 
     /**
-     * Insert landlord-level deductions from cb_landlord_account onto the master,
-     * preserving property_code/property_id where the deduction is property-specific
-     * (e.g. BANKING SERVICES). Marks consumed entries as recovered.
+     * Put the chosen landlord-level debits on the merged return as DR lines and reserve them for it. Nothing is recovered
+     * here: the debits are flagged recovered when the merged return is finalised (ReturnPostingService), and regenerating
+     * the returns frees them again, as for any return.
+     *
+     * @param string $masterReturnCode
+     * @param string $returnPeriod
+     * @param string $transactionDate
+     * @param int $returnId
+     * @param array $rows from pickMasterDeductionRows()
+     * @param int $userId
      */
     protected function insertMasterReturnDeductions(
         string $masterReturnCode,
         string $returnPeriod,
         string $transactionDate,
         int $returnId,
-        int $clientId,
-        int $returnYear,
-        int $returnMonth,
+        array $rows,
         int $userId
     ): int {
-        $placeholders = implode(',', array_fill(0, count($this->masterLandlordDeductionCodes), '?'));
-        $advancePaid = $this->advancePaidSql('cb_landlord_account');
-
-        $inserted = DB::affectingStatement("
-            INSERT INTO cb_returns_clients (
-                return_code, return_period, transaction_number, transaction_date,
-                entry_description, entry_type, transaction_code,
-                narration, transaction_ref, source_date,
-                property_code, dr_cr,
-                amount_text, amount_payable_landlord, amount_payable_tenant,
-                residual_debit, residual_credit, net_amount,
-                remarks, transaction_source,
-                vat_amount, commission_amount,
-                property_id, client_id,
-                return_id,
-                server_time, user_id
-            )
-            SELECT
-                ?, ?::integer, '', ?,
-                'DEDUCTION',
-                'Advance Payments-From Landlord Acc',
-                NULL,
-                COALESCE(la.entry_particulars, la.entry_description),
-                CASE
-                    WHEN COALESCE(la.payment_ref, '') = '' THEN NULL
-                    WHEN COALESCE(la.payment_ref_type, '') = '' THEN la.payment_ref
-                    ELSE la.payment_ref || ' ' || la.payment_ref_type
-                END,
-                la.entry_date,
-                COALESCE(la.property_code, ''),
-                'DR',
-                TO_CHAR(la.debit_amount, 'FM9999999990.00'),
-                0, 0,
-                la.debit_amount, 0, la.debit_amount,
-                'Payment OK',
-                'LANDLORD ACCOUNT',
-                0, 0,
-                la.property_id,
-                la.client_id,
-                ?,
-                NOW(),
-                ?
-            FROM cb_landlord_account la
-            WHERE la.client_id = ?
-              AND la.debit_amount > 0
-              AND COALESCE(la.is_recovered, 0) != 1
-              AND la.year  = ?
-              AND la.month = ?
-              AND la.entry_type_code IN ({$placeholders})
-            ORDER BY la.entry_date, la.id
-        ", array_merge(
-            [$masterReturnCode, $returnPeriod, $transactionDate, $returnId, $userId, $clientId, $returnYear, $returnMonth],
-            $this->masterLandlordDeductionCodes
-        ));
-
-        if ($inserted > 0) {
-            $recoveredIds = array_column(DB::select("
-                UPDATE cb_landlord_account
-                SET is_recovered         = 1,
-                    recovery_year        = ?,
-                    recovery_month       = ?,
-                    return_code          = ?,
-                    recovery_server_time = NOW()
-                WHERE client_id = ?
-                  AND debit_amount > 0
-                  AND COALESCE(is_recovered, 0) != 1
-                  AND year  = ?
-                  AND month = ?
-                  AND entry_type_code IN ({$placeholders})
-                  {$advancePaid}
-                RETURNING id
-            ", array_merge(
-                [$returnYear, $returnMonth, $masterReturnCode, $clientId, $returnYear, $returnMonth],
-                $this->masterLandlordDeductionCodes
-            )), 'id');
-
-            Log::info('ReturnsMasterReturnTrait: landlord deductions absorbed into MASTERRETURN', [
-                'master_code' => $masterReturnCode,
-                'client_id'   => $clientId,
-                'count'       => $inserted,
+        foreach ($rows as $row) {
+            DB::table('cb_returns_clients')->insert([
+                'return_code' => $masterReturnCode,
+                'return_period' => (int) $returnPeriod,
+                'transaction_number' => '',
+                'transaction_date' => $transactionDate,
+                'entry_description' => 'DEDUCTION',
+                'entry_type' => 'Advance Payments-From Landlord Acc',
+                'narration' => $row['entry_particulars'] ?: $row['entry_description'],
+                'transaction_ref' => trim(($row['payment_ref'] ?? '') . ' ' . ($row['payment_ref_type'] ?? '')) ?: null,
+                'source_date' => $row['entry_date'],
+                'property_code' => (string) ($row['property_code'] ?? ''),
+                'dr_cr' => 'DR',
+                'amount_text' => number_format((float) $row['debit_amount'], 2, '.', ''),
+                'amount_payable_landlord' => 0,
+                'amount_payable_tenant' => 0,
+                'residual_debit' => (float) $row['debit_amount'],
+                'residual_credit' => 0,
+                'net_amount' => (float) $row['debit_amount'],
+                'remarks' => 'Payment OK',
+                'transaction_source' => 'LANDLORD ACCOUNT',
+                'vat_amount' => 0,
+                'commission_amount' => 0,
+                'property_id' => $row['property_id'],
+                'client_id' => $row['client_id'],
+                'return_id' => $returnId,
+                'server_time' => now(),
+                'user_id' => $userId,
             ]);
-
-            // Mirrors the standard returns path — without this, ClientAdvance.current_balance
-            // never reflects a merge-batch recovery.
-            $this->syncAdvanceRecoveryStatus($recoveredIds);
         }
 
-        return $inserted;
+        if (!empty($rows)) {
+            DB::table('cb_landlord_account')->whereIn('id', array_column($rows, 'id'))->update(['return_code' => $masterReturnCode]);
+
+            Log::info('ReturnsMasterReturnTrait: landlord deductions reserved for the merged return', [
+                'master_code' => $masterReturnCode,
+                'count' => count($rows),
+            ]);
+        }
+
+        return count($rows);
     }
 
     /**

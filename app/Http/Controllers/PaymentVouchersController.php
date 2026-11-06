@@ -553,6 +553,7 @@ class PaymentVouchersController extends Controller
                     'cb_returns_summary.net_balance',
                     'cb_returns_summary.return_description',
                     'cb_returns_summary.approved_date',
+                    'cb_returns_summary.return_type',
                     'sys_pm_clients.id as landlord_id',
                     'sys_pm_clients.names as landlord_name',
                     'sys_pm_clients.reference_number',
@@ -565,15 +566,27 @@ class PaymentVouchersController extends Controller
                 ->where('cb_returns_summary.paid_status', 0)
                 ->where('cb_returns_summary.voucher_generated', 0)
                 ->where('cb_returns_summary.net_balance', '>', 0)
+                // A property return inside a merged return is paid with it, by the merged return's one voucher
+                ->whereRaw('COALESCE(cb_returns_summary.is_merged, FALSE) = FALSE')
+                ->whereRaw("COALESCE(cb_returns_summary.parent_return_code, '') = ''")
                 ->where('cb_returns_summary.year', $year)
                 ->where('cb_returns_summary.month', $month)
                 ->orderBy('cb_returns_summary.landlord_code')
                 ->get();
 
+            $merged = app(\App\Services\MergedReturnService::class);
+
             return response()->json([
                 'success' => true,
-                'data' => $returns->map(function ($r) {
+                'data' => $returns->map(function ($r) use ($merged) {
+                    $isMaster = $r->return_type === 'MASTERRETURN';
+                    $master = $isMaster ? ReturnSummary::find($r->id) : null;
+                    $properties = $master ? $merged->propertyReturns($master) : collect();
+
                     return [
+                        'is_master' => $isMaster,
+                        'merged_properties' => $properties->map(fn ($p) => trim($p->property_code . ' ' . ($p->property_name ?? '')))->implode(', '),
+                        'merged_bank' => $master ? $merged->payeeBank($master) : null,
                         'id' => $r->id,
                         'encrypted_id' => encrypt($r->id),
                         'return_code' => $r->return_code,
@@ -611,12 +624,12 @@ class PaymentVouchersController extends Controller
             $validated = $request->validate([
                 'return_summary_id' => 'required|integer',
                 'landlord_id' => 'required|integer',
-                'property_id' => 'required|integer',
+                'property_id' => 'nullable|integer',
                 'vendor_name' => 'required|string',
                 'vendor_type' => 'required|string',
-                'bank_name' => 'required|string',
-                'account_name' => 'required|string',
-                'account_number' => 'required|string',
+                'bank_name' => 'nullable|string',
+                'account_name' => 'nullable|string',
+                'account_number' => 'nullable|string',
                 'source_account_id' => 'nullable|integer',
                 'cheque_number' => 'nullable|string',
                 'cheque_leaf_id' => 'nullable|integer',
@@ -728,11 +741,11 @@ class PaymentVouchersController extends Controller
                     'entry_year' => $validated['post_year'],
                     'entry_month' => $validated['post_month'],
                     'voucher_type' => 'client_returns',
-                    'entry_description' => 'RETURNS PAYMENT' . (count($lineItems) > 1 ? ' (Entry ' . $line['line_number'] . ' of ' . count($lineItems) . ')' : ''),
+                    'entry_description' => ($return->return_type === 'MASTERRETURN' ? 'RETURNS PAYMENT MERGED' : 'RETURNS PAYMENT') . (count($lineItems) > 1 ? ' (Entry ' . $line['line_number'] . ' of ' . count($lineItems) . ')' : ''),
                     'payee_name' => $validated['vendor_name'],
-                    'account_bank' => $validated['bank_name'],
-                    'account_name' => $validated['account_name'],
-                    'account_number' => $validated['account_number'],
+                    'account_bank' => $validated['bank_name'] ?? null,
+                    'account_name' => $validated['account_name'] ?? null,
+                    'account_number' => $validated['account_number'] ?? null,
                     'cheque_number' => $line['cheque_number'],
                     'cheque_leaf_id' => $line['cheque_leaf_id'],
                     'amount' => $line['amount'],

@@ -60,7 +60,7 @@
                             <th class="text-end">Total Gross</th>
                             <th class="text-end">Total PAYE</th>
                             <th class="text-end">Total NSSF</th>
-                            <th class="text-end">Total SHIF</th>
+                            <th class="text-end">Total SHA</th>
                             <th class="text-end">Housing Levy</th>
                             <th class="text-end">Total Deductions</th>
                             <th class="text-end">Total Net Pay</th>

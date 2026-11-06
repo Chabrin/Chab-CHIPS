@@ -24,6 +24,8 @@
                                         <th>#</th>
                                         <th>Element Name</th>
                                         <th>Type</th>
+                                        <th>How often</th>
+                                        <th>Applies to</th>
                                         <th>Amount</th>
                                         <th>Account</th>
                                         <th>Status</th>
@@ -82,12 +84,29 @@
                                 <option value="1">Fixed</option>
                                 <option value="2">Percent of basic salary</option>
                                 <option value="3">Percent of gross payment</option>
-                                <option value="4">Use NSSF settings</option>
-                                <option value="5">Use PAYE settings</option>
-                                <option value="6">Use SHA settings</option>
-                                <option value="7">Use prorated deductions settings</option>
-                                <option value="8">HELB Settings</option>
+                                <option value="4">Use NSSF settings (built in)</option>
+                                <option value="5">Use PAYE settings (built in)</option>
+                                <option value="6">Use SHA settings (built in)</option>
                             </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-6 mb-3">
+                            <label for="recurrence" class="form-label">How often <span style="color:red">*</span></label>
+                            <select class="form-select" name="recurrence" id="recurrence" required>
+                                <option value="recurring" selected>Recurring (every month)</option>
+                                <option value="one_time">One-time (a single month)</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <label for="applies_to" class="form-label">Applies to <span style="color:red">*</span></label>
+                            <select class="form-select" name="applies_to" id="applies_to" required>
+                                <option value="specific" selected>Specific staff</option>
+                                <option value="all">All staff</option>
+                            </select>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <div class="alert alert-light border mb-0 small" id="settingsHelp"></div>
                         </div>
                     </div>
                     <div class="row">
@@ -168,6 +187,18 @@
                     }
                 },
                 {
+                    data: 'recurrence',
+                    render: function(data) {
+                        return data === 'one_time' ? 'One-time' : 'Recurring';
+                    }
+                },
+                {
+                    data: 'applies_to',
+                    render: function(data) {
+                        return data === 'all' ? 'All staff' : 'Specific staff';
+                    }
+                },
+                {
                     data: 'formatted_amount',
                     render: function(data, type, row) {
                         return data || '0.00';
@@ -208,7 +239,9 @@
                                     data-element_name="${row.element_name}" 
                                     data-account_id="${row.account_id}" 
                                     data-element_type="${row.element_type}" 
-                                    data-formula_id="${row.formula_id}" 
+                                    data-formula_id="${row.formula_id}"
+                                    data-recurrence="${row.recurrence || 'recurring'}"
+                                    data-applies_to="${row.applies_to || 'specific'}" 
                                     data-amount="${row.amount}" 
                                     data-staff_positions_id="${row.staff_positions_id}" 
                                     data-payslip_position="${row.payslip_position}"
@@ -374,6 +407,9 @@
             $('#element_name').val($(this).data('element_name'));
             $('#element_type').val($(this).data('element_type'));
             $('#formula').val($(this).data('formula_id'));
+            $('#recurrence').val($(this).data('recurrence'));
+            $('#applies_to').val($(this).data('applies_to'));
+            updateSettingsHelp();
             $('#amount').val($(this).data('amount'));
             $('#payslip_position').val($(this).data('payslip_position'));
 
@@ -462,6 +498,23 @@
                 }
             });
         });
+
+        // What the two settings mean, in words, for whoever is filling the form in
+        function updateSettingsHelp() {
+            var how = $('#recurrence').val();
+            var who = $('#applies_to').val();
+            var text;
+            if (how === 'one_time') {
+                text = 'Entered for a single payroll month on Monthly Payroll Items, then it stops. One-time items are not kept on contracts.';
+            } else if (who === 'all') {
+                text = 'Applied to every staff member in every run using the formula and amount here (Fixed, Percent of basic salary or Percent of gross payment). A contract can hold a row for it to give one person a different amount.';
+            } else {
+                text = 'Added to each staff member\'s contract by HR, with their own amount, and repeats every month.';
+            }
+            $('#settingsHelp').text(text);
+        }
+        $('#recurrence, #applies_to').on('change', updateSettingsHelp);
+        $('#addPayrollElementsModal').on('show.bs.modal', updateSettingsHelp);
 
         $('#addPayrollElementsModal').on('hidden.bs.modal', function() {
             $('#payrollElementsForm')[0].reset();

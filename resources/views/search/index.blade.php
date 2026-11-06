@@ -15,7 +15,7 @@
                                     <i class="fa fa-search text-primary me-2"></i>Search Results
                                 </h5>
                                 @if($term !== '')
-                                    <p class="text-muted small mb-0">Showing matching records across clients, staff, properties, and invoices.</p>
+                                    <p class="text-muted small mb-0">Showing matching records across clients, staff, properties, invoices, returns, vouchers, and advances.</p>
                                 @endif
                             </div>
                             @if($term !== '')
@@ -29,7 +29,7 @@
                             <div class="alert alert-light border text-muted mt-3 mb-0 py-2">
                                 <i class="fa fa-info-circle text-info me-1"></i> Type at least 2 characters to search.
                             </div>
-                        @elseif($clients->isEmpty() && $staff->isEmpty() && $properties->isEmpty() && $invoices->isEmpty())
+                        @elseif($clients->isEmpty() && $staff->isEmpty() && $properties->isEmpty() && $invoices->isEmpty() && $returns->isEmpty() && $vouchers->isEmpty() && $advances->isEmpty())
                             <div class="text-center py-4">
                                 <i class="fa fa-folder-open text-muted mb-2" style="font-size: 2rem;"></i>
                                 <p class="text-muted mb-0">No records found matching "<strong>{{ $term }}</strong>".</p>
@@ -269,6 +269,67 @@
             </div>
         </div>
         @endif
+
+
+        {{-- Returns, Payment Vouchers, Advances (reference code lookups) --}}
+        @foreach([
+            ['title' => 'Returns', 'icon' => 'fa-undo', 'rows' => $returns],
+            ['title' => 'Payment Vouchers', 'icon' => 'fa-money-check', 'rows' => $vouchers],
+            ['title' => 'Client Advances', 'icon' => 'fa-hand-holding-usd', 'rows' => $advances],
+        ] as $group)
+        @if($group['rows']->isNotEmpty())
+        <div class="row mb-3">
+            <div class="col-sm-12">
+                <div class="card shadow-sm border-0 border-top border-3 border-secondary">
+                    <div class="card-header bg-white card-no-border py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold text-dark"><i class="fa {{ $group['icon'] }} text-secondary me-2"></i>{{ $group['title'] }}</h6>
+                        <span class="badge bg-secondary rounded-pill px-3 py-1">{{ $group['rows']->count() }}</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive custom-scrollbar">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-muted small text-uppercase">
+                                    <tr>
+                                        <th class="ps-3">Reference</th>
+                                        <th>Detail</th>
+                                        <th class="text-end pe-3">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($group['rows'] as $row)
+                                    <tr>
+                                        <td class="ps-3">
+                                            @if($group['title'] === 'Returns')
+                                                <a href="{{ route('returns.details', $row->encrypted_id) }}" class="font-monospace fw-semibold text-dark text-decoration-none">{{ $row->return_code }}</a>
+                                            @elseif($group['title'] === 'Payment Vouchers')
+                                                <a href="{{ route('payment.vouchers.details', $row->encrypted_id) }}" class="font-monospace fw-semibold text-dark text-decoration-none">{{ $row->voucher_number }}</a>
+                                            @else
+                                                <a href="{{ route('property.advances.show', $row->encrypted_id) }}" class="font-monospace fw-semibold text-dark text-decoration-none">{{ $row->reference_number }}</a>
+                                            @endif
+                                        </td>
+                                        <td class="text-muted small">
+                                            @if($group['title'] === 'Returns')
+                                                {{ $row->return_type }} &middot; {{ $row->property_code }} &middot; {{ $row->year }}-{{ str_pad($row->month, 2, '0', STR_PAD_LEFT) }} &middot; {{ $row->paid_status == 1 ? 'Paid' : ($row->approved_status == 1 ? 'Approved' : 'Not approved') }}
+                                            @elseif($group['title'] === 'Payment Vouchers')
+                                                {{ $row->vendor_name }} &middot; {{ $row->voucher_status }}
+                                            @else
+                                                {{ $row->client->names ?? '—' }} &middot; balance {{ number_format($row->current_balance ?? 0, 2) }}
+                                            @endif
+                                        </td>
+                                        <td class="text-end pe-3 font-monospace">
+                                            {{ number_format((float) ($group['title'] === 'Returns' ? $row->net_balance : ($group['title'] === 'Payment Vouchers' ? $row->debit_amount : $row->amount)), 2) }}
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+        @endforeach
 
         {{-- Invoices --}}
         @if($invoices->isNotEmpty())

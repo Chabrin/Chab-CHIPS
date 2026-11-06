@@ -105,7 +105,7 @@
     var csrfToken = '{{ csrf_token() }}';
     var bulkUpdateUrl = '{{ route("contract.bulk.update") }}';
     var elementsUpdateUrlTemplate = '{{ url("/hr/contracts") }}/:id/elements';
-    var payrollElementsUrl = '{{ url("/ajax/payroll/elements/list/simpler") }}';
+    var payrollElementsUrl = '{{ url("/ajax/payroll/elements/list/simpler") }}?for=contract';
 
     // ── State ────────────────────────────────────────────────────────────────
     var dirty = {};          // { contractId: { id, date_start, date_end, basic_salary, position_id, current_status_id } }
@@ -465,20 +465,25 @@
         if (elements.length === 0) {
             $repeater.append(buildElementRow(0, null));
         } else {
+            // Only recurring items a contract can hold are listed; the rest are named and cleared on save
+            var skipped = [];
             elements.forEach(function(el, i) {
-                // Map element_name_id from the contract elements data
-                var elObj = {
-                    element_name_id: el.element_name ? null : null, // will fallback to name match below
-                    amount: el.amount,
-                    entry_type: el.entry_type,
-                };
-                // Try to find element_id by matching element_name against payrollElements
                 var found = payrollElements.find(function(p) {
                     return p.element_name === el.element_name;
                 });
-                if (found) elObj.element_name_id = found.id;
-                $repeater.append(buildElementRow(i, elObj));
+                if (!found) {
+                    skipped.push(el.element_name || 'Deleted element');
+                    return;
+                }
+                $repeater.append(buildElementRow(i, { element_name_id: found.id, amount: el.amount, entry_type: el.entry_type }));
             });
+            if (skipped.length) {
+                $repeater.prepend('<div class="alert alert-warning small">Not shown because they are no longer kept on contracts (one-time items, or calculated by the payroll run): '
+                    + escHtml(skipped.join(', ')) + '. They are removed when you save.</div>');
+            }
+            if ($repeater.find('.element-row').length === 0) {
+                $repeater.append(buildElementRow(0, null));
+            }
         }
 
         var modal = new bootstrap.Modal(document.getElementById('elementsModal'));

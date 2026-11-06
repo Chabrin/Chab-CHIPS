@@ -182,7 +182,7 @@
                                             </div>
                                             <div class="col-md-6" id="colPaymentStart">
                                                 <label class="form-label-sm">Payment Start Date <span class="text-danger">*</span></label>
-                                                <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" min="{{ date('Y-m-d') }}" value="{{ date('Y-m-d', strtotime('+1 month')) }}">
+                                                <input type="date" class="form-control form-control-sm" id="paymentStart" name="principal_start_date" min="{{ date('Y-m-d') }}" value="{{ date('Y-m-d', strtotime('first day of next month')) }}">
                                             </div>
                                         </div>
 
@@ -403,8 +403,8 @@
 
             var currentDate = new Date(disbursement);
             for (var i = 0; i < gracePeriodMonths - 1; i++) {
+                currentDate.setDate(1); // day 1 first: stepping a month from the 31st would overflow past the next month
                 currentDate.setMonth(currentDate.getMonth() + 1);
-                currentDate.setDate(1);
                 var gInterest = Math.round(balance * rate / 100 * 100) / 100;
                 schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: 0, interest: gInterest, total_amount: gInterest, loan_balance: balance });
             }
@@ -413,8 +413,8 @@
             currentDate = new Date(principalStart);
             for (var month = 1; month <= months; month++) {
                 if (month > 1) {
+                    currentDate.setDate(1); // day 1 first: stepping a month from the 31st would overflow past the next month
                     currentDate.setMonth(currentDate.getMonth() + 1);
-                    currentDate.setDate(1);
                 }
                 var pInterest = Math.round(balance * rate / 100 * 100) / 100;
                 var principal = Math.round(principalPerMonth * 100) / 100;
@@ -524,6 +524,15 @@
             $('#cs_monthly').text(monthlyPayment > 0 ? fmt(monthlyPayment) : '—');
             $('#cs_basis').text(basisText);
         }
+
+        // Repayment starts in the next cycle: the first of the month after the disbursement date, until the user picks a date
+        var paymentStartEdited = false;
+        $('#paymentStart').on('input change', function(e) { if (e.originalEvent) { paymentStartEdited = true; } });
+        $('#issuedDate').on('change', function() {
+            if (paymentStartEdited || !this.value) { return; }
+            var parts = this.value.split('-');
+            $('#paymentStart').val(new Date(Date.UTC(+parts[0], +parts[1], 1)).toISOString().slice(0, 10));
+        });
 
         $('#issuedDate, #amount, #interestRate, #months, #paymentStart, #chequeChargeGeneral').on('change keyup', recalculate);
 

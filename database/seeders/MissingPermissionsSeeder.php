@@ -51,7 +51,10 @@ class MissingPermissionsSeeder extends Seeder
 
         $directorRoleId = DB::table('cb_roles')->where('name', 'directors')->value('id');
 
-        $permissionIds = DB::table('cb_permissions')->whereIn('name', $names)->pluck('id');
+        // Payroll approval belongs to the accountant, not directors.
+        $permissionIds = DB::table('cb_permissions')
+            ->whereIn('name', array_diff($names, ['approve_payroll_processing']))
+            ->pluck('id');
 
         $pivotRows = $permissionIds->map(fn (int $permissionId) => [
             'permission_id' => $permissionId,

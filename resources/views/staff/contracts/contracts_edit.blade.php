@@ -63,7 +63,7 @@
                                 </div>
                                 <div class="mb-3 col-12">
                                     <label for="basic_salary" class="form-label">Basic Salary</label>
-                                    <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" value="{{ $contract->basic_salary }}">
+                                    <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" step="0.01" value="{{ $contract->basic_salary }}">
                                 </div>
                                 <div class="mb-3 col-12">
                                     <label for="signed_contract" class="form-label">Signed Contract (PDF)</label>
@@ -82,10 +82,44 @@
                             </div>
                         
                             <div class="mt-4">
+                                <h3>Recurring for all staff</h3>
+                                <hr class="mb-3 mt-3">
+                                <p class="text-muted small mb-2">These apply to every staff member automatically when payroll runs, worked out from the pay on this contract. They can't be edited here.</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0" id="allStaffItems">
+                                        <thead>
+                                            <tr><th>Item</th><th>Type</th><th>How it is worked out</th><th class="text-end">Amount</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td colspan="4" class="text-muted">Enter a basic salary to see the amounts.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
                                 <h3>Staff Specific Elements</h3>
                                 <hr class="mb-4 mt-3">
+                                @if($hiddenElements->isNotEmpty())
+                                <div class="alert alert-warning">
+                                    <strong>These items are no longer kept on contracts and are removed when you save:</strong>
+                                    <ul class="mb-1">
+                                        @foreach($hiddenElements as $hidden)
+                                        <li>
+                                            {{ $hidden->payrollElement?->element_name ?? 'Deleted element' }} ({{ number_format((float) $hidden->amount, 2) }}) -
+                                            @if(!$hidden->payrollElement) the element no longer exists
+                                            @elseif($hidden->payrollElement->isOneTime()) one-time item: enter it on Monthly Payroll Items
+                                            @elseif($hidden->payrollElement->isStatutory()) calculated by the payroll run for every staff member
+                                            @else comes from the basic salary
+                                            @endif
+                                        </li>
+                                        @endforeach
+                                    </ul>
+                                    <small>The payroll run already ignores them.</small>
+                                </div>
+                                @endif
                                 <div id="elementsRepeater">
-                                    @foreach($contract->elements as $i => $element)
+                                    @foreach($visibleElements->values() as $i => $element)
                                         <div class="row element-row mb-2">
                                             <div class="mb-3 col-6">
                                                 <label class="form-label">Element</label>
@@ -103,7 +137,7 @@
                                             </div>
                                             <div class="mb-3 col-10">
                                                 <label class="form-label">Amount</label>
-                                                <input type="number" class="form-control" name="elements[{{ $i }}][amount]" min="0" value="{{ $element->amount }}">
+                                                <input type="number" class="form-control" name="elements[{{ $i }}][amount]" min="0" step="0.01" value="{{ $element->amount }}">
                                             </div>
                                             <div class="mb-3 col-2 d-flex align-items-end">
                                                 <button type="button" class="btn btn-danger remove-element-row" style="height:38px;">Remove</button>
@@ -196,99 +230,7 @@
         });
 
 
-        // Element select population function
-        function populateElementSelect($select, selectedValue = null) {
-            $.ajax({
-                url: "{{ url('/ajax/payroll/elements/list/simpler') }}",
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $select.empty();
-                    $select.append($('<option>', {
-                        value: '',
-                        text: 'Select element',
-                        disabled: true,
-                        selected: true
-                    }));
-                    if (response.elements && Array.isArray(response.elements)) {
-                        response.elements.forEach(function(el) {
-                            $select.append($('<option>', {
-                                value: el.id,
-                                text: el.element_name
-                            }));
-                        });
-                    }
-                    if ($select.hasClass("select2-hidden-accessible")) {
-                        $select.select2('destroy');
-                    }
-                    $select.select2({
-                        placeholder: 'Select Element',
-                        allowClear: true
-                    });
-                    if (selectedValue) {
-                        $select.val(selectedValue).trigger('change');
-                    }
-                },
-                error: function() {
-                    toastr.error('Failed to load payroll elements.');
-                }
-            });
-
-            $('.entry-type-select').select2({
-                placeholder: 'Select entry type',
-                allowClear: true,
-                width: '100%'
-            });
-        }
-
-        // Populate all element selects on page load
-        $('#elementsRepeater .element-row').each(function(i, row) {
-            let $select = $(row).find('.element-select');
-            let selectedValue = $select.data('selected');
-            populateElementSelect($select, selectedValue);
-        });
-
-        $('.entry-type-select').select2({
-            placeholder: 'Select entry type',
-            allowClear: true,
-            width: '100%'
-        });
-
-        // Add new element row
-        $('#addElementRow').on('click', function() {
-            let index = $('#elementsRepeater .element-row').length;
-            let $newRow = $(`
-                <div class="row element-row mb-2">
-                    <div class="mb-3 col-6">
-                        <label class="form-label">Element</label>
-                        <select class="form-select element-select" name="elements[${index}][element]"></select>
-                    </div>
-                    <div class="mb-3 col-6">
-                        <label class="form-label">Entry Type</label>
-                        <select class="form-select  entry-type-select" name="elements[${index}][entry_type]">
-                            <option value="" disabled selected>Select entry type</option>
-                            <option value="1">Allowance</option>
-                            <option value="2">Deduction</option>
-                        </select>
-                    </div>
-                    <div class="mb-3 col-10">
-                        <label class="form-label">Amount</label>
-                        <input type="number" class="form-control" name="elements[${index}][amount]" min="0">
-                    </div>
-                    <div class="mb-3 col-2 d-flex align-items-end">
-                        <button type="button" class="btn btn-danger remove-element-row" style="height:38px;">Remove</button>
-                    </div>
-                </div>
-            `);
-            $('#elementsRepeater').append($newRow);
-            populateElementSelect($newRow.find('.element-select'));
-        });
-
-        // Remove element row
-        $(document).on('click', '.remove-element-row', function() {
-            $(this).closest('.element-row').remove();
-            // Optionally, re-index names if needed for backend
-        });
+        @include('staff.contracts.partials.element-scripts')
 
         // Handle form submission spinner
         $('#staffContractCreateForm').on('submit', function() {

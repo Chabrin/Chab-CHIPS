@@ -56,6 +56,17 @@
                             <a href="{{ route('property.advances.schedule.excel', Crypt::encrypt($advance->id)) }}" class="btn btn-outline-primary btn-sm">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">table_chart</span> Excel
                             </a>
+                            @if($advance->loan_form_path)
+                            <a href="{{ route('property.advances.loan-form.download', Crypt::encrypt($advance->id)) }}" class="btn btn-outline-primary btn-sm" title="{{ $advance->loan_form_name }}">
+                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">attach_file</span> Loan Form
+                            </a>
+                            @endif
+                            @permission('update_client_advances')
+                            <input type="file" id="loanFormInput" accept=".pdf,.jpg,.jpeg,.png" class="d-none">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btnLoanForm">
+                                <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">upload_file</span> {{ $advance->loan_form_path ? 'Replace Loan Form' : 'Attach Loan Form' }}
+                            </button>
+                            @endpermission
                             <button type="button" class="btn btn-outline-primary btn-sm" id="btnEmailSchedule">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">mail</span> Email Landlord
                             </button>
@@ -702,6 +713,27 @@
             });
         });
 
+        // Attach or replace the signed loan form
+        $('#btnLoanForm').on('click', function() { $('#loanFormInput').trigger('click'); });
+        $('#loanFormInput').on('change', function() {
+            var file = this.files[0];
+            if (!file) { return; }
+            var data = new FormData();
+            data.append('loan_form', file);
+            data.append('_token', '{{ csrf_token() }}');
+            $.ajax({
+                url: '/property/advances/' + encryptedId + '/loan-form',
+                type: 'POST', data: data, processData: false, contentType: false,
+                success: function(response) {
+                    Swal.fire({ icon: 'success', title: 'Attached', text: response.message || 'Loan form attached', confirmButtonColor: '#3598db' }).then(function() { location.reload(); });
+                },
+                error: function(xhr) {
+                    Swal.fire({ icon: 'error', title: 'Error', text: (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Failed to attach the loan form', confirmButtonColor: '#3598db' });
+                }
+            });
+            this.value = '';
+        });
+
         // Create the payment voucher that pays the advance out
         $('#btnCreatePayoutVoucher').on('click', function() {
             var btn = $(this);
@@ -746,16 +778,16 @@
 
             var currentDate = new Date(disbursement);
             for (var i = 0; i < gracePeriodMonths - 1; i++) {
+                currentDate.setDate(1); // day 1 first: stepping a month from the 31st would overflow past the next month
                 currentDate.setMonth(currentDate.getMonth() + 1);
-                currentDate.setDate(1);
                 var gInterest = Math.round(balance * rate / 100 * 100) / 100;
                 schedule.push({ payment_date: currentDate.toISOString().slice(0,10), principal_amount: 0, interest: gInterest, total_amount: gInterest });
             }
             currentDate = new Date(principalStart);
             for (var month = 1; month <= months; month++) {
                 if (month > 1) {
+                    currentDate.setDate(1); // day 1 first: stepping a month from the 31st would overflow past the next month
                     currentDate.setMonth(currentDate.getMonth() + 1);
-                    currentDate.setDate(1);
                 }
                 var pInterest = Math.round(balance * rate / 100 * 100) / 100;
                 var principal = Math.round(principalPerMonth * 100) / 100;
