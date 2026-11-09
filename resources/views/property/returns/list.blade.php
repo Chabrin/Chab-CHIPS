@@ -157,13 +157,18 @@
                 },
                 {
                     data: 'payable_units',
-                    render: function(d) {
+                    render: function(d, t, r) {
                         if (!d) return '-';
                         var parts = d.split('/');
-                        if (parts.length === 2 && parts[0] !== parts[1]) {
-                            return '<span class="text-warning" title="Some units below threshold">' + d + '</span>';
+                        var why = '';
+                        if (r.not_payable_reason) {
+                            var held = parseFloat(String(r.withheld || '0').replace(/,/g, '')) > 0 ? 'Withheld ' + r.withheld + ': ' : '';
+                            why = '<br><small class="text-muted" style="font-size:0.68rem;">' + $('<div>').text(held + r.not_payable_reason).html() + '</small>';
                         }
-                        return '<span class="text-success">' + d + '</span>';
+                        if (parts.length === 2 && parts[0] !== parts[1]) {
+                            return '<span class="text-warning" title="Some units are not payable: open the return to see each one">' + d + '</span>' + why;
+                        }
+                        return '<span class="text-success">' + d + '</span>' + why;
                     }
                 },
                 {

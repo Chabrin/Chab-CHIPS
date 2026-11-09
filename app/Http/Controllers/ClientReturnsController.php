@@ -195,6 +195,9 @@ class ClientReturnsController extends Controller
                 ->whereIn('reference_number', $landlordCodes)
                 ->pluck('names', 'reference_number');
 
+            // Why units of each return are not payable, in words (a master return has no lines of its own)
+            $whyNotPayable = $this->notPayableSummaries($returns->where('return_type', '!=', 'MASTERRETURN')->pluck('return_code')->all());
+
             return response()->json([
                 'success' => true,
                 'count' => $returns->count(),
@@ -202,7 +205,7 @@ class ClientReturnsController extends Controller
                     ->map(fn($code) => ['code' => $code, 'name' => $propertyNames[$code] ?? $code])
                     ->sortBy(fn($p) => strtolower($p['name']))
                     ->values(),
-                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes) {
+                'data' => $returns->map(function ($r) use ($propertyNames, $clientNames, $coveredCodes, $whyNotPayable) {
                     $name = $clientNames[$r->landlord_code] ?? '-';
                     $num = preg_replace('/^LAN-?/i', '', $r->landlord_code ?? '');
                     return [
@@ -222,6 +225,8 @@ class ClientReturnsController extends Controller
                         'commission_amount' => number_format($r->commission_amount ?? 0, 2),
                         'net_amount' => number_format($r->net_amount ?? 0, 2),
                         'payable_units' => ($r->payable_units ?? 0) . '/' . ($r->total_units ?? 0),
+                        'withheld' => number_format($r->non_payable_amount ?? 0, 2),
+                        'not_payable_reason' => $whyNotPayable[$r->return_code] ?? '',
                         'prepared_by' => $r->prepared_by ?? '-',
                         'approved_status' => $r->approved_status,
                         'prepared_status' => $r->prepared_status,
@@ -236,6 +241,76 @@ class ClientReturnsController extends Controller
                 'message' => 'Failed to fetch returns list data'
             ], 500);
         }
+    }
+
+    /**
+     * Say in words why one return line is not payable, or an empty string when it is payable or the line has no
+     * payable status (returns loaded from the old system carry none). A rent line is withheld by the 85% rule on the
+     * tenant's previous rent invoice; any other line is withheld because the tenant has not paid it yet.
+     *
+     * @param object $line a cb_returns_clients row
+     * @return string
+     */
+    private function notPayableReason($line): string {
+        if ($line->payable_status === null || (int) $line->payable_status !== 0) {
+            return '';
+        }
+        if (($line->entry_type ?? '') !== 'RENT CURRENT') {
+            return 'Nothing collected from the tenant yet';
+        }
+
+        $percent = rtrim(rtrim(number_format((float) ($line->pay_percentage ?? 0), 2, '.', ''), '0'), '.');
+        if ($line->total_amount === null || $line->current_balance === null) {
+            return "Previous rent invoice {$percent}% paid; 85% needed";
+        }
+
+        $paid = max((float) $line->total_amount - (float) $line->current_balance, 0);
+
+        return 'Previous rent invoice ' . number_format($paid, 2) . ' of ' . number_format((float) $line->total_amount, 2) . " paid ({$percent}%); 85% needed";
+    }
+
+    /**
+     * Say in words, per return, why units of the return are not payable. Counts the rent units held back by the 85%
+     * rule, the units marked with a recovery status by hand, and the bill lines the tenant has not paid yet. A return
+     * with nothing held back has no entry.
+     *
+     * @param array $returnCodes the return codes listed on the page
+     * @return array return code => text
+     */
+    private function notPayableSummaries(array $returnCodes): array {
+        $summaries = [];
+
+        foreach (array_chunk(array_values(array_unique($returnCodes)), 500) as $codes) {
+            $lines = DB::table('cb_returns_clients')
+                ->whereIn('return_code', $codes)
+                ->where('dr_cr', 'CR')
+                ->where(fn($q) => $q->where('payable_status', 0)->orWhereIn('payable_status', [34, 35, 36, 37]))
+                ->get(['return_code', 'entry_type', 'payable_status', 'payable_status_reason', 'unit_id'])
+                ->groupBy('return_code');
+
+            foreach ($lines as $code => $group) {
+                $held = $group->filter(fn($l) => (int) $l->payable_status === 0);
+                $rentUnits = $held->where('entry_type', 'RENT CURRENT')->pluck('unit_id')->unique()->count();
+                $bills = $held->where('entry_type', '!=', 'RENT CURRENT')->count();
+                $parts = [];
+
+                if ($rentUnits > 0) {
+                    $parts[] = $rentUnits . ($rentUnits === 1 ? ' unit' : ' units') . ' held back: previous rent invoice under 85% paid';
+                }
+                foreach ($group->filter(fn($l) => (int) $l->payable_status !== 0)->groupBy('payable_status_reason') as $reason => $marked) {
+                    $parts[] = $marked->count() . ($marked->count() === 1 ? ' unit' : ' units') . ' marked ' . ($reason !== '' ? $reason : 'recovered');
+                }
+                if ($bills > 0) {
+                    $parts[] = $bills . ($bills === 1 ? ' bill' : ' bills') . ' not paid by the tenant yet';
+                }
+
+                if ($parts) {
+                    $summaries[$code] = implode('; ', $parts);
+                }
+            }
+        }
+
+        return $summaries;
     }
 
     /**
@@ -522,7 +597,7 @@ class ClientReturnsController extends Controller
                         'pay_percentage' => $d->pay_percentage ?? '',
                         'return_period' => $d->return_period ?? '-',
                         'payable_status' => (int) $d->payable_status,
-                        'payable_status_reason' => $d->payable_status_reason ?? '',
+                        'payable_status_reason' => $d->payable_status_reason ?: $this->notPayableReason($d),
                     ];
                 })
             ]);
