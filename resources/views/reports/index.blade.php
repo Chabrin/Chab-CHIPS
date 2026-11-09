@@ -136,7 +136,7 @@
                 </a>
             </div>
 
-            <div class="col-12 col-sm-6 col-lg-4 col-xl-3 report-col" data-search="statutory deductions nssf shif housing levy period">
+            <div class="col-12 col-sm-6 col-lg-4 col-xl-3 report-col" data-search="statutory deductions nssf sha housing levy period">
                 <a href="{{ route('reports.statutory.deductions') }}" class="report-card d-block text-decoration-none">
                     <div class="card border-0 shadow-sm h-100 report-card-inner">
                         <div class="card-body py-3">

@@ -67,9 +67,13 @@
                                     <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" step="0.01">
                                 </div>
                                 <div class="mb-3 col-12">
-                                    <label for="signed_contract" class="form-label">Signed Contract (PDF)</label>
+                                    <label for="signed_contract" class="form-label">Signed Contract (PDF) <span class="text-muted small">- optional</span></label>
+                                    <div id="signed_contract_on_file" class="d-none mb-1">
+                                        <span class="text-success">Already on file from when the staff member was added: <a href="#" id="signed_contract_on_file_link" target="_blank"></a></span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 ms-2" id="signed_contract_replace">Upload a different file</button>
+                                    </div>
                                     <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf">
-                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB).</small>
+                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB). A signed contract already uploaded for the staff member is used automatically.</small>
                                     @error('signed_contract')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -130,8 +134,37 @@
         </div>
     </div>
 </div>
+<script src="{{ asset('assets/js/payroll-all-staff-rows.js') }}?v={{ filemtime(public_path('assets/js/payroll-all-staff-rows.js')) }}"></script>
 <script>
     $(document).ready(function() {
+
+        // ── Signed contract already uploaded with the staff record ───────
+        var staffSignedContracts = {{ \Illuminate\Support\Js::from($staffSignedContracts) }};
+        var replacingSignedContract = false;
+
+        function showSignedContractOnFile() {
+            var onFile = staffSignedContracts[$('#staff_id').val()];
+            var greyedOut = !!onFile && !replacingSignedContract;
+
+            $('#signed_contract_on_file').toggleClass('d-none', !greyedOut);
+            if (onFile) {
+                $('#signed_contract_on_file_link').text(onFile.name).attr('href', "{{ url('/documents') }}/" + onFile.id + '/view');
+            }
+            // A disabled file box is not sent, so the contract takes the file already on record
+            $('#signed_contract').prop('disabled', greyedOut);
+            if (greyedOut) {
+                $('#signed_contract').val('');
+            }
+        }
+
+        $('#staff_id').on('change', function() {
+            replacingSignedContract = false;
+            showSignedContractOnFile();
+        });
+        $('#signed_contract_replace').on('click', function() {
+            replacingSignedContract = true;
+            showSignedContractOnFile();
+        });
 
         // ── Staff dropdown ───────────────────────────────────────────────────
         $.ajax({
@@ -172,6 +205,8 @@
                     placeholder: 'Select Staff',
                     allowClear: true
                 });
+
+                showSignedContractOnFile();
             },
             error: function() {
                 toastr.error('Failed to load staff.');

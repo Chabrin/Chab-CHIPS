@@ -73,8 +73,15 @@
                                         <span class="text-muted small">- uploading a new file replaces it</span>
                                     </div>
                                     @endif
-                                    <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf">
-                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB).</small>
+                                    @if($staffCopy)
+                                    <div id="signed_contract_on_file" class="mb-1">
+                                        <span class="text-success">Already on file from when the staff member was added: <a href="{{ route('documents.view', $staffCopy->id) }}" target="_blank">{{ $staffCopy->file_name }}</a></span>
+                                        <span class="text-muted small">- attached to this contract when you save</span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 ms-2" id="signed_contract_replace">Upload a different file</button>
+                                    </div>
+                                    @endif
+                                    <input type="file" class="form-control @error('signed_contract') is-invalid @enderror" name="signed_contract" id="signed_contract" accept=".pdf,application/pdf" @if($staffCopy) disabled @endif>
+                                    <small class="text-muted">Upload the physically signed contract as a PDF (max 5MB). It is optional.</small>
                                     @error('signed_contract')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
@@ -154,8 +161,15 @@
         </div>
     </div>
 </div>
+<script src="{{ asset('assets/js/payroll-all-staff-rows.js') }}?v={{ filemtime(public_path('assets/js/payroll-all-staff-rows.js')) }}"></script>
 <script>
     $(document).ready(function() {
+
+        // Choose a different file instead of the one already on record
+        $('#signed_contract_replace').on('click', function() {
+            $('#signed_contract').prop('disabled', false);
+            $('#signed_contract_on_file').addClass('d-none');
+        });
 
         $.ajax({
             url: "{{ url('/ajax/hr/staff/list') }}",

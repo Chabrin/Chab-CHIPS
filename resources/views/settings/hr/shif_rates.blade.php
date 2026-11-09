@@ -11,7 +11,7 @@
                             @permission('create_shif_rates')
                             <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addShifRateModal">
                                 <span class="material-symbols-outlined">add_circle</span>
-                                <span class="ms-1">Add Shif Rate</span>
+                                <span class="ms-1">Add SHA Rate</span>
                             </button>
                             @endpermission
                         </div>
@@ -41,12 +41,12 @@
         </div>
     </div>
 </div>
-<!-- Add/Edit Shift Rate Modal -->
+<!-- Add/Edit SHA Rate Modal -->
 <div class="modal fade" id="addShifRateModal" aria-hidden="true">
     <div class="modal-dialog modal-md">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="addShifRateModalLabel">Add Shif Rate</h5>
+                <h5 class="modal-title" id="addShifRateModalLabel">Add SHA Rate</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -91,7 +91,7 @@
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                 },
                 dataType: 'json',
-                dataSrc: 'shiftrates'
+                dataSrc: 'sharates'
             },
             columns: [
                 {
@@ -226,7 +226,7 @@
             var $btn = $(this);
             var $icon = $btn.find('.material-symbols-outlined').first();
     
-            if (!confirm('Are you sure you want to delete this shif rate?')) {
+            if (!confirm('Are you sure you want to delete this SHA rate?')) {
                 return;
             }
     

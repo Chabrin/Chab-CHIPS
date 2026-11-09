@@ -205,7 +205,7 @@ pin"),
             'full_names' => 'Example Staff', 'gender' => 'Female', 'birth_date' => '1995-02-03', 'birth_place' => 'Nakuru',
             'national_id' => '12345678', 'marital' => 'Single', 'citizenship' => 'RESIDENT', 'disability' => 'NO',
             'mobile_number' => '0700000000', 'personal_email' => 'me@example.test', 'district' => 'Nakuru East',
-            'location' => 'Milimani', 'sub_location' => 'Section 58', 'kins_names' => 'Jane Example',
+            'location' => 'Milimani', 'sub_location' => 'Section 58', 'kins_names' => 'Jane Example', 'kins_relationship' => 'Sibling',
             'bank_name' => 1, 'account_name' => 'Example Staff', 'account_number' => '001', 'pin_number' => 'A001',
             'nhif_number' => 'SHA1', 'nssf_number' => 'NSSF1',
             'documents' => [
@@ -219,6 +219,7 @@ pin"),
         $this->assertSame('Nakuru', $submission['birth_place']);
         $this->assertSame('Section 58', $submission['sub_location']);
         $this->assertSame('Jane Example', $submission['kins_names']);
+        $this->assertSame('Sibling', $submission['kins_relationship']);
         $this->assertArrayNotHasKey('documents', $submission);
         $this->assertCount(2, $submission['onboarding_documents']);
         $this->assertTrue(Storage::disk('local')->exists($submission['staff_photo_path']));

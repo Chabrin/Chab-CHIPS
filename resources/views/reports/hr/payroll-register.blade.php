@@ -104,7 +104,7 @@ $(function () {
             { data: 'gross', className: 'text-end' },
             { data: 'paye', className: 'text-end' },
             { data: 'nssf', className: 'text-end' },
-            { data: 'shif', className: 'text-end' },
+            { data: 'sha', className: 'text-end' },
             { data: 'housing_levy', className: 'text-end' },
             { data: 'total_deductions', className: 'text-end' },
             { data: 'net_pay', className: 'text-end' }
@@ -127,7 +127,7 @@ $(function () {
                 if (!res.success) { toastr.error(res.message || 'Failed to load report'); return; }
                 reportDT.clear().rows.add(res.data).draw();
                 var t = res.totals;
-                $('#reportFoot').html('<tr><td colspan="4">TOTALS</td><td class="text-end">' + t.basic_salary + '</td><td class="text-end">' + t.allowances + '</td><td class="text-end">' + t.gross + '</td><td class="text-end">' + t.paye + '</td><td class="text-end">' + t.nssf + '</td><td class="text-end">' + t.shif + '</td><td class="text-end">' + t.housing_levy + '</td><td class="text-end">' + t.total_deductions + '</td><td class="text-end">' + t.net_pay + '</td></tr>');
+                $('#reportFoot').html('<tr><td colspan="4">TOTALS</td><td class="text-end">' + t.basic_salary + '</td><td class="text-end">' + t.allowances + '</td><td class="text-end">' + t.gross + '</td><td class="text-end">' + t.paye + '</td><td class="text-end">' + t.nssf + '</td><td class="text-end">' + t.sha + '</td><td class="text-end">' + t.housing_levy + '</td><td class="text-end">' + t.total_deductions + '</td><td class="text-end">' + t.net_pay + '</td></tr>');
                 $('#resultsInfo').text(res.count + ' employee(s) found');
                 $('#exportBtn').prop('disabled', false);
             },

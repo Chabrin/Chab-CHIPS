@@ -117,6 +117,7 @@ class StaffOnboardingController extends Controller
             'location' => 'nullable|string|max:255',
             'sub_location' => 'nullable|string|max:255',
             'kins_names' => 'nullable|string|max:255',
+            'kins_relationship' => 'required_with:kins_names|nullable|in:' . implode(',', Staff::KIN_RELATIONSHIPS),
             'bank_name' => 'required|integer|exists:sys_set_banks,id',
             'account_name' => 'required|string|max:255',
             'account_number' => 'required|string|max:255',
@@ -129,7 +130,7 @@ class StaffOnboardingController extends Controller
             'documents.cv' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'documents.academic' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
             'staff_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
-        ]);
+        ], [], ['kins_names' => 'next of kin names', 'kins_relationship' => 'relationship']);
         unset($data['documents'], $data['staff_photo'], $data['signature_file'], $data['signature_data']);
         $files = [];
         foreach (array_keys(StaffOnboardingInvitation::DOCUMENT_TYPES) as $type) {
@@ -187,6 +188,7 @@ class StaffOnboardingController extends Controller
                 'Address' => $data['address'] ?? null, 'District' => $data['district'] ?? null,
                 'Location' => $data['location'] ?? null, 'Sub Location' => $data['sub_location'] ?? null,
                 'Next of Kin Names' => $data['kins_names'] ?? null,
+                'Next of Kin Relationship' => $data['kins_relationship'] ?? null,
             ],
             'Banking & Statutory' => [
                 'Bank' => $bank, 'Account Name' => $data['account_name'] ?? null,
