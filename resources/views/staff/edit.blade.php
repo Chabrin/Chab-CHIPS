@@ -540,10 +540,22 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                        <div class="col-md-12 mb-3">
+                                        <div class="col-md-8 mb-3">
                                             <label for="kins_names" class="form-label">Next of Kin Names</label>
                                             <input type="text" class="form-control @error('kins_names') is-invalid @enderror" id="kins_names" name="kins_names" value="{{ old('kins_names', $staff->kins_names) }}">
                                             @error('kins_names')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="kins_relationship" class="form-label">Relationship to Staff</label>
+                                            <select class="form-select @error('kins_relationship') is-invalid @enderror" id="kins_relationship" name="kins_relationship">
+                                                <option value="">Select Relationship</option>
+                                                @foreach(\App\Models\Staff::KIN_RELATIONSHIPS as $relationship)
+                                                <option value="{{ $relationship }}" {{ old('kins_relationship', $staff->kins_relationship) == $relationship ? 'selected' : '' }}>{{ $relationship }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('kins_relationship')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>

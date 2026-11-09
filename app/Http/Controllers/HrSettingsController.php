@@ -17,6 +17,7 @@ use App\Models\Communication;
 use App\Models\PublicHoliday;
 use App\Models\PayrollElement;
 use App\Services\ErrorDispatcher;
+use App\Services\NssfCalculator;
 use App\Models\ZoneAssignmentType;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -855,7 +856,7 @@ public function positionsDropdowns(Request $request)
         }
     }
 
-    // Shift Rates Settings
+    // SHA Rates Settings
     public function shifRatesIndex()
     {
         return view('settings.hr.shif_rates');
@@ -880,14 +881,14 @@ public function positionsDropdowns(Request $request)
                 ];
             });
 
-            return response()->json(['shiftrates' => $rates]);
+            return response()->json(['sharates' => $rates]);
         } catch (\Exception $e) {
             try {
                 ErrorDispatcher::dispatch($e);
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['error' => 'Failed to load shift rates'], 500);
+            return response()->json(['error' => 'Failed to load SHA rates'], 500);
         }
     }
 
@@ -907,7 +908,7 @@ public function positionsDropdowns(Request $request)
             $rate->date_time = now();
             $rate->save();
 
-            return response()->json(['success' => true, 'shiftrate' => $rate]);
+            return response()->json(['success' => true, 'sharate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -916,7 +917,7 @@ public function positionsDropdowns(Request $request)
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to save shift rate'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to save SHA rate'], 500);
         }
     }
 
@@ -933,7 +934,7 @@ public function positionsDropdowns(Request $request)
             $rate->from_date = $validated['from_date'] . ' 00:00:00';
             $rate->save();
 
-            return response()->json(['success' => true, 'shiftrate' => $rate]);
+            return response()->json(['success' => true, 'sharate' => $rate]);
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
@@ -942,7 +943,7 @@ public function positionsDropdowns(Request $request)
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to update shift rate'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to update SHA rate'], 500);
         }
     }
 
@@ -958,28 +959,34 @@ public function positionsDropdowns(Request $request)
             } catch (\Exception $ex) {
                 Log::error('Failed dispatching error via ErrorDispatcher: ' . $ex->getMessage());
             }
-            return response()->json(['success' => false, 'error' => 'Failed to delete shift rate'], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to delete SHA rate'], 500);
         }
     }
 
     // NSSF Rates Settings
     public function nssfRatesIndex()
     {
-        return view('settings.hr.nssf_rates');
+        // What payroll is using today, so HR can see whether a row is in force or the standard figures apply
+        return view('settings.hr.nssf_rates', ['inUse' => app(NssfCalculator::class)->settingsFor()]);
     }
 
     public function nssfRatesList()
     {
         try {
-            $rates = NssfRate::with('createdBy')->orderBy('from_date', 'desc')->get()->map(function ($rate) {
+            $inUseId = app(NssfCalculator::class)->settingsFor()['id'];
+
+            $rates = NssfRate::with('createdBy')->orderBy('from_date', 'desc')->get()->map(function ($rate) use ($inUseId) {
                 return [
                     'id' => $rate->id,
                     'from_date' => $rate->from_date ? substr($rate->from_date, 0, 10) : null,
-                    'base_id' => $rate->base_id,
                     'employee_perc' => $rate->employee_perc,
                     'employer_perc' => $rate->employer_perc,
+                    'lower_earnings_limit' => $rate->lower_earnings_limit,
+                    'upper_earnings_limit' => $rate->upper_earnings_limit,
                     'maximum_contribution' => $rate->maximum_contribution,
-                    'taxable' => $rate->taxable,
+                    'tier1_name' => $rate->tier1_name,
+                    'tier2_name' => $rate->tier2_name,
+                    'in_use' => $rate->id === $inUseId,
                     'current_status_id' => $rate->current_status_id,
                     'created_by' => $rate->createdBy ? [
                         'id' => $rate->createdBy->id,
@@ -1005,25 +1012,9 @@ public function positionsDropdowns(Request $request)
     public function nssfRatesStore(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'rate' => 'required|numeric|min:0|max:100',
-                'from_date' => 'required|date',
-                'base_id' => 'nullable|integer',
-                'employee_perc' => 'required|numeric|min:0|max:100',
-                'employer_perc' => 'required|numeric|min:0|max:100',
-                'maximum_contribution' => 'required|numeric|min:0',
-                'taxable' => 'required|boolean',
-            ]);
-
             $rate = new NssfRate();
-            $rate->rate = $validated['rate'];
-            $rate->from_date = $validated['from_date'] . ' 00:00:00';
-            $rate->base_id = $validated['base_id'] ?? null;
-            $rate->employee_perc = $validated['employee_perc'];
-            $rate->employer_perc = $validated['employer_perc'];
-            $rate->maximum_contribution = $validated['maximum_contribution'];
-            $rate->taxable = $validated['taxable'];
-            $rate->current_status_id = 5;
+            $this->fillNssfRate($rate, $this->nssfRateInput($request));
+            $rate->current_status_id = NssfRate::ACTIVE;
             $rate->created_by_id = Auth::id();
             $rate->date_time = now();
             $rate->save();
@@ -1044,24 +1035,8 @@ public function positionsDropdowns(Request $request)
     public function nssfRatesUpdate(Request $request, $id)
     {
         try {
-            $validated = $request->validate([
-                'rate' => 'required|numeric|min:0|max:100',
-                'from_date' => 'required|date',
-                'base_id' => 'nullable|integer',
-                'employee_perc' => 'required|numeric|min:0|max:100',
-                'employer_perc' => 'required|numeric|min:0|max:100',
-                'maximum_contribution' => 'required|numeric|min:0',
-                'taxable' => 'required|boolean',
-            ]);
-
             $rate = NssfRate::findOrFail($id);
-            $rate->rate = $validated['rate'];
-            $rate->from_date = $validated['from_date'] . ' 00:00:00';
-            $rate->base_id = $validated['base_id'] ?? null;
-            $rate->employee_perc = $validated['employee_perc'];
-            $rate->employer_perc = $validated['employer_perc'];
-            $rate->maximum_contribution = $validated['maximum_contribution'];
-            $rate->taxable = $validated['taxable'];
+            $this->fillNssfRate($rate, $this->nssfRateInput($request, (int) $rate->id));
             $rate->save();
 
             return response()->json(['success' => true, 'nssfrate' => $rate]);
@@ -1075,6 +1050,51 @@ public function positionsDropdowns(Request $request)
             }
             return response()->json(['success' => false, 'error' => 'Failed to update NSSF rate'], 500);
         }
+    }
+
+    /** What a NSSF rate row needs. $ignoreId is the row being edited, so it does not clash with itself on the From Date. */
+    private function nssfRateInput(Request $request, ?int $ignoreId = null): array
+    {
+        return $request->validate([
+            'from_date' => ['required', 'date', function ($attribute, $value, $fail) use ($ignoreId) {
+                $taken = NssfRate::whereDate('from_date', $value)
+                    ->where('current_status_id', NssfRate::ACTIVE)
+                    ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
+                    ->exists();
+                if ($taken) {
+                    $fail('A rate already starts on this date. Edit that one instead.');
+                }
+            }],
+            'employee_perc' => 'required|numeric|gt:0|max:100',
+            'employer_perc' => 'required|numeric|min:0|max:100',
+            'lower_earnings_limit' => 'required|numeric|min:0',
+            'upper_earnings_limit' => 'required|numeric|gt:lower_earnings_limit',
+            'tier1_name' => 'nullable|string|max:60',
+            'tier2_name' => 'nullable|string|max:60',
+        ], [
+            'upper_earnings_limit.gt' => 'The Tier II limit must be higher than the Tier I limit.',
+        ], [
+            'from_date' => 'from date',
+            'employee_perc' => 'employee %',
+            'employer_perc' => 'employer %',
+            'lower_earnings_limit' => 'Tier I limit',
+            'upper_earnings_limit' => 'Tier II limit',
+            'tier1_name' => 'Tier I name',
+            'tier2_name' => 'Tier II name',
+        ]);
+    }
+
+    private function fillNssfRate(NssfRate $rate, array $input): void
+    {
+        $rate->from_date = \Carbon\Carbon::parse($input['from_date'])->toDateString() . ' 00:00:00';
+        $rate->employee_perc = $input['employee_perc'];
+        $rate->employer_perc = $input['employer_perc'];
+        $rate->lower_earnings_limit = $input['lower_earnings_limit'];
+        $rate->upper_earnings_limit = $input['upper_earnings_limit'];
+        // The most one person pays: the rate on pay up to the Tier II limit
+        $rate->maximum_contribution = round($input['upper_earnings_limit'] * $input['employee_perc'] / 100, 2);
+        $rate->tier1_name = $input['tier1_name'] ?? null;
+        $rate->tier2_name = $input['tier2_name'] ?? null;
     }
 
     public function nssfRatesDelete($id)

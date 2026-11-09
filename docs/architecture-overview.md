@@ -92,7 +92,7 @@ public/assets/           ~50 vendored JS/CSS plugin folders (jQuery, Bootstrap, 
    landlord ledger posting.
 4. **Reporting** — 29 distinct reports across two large controllers (Accounts, Property).
 5. **HR/Staff** — staff master records, contracts, zone assignments, user-account linking.
-6. **Payroll** — payroll cycles, Kenyan statutory tax calculation (PAYE/NSSF/SHIF/Housing Levy).
+6. **Payroll** — payroll cycles, Kenyan statutory tax calculation (PAYE/NSSF/SHA/Housing Levy).
 7. **Leave Management** — leave requests/balances, its own two-stage approval chain.
 8. **Discipline Tracking** — a purpose-built 14-step disciplinary case workflow.
 9. **Finance/GL** — chart of accounts, GL postings, cheques, vouchers, transaction types.
@@ -384,7 +384,7 @@ which feeds the landlord ledger (`cb_landlord_account`) and the 4-level Returns 
 3. **Returns cycle**: periodic generation → rent-line extraction → threshold rule → deductions →
    summary aggregation → (optional) master-return merging across properties → 4-level approval
    (`ReturnsApprovalController`) → landlord ledger posting → payment/voucher.
-4. **Payroll cycle**: period selection → per-contract PAYE/NSSF/SHIF/Housing-Levy calculation →
+4. **Payroll cycle**: period selection → per-contract PAYE/NSSF/SHA/Housing-Levy calculation →
    payslip generation → (separately, manually triggered) payslip email with optional PDF
    password-encryption.
 5. **Discipline case**: 14 fixed steps from incident report through investigator assignment,

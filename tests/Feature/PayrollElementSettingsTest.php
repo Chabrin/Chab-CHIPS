@@ -396,6 +396,37 @@ class PayrollElementSettingsTest extends TestCase
         $this->assertTrue($empty->every(fn ($row) => $row['amount'] === null));
     }
 
+    public function test_the_all_staff_preview_splits_nssf_into_its_tiers(): void
+    {
+        $this->actingWithElementPermissions();
+        DB::table('sys_hr_payroll_elements')->whereIn('id', [self::NSSF, self::SHA, self::HOUSING_LEVY])->update(['applies_to' => 'all']);
+
+        $rows = collect($this->getJson('/ajax/payroll/elements/all-staff-preview?basic=50000')->assertOk()->json('elements'))->keyBy('name');
+
+        $tiers = $rows['NSSF']['breakdown'];
+        $this->assertSame(['Tier I (NSSF)', 'Tier II (Britam)'], array_column($tiers, 'name'));
+        $this->assertEquals([540, 2460], array_column($tiers, 'amount'));
+        $this->assertSame(['6% of pay up to 9,000', '6% of pay from 9,000 up to 108,000'], array_column($tiers, 'how'));
+        $this->assertEquals($rows['NSSF']['amount'], array_sum(array_column($tiers, 'amount'))); // the total is the tiers added up
+        $this->assertNull($rows['SHA']['breakdown']);
+        $this->assertNull($rows['Housing Levy']['breakdown']);
+    }
+
+    public function test_pay_inside_tier_one_shows_nothing_for_tier_two_and_no_pay_shows_no_amounts(): void
+    {
+        $this->actingWithElementPermissions();
+        DB::table('sys_hr_payroll_elements')->where('id', self::NSSF)->update(['applies_to' => 'all']);
+        $nssf = fn (int $basic) => collect($this->getJson("/ajax/payroll/elements/all-staff-preview?basic={$basic}")->assertOk()->json('elements'))->firstWhere('name', 'NSSF');
+
+        $small = $nssf(5000);
+        $this->assertEquals([300, 0], array_column($small['breakdown'], 'amount'));
+        $this->assertEquals(300, $small['amount']);
+
+        $none = $nssf(0);
+        $this->assertSame([null, null], array_column($none['breakdown'], 'amount'));
+        $this->assertNull($none['amount']);
+    }
+
     // ── contract rows ─────────────────────────────────────────────────
 
     private function contractRows(array $elementIds): array

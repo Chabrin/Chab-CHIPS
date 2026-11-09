@@ -78,11 +78,11 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Add New Staff</h4>
                         <div class="ms-auto d-flex gap-2">
-                            <button type="submit" form="staffCreateForm" class="btn btn-primary btn-sm d-flex align-items-center" id="createButton">
+                            {{-- <button type="submit" form="staffCreateForm" class="btn btn-primary btn-sm d-flex align-items-center" id="createButton">
                                 <span class="spinner-border spinner-border-sm me-2 d-none" id="submitSpinner"></span>
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
                                 <span>Save Staff</span>
-                            </button>
+                            </button> --}}
                             <a href="{{ route('staff.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -300,6 +300,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             </div>
                                         </div>
                                     </div>
+                                    @include('staff.partials.step-footer')
                                 </div>
 
                                 <!-- Employment Details Tab -->
@@ -399,6 +400,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             </div>
                                         </div>
                                     </div>
+                                    @include('staff.partials.step-footer')
                                 </div>
 
                                 <!-- Contact Information Tab -->
@@ -458,14 +460,27 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
-                                        <div class="col-md-12 mb-3">
+                                        <div class="col-md-8 mb-3">
                                             <label for="kins_names" class="form-label">Next of Kin Names</label>
                                             <input type="text" class="form-control @error('kins_names') is-invalid @enderror" id="kins_names" name="kins_names" value="{{ $val('kins_names') }}">
                                             @error('kins_names')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="kins_relationship" class="form-label">Relationship to Staff</label>
+                                            <select class="form-select @error('kins_relationship') is-invalid @enderror" id="kins_relationship" name="kins_relationship">
+                                                <option value="">Select Relationship</option>
+                                                @foreach(\App\Models\Staff::KIN_RELATIONSHIPS as $relationship)
+                                                <option value="{{ $relationship }}" {{ $val('kins_relationship') == $relationship ? 'selected' : '' }}>{{ $relationship }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('kins_relationship')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
                                     </div>
+                                    @include('staff.partials.step-footer')
                                 </div>
 
                                 <!-- Banking & Statutory Tab -->
@@ -521,6 +536,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             @enderror
                                         </div>
                                     </div>
+                                    @include('staff.partials.step-footer')
                                 </div>
                                 <!-- Documentation section  -->
                                 <div class="tab-pane fade" id="documents" role="tabpanel" aria-labelledby="documents-tab">
@@ -596,6 +612,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             ])
                                         </div>
                                     </div>
+                                    @include('staff.partials.step-footer')
                                 </div>
 
                                 @if($canCreateUsers)
@@ -633,6 +650,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             @enderror
                                         </div>
                                     </div>
+                                    @include('staff.partials.step-footer')
                                 </div>
                                 @endif
                             </div>
@@ -823,6 +841,15 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
         }
     });
 
+    // The relationship is needed as soon as a next of kin name is typed
+    (function () {
+        var kinName = document.getElementById('kins_names');
+        var kinRelationship = document.getElementById('kins_relationship');
+        function syncKinRelationship() { kinRelationship.required = kinName.value.trim() !== ''; }
+        kinName.addEventListener('input', syncKinRelationship);
+        syncKinRelationship();
+    })();
+
     // Live preview of the selected staff photo
     document.getElementById('photo-input').addEventListener('change', function(e) {
         if (e.target.files && e.target.files[0]) {
@@ -900,5 +927,6 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
     }
 });
 </script>
+<script src="{{ asset('assets/js/staff-form-steps.js') }}?v={{ filemtime(public_path('assets/js/staff-form-steps.js')) }}"></script>
 @include('staff.partials.upload-duplicate-check')
 @endsection

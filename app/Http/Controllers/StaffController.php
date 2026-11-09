@@ -63,6 +63,8 @@ class StaffController extends Controller
         'pin_number' => 'KRA PIN number',
         'nhif_number' => 'SHA number',
         'nssf_number' => 'NSSF number',
+        'kins_names' => 'next of kin name',
+        'kins_relationship' => 'next of kin relationship',
         'login_email' => 'login email',
         'documents.national_id' => 'National ID / Passport copy',
         'documents.kra_pin' => 'KRA PIN certificate',
@@ -447,6 +449,7 @@ class StaffController extends Controller
                 'marital' => 'required|string',
                 'spouse_name' => 'nullable|string|max:255',
                 'kins_names' => 'nullable|string|max:255',
+                'kins_relationship' => 'required_with:kins_names|nullable|in:' . implode(',', Staff::KIN_RELATIONSHIPS),
                 'district' => 'nullable|string|max:255',
                 'location' => 'nullable|string|max:255',
                 'sub_location' => 'nullable|string|max:255',
@@ -711,25 +714,61 @@ class StaffController extends Controller
     }
 
     /**
-     * Attach the physically signed contract (PDF) to a contract, replacing any earlier upload for that contract.
+     * Attach the physically signed contract (PDF) to a contract, replacing any earlier PDF on that contract.
+     * With no upload, or the same file picked again, the signed contract already uploaded with the staff record is
+     * used instead, so HR never uploads it twice. Returns true when that earlier upload was attached.
      */
-    private function saveSignedContract(Contract $contract, UploadedFile $file): void {
-        app(EmployeeUploadGuard::class)->validate(['signed_contract' => $file], (int) $contract->staff_id);
-
-        $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
-        if (!$typeId) {
-            throw new \RuntimeException('Document type missing: Signed Employment Contract');
-        }
-
-        $staff = Staff::findOrFail($contract->staff_id);
+    private function saveSignedContract(Contract $contract, ?UploadedFile $file): bool {
+        $staffCopy = $this->unattachedSignedContract((int) $contract->staff_id);
         $previous = EmployeeDocument::where('contract_id', $contract->id)->get();
 
-        $document = $this->saveEmployeeDocument($staff, $typeId, 'Signed contract ' . date('d M Y', strtotime($contract->date_start)) . ' - ' . date('d M Y', strtotime($contract->date_end)), $file);
-        $document->update(['contract_id' => $contract->id]);
+        if ($file && !($staffCopy && $this->hasSameContents($staffCopy, $file))) {
+            app(EmployeeUploadGuard::class)->validate(['signed_contract' => $file], (int) $contract->staff_id);
 
-        foreach ($previous as $old) {
-            Storage::disk('local')->delete($old->file_path);
-            $old->delete();
+            $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
+            if (!$typeId) {
+                throw new \RuntimeException('Document type missing: Signed Employment Contract');
+            }
+
+            $staff = Staff::findOrFail($contract->staff_id);
+            $document = $this->saveEmployeeDocument($staff, $typeId, 'Signed contract ' . date('d M Y', strtotime($contract->date_start)) . ' - ' . date('d M Y', strtotime($contract->date_end)), $file);
+            $document->update(['contract_id' => $contract->id]);
+            $this->discardDocuments($previous);
+
+            return false;
+        }
+
+        // Nothing on file to use, or no new upload and the contract already has its PDF
+        if (!$staffCopy || (!$file && $previous->isNotEmpty())) {
+            return false;
+        }
+
+        $staffCopy->update(['contract_id' => $contract->id]);
+        $this->discardDocuments($previous);
+
+        return true;
+    }
+
+    /**
+     * The signed contract PDF uploaded with the staff record, while no contract has claimed it.
+     */
+    private function unattachedSignedContract(int $staffId): ?EmployeeDocument {
+        $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
+
+        return $typeId
+            ? EmployeeDocument::where('employee_id', $staffId)->where('document_type_id', $typeId)->whereNull('contract_id')->latest('id')->first()
+            : null;
+    }
+
+    private function hasSameContents(EmployeeDocument $document, UploadedFile $file): bool {
+        return Storage::disk('local')->exists($document->file_path)
+            && hash('sha256', Storage::disk('local')->get($document->file_path)) === hash_file('sha256', $file->getRealPath());
+    }
+
+    private function discardDocuments($documents): void {
+        foreach ($documents as $document) {
+            Storage::disk('local')->delete($document->file_path);
+            $document->delete();
         }
     }
 
@@ -897,6 +936,7 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             'marital' => 'required|string',
             'spouse_name' => 'nullable|string|max:255',
             'kins_names' => 'nullable|string|max:255',
+            'kins_relationship' => 'nullable|in:' . implode(',', Staff::KIN_RELATIONSHIPS),
             'district' => 'nullable|string|max:255',
             'location' => 'nullable|string|max:255',
             'sub_location' => 'nullable|string|max:255',
@@ -1040,7 +1080,14 @@ private function syncStaffFiles(Request $request, Staff $staff): array
 
     public function contractsCreate()
     {
-        return view('staff.contracts.contracts_create');
+        // Staff whose signed contract was uploaded with the staff record, so the form can show it instead of asking again
+        $typeId = DocumentType::where('name', 'Signed Employment Contract')->value('id');
+        $staffSignedContracts = $typeId
+            ? EmployeeDocument::where('document_type_id', $typeId)->whereNull('contract_id')->orderBy('id')->get(['id', 'employee_id', 'file_name'])
+                ->mapWithKeys(fn ($document) => [$document->employee_id => ['id' => $document->id, 'name' => $document->file_name]])
+            : collect();
+
+        return view('staff.contracts.contracts_create', compact('staffSignedContracts'));
     }
 
     public function contractsEdit($encryptedId)
@@ -1052,7 +1099,9 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         // Rows the run no longer reads from a contract are shown as a notice, and cleared when the contract is saved
         [$visibleElements, $hiddenElements] = $contract->elements->partition(fn ($row) => $row->payrollElement?->canBeOnContract());
 
-        return view('staff.contracts.contracts_edit', compact('contract', 'visibleElements', 'hiddenElements'));
+        $staffCopy = $contract->signedDocument ? null : $this->unattachedSignedContract((int) $contract->staff_id);
+
+        return view('staff.contracts.contracts_edit', compact('contract', 'visibleElements', 'hiddenElements', 'staffCopy'));
     }
 
    public function contractList()
@@ -1146,31 +1195,32 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             $elementRows = $this->contractElementRows($validated['elements'] ?? []);
             $staff = Staff::find($validated['staff_id']);
 
-            // Create contract
-            $contract = new Contract();
-            $contract->staff_id = $validated['staff_id'];
-            $contract->position_id = $validated['staff_positions'];
-            $contract->date_start = $validated['date_start'] . ' 00:00:00';
-            $contract->date_end = $validated['date_end'] . ' 00:00:00';
-            $contract->basic_salary = $validated['basic_salary'];
-            $contract->current_status_id = 5; // Active
-            $contract->created_by = Auth::id();
-            $contract->date_time = now();
-            $contract->staff_number = $staff->staff_number ?? null;
-            $contract->save();
+            // All or nothing: a rejected PDF must not leave a half-saved contract behind to be entered again
+            $usedStaffCopy = DB::transaction(function () use ($validated, $staff, $elementRows, $request) {
+                // Create contract
+                $contract = new Contract();
+                $contract->staff_id = $validated['staff_id'];
+                $contract->position_id = $validated['staff_positions'];
+                $contract->date_start = $validated['date_start'] . ' 00:00:00';
+                $contract->date_end = $validated['date_end'] . ' 00:00:00';
+                $contract->basic_salary = $validated['basic_salary'];
+                $contract->current_status_id = 5; // Active
+                $contract->created_by = Auth::id();
+                $contract->date_time = now();
+                $contract->staff_number = $staff->staff_number ?? null;
+                $contract->save();
 
-            // Store contract elements
-            foreach ($elementRows as $row) {
-                $contract->elements()->create($row);
-            }
+                // Store contract elements
+                foreach ($elementRows as $row) {
+                    $contract->elements()->create($row);
+                }
 
-            ContractChange::contractCreated($contract, Auth::id());
+                ContractChange::contractCreated($contract, Auth::id());
 
-            if ($request->hasFile('signed_contract')) {
-                $this->saveSignedContract($contract, $request->file('signed_contract'));
-            }
+                return $this->saveSignedContract($contract, $request->file('signed_contract'));
+            });
 
-            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract created successfully');
+            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract created successfully' . ($usedStaffCopy ? '. The signed contract uploaded with the staff record is attached to it.' : ''));
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {
@@ -1229,11 +1279,9 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             ContractChange::salary($contract, $oldSalary, $contract->basic_salary, Auth::id());
             ContractChange::elements($contract, $oldElements, array_map('floatval', array_column($elementRows, 'amount', 'element_id')), Auth::id());
 
-            if ($request->hasFile('signed_contract')) {
-                $this->saveSignedContract($contract, $request->file('signed_contract'));
-            }
+            $usedStaffCopy = $this->saveSignedContract($contract, $request->file('signed_contract'));
 
-            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract updated successfully');
+            return redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Contract updated successfully' . ($usedStaffCopy ? '. The signed contract uploaded with the staff record is attached to it.' : ''));
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors())->withInput();
         } catch (\Exception $e) {

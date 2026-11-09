@@ -304,8 +304,9 @@ class PayrollController extends Controller
         $basic = max(0, (float) $request->query('basic', 0));
         $gross = $basic + max(0, (float) $request->query('allowances', 0));
 
-        $nssf = $this->nssfCalculator->calculate($gross)['total'];
-        $sha = $this->calculateNHIF($gross);
+        $nssfBreakdown = $this->nssfCalculator->calculate($gross);
+        $nssf = $nssfBreakdown['total'];
+        $sha = $this->calculateSha($gross);
         $levy = $this->calculateHousingLevy($gross);
         $paye = $this->calculatePAYE($gross - $nssf - $sha - $levy);
 
@@ -315,7 +316,7 @@ class PayrollController extends Controller
             ->orderBy('payslip_position')->orderBy('element_name')
             ->get()
             ->reject(fn ($element) => $element->isSystem())
-            ->map(function ($element) use ($basic, $gross, $nssf, $sha, $levy, $paye) {
+            ->map(function ($element) use ($basic, $gross, $nssf, $nssfBreakdown, $sha, $levy, $paye) {
                 [$amount, $how] = match (strtolower((string) $element->element_key)) {
                     'nssf' => [$nssf, 'Tier I and Tier II on gross pay'],
                     'nhif' => [$sha, 'Calculated from gross pay'],
@@ -335,6 +336,14 @@ class PayrollController extends Controller
                     'statutory' => $element->isStatutory(),
                     'how' => $how,
                     'amount' => $gross > 0 ? $amount : null,
+                    // NSSF is shown as Tier I, Tier II and a total
+                    'breakdown' => strtolower((string) $element->element_key) === 'nssf'
+                        ? collect($nssfBreakdown['tiers'])->map(fn ($tier) => [
+                            'name' => $tier['name'],
+                            'how' => $tier['basis'],
+                            'amount' => $gross > 0 ? $tier['amount'] : null,
+                        ])->all()
+                        : null,
                 ];
             })->values();
 
@@ -1284,21 +1293,22 @@ class PayrollController extends Controller
 
         // --- Statutory deductions ---
         $nssfElement       = $payrollElements->get('nssf');
-        $nhifElement       = $payrollElements->get('nhif');
+        // SHA is kept under the 'nhif' element key and the nhif column
+        $shaElement        = $payrollElements->get('nhif');
         $housingLevyElement = $payrollElements->get('housing_levy');
         $payeeElement      = $payrollElements->get('payee');
 
-        // NSSF (Tier I + Tier II) on gross pay, same calculation as the contract form
-        $nssfBreakdown = $this->nssfCalculator->calculate($statutoryGrossPay);
+        // NSSF (Tier I + Tier II) on gross pay, at the rates in force for this pay period
+        $nssfBreakdown = $this->nssfCalculator->calculate($statutoryGrossPay, $periodStartDate);
         $nssf = $nssfBreakdown['total'];
         $nssfTier1 = $nssfBreakdown['tiers'][0]['amount'];
         $nssfTier2 = $nssfBreakdown['tiers'][1]['amount'];
-        // NHIF/SHIF and Housing Levy on full gross (basic + allowances)
-        $nhif        = $this->calculateNHIF($statutoryGrossPay);
+        // SHA and Housing Levy on full gross (basic + allowances)
+        $sha         = $this->calculateSha($statutoryGrossPay);
         $housingLevy = $this->calculateHousingLevy($statutoryGrossPay);
 
         // Taxable income for PAYE
-        $taxableIncome = $statutoryGrossPay - $nssf - $nhif - $housingLevy;
+        $taxableIncome = $statutoryGrossPay - $nssf - $sha - $housingLevy;
 
         $paye = 0;
         if (strtolower($staffDisability) !== 'yes') {
@@ -1307,7 +1317,7 @@ class PayrollController extends Controller
 
         $incomeTaxBeforeRelief = $paye + 2400;
 
-        $totalDeductions = $nssf + $nhif + $housingLevy + $paye;
+        $totalDeductions = $nssf + $sha + $housingLevy + $paye;
 
         // Build payslip elements — stored with full details so display needs no extra DB query
         $payslipElements = array_merge(
@@ -1315,7 +1325,7 @@ class PayrollController extends Controller
             [
                 $this->makePayslipEntry($nssfElement,       $nssfTier1,   'NSSF Tier I',  '1', 10, 'NSSF Tier I'),
                 $this->makePayslipEntry($nssfElement,       $nssfTier2,   'NSSF Tier II', '1', 11, 'NSSF Tier II'),
-                $this->makePayslipEntry($nhifElement,       $nhif,        'SHA',          '1', 20),
+                $this->makePayslipEntry($shaElement,        $sha,         'SHA',          '1', 20),
                 $this->makePayslipEntry($housingLevyElement, $housingLevy, 'Housing Levy', '1', 30),
                 $this->makePayslipEntry($payeeElement,      $paye,        'PAYE',         '1', 40),
             ],
@@ -1416,7 +1426,7 @@ class PayrollController extends Controller
             'nssf' => $nssf,
             'nssf_tier1' => $nssfTier1,
             'nssf_tier2' => $nssfTier2,
-            'nhif' => $nhif,
+            'nhif' => $sha,
             'housing_levy' => $housingLevy,
             'taxable_income' => $taxableIncome,
             'income_tax' => $incomeTaxBeforeRelief,
@@ -1446,22 +1456,22 @@ class PayrollController extends Controller
     }
 
     /**
-     * Calculate SHIF contribution (replaces NHIF)
+     * Calculate the SHA contribution
      * Rate: 2.75% of gross monthly salary
      * Minimum: KES 300/month
      * No upper limit
      */
-    private function calculateNHIF($grossPay)
+    private function calculateSha($grossPay)
     {
         $rate = 0.0275; // 2.75%
         $minContribution = 300;
 
-        $shif = $grossPay * $rate;
+        $sha = $grossPay * $rate;
 
         // Apply minimum contribution
-        $shif = max($shif, $minContribution);
+        $sha = max($sha, $minContribution);
 
-        return round($shif, 2);
+        return round($sha, 2);
     }
 
     /**

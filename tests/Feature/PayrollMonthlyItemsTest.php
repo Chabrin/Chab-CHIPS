@@ -68,6 +68,19 @@ class PayrollMonthlyItemsTest extends TestCase
             $t->decimal('basic_salary', 15, 2)->default(0);
             $t->string('staff_number')->nullable();
         });
+        // Saving a contract looks for the signed contract already uploaded with the staff record
+        Schema::create('document_types', function (Blueprint $t) {
+            $t->id();
+            $t->string('name');
+        });
+        Schema::create('employee_documents', function (Blueprint $t) {
+            $t->id();
+            $t->integer('employee_id');
+            $t->integer('contract_id')->nullable();
+            $t->integer('document_type_id');
+            $t->string('file_path');
+            $t->string('file_name')->nullable();
+        });
         Schema::create('sys_hr_employee_contracts_279_repeat', function (Blueprint $t) {
             $t->id();
             $t->integer('parent_id');
