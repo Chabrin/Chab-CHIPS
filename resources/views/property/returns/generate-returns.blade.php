@@ -89,7 +89,7 @@
                                             Returns Month <span class="text-danger">*</span>
                                         </label>
                                         <input type="month" class="form-control month-select" id="returns_month" name="returns_month" required>
-                                        <small class="text-muted">Select the month for returns generation (last 3 months available)</small>
+                                        <small class="text-muted">Select the month for returns generation (last 12 months available)</small>
                                     </div>
                                 </div>
                             </div>
@@ -188,13 +188,11 @@
         const currentYear = parseInt($('#generateReturnsForm').data('current-year'));
         const currentMonth = parseInt($('#generateReturnsForm').data('current-month'));
 
-        // Calculate min month (3 months back)
-        let minYear = currentYear;
-        let minMonth = currentMonth - 3;
-        if (minMonth <= 0) {
-            minMonth = 12 + minMonth;
-            minYear = currentYear - 1;
-        }
+        // Calculate min month (how many months back can be chosen)
+        const monthsBack = 12;
+        const minIndex = currentYear * 12 + (currentMonth - 1) - monthsBack;
+        const minYear = Math.floor(minIndex / 12);
+        const minMonth = (minIndex % 12) + 1;
 
         // Set month restrictions - allow 1 month ahead for testing
         let maxMonth = currentMonth + 1;
