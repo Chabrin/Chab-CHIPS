@@ -154,6 +154,7 @@
 @endsection
 
 @section('scripts')
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     var positionsTable;
 
@@ -386,14 +387,16 @@
     }
 
     function saveAddPosition() {
-        var $btn =$('#addPositionSaveBtn');
-        var $spinner =$('#addSaveSpinner');
-        var $icon =$('#addSaveIcon');
-        var $btnText =$('#addSaveBtnText');
+        var $btn = $('#addPositionSaveBtn');
+        var $spinner = $('#addSaveSpinner');
+        var $icon = $('#addSaveIcon');
+        var $btnText = $('#addSaveBtnText');
 
         $btn.prop('disabled', true);
-        $icon.addClass('d-none');$spinner.removeClass('d-none');
-        $btnText.text('Saving...');$('#addPositionForm .is-invalid').removeClass('is-invalid');
+        $icon.addClass('d-none');
+        $spinner.removeClass('d-none');
+        $btnText.text('Saving...');
+        $('#addPositionForm .is-invalid').removeClass('is-invalid');
         $('#addPositionForm .invalid-feedback').text('');
 
         var formData = {
@@ -421,30 +424,35 @@
                 if (xhr.status === 422) {
                     var errors = xhr.responseJSON.errors || {};
                     $.each(errors, function(field, messages) {
-                        var $field =$('#add_' + field);
-                        $field.addClass('is-invalid');$field.next('.invalid-feedback').text(messages[0]);
+                        var $field = $('#add_' + field);
+                        $field.addClass('is-invalid');
+                        $field.next('.invalid-feedback').text(messages[0]);
                     });
                 } else {
                     toastr.error('An error occurred while saving');
                 }
             },
             complete: function() {
-                $btn.prop('disabled', false);$spinner.addClass('d-none');
-                $icon.removeClass('d-none');$btnText.text('Save');
+                $btn.prop('disabled', false);
+                $spinner.addClass('d-none');
+                $icon.removeClass('d-none');
+                $btnText.text('Save');
             }
         });
     }
 
     function saveEditPosition() {
-        var $btn =$('#editPositionSaveBtn');
-        var $spinner =$('#editSaveSpinner');
-        var $icon =$('#editSaveIcon');
-        var $btnText =$('#editSaveBtnText');
+        var $btn = $('#editPositionSaveBtn');
+        var $spinner = $('#editSaveSpinner');
+        var $icon = $('#editSaveIcon');
+        var $btnText = $('#editSaveBtnText');
         var positionId = $('#edit_position_id').val();
 
         $btn.prop('disabled', true);
-        $icon.addClass('d-none');$spinner.removeClass('d-none');
-        $btnText.text('Updating...');$('#editPositionForm .is-invalid').removeClass('is-invalid');
+        $icon.addClass('d-none');
+        $spinner.removeClass('d-none');
+        $btnText.text('Updating...');
+        $('#editPositionForm .is-invalid').removeClass('is-invalid');
         $('#editPositionForm .invalid-feedback').text('');
 
         var formData = {
@@ -472,16 +480,19 @@
                 if (xhr.status === 422) {
                     var errors = xhr.responseJSON.errors || {};
                     $.each(errors, function(field, messages) {
-                        var $field =$('#edit_' + field);
-                        $field.addClass('is-invalid');$field.next('.invalid-feedback').text(messages[0]);
+                        var $field = $('#edit_' + field);
+                        $field.addClass('is-invalid');
+                        $field.next('.invalid-feedback').text(messages[0]);
                     });
                 } else {
                     toastr.error('An error occurred while updating');
                 }
             },
             complete: function() {
-                $btn.prop('disabled', false);$spinner.addClass('d-none');
-                $icon.removeClass('d-none');$btnText.text('Update');
+                $btn.prop('disabled', false);
+                $spinner.addClass('d-none');
+                $icon.removeClass('d-none');
+                $btnText.text('Update');
             }
         });
     }
