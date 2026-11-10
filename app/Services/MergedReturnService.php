@@ -15,6 +15,29 @@ use Illuminate\Support\Facades\DB;
 class MergedReturnService
 {
     /**
+     * The code of a landlord's merged return for a period. The first batch keeps the plain code (R1 + period + landlord
+     * code, the shape the old system used). Each further batch of the same landlord in the same period takes -2, -3 and
+     * so on, so two batches never share a code and their lines, deductions and vouchers stay apart. A code freed by a
+     * deleted merged return is taken again.
+     *
+     * @param string $returnPeriod e.g. 202611
+     * @param string $landlordCode e.g. LAN-01072
+     * @param array $used the return codes already in use (codes that do not belong to this landlord and period are ignored)
+     */
+    public static function masterCode(string $returnPeriod, string $landlordCode, array $used): string {
+        $base = 'R1' . $returnPeriod . $landlordCode;
+        $code = $base;
+        $sequence = 1;
+
+        while (in_array($code, $used, true)) {
+            $sequence++;
+            $code = $base . '-' . $sequence;
+        }
+
+        return $code;
+    }
+
+    /**
      * The property returns a merged return covers, with each one's property, net and approval state.
      *
      * @param ReturnSummary $master

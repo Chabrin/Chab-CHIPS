@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Services\MergedReturnService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -69,7 +70,9 @@ trait ReturnsMasterReturnTrait
                 continue;
             }
 
-            $masterReturnCode = 'R1' . $returnPeriod . $landlordCode;
+            // A landlord with two batches gets two merged returns; the second one's code ends -2 so the two never collide
+            $usedCodes = DB::table('cb_returns_summary')->where('return_code', 'like', 'R1' . $returnPeriod . $landlordCode . '%')->pluck('return_code')->all();
+            $masterReturnCode = MergedReturnService::masterCode($returnPeriod, $landlordCode, $usedCodes);
 
             // Master totals
             $childNetSum   = (float) $batch->child_net_amount_sum;
@@ -234,6 +237,7 @@ trait ReturnsMasterReturnTrait
             LEFT JOIN sys_pm_clients cl ON cl.id = cr.batch_client_id
             GROUP BY cr.batch_id, cr.batch_code, cr.batch_name, cr.batch_client_id, cl.reference_number, cl.names
             HAVING COUNT(*) > 1
+            ORDER BY cr.batch_id
         ", [$returnPeriod]);
     }
 
