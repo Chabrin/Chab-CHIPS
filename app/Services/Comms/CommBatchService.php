@@ -18,6 +18,9 @@ class CommBatchService
     const CHUNK_SIZE = 500;
     const QUEUE = 'comms';
 
+    /** Titles that can lead a stored name ("Mr David Bett") and must not be taken for the first name. */
+    const TITLES = ['mr', 'mrs', 'ms', 'miss', 'dr', 'prof', 'eng', 'hon', 'rev', 'sir', 'madam', 'mzee', 'bishop', 'pastor'];
+
     protected AudienceResolver $audience;
 
     /**
@@ -59,7 +62,7 @@ class CommBatchService
             'skipped' => $skipped->count(),
             'sms_units' => $units,
             'audience_label' => $this->audience->label($audienceType, $params),
-            'sample' => $first ? ['name' => $first['name'], 'property' => $first['property'], 'unit' => $first['unit'], 'reference' => $first['reference']] : null,
+            'sample' => $first ? ['name' => $first['name'], 'contact' => $channel === 'sms' ? $first['mobile'] : $first['email'], 'property' => $first['property'], 'unit' => $first['unit'], 'reference' => $first['reference']] : null,
             'preview' => $first ? [
                 'name' => $first['name'],
                 'contact' => $channel === 'sms' ? $first['mobile'] : $first['email'],
@@ -171,9 +174,25 @@ class CommBatchService
 
         return str_replace(
             ['{name}', '{first_name}', '{property}', '{unit}', '{reference}', '{date}'],
-            [$name, strtok($name, ' ') ?: $name, (string) ($recipient['property'] ?? ''), (string) ($recipient['unit'] ?? ''), (string) ($recipient['reference'] ?? ''), date('d M Y')],
+            [$name, self::firstName($name), (string) ($recipient['property'] ?? ''), (string) ($recipient['unit'] ?? ''), (string) ($recipient['reference'] ?? ''), date('d M Y')],
             $text
         );
+    }
+
+    /**
+     * The first name to greet someone with: the first word of the name, skipping a leading title
+     * such as Mr, Mrs or Dr. A name that is only a title is returned whole.
+     *
+     * @param string $name the full name as stored
+     */
+    public static function firstName(string $name): string {
+        $tokens = preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY);
+
+        while (count($tokens) > 1 && in_array(strtolower(rtrim($tokens[0], '.')), self::TITLES, true)) {
+            array_shift($tokens);
+        }
+
+        return $tokens[0] ?? $name;
     }
 
     /**

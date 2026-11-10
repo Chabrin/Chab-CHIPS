@@ -7,12 +7,24 @@ use App\Models\EmailLog;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * The one way the system sends an email. Sends through the default mailer as the branded
- * GenericCommMail and writes a cb_email_logs row for every attempt — sent or failed — so the
- * caller cannot forget to log. Never throws at the caller: returns [$ok, $error].
+ * The one way the system sends an email. Sends the branded GenericCommMail through the credentials
+ * saved on the Communications settings page (the server's .env when none are saved) and writes a
+ * cb_email_logs row for every attempt, sent or failed, so the caller cannot forget to log. Never
+ * throws at the caller: returns [$ok, $error].
  */
 class EmailService
 {
+    protected MailConfigService $mailConfig;
+
+    /**
+     * Inject the service that loads the saved mail credentials.
+     *
+     * @param MailConfigService $mailConfig
+     */
+    public function __construct(MailConfigService $mailConfig) {
+        $this->mailConfig = $mailConfig;
+    }
+
     /**
      * Send one email and log the outcome.
      *
@@ -40,7 +52,18 @@ class EmailService
 
         try {
             $mailable = new GenericCommMail($subject, $body, $attachPath, $attachName, $rawAttachmentData ? base64_encode($rawAttachmentData) : null, $rawAttachmentName, $rawAttachmentMime);
-            Mail::to($toEmail, $toName)->send($mailable);
+
+            // Credentials saved on the settings page win; with none saved this is the .env mailer as before
+            [$fromAddress, $fromName] = $this->mailConfig->from();
+            if ($fromAddress) {
+                $mailable->from($fromAddress, $fromName);
+            }
+            [$replyAddress, $replyName] = $this->mailConfig->replyTo();
+            if ($replyAddress) {
+                $mailable->replyTo($replyAddress, $replyName);
+            }
+
+            Mail::mailer($this->mailConfig->mailerName())->to($toEmail, $toName)->send($mailable);
         } catch (\Throwable $e) {
             $status = 'failed';
             $error = mb_substr($e->getMessage(), 0, 2000);

@@ -1,4 +1,4 @@
-{{-- Hero banner + tab bar shared by every Communications page. Needs $active (compose|batches|logs|metrics), $title, $subtitle. --}}
+{{-- Hero banner + tab bar shared by every Communications page. Order, names and icons match the sidebar sub-menus (CommunicationsMenuSeeder). Needs $active (compose|batches|logs|metrics|settings), $title, $subtitle. --}}
 @php
     $tabs = [
         'compose' => ['Compose', 'edit_square', route('communications.compose')],
@@ -6,6 +6,10 @@
         'logs' => ['Logs', 'receipt_long', route('communications.logs')],
         'metrics' => ['Metrics', 'monitoring', route('communications.metrics')],
     ];
+    // The credentials page is only offered to people who hold it
+    if (app(\App\Services\Comms\CommSettings::class)->canManage()) {
+        $tabs['settings'] = ['Settings', 'settings', route('communications.settings')];
+    }
 @endphp
 <div class="cm-hero">
     <div class="cm-hero-top">

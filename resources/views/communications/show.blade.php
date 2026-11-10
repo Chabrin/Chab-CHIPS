@@ -57,6 +57,7 @@
                                     <th>Status</th>
                                     <th>Detail</th>
                                     <th>Time</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -83,9 +84,11 @@
         </div>
     </div>
 </div>
+@include('communications._message_modal')
 @endsection
 
 @section('scripts')
+@include('communications._message_modal_js')
 <script>
     $(document).ready(function() {
         var isSms = @json($isSms);
@@ -122,22 +125,35 @@
         columns.push(
             { data: 'status', render: function(d, t) { return t === 'display' ? '<span class="cm-pill ' + d + '">' + ({ sent: 'Delivered', failed: 'Failed', skipped: 'Skipped' }[d] || d) + '</span>' : d; } },
             { data: 'error', render: function(d, t) { return t === 'display' ? (d ? '<div class="cm-err">' + esc(d) + '</div>' : '') : d; } },
-            { data: 'date', render: function(d, t) { return t === 'display' ? '<span style="font-size:12px;color:#64748b;">' + esc(d) + '</span>' : d; } }
+            { data: 'date', render: function(d, t) { return t === 'display' ? '<span style="font-size:12px;color:#64748b;">' + esc(d) + '</span>' : d; } },
+            { data: null, orderable: false, searchable: false, render: function() { return '<button type="button" class="cm-read cm-btn cm-btn-light" title="Read the message" style="padding:4px 8px;"><span class="material-symbols-outlined" style="font-size:18px !important;">visibility</span></button>'; } }
         );
 
         var table = $('#logs-table').DataTable({
-            data: [], columns: columns, pageLength: 25, order: [],
+            // a batch can hold tens of thousands of recipients: one page at a time from the server
+            serverSide: true,
+            processing: true,
+            ordering: false,
+            searching: true,
+            searchDelay: 400,
+            ajax: {
+                url: logsUrl,
+                type: 'GET',
+                data: function(d) { d.status = statusFilter; },
+                error: function(xhr) { toast('error', (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to load recipients.'); }
+            },
+            columns: columns,
+            pageLength: 50,
+            lengthMenu: [25, 50, 100],
+            createdRow: function(row, data) { $(row).addClass('cm-click').on('click', function() { cmOpenMessage('{{ url("/ajax/communications/logs") }}/' + (isSms ? 'sms' : 'email') + '/' + data.id + '/message'); }); },
             language: { search: '', searchPlaceholder: 'Find a recipient…', zeroRecords: '<div class="cm-empty"><span class="material-symbols-outlined">person_search</span><h4>No recipients here</h4></div>', emptyTable: '<div class="cm-empty"><span class="material-symbols-outlined">hourglass_empty</span><h4>No recipients logged yet</h4><p>They appear here as the batch is processed.</p></div>' }
         });
 
-        function loadLogs() {
-            $('#table_wrap').addClass('cm-loading');
-            $.ajax({
-                url: logsUrl, type: 'GET', data: { status: statusFilter },
-                success: function(res) { if (res.success) { table.clear().rows.add(res.data).draw(false); } },
-                error: function(xhr) { toast('error', (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to load recipients.'); },
-                complete: function() { $('#table_wrap').removeClass('cm-loading'); }
-            });
+        table.on('processing.dt', function(e, settings, on) { $('#table_wrap').toggleClass('cm-loading', on); });
+
+        // reload the current page (keepPage) or go back to page 1 (a new filter)
+        function loadLogs(keepPage) {
+            table.ajax.reload(null, !keepPage);
         }
 
         $('#status_filters .cm-fchip').on('click', function() {
@@ -148,7 +164,6 @@
         });
 
         paint(current);
-        loadLogs();
 
         // While the batch is going out, keep the numbers and the recipient list live
         var poller = null;
@@ -156,7 +171,7 @@
             $.get(statusUrl).done(function(res) {
                 if (!res.success) return;
                 paint({ status: res.status, recipients: res.recipients, sent: res.sent, failed: res.failed, skipped: res.skipped });
-                loadLogs();
+                loadLogs(true);
                 if (res.status === 'done' || res.status === 'failed') { clearInterval(poller); poller = null; }
             });
         }

@@ -366,3 +366,10 @@ table.cm-table thead th.text-end, table.cm-table tbody td.text-end { text-align:
 
 .cm-page .select2-container .select2-selection--single { padding: 0 !important; }
 .cm-modal { color: var(--cm-text); }
+
+/* the tables show their own loading state (dimmed rows), not DataTables' overlay */
+.cm-page .dataTables_processing, .cm-page .dt-processing { display: none !important; }
+
+/* DataTables 2 right-aligns any column it detects as numeric (the id/date column); keep our tables left-aligned */
+table.cm-table.dataTable thead th, table.cm-table.dataTable tbody td, table.cm-table thead th, table.cm-table tbody td { text-align: left !important; }
+table.cm-table thead th.text-end, table.cm-table tbody td.text-end { text-align: right !important; }

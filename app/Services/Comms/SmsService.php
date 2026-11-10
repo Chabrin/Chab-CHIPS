@@ -16,6 +16,17 @@ class SmsService
     const GSM_SINGLE = 160;
     const GSM_MULTI = 153;
 
+    protected CommSettings $settings;
+
+    /**
+     * Inject the store of the credentials saved on the settings page.
+     *
+     * @param CommSettings $settings
+     */
+    public function __construct(CommSettings $settings) {
+        $this->settings = $settings;
+    }
+
     /**
      * Send one SMS and log the outcome.
      *
@@ -32,10 +43,11 @@ class SmsService
      * @return array [$ok, $error]
      */
     public function send(string $to, string $recipientName, string $message, string $type = 'general', ?int $batchId = null, ?string $recipientType = null, ?int $recipientId = null, ?string $entityType = null, ?int $entityId = null, ?int $sentBy = null): array {
-        $provider = config('services.sms.provider', 'none');
+        $gateway = $this->gatewayConfig();
+        $provider = $gateway['provider'];
 
         [$ok, $error, $gatewayResponse, $messageId] = match ($provider) {
-            'africastalking' => $this->sendViaAfricasTalking($to, $message),
+            'africastalking' => $this->sendViaAfricasTalking($to, $message, $gateway),
             default => [false, 'SMS gateway is not configured yet. Set SMS_PROVIDER and its credentials.', null, null],
         };
 
@@ -74,16 +86,33 @@ class SmsService
     }
 
     /**
-     * Send through Africa's Talking. Needs services.sms username, api_key and sender_id.
+     * The gateway to use: the credentials saved on the settings page when a provider is chosen
+     * there, otherwise the server's .env (services.sms).
+     *
+     * @return array provider, username, api_key, sender_id
+     */
+    protected function gatewayConfig(): array {
+        $saved = $this->settings->get('sms');
+
+        if ($saved && ($saved['provider'] ?? 'none') !== 'none' && ($saved['provider'] ?? '') !== '') {
+            return ['provider' => $saved['provider'], 'username' => $saved['username'] ?? '', 'api_key' => $saved['api_key'] ?? '', 'sender_id' => $saved['sender_id'] ?? ''];
+        }
+
+        return ['provider' => config('services.sms.provider', 'none'), 'username' => config('services.sms.username'), 'api_key' => config('services.sms.api_key'), 'sender_id' => config('services.sms.sender_id')];
+    }
+
+    /**
+     * Send through Africa's Talking.
      *
      * @param string $to
      * @param string $message
+     * @param array $gateway username, api_key, sender_id
      * @return array [$ok, $error, $gatewayResponse, $messageId]
      */
-    private function sendViaAfricasTalking(string $to, string $message): array {
-        $username = config('services.sms.username');
-        $apiKey = config('services.sms.api_key');
-        $from = config('services.sms.sender_id');
+    private function sendViaAfricasTalking(string $to, string $message, array $gateway): array {
+        $username = $gateway['username'];
+        $apiKey = $gateway['api_key'];
+        $from = $gateway['sender_id'];
 
         if (!$username || !$apiKey) {
             return [false, 'Africa\'s Talking credentials are incomplete.', null, null];

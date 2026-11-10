@@ -1956,6 +1956,15 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::get('/ajax/communications/metrics',           [App\Http\Controllers\CommunicationsController::class, 'metricsData'])->name('ajax.communications.metrics');
     Route::get('/ajax/communications/client-search',     [App\Http\Controllers\CommunicationsController::class, 'clientSearch'])->name('ajax.communications.client.search');
     Route::get('/ajax/communications/property-search',   [App\Http\Controllers\CommunicationsController::class, 'propertySearch'])->name('ajax.communications.property.search');
+    Route::get('/ajax/communications/staff-search',      [App\Http\Controllers\CommunicationsController::class, 'staffSearch'])->name('ajax.communications.staff.search');
+    Route::get('/ajax/communications/batches/{id}/message', [App\Http\Controllers\CommunicationsController::class, 'batchMessage'])->name('ajax.communications.batch.message');
+    Route::get('/ajax/communications/logs/{channel}/{id}/message', [App\Http\Controllers\CommunicationsController::class, 'logMessage'])->name('ajax.communications.log.message');
+    Route::get('/communications/settings',               [App\Http\Controllers\CommunicationsController::class, 'settingsPage'])->name('communications.settings');
+    Route::get('/ajax/communications/settings',          [App\Http\Controllers\CommunicationsController::class, 'settingsData'])->name('ajax.communications.settings');
+    Route::post('/ajax/communications/settings/mail',    [App\Http\Controllers\CommunicationsController::class, 'saveMailSettings'])->name('ajax.communications.settings.mail');
+    Route::post('/ajax/communications/settings/sms',     [App\Http\Controllers\CommunicationsController::class, 'saveSmsSettings'])->name('ajax.communications.settings.sms');
+    Route::post('/ajax/communications/settings/mail/test', [App\Http\Controllers\CommunicationsController::class, 'testMail'])->middleware('throttle:5,1')->name('ajax.communications.settings.mail.test');
+    Route::post('/ajax/communications/settings/sms/test', [App\Http\Controllers\CommunicationsController::class, 'testSms'])->middleware('throttle:5,1')->name('ajax.communications.settings.sms.test');
     Route::get('/ajax/communications/batches/{id}/status', [App\Http\Controllers\CommunicationsController::class, 'batchStatus'])->name('ajax.communications.batch.status');
 
     // GL Periods

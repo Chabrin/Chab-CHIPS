@@ -29,11 +29,11 @@
                 </div>
                 <div class="cm-field">
                     <label class="cm-label">From</label>
-                    <input type="date" class="cm-input" id="date_from">
+                    <input type="date" class="cm-input" id="date_from" value="{{ now()->subMonthNoOverflow()->format('Y-m-d') }}">
                 </div>
                 <div class="cm-field">
                     <label class="cm-label">To</label>
-                    <input type="date" class="cm-input" id="date_to">
+                    <input type="date" class="cm-input" id="date_to" value="{{ now()->format('Y-m-d') }}">
                 </div>
                 <div class="cm-field" style="min-width:210px;flex:1;">
                     <label class="cm-label">Recipient</label>
@@ -44,7 +44,7 @@
                 </div>
             </div>
 
-            <div class="cm-hint mb-2" id="result_info" style="display:none;"><b id="result_count">0</b> records<span id="truncated_note" style="display:none;"> — showing the latest 5,000, narrow the dates to see older ones</span></div>
+            <div class="cm-hint mb-2" id="result_info" style="display:none;"><b id="result_count">0</b> records<span id="truncated_note" style="display:none;"> — more than that match, narrow the dates or search to see fewer</span></div>
 
             <div class="cm-table-wrap" id="table_wrap">
                 <table class="cm-table" id="logs-table">
@@ -56,6 +56,7 @@
                             <th>Type</th>
                             <th>Status</th>
                             <th>Batch</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -64,18 +65,48 @@
         </div>
     </div>
 </div>
+@include('communications._message_modal')
 @endsection
 
 @section('scripts')
+@include('communications._message_modal_js')
 <script>
     $(document).ready(function() {
         var channel = 'email';
         var batchUrl = '{{ url("/communications/batches") }}/';
+        var logMessageUrl = '{{ url("/ajax/communications/logs") }}/';
 
         function esc(s) { return $('<div>').text(s == null ? '' : s).html(); }
 
+        var lastJson = null;
+
         var table = $('#logs-table').DataTable({
-            data: [],
+            // one page at a time from the server; the Recipient box above does the searching
+            serverSide: true,
+            processing: true,
+            searching: false,
+            ajax: {
+                url: '{{ route("ajax.communications.logs") }}',
+                type: 'GET',
+                data: function(d) {
+                    d.channel = channel;
+                    d.status = $('#status_filter').val();
+                    d.date_from = $('#date_from').val();
+                    d.date_to = $('#date_to').val();
+                    d.q = $('#search_term').val();
+                },
+                dataSrc: function(json) {
+                    lastJson = json;
+                    $('#result_info').show();
+                    $('#result_count').text(Number(json.count).toLocaleString() + (json.capped ? '+' : ''));
+                    $('#truncated_note').toggle(!!json.capped);
+                    return json.data;
+                },
+                error: function(xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to load logs.';
+                    if (window.toastr) toastr.error(msg); else alert(msg);
+                }
+            },
             columns: [
                 {
                     data: 'id',
@@ -108,43 +139,38 @@
                         if (t !== 'display') return d || 0;
                         return d ? '<a href="' + batchUrl + d + '" style="font-weight:600;">#' + d + '</a>' : '<span class="cm-hint">system</span>';
                     }
-                }
+                },
+                { data: null, orderable: false, searchable: false, render: function() { return '<button type="button" class="cm-read cm-btn cm-btn-light" title="Read the message" style="padding:4px 8px;"><span class="material-symbols-outlined" style="font-size:18px !important;">visibility</span></button>'; } }
             ],
+            columnDefs: [{ orderable: true, targets: 0 }, { orderable: false, targets: '_all' }],
             order: [[0, 'desc']],
-            pageLength: 25,
+            pageLength: 50,
+            lengthMenu: [25, 50, 100],
+            createdRow: function(row, data) {
+                $(row).addClass('cm-click').on('click', function(e) {
+                    if ($(e.target).closest('a').length) return; // the batch link keeps its own job
+                    cmOpenMessage(logMessageUrl + channel + '/' + data.id + '/message');
+                });
+            },
+            infoCallback: function(settings, start, end, max, total) {
+                if (!total) return '';
+                return 'Showing ' + Number(start).toLocaleString() + ' to ' + Number(end).toLocaleString() + ' of ' + Number(total).toLocaleString() + (lastJson && lastJson.capped ? '+' : '') + ' entries';
+            },
             language: {
-                search: '', searchPlaceholder: 'Filter these results…',
                 emptyTable: '<div class="cm-empty"><span class="material-symbols-outlined">inbox</span><h4>No messages match</h4><p>Change the filters above and search again.</p></div>',
                 zeroRecords: '<div class="cm-empty"><span class="material-symbols-outlined">search_off</span><h4>No matches</h4></div>'
             }
         });
 
-        function loadData() {
-            $('#search_icon').text('progress_activity').addClass('cm-spin');
-            $('#search_btn').prop('disabled', true);
-            $('#table_wrap').addClass('cm-loading');
+        table.on('processing.dt', function(e, settings, on) {
+            $('#search_icon').text(on ? 'progress_activity' : 'search').toggleClass('cm-spin', on);
+            $('#search_btn').prop('disabled', on);
+            $('#table_wrap').toggleClass('cm-loading', on);
+        });
 
-            $.ajax({
-                url: '{{ route("ajax.communications.logs") }}',
-                type: 'GET',
-                data: { channel: channel, status: $('#status_filter').val(), date_from: $('#date_from').val(), date_to: $('#date_to').val(), search: $('#search_term').val() },
-                success: function(res) {
-                    if (!res.success) return;
-                    $('#result_info').show();
-                    $('#result_count').text(Number(res.count).toLocaleString());
-                    $('#truncated_note').toggle(!!res.truncated);
-                    table.clear().rows.add(res.data).draw();
-                },
-                error: function(xhr) {
-                    var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to load logs.';
-                    if (window.toastr) toastr.error(msg); else alert(msg);
-                },
-                complete: function() {
-                    $('#search_icon').text('search').removeClass('cm-spin');
-                    $('#search_btn').prop('disabled', false);
-                    $('#table_wrap').removeClass('cm-loading');
-                }
-            });
+        // back to page 1 with the current filters
+        function loadData() {
+            table.ajax.reload();
         }
 
         $('#channel_seg button').on('click', function() {
@@ -156,7 +182,6 @@
         $('#status_filter, #date_from, #date_to').on('change', loadData);
         $('#search_btn').on('click', loadData);
         $('#search_term').on('keypress', function(e) { if (e.which === 13) loadData(); });
-        loadData();
     });
 </script>
 @endsection

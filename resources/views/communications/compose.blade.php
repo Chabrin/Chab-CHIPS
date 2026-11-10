@@ -28,8 +28,9 @@
                         <button type="button" class="cm-aud" data-aud="clients"><span class="cm-aud-ico"><span class="material-symbols-outlined">group_add</span></span><span><div class="cm-aud-t">Selected clients</div><div class="cm-aud-s">Pick several</div></span></button>
                         <button type="button" class="cm-aud" data-aud="property"><span class="cm-aud-ico"><span class="material-symbols-outlined">apartment</span></span><span><div class="cm-aud-t">A property</div><div class="cm-aud-s">Its current tenants</div></span></button>
                         <button type="button" class="cm-aud" data-aud="zone"><span class="cm-aud-ico"><span class="material-symbols-outlined">map</span></span><span><div class="cm-aud-t">A zone</div><div class="cm-aud-s">Tenants in the zone</div></span></button>
-                        <button type="button" class="cm-aud" data-aud="tenants_all"><span class="cm-aud-ico"><span class="material-symbols-outlined">groups</span></span><span><div class="cm-aud-t">All tenants</div><div class="cm-aud-s">Everyone on a lease</div></span></button>
+                        <button type="button" class="cm-aud" data-aud="tenants_all"><span class="cm-aud-ico"><span class="material-symbols-outlined">groups</span></span><span><div class="cm-aud-t">All tenants</div><div class="cm-aud-s">Current tenants</div></span></button>
                         <button type="button" class="cm-aud" data-aud="landlords_all"><span class="cm-aud-ico"><span class="material-symbols-outlined">real_estate_agent</span></span><span><div class="cm-aud-t">All landlords</div><div class="cm-aud-s">Every landlord</div></span></button>
+                        <button type="button" class="cm-aud" data-aud="staff"><span class="cm-aud-ico"><span class="material-symbols-outlined">person_search</span></span><span><div class="cm-aud-t">One or more staff</div><div class="cm-aud-s">Pick by name</div></span></button>
                         <button type="button" class="cm-aud" data-aud="staff_all"><span class="cm-aud-ico"><span class="material-symbols-outlined">badge</span></span><span><div class="cm-aud-t">All staff</div><div class="cm-aud-s">Active employees</div></span></button>
                     </div>
 
@@ -40,6 +41,10 @@
                     <div class="mt-3" id="picker_clients" style="display:none;">
                         <label class="cm-label">Clients (search and pick several)</label>
                         <select id="client_ids" multiple></select>
+                    </div>
+                    <div class="mt-3" id="picker_staff" style="display:none;">
+                        <label class="cm-label">Staff (search by name or staff number, pick one or several)</label>
+                        <select id="staff_ids" multiple></select>
                     </div>
                     <div class="mt-3" id="picker_property" style="display:none;">
                         <label class="cm-label">Property</label>
@@ -106,7 +111,7 @@
 
                         <div id="prev_email">
                             <div class="cm-mail-mock">
-                                <div class="cm-mail-bar">To: <b id="pe_to">—</b><br>Subject: <b id="pe_subject">—</b></div>
+                                <div class="cm-mail-bar">To: <b id="pe_to">—</b><br><span id="pe_to_email" style="display:block;margin:1px 0 4px 21px;color:#1e5ba8;font-weight:600;"></span>Subject: <b id="pe_subject">—</b></div>
                                 <div class="cm-mail-head">{{ config('app.company_name') }}</div>
                                 <div class="cm-mail-body" id="pe_body"></div>
                                 <div class="cm-mail-foot">&copy; {{ date('Y') }} {{ config('app.company_name') }}</div>
@@ -114,6 +119,7 @@
                         </div>
 
                         <div id="prev_sms" style="display:none;">
+                            <div class="text-center mb-2" style="font-size:13px;">To: <b id="ps_to_name">—</b><span id="ps_to_phone" style="display:block;color:#1e5ba8;font-weight:600;"></span></div>
                             <div class="cm-phone">
                                 <div class="cm-phone-top"></div>
                                 <div class="cm-phone-screen">
@@ -144,7 +150,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="mb-2"><span class="cm-label" style="display:inline;">To</span> <strong id="rv_audience"></strong></div>
+                <div><span class="cm-label" style="display:inline;">To</span> <strong id="rv_audience"></strong></div>
+                <div class="cm-hint" id="rv_contact" style="margin:2px 0 12px;"></div>
                 <div class="cm-review-nums">
                     <div><b id="rv_sendable">0</b><span>will receive it</span></div>
                     <div><b id="rv_skipped">0</b><span>skipped (no contact)</span></div>
@@ -154,7 +161,6 @@
                     <div class="cm-msg-subject" id="rv_subject"></div>
                     <div class="cm-msg-body" id="rv_body"></div>
                 </div>
-                <div class="cm-hint mt-2" id="rv_first"></div>
                 <div class="cm-warn-box" id="rv_confirm_box" style="display:none;">
                     This goes to <strong id="rv_big_n"></strong> people and cannot be recalled. Type <strong>SEND</strong> to confirm.
                     <input type="text" class="cm-input mt-2" id="rv_confirm" autocomplete="off" placeholder="SEND">
@@ -177,11 +183,12 @@
             send: '{{ route("ajax.communications.send") }}',
             clients: '{{ route("ajax.communications.client.search") }}',
             properties: '{{ route("ajax.communications.property.search") }}',
+            staff: '{{ route("ajax.communications.staff.search") }}',
             batch: '{{ url("/communications/batches") }}'
         };
         var csrf = '{{ csrf_token() }}';
         var NO_PICKER = ['tenants_all', 'landlords_all', 'staff_all'];
-        var FALLBACK = { name: 'Jane Wanjiru', property: 'Sample Court', unit: 'A12', reference: 'TEN-000123' };
+        var FALLBACK = { name: 'John Doe', property: 'Sample Court', unit: 'A12', reference: 'TEN-000123' };
 
         var state = { channel: 'email', aud: 'single_client', reach: null, sample: null, reqId: 0, timer: null };
 
@@ -199,6 +206,10 @@
             width: '100%', placeholder: 'Search clients…', minimumInputLength: 2,
             ajax: { url: urls.clients, dataType: 'json', delay: 300, data: function(p) { return { q: p.term, kind: 'any' }; }, processResults: function(d) { return { results: d.results || [] }; } }
         });
+        $('#staff_ids').select2({
+            width: '100%', placeholder: 'Search staff…', minimumInputLength: 2,
+            ajax: { url: urls.staff, dataType: 'json', delay: 300, data: function(p) { return { q: p.term }; }, processResults: function(d) { return { results: d.results || [] }; } }
+        });
         $('#property_id').select2({
             width: '100%', placeholder: 'Search a property by name or code…', allowClear: true, minimumInputLength: 2,
             ajax: { url: urls.properties, dataType: 'json', delay: 300, data: function(p) { return { q: p.term }; }, processResults: function(d) { return { results: d.results || [] }; } }
@@ -208,6 +219,7 @@
             switch (state.aud) {
                 case 'single_client': return !!$('#client_id').val();
                 case 'clients': return ($('#client_ids').val() || []).length > 0;
+                case 'staff': return ($('#staff_ids').val() || []).length > 0;
                 case 'property': return !!$('#property_id').val();
                 case 'zone': return !!$('#zone_id').val();
                 default: return true;
@@ -226,6 +238,7 @@
                 client_id: $('#client_id').val(), property_id: $('#property_id').val(), zone_id: $('#zone_id').val()
             };
             ($('#client_ids').val() || []).forEach(function(v, i) { d['client_ids[' + i + ']'] = v; });
+            ($('#staff_ids').val() || []).forEach(function(v, i) { d['staff_ids[' + i + ']'] = v; });
             return $.extend(d, extra || {});
         }
 
@@ -276,10 +289,17 @@
         }
 
         /* ---------- live preview ---------- */
+        var TITLES = ['mr', 'mrs', 'ms', 'miss', 'dr', 'prof', 'eng', 'hon', 'rev', 'sir', 'madam', 'mzee', 'bishop', 'pastor'];
+        function firstName(name) {
+            var t = name.trim().split(/\s+/).filter(Boolean);
+            while (t.length > 1 && TITLES.indexOf(t[0].replace(/\.$/, '').toLowerCase()) !== -1) t.shift();
+            return t[0] || name;
+        }
+
         function fill(text, s) {
             var name = s.name || '';
             var date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-            return text.replace(/\{name\}/g, name).replace(/\{first_name\}/g, name.split(' ')[0] || name)
+            return text.replace(/\{name\}/g, name).replace(/\{first_name\}/g, firstName(name))
                 .replace(/\{property\}/g, s.property || '').replace(/\{unit\}/g, s.unit || '')
                 .replace(/\{reference\}/g, s.reference || '').replace(/\{date\}/g, date);
         }
@@ -297,7 +317,11 @@
             $('#pe_body').html(bodyHtml);
             $('#ps_body').html(bodyHtml);
             $('#pe_subject').text(subject.trim() ? fill(subject, s) : '—');
+            // who it goes to: the name, with their email (or phone for SMS) just under it
             $('#pe_to').text(s.name + (state.sample ? '' : ' (sample)'));
+            $('#pe_to_email').text(state.sample && s.contact ? s.contact : '').toggle(!!(state.sample && s.contact));
+            $('#ps_to_name').text(s.name + (state.sample ? '' : ' (sample)'));
+            $('#ps_to_phone').text(state.sample && s.contact ? s.contact : '').toggle(!!(state.sample && s.contact));
             $('#sample_note').text(state.sample ? 'Showing how it looks for ' + s.name + ' — every recipient gets their own details.' : 'Sample details shown until an audience is chosen.');
 
             if (isSms) {
@@ -336,13 +360,13 @@
 
         function applyAudience() {
             $('#aud_grid .cm-aud').removeClass('active').filter('[data-aud="' + state.aud + '"]').addClass('active');
-            ['single_client', 'clients', 'property', 'zone'].forEach(function(t) { $('#picker_' + t).toggle(state.aud === t); });
+            ['single_client', 'clients', 'staff', 'property', 'zone'].forEach(function(t) { $('#picker_' + t).toggle(state.aud === t); });
             scheduleReach();
         }
 
         $('#channel_seg button').on('click', function() { state.channel = $(this).data('ch'); applyChannel(); });
         $('#aud_grid .cm-aud').on('click', function() { state.aud = $(this).data('aud'); applyAudience(); });
-        $('#client_id, #client_ids, #property_id, #zone_id').on('change', scheduleReach);
+        $('#client_id, #client_ids, #staff_ids, #property_id, #zone_id').on('change', scheduleReach);
         $('#body, #subject').on('input', function() { refreshPreview(); refreshButton(); });
 
         $('.cm-chip-btn').on('click', function() {
@@ -389,7 +413,14 @@
                     if (!isSms) $('#rv_units').text(res.sendable.toLocaleString());
                     $('#rv_subject').text(isSms ? '' : (res.preview ? res.preview.subject : '')).toggle(!isSms);
                     $('#rv_body').text(res.preview ? res.preview.body : '');
-                    $('#rv_first').text(res.preview ? 'Preview shown for ' + res.preview.name + '.' : '');
+                    // the email (or phone) goes just under the name: for one person that is who it is going to,
+                    // for a group it is the example recipient the message above is shown for
+                    var contact = res.preview ? (res.preview.contact || '') : '';
+                    if (res.preview) {
+                        $('#rv_contact').text(res.sendable === 1 ? contact : 'Example recipient: ' + res.preview.name + (contact ? ' · ' + contact : ''));
+                    } else {
+                        $('#rv_contact').text('');
+                    }
 
                     var big = res.sendable > 500;
                     $('#rv_confirm_box').toggle(big);

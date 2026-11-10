@@ -9,9 +9,10 @@ class CommunicationsMenuSeeder extends Seeder
 {
     /**
      * Add Communications as its own top-level menu group (a super module, beside Management and
-     * Accounting) holding one "Email & SMS" module with its four pages, and give them to the
+     * Accounting) holding one "Email & SMS" module with its five pages, and give them to the
      * Directors role. Safe to re-run: the group and module are matched by name, the sub-modules by
-     * URL and the permissions by role/sub-module pair. A module left under Management by an earlier
+     * URL and the permissions by role/sub-module pair. Re-running puts the five pages back in the tab
+     * bar's order with the same names. A module left under Management by an earlier
      * run of this seeder (it was then named "Communications") is moved into the new group.
      */
     public function run(): void {
@@ -46,11 +47,14 @@ class CommunicationsMenuSeeder extends Seeder
             ]);
         }
 
+        // Same order, names and icons as the tab bar along the top of every Communications page
+        // (resources/views/communications/_header.blade.php). Keep the two in step.
         $pages = [
-            ['url' => '/communications', 'name' => 'Sent Batches', 'icon' => 'outbox'],
-            ['url' => '/communications/compose', 'name' => 'Compose', 'icon' => 'edit_note'],
+            ['url' => '/communications/compose', 'name' => 'Compose', 'icon' => 'edit_square'],
+            ['url' => '/communications', 'name' => 'Sent', 'icon' => 'outbox'],
             ['url' => '/communications/logs', 'name' => 'Logs', 'icon' => 'receipt_long'],
             ['url' => '/communications/metrics', 'name' => 'Metrics', 'icon' => 'monitoring'],
+            ['url' => '/communications/settings', 'name' => 'Settings', 'icon' => 'settings'],
         ];
 
         foreach ($pages as $index => $page) {
@@ -61,7 +65,7 @@ class CommunicationsMenuSeeder extends Seeder
                 [
                     'sub_module_name' => $page['name'],
                     'icon' => $page['icon'],
-                    'order' => $existing->order ?? $index + 1,
+                    'order' => $index + 1,
                     'added_by' => 'amos',
                     'added_on' => $now,
                     'module_id' => $moduleId,

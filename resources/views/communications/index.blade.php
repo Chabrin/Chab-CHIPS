@@ -28,11 +28,11 @@
                 </div>
                 <div class="cm-field">
                     <label class="cm-label">From</label>
-                    <input type="date" class="cm-input" id="date_from">
+                    <input type="date" class="cm-input" id="date_from" value="{{ now()->subMonthNoOverflow()->format('Y-m-d') }}">
                 </div>
                 <div class="cm-field">
                     <label class="cm-label">To</label>
-                    <input type="date" class="cm-input" id="date_to">
+                    <input type="date" class="cm-input" id="date_to" value="{{ now()->format('Y-m-d') }}">
                 </div>
                 <div class="cm-field" style="min-width:auto;">
                     <button type="button" class="cm-btn cm-btn-primary" id="search_btn" style="height:38px;"><span class="material-symbols-outlined" id="search_icon">search</span>Search</button>
@@ -58,12 +58,15 @@
         </div>
     </div>
 </div>
+@include('communications._message_modal')
 @endsection
 
 @section('scripts')
+@include('communications._message_modal_js')
 <script>
     $(document).ready(function() {
         var showUrl = '{{ url("/communications/batches") }}/';
+        var ajaxBatchUrl = '{{ url("/ajax/communications/batches") }}/';
         var composeUrl = '{{ route("communications.compose") }}';
 
         function esc(s) { return $('<div>').text(s == null ? '' : s).html(); }
@@ -107,11 +110,17 @@
                 { data: 'sent', orderable: false, render: function(d, t, r) { return t === 'display' ? delivery(r) : d; } },
                 { data: 'status', render: function(d, t) { return t === 'display' ? '<span class="cm-pill ' + d + '">' + (labels[d] || d) + '</span>' : d; } },
                 { data: 'sender', render: function(d, t) { return t === 'display' ? '<span style="font-size:12px;">' + esc(d) + '</span>' : d; } },
-                { data: null, orderable: false, searchable: false, render: function() { return '<span class="material-symbols-outlined" style="color:#9ec3e3;">chevron_right</span>'; } }
+                { data: null, orderable: false, searchable: false, render: function() { return '<button type="button" class="cm-read cm-btn cm-btn-light" title="Read the message" style="padding:4px 8px;"><span class="material-symbols-outlined" style="font-size:18px !important;">visibility</span></button>' + ' <span class="material-symbols-outlined" style="color:#9ec3e3;vertical-align:middle;">chevron_right</span>'; } }
             ],
             order: [[0, 'desc']],
             pageLength: 25,
-            createdRow: function(row, data) { $(row).addClass('cm-click').on('click', function() { window.location = showUrl + data.id; }); },
+            createdRow: function(row, data) {
+                $(row).addClass('cm-click').on('click', function(e) {
+                    // the eye button reads the message in a popup; anywhere else opens the batch
+                    if ($(e.target).closest('.cm-read').length) { cmOpenMessage(ajaxBatchUrl + data.id + '/message'); return; }
+                    window.location = showUrl + data.id;
+                });
+            },
             language: {
                 search: '', searchPlaceholder: 'Filter these results…',
                 emptyTable: '<div class="cm-empty"><span class="material-symbols-outlined">forward_to_inbox</span><h4>Nothing sent yet</h4><p>Messages you send will be listed here with their delivery results.</p><a href="' + composeUrl + '" class="cm-btn cm-btn-primary">Write the first one</a></div>',
