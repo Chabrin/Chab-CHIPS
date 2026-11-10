@@ -99,7 +99,7 @@ class TenantPayment extends Model
      */
     public function allocations()
     {
-        return $this->hasMany(TenantPaymentAllocation::class, 'parent_id');
+        return $this->hasMany(TenantPaymentAllocation::class, 'payment_id');
     }
 
     /**

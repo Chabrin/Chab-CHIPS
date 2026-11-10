@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\TenantPayment;
+use App\Services\PaymentAllocationService;
+use Illuminate\Validation\ValidationException;
 use App\Models\TenantPaymentAllocation;
 use App\Models\TenantPaymentAllocated;
 use App\Models\DebtorInvoice;
@@ -17,6 +19,15 @@ use App\Exports\TenantPaymentsAllocatedExport;
 
 class TenantPaymentsController extends Controller
 {
+    protected PaymentAllocationService $allocationService;
+
+    /**
+     * Inject the allocation service the manual allocation goes through.
+     */
+    public function __construct(PaymentAllocationService $allocationService) {
+        $this->allocationService = $allocationService;
+    }
+
     /**
      * Display the tenant payments listing page
      */
@@ -129,10 +140,10 @@ class TenantPaymentsController extends Controller
                 } elseif ($status === 'partially_allocated') {
                     // Payments where sum of allocations < amount
                     $query->whereHas('allocations')
-                        ->whereRaw('amount > (SELECT COALESCE(SUM(amount_allocated), 0) FROM sys_pm_tenants_payments_87_repeat WHERE parent_id = sys_pm_tenants_payments.id)');
+                        ->whereRaw('amount > (SELECT COALESCE(SUM(amount_allocated), 0) FROM sys_pm_tenants_payments_invoices WHERE payment_id = sys_pm_tenants_payments.id)');
                 } elseif ($status === 'fully_allocated') {
                     // Payments where sum of allocations >= amount
-                    $query->whereRaw('amount <= (SELECT COALESCE(SUM(amount_allocated), 0) FROM sys_pm_tenants_payments_87_repeat WHERE parent_id = sys_pm_tenants_payments.id)');
+                    $query->whereRaw('amount <= (SELECT COALESCE(SUM(amount_allocated), 0) FROM sys_pm_tenants_payments_invoices WHERE payment_id = sys_pm_tenants_payments.id)');
                 }
             }
 
@@ -246,13 +257,15 @@ class TenantPaymentsController extends Controller
                 'property',
                 'unit',
                 'lease',
-                'status',
-                'channel',
                 'allocations.invoice'
             ])->findOrFail($paymentId);
 
             $totalAllocated = $payment->allocations->sum('amount_allocated') ?? 0;
             $unallocated = $payment->amount - $totalAllocated;
+
+            // The status and channel relations point at tables that do not exist, so the labels are worked out here
+            $statusName = $totalAllocated == 0 ? 'Unallocated' : ($unallocated > 0 ? 'Partially Allocated' : 'Fully Allocated');
+            $channelName = $payment->channel_id ? DB::table('sys_fin_pay_channels')->where('id', $payment->channel_id)->value('channel_name') : null;
 
             $allocations = $payment->allocations->map(function ($allocation) {
                 return [
@@ -261,8 +274,9 @@ class TenantPaymentsController extends Controller
                     'invoice_reference' => $allocation->invoice ? $allocation->invoice->reference_number : '-',
                     'amount_allocated' => number_format($allocation->amount_allocated, 2),
                     'amount_allocated_raw' => $allocation->amount_allocated,
-                    'payment_priority' => $allocation->payment_priority ?? '-',
-                    'allocation_id' => $allocation->allocation_id
+                    'payment_priority' => '-',
+                    'allocation_id' => $allocation->id,
+                    'allocated_on' => $allocation->date_time ? substr((string) $allocation->date_time, 0, 16) : '-'
                 ];
             });
 
@@ -278,9 +292,9 @@ class TenantPaymentsController extends Controller
                     'property_name' => $payment->property ? $payment->property->property_name : '-',
                     'unit_name' => $payment->unit ? $payment->unit->unit_name : '-',
                     'narration' => $payment->narration ?? '-',
-                    'channel' => $payment->channel ? $payment->channel->channel_name : '-',
+                    'channel' => $channelName ?: '-',
                     'receipt_number' => $payment->receipt_number ?? '-',
-                    'status' => $payment->status ? $payment->status->status_name : '-',
+                    'status' => $statusName,
                     'total_allocated' => number_format($totalAllocated, 2),
                     'total_allocated_raw' => $totalAllocated,
                     'unallocated_amount' => number_format($unallocated, 2),
@@ -347,82 +361,34 @@ class TenantPaymentsController extends Controller
     }
 
     /**
-     * Allocate payment to invoice
+     * Allocate a payment to one invoice through the allocation service, so the invoice, payment, tenant ledger,
+     * landlord ledger and GL are updated exactly as for an automatic allocation. The amount is not chosen by the
+     * caller: it is the lesser of the payment's unallocated balance and the invoice's balance.
      */
-    public function allocatePayment(Request $request, $id)
-    {
+    public function allocatePayment(Request $request, $id) {
         try {
-            $request->validate([
-                'invoice_id' => 'required|integer|exists:sys_pm_debtors_invoices,id',
-                'amount_allocated' => 'required|numeric|min:0.01'
-            ]);
+            $request->validate(['invoice_id' => 'required|integer|exists:sys_pm_debtors_invoices,id']);
 
-            $paymentId = decrypt($id);
-            $payment = TenantPayment::with('allocations')->findOrFail($paymentId);
+            $result = $this->allocationService->manualAllocate((int) decrypt($id), (int) $request->invoice_id);
 
-            // Check available amount
-            $totalAllocated = $payment->allocations->sum('amount_allocated') ?? 0;
-            $available = $payment->amount - $totalAllocated;
-
-            if ($request->amount_allocated > $available) {
+            if (!$result['success']) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Allocation amount exceeds available balance. Available: ' . number_format($available, 2)
-                ], 400);
+                    'message' => 'Nothing was allocated: the payment is already fully allocated or the invoice is already paid.'
+                ], 422);
             }
-
-            // Check if invoice exists and is not fully paid
-            $invoice = DebtorInvoice::with('invoiceItems')->findOrFail($request->invoice_id);
-            $invoiceTotal = $invoice->invoiceItems->sum('total_amount') ?? 0;
-            $invoicePaid = TenantPaymentAllocation::where('invoice_id', $invoice->id)->sum('amount_allocated') ?? 0;
-            $invoiceBalance = $invoiceTotal - $invoicePaid;
-
-            if ($request->amount_allocated > $invoiceBalance) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Allocation amount exceeds invoice balance. Invoice balance: ' . number_format($invoiceBalance, 2)
-                ], 400);
-            }
-
-            DB::beginTransaction();
-
-            // Create allocation
-            $allocation = TenantPaymentAllocation::create([
-                'parent_id' => $payment->id,
-                'invoice_id' => $request->invoice_id,
-                'amount_allocated' => $request->amount_allocated,
-                'payment_priority' => $request->payment_priority ?? null,
-                'allocation_id' => time() . rand(1000, 9999) // Generate unique allocation ID
-            ]);
-
-            // Update invoice status based on payment
-            $newInvoicePaid = $invoicePaid + $request->amount_allocated;
-            if ($newInvoicePaid >= $invoiceTotal) {
-                $invoice->current_status_id = 9; // Fully Paid
-            } else {
-                $invoice->current_status_id = 6; // Partially Paid
-            }
-            $invoice->save();
-
-            // Update payment status if fully allocated
-            $newTotalAllocated = $totalAllocated + $request->amount_allocated;
-            if ($newTotalAllocated >= $payment->amount) {
-                $payment->current_status_id = 9; // Fully Allocated
-                $payment->save();
-            }
-
-            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Payment allocated successfully',
                 'allocation' => [
-                    'id' => $allocation->id,
-                    'amount_allocated' => number_format($allocation->amount_allocated, 2)
+                    'amount_allocated' => number_format($result['result']['amount'], 2),
+                    'invoice_status' => $result['result']['invoice_status']
                 ]
             ]);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Error allocating payment: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
@@ -432,58 +398,15 @@ class TenantPaymentsController extends Controller
     }
 
     /**
-     * Delete allocation
+     * Allocations cannot be removed from here. An allocation has already posted a tenant ledger credit, a landlord
+     * ledger and return-threshold update and a GL journal, and deleting the allocation row alone would leave all of
+     * those standing. Removing an allocation needs a full reversal, which does not exist yet.
      */
-    public function deleteAllocation($allocationId)
-    {
-        try {
-            $allocation = TenantPaymentAllocation::findOrFail($allocationId);
-
-            DB::beginTransaction();
-
-            $payment = $allocation->payment;
-            $invoice = $allocation->invoice;
-            $amountAllocated = $allocation->amount_allocated;
-
-            // Delete the allocation
-            $allocation->delete();
-
-            // Update payment status
-            $totalAllocated = $payment->allocations()->sum('amount_allocated') ?? 0;
-            if ($totalAllocated < $payment->amount) {
-                $payment->current_status_id = 6; // Partially Allocated
-                $payment->save();
-            }
-
-            // Update invoice status
-            if ($invoice) {
-                $invoiceTotal = $invoice->invoiceItems->sum('total_amount') ?? 0;
-                $invoicePaid = TenantPaymentAllocation::where('invoice_id', $invoice->id)->sum('amount_allocated') ?? 0;
-
-                if ($invoicePaid >= $invoiceTotal) {
-                    $invoice->current_status_id = 9; // Fully Paid
-                } elseif ($invoicePaid > 0) {
-                    $invoice->current_status_id = 6; // Partially Paid
-                } else {
-                    $invoice->current_status_id = 1; // Pending
-                }
-                $invoice->save();
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Allocation removed successfully'
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error deleting allocation: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error deleting allocation: ' . $e->getMessage()
-            ], 500);
-        }
+    public function deleteAllocation($allocationId) {
+        return response()->json([
+            'success' => false,
+            'message' => 'An allocation cannot be removed here because it has already posted to the ledgers and the GL.'
+        ], 422);
     }
 
     /**
@@ -514,7 +437,7 @@ class TenantPaymentsController extends Controller
             }
 
             // Only get payments with unallocated balance
-            $query->whereRaw('amount > (SELECT COALESCE(SUM(amount_allocated), 0) FROM sys_pm_tenants_payments_87_repeat WHERE parent_id = sys_pm_tenants_payments.id)');
+            $query->whereRaw('amount > (SELECT COALESCE(SUM(amount_allocated), 0) FROM sys_pm_tenants_payments_invoices WHERE payment_id = sys_pm_tenants_payments.id)');
 
             // Return top 100 for initial load or search results
             $query->orderBy('payment_date', 'desc')->limit(100);
@@ -633,99 +556,6 @@ class TenantPaymentsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error searching invoices: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Store allocation from allocation page
-     */
-    public function storeAllocation(Request $request)
-    {
-        try {
-            $request->validate([
-                'payment_id' => 'required',
-                'invoice_id' => 'required|integer|exists:sys_pm_debtors_invoices,id',
-                'amount_allocated' => 'required|numeric|min:0.01'
-            ]);
-
-            $paymentId = decrypt($request->payment_id);
-            $payment = TenantPayment::with('allocations')->findOrFail($paymentId);
-
-            // Check available amount
-            $totalAllocated = $payment->allocations->sum('amount_allocated') ?? 0;
-            $available = $payment->amount - $totalAllocated;
-
-            if ($request->amount_allocated > $available) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Allocation amount exceeds available balance. Available: ' . number_format($available, 2)
-                ], 400);
-            }
-
-            // Check invoice balance
-            $invoice = DebtorInvoice::with('lineItems')->findOrFail($request->invoice_id);
-            $invoiceTotal = $invoice->lineItems->sum('total_amount') ?? 0;
-            $invoicePaid = TenantPaymentAllocation::where('invoice_id', $invoice->id)->sum('amount_allocated') ?? 0;
-            $invoiceBalance = $invoiceTotal - $invoicePaid;
-
-            if ($request->amount_allocated > $invoiceBalance) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Allocation amount exceeds invoice balance. Invoice balance: ' . number_format($invoiceBalance, 2)
-                ], 400);
-            }
-
-            DB::beginTransaction();
-
-            // Create allocation
-            $allocation = TenantPaymentAllocation::create([
-                'parent_id' => $payment->id,
-                'invoice_id' => $request->invoice_id,
-                'amount_allocated' => $request->amount_allocated,
-                'payment_priority' => $request->payment_priority ?? null,
-                'allocation_id' => time() . rand(1000, 9999)
-            ]);
-
-            // Update invoice status
-            $newInvoicePaid = $invoicePaid + $request->amount_allocated;
-            if ($newInvoicePaid >= $invoiceTotal) {
-                $invoice->current_status_id = 9; // Fully Paid
-            } else {
-                $invoice->current_status_id = 6; // Partially Paid
-            }
-            $invoice->save();
-
-            // Update payment status if fully allocated
-            $newTotalAllocated = $totalAllocated + $request->amount_allocated;
-            if ($newTotalAllocated >= $payment->amount) {
-                $payment->current_status_id = 9; // Fully Allocated
-                $payment->save();
-            }
-
-            DB::commit();
-
-            Log::info('Payment allocation created', [
-                'allocation_id' => $allocation->id,
-                'payment_id' => $payment->id,
-                'invoice_id' => $invoice->id,
-                'amount' => $request->amount_allocated
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment allocated successfully'
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error creating allocation', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Error allocating payment: ' . $e->getMessage()
             ], 500);
         }
     }
