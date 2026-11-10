@@ -173,6 +173,14 @@ Rescheduled advances append `-R1`, `-R2`, etc. (e.g. `ADV-2026-007-R1`).
     └─→ 8 (Rescheduled) — replaced by a new advance
 ```
 
+### Editing and deleting
+
+- **Quick edit** (amount, rate, dates) is allowed only while the advance is **Pending**. Once it is Approved the terms are signed off: the person who raised an advance cannot confirm it, so changing the terms after the confirmation would get around that check. A Posted advance is on the client account and changes only through Restructure (dates, repayment months and a lower rate; the principal stays). Cleared, Cancelled, Suspended and Rescheduled advances are closed. The rule is `ClientAdvance::canBeEdited()`, used by the update endpoint, the advances list and the advance page. **Restructure** itself works on Posted advances only.
+- Both the edit and the delete re-read the advance under a database lock before checking its status, so an advance the landlord posts through the e-mail link (or a colleague confirms) at the same moment is refused, not changed or deleted.
+- **Delete** is allowed only while the advance is Pending, and not for an advance that replaces an earlier one (it would leave the earlier one closed with no successor). It removes the advance together with its repayment schedule rows and its own restructure history rows (those tables have no foreign key) and its loan form file (`ClientAdvanceService::deletePending`).
+- An Approved advance whose terms are wrong cannot be edited, restructured or deleted. There is no cancel or revert action yet, so it has to be posted first.
+- Note: the sections below that describe a **Reschedule** button and `-R1` references describe an older flow. The current code has no Reschedule endpoint, only Restructure.
+
 ---
 
 ## 6. Approval Process

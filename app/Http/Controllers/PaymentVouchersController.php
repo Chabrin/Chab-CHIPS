@@ -203,13 +203,14 @@ class PaymentVouchersController extends Controller
                 'lines.min'      => 'Add at least one entry before creating the voucher.',
             ]);
 
-            $maxSeq      = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
-            $nextSeq     = $maxSeq + 1;
-            $voucherNum  = 'PV' . $validated['year'] . str_pad($validated['month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
             $totalAmount = collect($validated['lines'])->sum('amount');
             $voucherType = $validated['voucher_type'] ?? 'general_voucher';
 
-            $header = DB::transaction(function () use ($validated, $voucherNum, $nextSeq, $totalAmount, $voucherType) {
+            $header = DB::transaction(function () use ($validated, $totalAmount, $voucherType) {
+                // The number is taken inside the transaction that saves the voucher, so two people cannot get the same one.
+                $nextSeq    = PaymentVoucherHeader::nextSequence();
+                $voucherNum = 'PV' . $validated['year'] . str_pad($validated['month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
+
                 $header = PaymentVoucherHeader::create([
                     'voucher_sequence' => $nextSeq,
                     'voucher_number'   => $voucherNum,
@@ -261,6 +262,8 @@ class PaymentVouchersController extends Controller
                 return $header;
             });
 
+            $voucherNum = $header->voucher_number;
+
             return response()->json([
                 'success'        => true,
                 'message'        => 'Voucher ' . $voucherNum . ' created successfully',
@@ -293,33 +296,35 @@ class PaymentVouchersController extends Controller
                 'month'        => ['required', 'integer', 'min:1', 'max:12'],
             ]);
 
-            $maxSeq       = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
-            $nextSeq      = $maxSeq + 1;
-            $voucherNumber = 'PV' . $validated['year'] . str_pad($validated['month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
+            // The number is taken inside the transaction that saves the header, so two people cannot get the same one.
+            $header = DB::transaction(function () use ($validated) {
+                $nextSeq = PaymentVoucherHeader::nextSequence();
+                $voucherNumber = 'PV' . $validated['year'] . str_pad($validated['month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
 
-            $header = PaymentVoucherHeader::create([
-                'voucher_sequence' => $nextSeq,
-                'voucher_number'   => $voucherNumber,
-                'year'             => $validated['year'],
-                'month'            => $validated['month'],
-                'voucher_date'     => $validated['voucher_date'],
-                'description'      => $validated['description'],
-                'vendor_id'        => $validated['vendor_id'] ?? null,
-                'vendor_name'      => $validated['vendor_name'],
-                'vendor_type'      => $validated['vendor_type'],
-                'debit_amount'     => $validated['debit_amount'],
-                'credit_amount'    => 0,
-                'entry_count'      => 0,
-                'voucher_status'   => 'Pending',
-                'is_deleted'       => 0,
-                'prepared_by'      => Auth::user()->name,
-                'is_printed'       => 0,
-            ]);
+                return PaymentVoucherHeader::create([
+                    'voucher_sequence' => $nextSeq,
+                    'voucher_number' => $voucherNumber,
+                    'year' => $validated['year'],
+                    'month' => $validated['month'],
+                    'voucher_date' => $validated['voucher_date'],
+                    'description' => $validated['description'],
+                    'vendor_id' => $validated['vendor_id'] ?? null,
+                    'vendor_name' => $validated['vendor_name'],
+                    'vendor_type' => $validated['vendor_type'],
+                    'debit_amount' => $validated['debit_amount'],
+                    'credit_amount' => 0,
+                    'entry_count' => 0,
+                    'voucher_status' => 'Pending',
+                    'is_deleted' => 0,
+                    'prepared_by' => Auth::user()->name,
+                    'is_printed' => 0,
+                ]);
+            });
 
             return response()->json([
                 'success'        => true,
                 'message'        => 'Voucher header created successfully',
-                'voucher_number' => $voucherNumber,
+                'voucher_number' => $header->voucher_number,
                 'encrypted_id'   => encrypt($header->id),
             ]);
         } catch (ValidationException $e) {
@@ -664,9 +669,8 @@ class PaymentVouchersController extends Controller
                 return response()->json(['success' => false, 'message' => 'The voucher must pay the return\'s net balance of ' . number_format($netBalance, 2) . '.'], 422);
             }
 
-            // Get next voucher sequence
-            $maxSeq = PaymentVoucherHeader::max('voucher_sequence') ?? 0;
-            $nextSeq = $maxSeq + 1;
+            // Get next voucher sequence (inside this transaction, which holds the number until it commits)
+            $nextSeq = PaymentVoucherHeader::nextSequence();
             $voucherNumber = 'PV' . $validated['post_year'] . str_pad($validated['post_month'], 2, '0', STR_PAD_LEFT) . $nextSeq;
             $entryCount = 0;
             

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\ClientAccountException;
+use App\Models\AdvanceRescheduleHistory;
 use App\Models\ChartAccount;
 use App\Models\Client;
 use App\Models\ClientAdvance;
@@ -172,7 +173,7 @@ class ClientAdvanceService
             ->first(['d.account_number', 'b.bank_name']);
 
         $principal = round((float) $advance->amount, 2);
-        $sequence = ((int) PaymentVoucherHeader::max('voucher_sequence')) + 1;
+        $sequence = PaymentVoucherHeader::nextSequence();
         $now = now();
         $number = 'PV' . $now->year . str_pad($now->month, 2, '0', STR_PAD_LEFT) . $sequence;
         $preparedBy = mb_substr((string) (User::find($userId)->name ?? $userId), 0, 50);
@@ -638,5 +639,42 @@ class ClientAdvanceService
         }
 
         return $advance;
+    }
+
+    /**
+     * Delete a Pending advance together with what hangs off it: its repayment schedule rows and its own
+     * restructure history rows (those tables have no foreign key, so they would be left behind), and its loan
+     * form file. The advance is read again under a lock, so one that was posted or approved a moment earlier
+     * (the landlord's e-mail link, a colleague's confirm) is refused instead of deleted. An advance that
+     * replaces an older one is refused too: deleting it would leave the older one closed with no successor.
+     * Anything past Pending is on the client account and is refused.
+     *
+     * @param ClientAdvance $advance
+     */
+    public function deletePending(ClientAdvance $advance): void {
+        $reference = (string) $advance->reference_number;
+
+        DB::transaction(function () use ($advance, $reference) {
+            $locked = ClientAdvance::whereKey($advance->id)->lockForUpdate()->first();
+
+            if (!$locked) {
+                throw new ClientAccountException('Advance ' . $reference . ' no longer exists.');
+            }
+
+            if ((int) $locked->current_status_id !== 1) {
+                throw new ClientAccountException('Advance ' . $reference . ' is no longer Pending, so it cannot be deleted.');
+            }
+
+            if ($locked->previous_advance_id) {
+                throw new ClientAccountException('Advance ' . $reference . ' replaces an earlier advance, so it cannot be deleted.');
+            }
+
+            $locked->schedule()->delete();
+            AdvanceRescheduleHistory::where('original_advance_id', $locked->id)->where('from_advance_id', $locked->id)->where('to_advance_id', $locked->id)->delete();
+            $locked->delete();
+        });
+
+        // Only after the database part has committed: a failed delete above must not lose the file.
+        Storage::disk('local')->deleteDirectory('advance_loan_forms/' . $advance->id);
     }
 }

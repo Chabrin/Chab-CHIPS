@@ -58,7 +58,7 @@ class ClientAdvanceController extends Controller
                 ->findOrFail($id);
 
             $schedule = $this->buildScheduleArray($advance);
-            $canRestructure = $advance->canBeRestructured();
+            $canRestructure = (int) $advance->current_status_id === 6 && $advance->canBeRestructured();
 
             // Already-recovered installments, for display alongside the live restructure
             // preview so the modal shows the full picture (repaid + newly-restructured rows).
@@ -144,6 +144,7 @@ class ClientAdvanceController extends Controller
                         'created_by_name' => $advance->createdBy->name ?? '-',
                         'is_own_requisition' => $isOwnRequisition,
                         'can_update' => $canUpdate,
+                        'can_edit' => $canUpdate && $advance->canBeEdited(),
                         'can_delete' => Auth::user()->isAbleTo('delete_client_advances'),
                         'can_confirm' => $canUpdate && !$isOwnRequisition && (int) $advance->current_status_id === 1,
                         'can_post' => $canUpdate && (int) $advance->current_status_id === 5,
@@ -514,19 +515,24 @@ class ClientAdvanceController extends Controller
     /**
      * Quick-edit a client advance. Only the start dates, percentage, and amount can
      * change — client, property, advance type, requisition date, narration, charges,
-     * and repayment months are fixed at creation. Posted advances must go through
-     * Reschedule instead, since their schedule may already have cleared payments.
+     * and repayment months are fixed at creation. Only a Pending advance can be edited
+     * (see ClientAdvance::canBeEdited); a Posted one goes through Restructure instead,
+     * since its schedule may already have cleared payments.
      */
     public function update(Request $request, $encryptedId)
     {
         DB::beginTransaction();
         try {
             $id = Crypt::decrypt($encryptedId);
-            $advance = ClientAdvance::findOrFail($id);
+            // Locked, so a confirm or post that commits at the same moment cannot slip past the status check below.
+            $advance = ClientAdvance::whereKey($id)->lockForUpdate()->firstOrFail();
 
-            if ($advance->current_status_id == 6) {
+            if (!$advance->canBeEdited()) {
                 DB::rollBack();
-                return response()->json(['success' => false, 'message' => 'Posted advances cannot be edited directly — use Reschedule instead.'], 422);
+                $message = (int) $advance->current_status_id === 6
+                    ? 'Posted advances cannot be edited directly — use Restructure instead.'
+                    : 'Only a Pending advance can be edited. Once an advance is approved its terms are signed off, and a closed advance cannot be changed.';
+                return response()->json(['success' => false, 'message' => $message], 422);
             }
 
             $validated = $request->validate([
@@ -662,6 +668,12 @@ class ClientAdvanceController extends Controller
             $id = Crypt::decrypt($encryptedId);
             $advance = ClientAdvance::with(['client', 'schedule', 'landlordAccountEntries'])->findOrFail($id);
             $oldTotal = (float) $advance->total_amount;
+
+            // Posted advances only: a Pending one is edited, and an Approved one is signed off (see ClientAdvance::canBeEdited).
+            if ((int) $advance->current_status_id !== 6) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => 'Only a Posted advance can be restructured. A Pending advance can be edited instead.'], 422);
+            }
 
             if (!$advance->canBeRestructured()) {
                 DB::rollBack();
@@ -893,9 +905,12 @@ class ClientAdvanceController extends Controller
                 return response()->json(['success' => false, 'message' => 'Only a Pending advance can be deleted. Once approved or posted, an advance is on the client account.'], 422);
             }
 
-            $advance->delete();
+            $this->advances->deletePending($advance);
 
             return response()->json(['success' => true, 'message' => 'Client advance deleted successfully']);
+        } catch (ClientAccountException $e) {
+            // The advance changed under us (posted or approved a moment ago): a plain refusal, not a server error.
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             ErrorDispatcher::dispatch($e);
             Log::error('Error deleting client advance: ' . $e->getMessage());

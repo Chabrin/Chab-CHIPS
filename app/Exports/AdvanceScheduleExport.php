@@ -5,6 +5,7 @@ namespace App\Exports;
 use App\Models\ClientAdvance;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithCustomStartCell;
@@ -13,7 +14,8 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 
-class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles, WithTitle, WithCustomStartCell
+// WithStrictNullComparison keeps a zero as a zero; without it a zero balance or a zero repaid amount is left as an empty cell.
+class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles, WithTitle, WithCustomStartCell, WithStrictNullComparison
 {
     protected ClientAdvance $advance;
     protected array $schedule;
@@ -53,14 +55,15 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
     {
         return collect($this->schedule)->map(function ($entry, $index) {
             return [
-                'no'             => $index + 1,
-                'due_date'       => $entry['payment_date'] . (($entry['restructured'] ?? false) ? ' (restructured)' : ''),
-                'principal'      => number_format($entry['principal_amount'], 2),
-                'interest'       => number_format($entry['interest'], 2),
-                'total_payment'  => number_format($entry['total_amount'], 2),
-                'repaid'         => ($entry['repaid_amount'] ?? 0) > 0 ? number_format($entry['repaid_amount'], 2) : '—',
-                'balance'        => number_format($entry['loan_balance'], 2),
-                'status'         => $this->statusNames[$entry['status_id'] ?? 1] ?? '—',
+                'no' => $index + 1,
+                'due_date' => $entry['payment_date'] . (($entry['restructured'] ?? false) ? ' (restructured)' : ''),
+                // Real numbers, formatted in styles(), so the columns can be summed and sorted in Excel.
+                'principal' => round((float) $entry['principal_amount'], 2),
+                'interest' => round((float) $entry['interest'], 2),
+                'total_payment' => round((float) $entry['total_amount'], 2),
+                'repaid' => round((float) ($entry['repaid_amount'] ?? 0), 2),
+                'balance' => round((float) $entry['loan_balance'], 2),
+                'status' => $this->statusNames[$entry['status_id'] ?? 1] ?? '—',
             ];
         });
     }
@@ -106,21 +109,27 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
 
         // Financial summary
         $sheet->setCellValue('A5', 'Principal:');
-        $sheet->setCellValue('B5', 'KSh ' . number_format($advance->amount, 2));
+        $sheet->setCellValue('B5', round((float) $advance->amount, 2));
         $sheet->getStyle('A5')->getFont()->setBold(true);
         $sheet->setCellValue('D5', 'Interest Rate:');
         $sheet->setCellValue('E5', ($advance->interest_rate ?? 0) . '%');
         $sheet->getStyle('D5')->getFont()->setBold(true);
 
         $sheet->setCellValue('A6', 'Interest Amount:');
-        $sheet->setCellValue('B6', 'KSh ' . number_format($advance->interest_amount ?? 0, 2));
+        $sheet->setCellValue('B6', round((float) ($advance->interest_amount ?? 0), 2));
         $sheet->getStyle('A6')->getFont()->setBold(true);
         $sheet->setCellValue('D6', 'Processing Charge:');
-        $sheet->setCellValue('E6', 'KSh ' . number_format($advance->charge_amount ?? 0, 2));
+        $sheet->setCellValue('E6', round((float) ($advance->charge_amount ?? 0), 2));
         $sheet->getStyle('D6')->getFont()->setBold(true);
 
         $sheet->setCellValue('A7', 'Total Amount:');
-        $sheet->setCellValue('B7', 'KSh ' . number_format($advance->total_amount, 2));
+        $sheet->setCellValue('B7', round((float) $advance->total_amount, 2));
+
+        // The summary amounts are numbers shown with a KSh prefix.
+        foreach (['B5', 'B6', 'E6', 'B7'] as $cell) {
+            $sheet->getStyle($cell)->getNumberFormat()->setFormatCode('"KSh "#,##0.00');
+            $sheet->getStyle($cell)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+        }
         $sheet->getStyle('A7')->getFont()->setBold(true)->setSize(12);
         $sheet->getStyle('B7')->getFont()->setBold(true)->setSize(12);
         $sheet->getStyle('B7')->getFont()->getColor()->setRGB('1a7a4a');
@@ -149,10 +158,10 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
 
         $sheet->setCellValue('A' . $totalsRow, 'Totals');
         $sheet->mergeCells('A' . $totalsRow . ':B' . $totalsRow);
-        $sheet->setCellValue('C' . $totalsRow, number_format($totalPrincipal, 2));
-        $sheet->setCellValue('D' . $totalsRow, number_format($totalInterest, 2));
-        $sheet->setCellValue('E' . $totalsRow, number_format($totalPayment, 2));
-        $sheet->setCellValue('F' . $totalsRow, number_format($totalRepaid, 2));
+        $sheet->setCellValue('C' . $totalsRow, round((float) $totalPrincipal, 2));
+        $sheet->setCellValue('D' . $totalsRow, round((float) $totalInterest, 2));
+        $sheet->setCellValue('E' . $totalsRow, round((float) $totalPayment, 2));
+        $sheet->setCellValue('F' . $totalsRow, round((float) $totalRepaid, 2));
         $sheet->setCellValue('G' . $totalsRow, '—');
         $sheet->setCellValue('H' . $totalsRow, '—');
 
@@ -162,6 +171,14 @@ class AdvanceScheduleExport implements FromCollection, WithHeadings, WithStyles,
             'borders' => ['top' => ['borderStyle' => Border::BORDER_MEDIUM]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
+
+        // Money columns: principal, interest, payment, repaid, balance. A repaid amount of zero shows as a dash, as before.
+        if (count($this->schedule) > 0) {
+            $sheet->getStyle('C10:E' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('F10:F' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00;-#,##0.00;"—"');
+            $sheet->getStyle('G10:G' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+        }
+        $sheet->getStyle('C' . $totalsRow . ':F' . $totalsRow)->getNumberFormat()->setFormatCode('#,##0.00');
 
         // Column widths
         $sheet->getColumnDimension('A')->setWidth(6);

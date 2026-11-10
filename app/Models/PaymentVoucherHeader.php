@@ -3,10 +3,34 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use LogicException;
 
 class PaymentVoucherHeader extends Model
 {
+    /** Key of the database lock that makes two people creating a voucher at the same moment take turns. */
+    private const SEQUENCE_LOCK_KEY = 7340011;
+
     protected $table = 'cb_payment_vouchers_headers_new';
+
+    /**
+     * Take the next voucher sequence number. Every place that creates a voucher header uses this, so no two
+     * vouchers get the same number. It must be called inside an open transaction, and the header must be saved
+     * in that same transaction: the lock is held until the transaction ends, so the next person waits and then
+     * sees this voucher when they read the highest number.
+     */
+    public static function nextSequence(): int {
+        if (DB::transactionLevel() === 0) {
+            throw new LogicException('nextSequence() must be called inside a database transaction.');
+        }
+
+        // Postgres only (production and dev). The SQLite test database has a single connection, so there is nothing to wait for.
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(?)', [self::SEQUENCE_LOCK_KEY]);
+        }
+
+        return ((int) static::max('voucher_sequence')) + 1;
+    }
 
     protected $fillable = [
         'voucher_sequence',

@@ -179,6 +179,17 @@ class ClientAdvance extends Model
     }
 
     /**
+     * Whether the quick edit (amount, rate, dates) is allowed: only while the advance is Pending. Once it is
+     * Approved the terms are signed off (the person who raised it cannot confirm it, so changing them afterwards
+     * would get around that check). Once Posted it is on the client account, and only Restructure applies.
+     * Cleared, Cancelled, Suspended and Rescheduled advances are closed.
+     */
+    public function canBeEdited(): bool
+    {
+        return (int) $this->current_status_id === 1;
+    }
+
+    /**
      * Whether there's anything left to restructure. Overpayment Advances (installments)
      * can be restructured as long as at least one installment hasn't actually been
      * recovered yet (per the ledger) — already-recovered installments are left untouched.

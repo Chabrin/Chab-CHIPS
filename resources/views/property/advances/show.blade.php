@@ -83,7 +83,7 @@
                             @elseif($advance->current_status_id == 6 && !$activeVoucher)
                             <span class="text-muted align-self-center" style="font-size:0.8rem;">Posted before GL posting &mdash; no payment voucher can be made</span>
                             @endif
-                            @if($advance->current_status_id != 6)
+                            @if($advance->canBeEdited())
                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editAdvanceModal">
                                 <span class="material-symbols-outlined" style="font-size:16px; vertical-align:bottom;">edit</span> Edit
                             </button>
