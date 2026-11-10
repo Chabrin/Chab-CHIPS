@@ -17,6 +17,9 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    // Name shown on outgoing email and SMS branding (the APP_NAME default is not fit to show clients)
+    'company_name' => env('COMPANY_NAME', 'Chabrin Agencies Ltd'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

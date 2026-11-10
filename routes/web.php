@@ -1941,6 +1941,23 @@ Route::middleware(['auth', 'onelogin'])->group(function () {
     Route::post('/ledger/accounts/{encryptedId}',                [App\Http\Controllers\LedgerController::class, 'updateAccount'])->name('ledger.accounts.update');
     Route::delete('/ledger/accounts/{encryptedId}',              [App\Http\Controllers\LedgerController::class, 'deleteAccount'])->name('ledger.accounts.delete');
 
+    // Communications module: compose + send email/SMS to an audience, batches, logs, metrics
+    Route::get('/communications',                        [App\Http\Controllers\CommunicationsController::class, 'index'])->name('communications.index');
+    Route::get('/communications/compose',                [App\Http\Controllers\CommunicationsController::class, 'compose'])->name('communications.compose');
+    Route::get('/communications/logs',                   [App\Http\Controllers\CommunicationsController::class, 'logs'])->name('communications.logs');
+    Route::get('/communications/metrics',                [App\Http\Controllers\CommunicationsController::class, 'metrics'])->name('communications.metrics');
+    Route::get('/communications/batches/{id}',           [App\Http\Controllers\CommunicationsController::class, 'show'])->name('communications.show');
+    Route::get('/ajax/communications/batches',           [App\Http\Controllers\CommunicationsController::class, 'batchesData'])->name('ajax.communications.batches');
+    Route::get('/ajax/communications/batches/{id}/logs', [App\Http\Controllers\CommunicationsController::class, 'batchLogsData'])->name('ajax.communications.batch.logs');
+    Route::post('/ajax/communications/batches/{id}/resend', [App\Http\Controllers\CommunicationsController::class, 'resendFailed'])->name('ajax.communications.batch.resend');
+    Route::post('/ajax/communications/estimate',         [App\Http\Controllers\CommunicationsController::class, 'estimate'])->name('ajax.communications.estimate');
+    Route::post('/ajax/communications/send',             [App\Http\Controllers\CommunicationsController::class, 'send'])->name('ajax.communications.send');
+    Route::get('/ajax/communications/logs',              [App\Http\Controllers\CommunicationsController::class, 'logsData'])->name('ajax.communications.logs');
+    Route::get('/ajax/communications/metrics',           [App\Http\Controllers\CommunicationsController::class, 'metricsData'])->name('ajax.communications.metrics');
+    Route::get('/ajax/communications/client-search',     [App\Http\Controllers\CommunicationsController::class, 'clientSearch'])->name('ajax.communications.client.search');
+    Route::get('/ajax/communications/property-search',   [App\Http\Controllers\CommunicationsController::class, 'propertySearch'])->name('ajax.communications.property.search');
+    Route::get('/ajax/communications/batches/{id}/status', [App\Http\Controllers\CommunicationsController::class, 'batchStatus'])->name('ajax.communications.batch.status');
+
     // GL Periods
     Route::get('/accounting/fiscalyears',                        [App\Http\Controllers\LedgerController::class, 'periodsIndex'])->name('gl.periods.index');
     Route::get('/ajax/accounting/gl-periods',                    [App\Http\Controllers\LedgerController::class, 'getPeriods'])->name('gl.periods.data');
