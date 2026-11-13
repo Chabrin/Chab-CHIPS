@@ -266,6 +266,15 @@ trait ReturnThresholdTrait
                 return true; // Not an error, just no return to update
             }
 
+            // Migrated invoices carry no item_type_id (their item is named in return_type_id or the narration), so there
+            // is no item configuration to read. This threshold system is not the live payability rule (that is
+            // ReturnsPayThresholdTrait when the return is generated), so there is nothing to update here. Failing would
+            // roll back every payment against a migrated invoice that has a return row, which is every arrears payment.
+            if (empty($invoice->item_type_id)) {
+                Log::info("Invoice {$invoiceId} has no item_type_id (migrated invoice) - skipping threshold update");
+                return true;
+            }
+
             // Get item configuration
             $itemConfig = $this->getItemConfiguration($invoice->item_type_id);
             if (!$itemConfig) {
