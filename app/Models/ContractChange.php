@@ -15,6 +15,9 @@ class ContractChange extends Model
     public const ELEMENT_ADDED = 'element_added';
     public const ELEMENT_REMOVED = 'element_removed';
     public const ELEMENT_CHANGED = 'element_changed';
+    public const ELEMENT_TERMS = 'element_terms';
+    public const ITEM_EXCLUDED = 'item_excluded';
+    public const ITEM_INCLUDED = 'item_included';
 
     protected $table = 'contract_changes';
     public $timestamps = false;
@@ -126,6 +129,75 @@ class ContractChange extends Model
                 'created_at' => now(),
             ]);
         }
+    }
+
+    /**
+     * Record changes to how often an item applies, or what a part month does to it, on items that stay on the contract.
+     * Each side is element id => the terms in words (ContractElement::termsBrief()).
+     */
+    public static function terms(Contract|EmployeeContract $contract, array $old, array $new, ?int $userId): void
+    {
+        foreach ($new as $elementId => $terms) {
+            if (array_key_exists($elementId, $old) && $old[$elementId] !== $terms) {
+                self::create([
+                    'contract_id' => $contract->id,
+                    'staff_id' => $contract->staff_id,
+                    'field' => self::ELEMENT_TERMS,
+                    'element_id' => $elementId,
+                    'old_value' => mb_substr($old[$elementId], 0, 50),
+                    'new_value' => mb_substr($terms, 0, 50),
+                    'changed_by' => $userId,
+                    'created_at' => now(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Record company-wide items left out for this person, or put back. Each side is element id => the reason.
+     */
+    public static function exclusions(Contract|EmployeeContract $contract, array $old, array $new, ?int $userId): void
+    {
+        foreach ($new as $elementId => $reason) {
+            if (!array_key_exists($elementId, $old)) {
+                self::create([
+                    'contract_id' => $contract->id,
+                    'staff_id' => $contract->staff_id,
+                    'field' => self::ITEM_EXCLUDED,
+                    'element_id' => $elementId,
+                    'new_value' => mb_substr($reason, 0, 50),
+                    'changed_by' => $userId,
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
+        foreach ($old as $elementId => $reason) {
+            if (!array_key_exists($elementId, $new)) {
+                self::create([
+                    'contract_id' => $contract->id,
+                    'staff_id' => $contract->staff_id,
+                    'field' => self::ITEM_INCLUDED,
+                    'element_id' => $elementId,
+                    'old_value' => mb_substr($reason, 0, 50),
+                    'changed_by' => $userId,
+                    'created_at' => now(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * A contract's elements as element id => terms in words, the shape terms() compares.
+     */
+    public static function elementTerms($rows): array
+    {
+        $terms = [];
+        foreach ($rows as $row) {
+            $terms[(int) $row->element_id] = $row->termsBrief();
+        }
+
+        return $terms;
     }
 
     /**

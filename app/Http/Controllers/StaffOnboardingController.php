@@ -13,7 +13,10 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Services\EmployeeUploadGuard;
+use App\Services\StaffContactInput;
+use App\Services\StaffOnboardingTracker;
 use App\Traits\HandlesStaffSignature;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -79,11 +82,27 @@ class StaffOnboardingController extends Controller
         return redirect()->route('staff.onboarding.index')->with('success', 'A private onboarding link was sent to ' . $invitation->recipient_email . '.');
     }
 
-    public function index()
+    /**
+     * Everyone being onboarded in one list: invitations sent for the employee to fill in, and staff HR is adding directly (drafts),
+     * each with how far every stage has got and what to do next. Staff who have been saved but have no contract yet stay in
+     * progress, waiting at "Add contract".
+     */
+    public function index(Request $request)
     {
         $this->authorizeStaffCreation();
-        $invitations = StaffOnboardingInvitation::latest()->paginate(25);
-        return view('staff.onboarding.index', compact('invitations'));
+
+        $rows = app(StaffOnboardingTracker::class)->rows();
+        $counts = StaffOnboardingTracker::counts($rows);
+        $show = in_array($request->query('show'), [StaffOnboardingTracker::GROUP_IN_PROGRESS, StaffOnboardingTracker::GROUP_FINISHED, StaffOnboardingTracker::GROUP_CLOSED], true)
+            ? $request->query('show')
+            : StaffOnboardingTracker::GROUP_IN_PROGRESS;
+
+        $list = StaffOnboardingTracker::inGroup($rows, $show);
+        $perPage = 25;
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $onboardings = new LengthAwarePaginator($list->forPage($page, $perPage)->values(), $list->count(), $perPage, $page, ['path' => $request->url(), 'query' => $request->query()]);
+
+        return view('staff.onboarding.index', compact('onboardings', 'counts', 'show'));
     }
 
     public function show(string $token)
@@ -99,6 +118,8 @@ class StaffOnboardingController extends Controller
     public function submit(Request $request, string $token)
     {
         $invitation = $this->findUsableInvitation($token);
+        // The mobile number is kept with its country code (+254712345678)
+        $contact = app(StaffContactInput::class)->prepare($request);
         $data = $request->validate($this->signatureRules() + [
             'full_names' => 'required|string|max:255',
             'gender' => 'required|in:Male,Female',
@@ -110,7 +131,7 @@ class StaffOnboardingController extends Controller
             'spouse_name' => 'nullable|string|max:255',
             'citizenship' => 'required|in:RESIDENT,NO',
             'disability' => 'required|in:YES,NO',
-            'mobile_number' => 'required|string|max:30',
+            'mobile_number' => array_merge(['required', 'string', 'max:30'], $contact['mobile_number'] ?? []),
             'personal_email' => 'required|email|max:255',
             'address' => 'nullable|string|max:1000',
             'district' => 'nullable|string|max:255',
@@ -130,7 +151,7 @@ class StaffOnboardingController extends Controller
             'documents.cv' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'documents.academic' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
             'staff_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
-        ], [], ['kins_names' => 'next of kin names', 'kins_relationship' => 'relationship']);
+        ], [], ['kins_names' => 'next of kin names', 'kins_relationship' => 'relationship', 'mobile_number' => 'mobile number']);
         unset($data['documents'], $data['staff_photo'], $data['signature_file'], $data['signature_data']);
         $files = [];
         foreach (array_keys(StaffOnboardingInvitation::DOCUMENT_TYPES) as $type) {

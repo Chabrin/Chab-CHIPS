@@ -19,6 +19,7 @@ class StaffFormTabsViewTest extends TestCase
     {
         parent::setUp();
         $this->usePlainLayout();
+        (require database_path('migrations/2026_11_10_100000_create_employment_categories_table.php'))->up();
     }
 
     protected function tearDown(): void
@@ -41,6 +42,7 @@ class StaffFormTabsViewTest extends TestCase
             'departments' => collect(), 'banks' => collect(), 'positions' => collect(), 'zones' => collect(),
             'zoneAreas' => collect(), 'roles' => collect(), 'nextStaffNumber' => 'E-001',
             'onboarding' => null, 'prefill' => $prefill, 'onboardingFiles' => [],
+            'categories' => \App\Models\EmploymentCategory::active()->ordered()->get(), 'defaultCategory' => 'Permanent',
         ])->render();
     }
 

@@ -39,7 +39,9 @@ class ContractSignedPdfTest extends TestCase
             $t->id();
             $t->string('staff_number')->nullable();
             $t->string('photo')->nullable();
+            $t->string('employment_type')->nullable();
         });
+        (require database_path('migrations/2026_11_10_100000_create_employment_categories_table.php'))->up();
         Schema::create('sys_hr_employee_contracts', function (Blueprint $t) {
             $t->id();
             $t->timestamp('date_time')->nullable();
@@ -52,6 +54,7 @@ class ContractSignedPdfTest extends TestCase
             $t->decimal('basic_salary', 15, 2)->default(0);
             $t->string('staff_number')->nullable();
         });
+        (require database_path('migrations/2026_11_10_100200_add_period_and_probation_to_contracts.php'))->up();
         Schema::create('sys_hr_employee_contracts_279_repeat', function (Blueprint $t) {
             $t->id();
             $t->integer('parent_id');
@@ -59,6 +62,8 @@ class ContractSignedPdfTest extends TestCase
             $t->integer('entry_type_id')->nullable();
             $t->decimal('amount', 15, 2)->default(0);
         });
+        // How often each row applies, what a part month does to it, and the company-wide items left out for a person
+        (require database_path('migrations/2026_11_11_120000_add_terms_and_exclusions_for_contract_elements.php'))->up();
         Schema::create('sys_hr_payroll_elements', function (Blueprint $t) {
             $t->id();
             $t->string('element_name')->nullable();

@@ -1,0 +1,18 @@
+[
+  { "start": "2027-01-01", "value": 12, "unit": "months", "end": "2027-12-31", "note": "the example in the findings" },
+  { "start": "2027-03-15", "value": 6, "unit": "months", "end": "2027-09-14", "note": "the second example in the findings" },
+  { "start": "2027-01-01", "value": 1, "unit": "years", "end": "2027-12-31" },
+  { "start": "2027-01-15", "value": 2, "unit": "years", "end": "2029-01-14" },
+  { "start": "2027-01-01", "value": 52, "unit": "weeks", "end": "2027-12-30" },
+  { "start": "2027-01-01", "value": 2, "unit": "weeks", "end": "2027-01-14" },
+  { "start": "2027-01-01", "value": 30, "unit": "days", "end": "2027-01-30" },
+  { "start": "2027-01-01", "value": 1, "unit": "days", "end": "2027-01-01", "note": "a one-day contract ends the day it starts" },
+  { "start": "2027-01-01", "value": 3, "unit": "months", "end": "2027-03-31" },
+  { "start": "2027-12-16", "value": 3, "unit": "months", "end": "2028-03-15", "note": "across the new year" },
+  { "start": "2027-01-31", "value": 1, "unit": "months", "end": "2027-02-27", "note": "no overflow: 28 February is a month later, less a day" },
+  { "start": "2027-08-31", "value": 6, "unit": "months", "end": "2028-02-28", "note": "into a leap year February" },
+  { "start": "2028-02-29", "value": 1, "unit": "years", "end": "2029-02-27", "note": "a leap day, a year later is 28 February" },
+  { "start": "2027-06-01", "value": 24, "unit": "months", "end": "2029-05-31" },
+  { "start": "2027-01-01", "value": 365, "unit": "days", "end": "2027-12-31" },
+  { "start": "2028-01-01", "value": 365, "unit": "days", "end": "2028-12-30", "note": "2028 has 366 days" }
+]

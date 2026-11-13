@@ -20,6 +20,7 @@ class EmployeeUploadGuardTest extends TestCase
         // Explicitly isolate these tests from any inherited workstation DB settings.
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'database.connections.sqlite.prefix' => '']);
         DB::purge('sqlite');
+        (require database_path('migrations/2026_11_10_100000_create_employment_categories_table.php'))->up();
         Storage::fake('local');
         Storage::fake('public');
         Schema::create('employee_documents', function (Blueprint $table) {
@@ -195,12 +196,12 @@ class EmployeeUploadGuardTest extends TestCase
         Schema::create('cb_roles', fn (Blueprint $table) => $table->id());
         DB::table('cb_roles')->insert(['id' => 1]);
         return [
-            'full_names' => 'Test Staff', 'employment_type' => 'Permanent', 'email_address' => 'staff@example.test',
+            'full_names' => 'Test Staff', 'employment_type' => 'Permanent', 'email_address' => 'test.staff@chabrinagencies.co.ke',
             'national_id' => 'TEST123', 'gender' => 'Male', 'birth_date' => '2000-01-01',
             'bank_name' => 1, 'account_name' => 'Test Staff', 'account_number' => '123',
             'pin_number' => 'TESTPIN', 'nhif_number' => 'TESTSHA', 'nssf_number' => 'TESTNSSF',
             'marital' => 'Single', 'citizenship' => 'Kenya', 'disability' => 'No',
-            'login_email' => 'login@example.test', 'role_id' => 1,
+            'login_email' => 'test.login@chabrinagencies.co.ke', 'role_id' => 1,
             'documents' => [
                 'national_id' => $this->upload('id.pdf', "%PDF-1.4\nTest ID document"),
                 'kra_pin' => $this->upload('pin.pdf', "%PDF-1.4\nDifferent certificate"),

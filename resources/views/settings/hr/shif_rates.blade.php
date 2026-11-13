@@ -85,7 +85,7 @@
             processing: true,
             serverSide: false,
             ajax: {
-                url: "{{ url('/ajax/hr/shif/rates/list') }}",
+                url: "{{ url('/ajax/hr/sha/rates/list') }}",
                 type: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
@@ -169,7 +169,7 @@
         $('#shifRateForm').on('submit', function(e) {
             e.preventDefault();
             var id = $('#shifRateId').val();
-            var url = id ? "{{ url('/ajax/hr/shif/rates') }}/" + id : "{{ url('/ajax/hr/shif/rates') }}";
+            var url = id ? "{{ url('/ajax/hr/sha/rates') }}/" + id : "{{ url('/ajax/hr/sha/rates') }}";
             var method = 'POST';
             var formData = $(this).serialize() + '&_token={{ csrf_token() }}';
             var $btn = $('#saveShifRateBtn');
@@ -235,7 +235,7 @@
             $btn.prop('disabled', true);
     
             $.ajax({
-                url: "{{ url('/ajax/hr/shif/rates') }}/" + $btn.data('id'),
+                url: "{{ url('/ajax/hr/sha/rates') }}/" + $btn.data('id'),
                 type: 'DELETE',
                 data: {
                     _token: '{{ csrf_token() }}'

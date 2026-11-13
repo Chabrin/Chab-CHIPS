@@ -6,7 +6,7 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
 <body class="bg-light"><main class="container py-5" style="max-width:900px"><div class="card"><div class="card-body p-4">
     <h2>Staff onboarding</h2><p class="text-muted">This form is private and will be reviewed by HR. Your job and company details will be added by HR.</p>
     @if($errors->any())<div class="alert alert-danger">Please correct the errors shown below and resubmit. For security, any files you selected must be chosen again.</div>@endif
-    <form method="POST" enctype="multipart/form-data" action="{{ route('staff.onboarding.submit', ['token'=>$token]) }}">@csrf
+    <form method="POST" enctype="multipart/form-data" data-file-slots action="{{ route('staff.onboarding.submit', ['token'=>$token]) }}">@csrf
     <h5>Personal information</h5><div class="row g-3">
         <div class="col-md-6"><label class="form-label">Full names</label><input name="full_names" class="form-control" value="{{ old('full_names') }}" required>{!! $err('full_names') !!}</div>
         <div class="col-md-3"><label class="form-label">Gender</label><select name="gender" class="form-select" required><option value="">Select</option>@foreach(['Male','Female'] as $o)<option {{ $sel('gender',$o) }}>{{ $o }}</option>@endforeach</select>{!! $err('gender') !!}</div>
@@ -20,7 +20,7 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
         <div class="col-md-4"><label class="form-label">Disability</label><select name="disability" class="form-select" required><option value="">Select</option>@foreach(['YES','NO'] as $o)<option {{ $sel('disability',$o) }}>{{ $o }}</option>@endforeach</select>{!! $err('disability') !!}</div>
     </div>
     <h5 class="mt-4">Contact information</h5><div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Mobile number</label><input name="mobile_number" value="{{ old('mobile_number') }}" class="form-control" required>{!! $err('mobile_number') !!}</div>
+        <div class="col-md-4"><label class="form-label">Mobile number</label><input type="tel" name="mobile_number" value="{{ old('mobile_number') }}" class="form-control" placeholder="+254 7XX XXX XXX" autocomplete="tel" data-mobile-format required><small>Start with the country code, like +254.</small>{!! $err('mobile_number') !!}</div>
         <div class="col-md-4"><label class="form-label">Personal email</label><input type="email" name="personal_email" value="{{ old('personal_email', $invitation->recipient_email) }}" class="form-control" required>{!! $err('personal_email') !!}</div>
         <div class="col-md-4"><label class="form-label">Address</label><input name="address" value="{{ old('address') }}" class="form-control">{!! $err('address') !!}</div>
         <div class="col-md-4"><label class="form-label">District</label><input name="district" value="{{ old('district') }}" class="form-control">{!! $err('district') !!}</div>
@@ -28,6 +28,7 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
         <div class="col-md-4"><label class="form-label">Sub location</label><input name="sub_location" value="{{ old('sub_location') }}" class="form-control">{!! $err('sub_location') !!}</div>
         <div class="col-md-6"><label class="form-label">Next of kin names</label><input id="kins_names" name="kins_names" value="{{ old('kins_names') }}" class="form-control">{!! $err('kins_names') !!}</div>
         <div class="col-md-6"><label class="form-label">Relationship to you</label><select id="kins_relationship" name="kins_relationship" class="form-select"><option value="">Select</option>@foreach(\App\Models\Staff::KIN_RELATIONSHIPS as $o)<option {{ $sel('kins_relationship',$o) }}>{{ $o }}</option>@endforeach</select><small>Needed once you enter a next of kin name.</small>{!! $err('kins_relationship') !!}</div>
+        <div class="col-md-4"><label class="form-label">Next of kin Mobile number</label><input type="tel" name="mobile_number" value="{{ old('mobile_number') }}" class="form-control" placeholder="+254 7XX XXX XXX" autocomplete="tel" data-mobile-format required><small>Start with the country code, like +254.</small>{!! $err('mobile_number') !!}</div>
     </div>
     <h5 class="mt-4">Staff photo</h5><div class="row g-3"><div class="col-md-6"><label class="form-label">Profile photo (JPG/PNG, max 2 MB)</label><input type="file" name="staff_photo" class="form-control" accept=".jpg,.jpeg,.png,image/jpeg,image/png"><small>Optional. HR will add this to your staff record.</small>{!! $err('staff_photo') !!}{!! $err('photo') !!}</div></div>
     <h5 class="mt-4">Signature</h5><p style="margin-top:0;color:#5c6b7a">Optional. Draw your signature or upload a clear image of it.</p>
@@ -50,6 +51,8 @@ $sel = fn ($field, $value) => (string) old($field) === (string) $value ? 'select
     <div class="alert alert-info mt-4">Submitting this form shares your information with the company HR team to set up your employment and payroll records. Documents are stored privately. Do not use a shared device to complete it.</div>
     <button class="btn btn-primary" type="submit">Submit to HR</button></form>
 </div></div></main>
+<script src="{{ asset('assets/js/staff-contact-format.js') }}?v={{ filemtime(public_path('assets/js/staff-contact-format.js')) }}"></script>
+<script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
 <script>
 // Choosing the relationship is checked here too, because a rejected form clears the files the staff member picked.
 (function () {

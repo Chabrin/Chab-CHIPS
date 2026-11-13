@@ -23,7 +23,7 @@ function setup(fetch) {
             insertAdjacentElement: (_, note) => notes.push(note),
             addEventListener(type, handler) { this.handlers[type] = handler; },
             setCustomValidity(message) { this.message = message; },
-            classList: { toggle() {},remove(){} }, closest: () => null, focus() {}, notes,
+            classList: { toggle() {},remove(){}, contains: () => false }, closest: () => null, focus() {}, scrollIntoView() {}, notes,
         };
     });
     let submit;

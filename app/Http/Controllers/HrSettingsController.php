@@ -310,6 +310,7 @@ class HrSettingsController extends Controller
                     'basic_salary' => $position->basic_salary,
                     'reports_to_name' => $position->reportsTo->position_name ?? null,
                     'staff_count' => $position->staff_count,
+                    'is_active' => (bool) $position->is_active,
                     'can_update' => $canUpdate,
                     'can_read' => $canRead,
                     'can_delete' => $canDelete,
@@ -333,7 +334,10 @@ public function positionsDropdowns(Request $request)
     try {
         $currentId = $request->get('current_id');
 
-        $query = Position::orderBy('position_name');
+        // Only positions that are switched on can be reported to, besides the one this position already reports to
+        $currentBoss = !empty($currentId) ? Position::where('id', $currentId)->value('reports_to_id') : null;
+        $query = Position::orderBy('position_name')
+            ->where(fn ($q) => $q->where('is_active', true)->when($currentBoss, fn ($q) => $q->orWhere('id', $currentBoss)));
         if (!empty($currentId)) {
             $query->where('id', '!=', $currentId);
         }
@@ -500,22 +504,18 @@ public function positionsDropdowns(Request $request)
 
     public function positionsDestroyAjax($id)
     {
+        // The Delete button is only shown with this permission; the request is held to it too
+        abort_unless(Auth::check() && Auth::user()->isAbleTo('delete_staff_positions'), 403, 'You do not have permission to delete positions.');
+
         try {
             $position = Position::findOrFail($id);
 
-            $staffCount = Staff::where('position_id', $id)->count();
-            if ($staffCount > 0) {
+            // Anything that uses the position stops it being deleted, and the message says what and how many
+            $uses = $position->usageNotes();
+            if ($uses) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'This position cannot be deleted because it is assigned to ' . $staffCount . ' staff member(s).'
-                ], 422);
-            }
-
-            $reportsToCount = Position::where('reports_to_id', $id)->count();
-            if ($reportsToCount > 0) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'This position cannot be deleted because other positions report to it.'
+                    'error' => 'Cannot delete this position because ' . \Illuminate\Support\Arr::join($uses, ', ', ' and ') . '. Mark it as inactive instead.'
                 ], 422);
             }
 
@@ -535,6 +535,27 @@ public function positionsDropdowns(Request $request)
             }
             return response()->json(['success' => false, 'error' => 'Failed to delete position'], 500);
         }
+    }
+
+    /**
+     * Switch a position on or off. A switched-off position is no longer offered for new staff or contracts, and the
+     * staff who hold it keep it.
+     */
+    public function positionsToggleAjax($id)
+    {
+        abort_unless(Auth::check() && Auth::user()->isAbleTo('update_staff_positions'), 403, 'You do not have permission to update positions.');
+
+        $position = Position::findOrFail($id);
+        $position->update(['is_active' => !$position->is_active]);
+
+        $held = Staff::where('position_id', $position->id)->count();
+        return response()->json([
+            'success' => true,
+            'is_active' => (bool) $position->is_active,
+            'message' => $position->is_active
+                ? "{$position->position_name} is on again and can be chosen for new staff."
+                : "{$position->position_name} is switched off. It is no longer offered for new staff or contracts" . ($held > 0 ? ", and the {$held} staff holding it keep it." : '.'),
+        ]);
     }
 
     public function positionsShow($encryptedId)
@@ -1470,7 +1491,7 @@ public function positionsDropdowns(Request $request)
     {
         try {
             $query = Staff::with(['position:id,position_name', 'zone:id,zone_name'])
-                ->select('id', 'full_names', 'position_id', 'zone_id', 'department_id');
+                ->select('id', 'full_names', 'position_id', 'zone_id', 'department_id', 'employment_type');
 
             if ($request->filled('zone_id')) {
                 $query->where('zone_id', $request->input('zone_id'));
@@ -1481,11 +1502,14 @@ public function positionsDropdowns(Request $request)
                 $query->whereIn('position_id', $positionIds);
             }
 
+            // Staff in a category with no contract end date (permanent staff) are asked for probation only on the contract form
+            $withoutEndDate = \App\Models\EmploymentCategory::codesWithoutEndDate();
             $staff = $query->get()
-                ->map(function ($employee) {
+                ->map(function ($employee) use ($withoutEndDate) {
                     return [
                         'id' => $employee->id,
                         'full_names' => $employee->full_names,
+                        'has_end_date' => !in_array($employee->employment_type, $withoutEndDate, true),
                         'department_id' => $employee->department_id,
                         'position' => $employee->position ? $employee->position->position_name : null,
                         'zone_name' => $employee->zone->zone_name ?? null,

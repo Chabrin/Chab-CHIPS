@@ -8,6 +8,32 @@ let loadingRows = false;
 let allStaffTimer;
 let nextRowIndex = $('#elementsRepeater .element-row').length;
 
+// The company-wide items left out for this person. The choices are written into #exclusionInputs, which the server reads.
+const leftOut = ContractExclusions.create(ContractExclusions.parse($('#exclusionInputs').attr('data-left-out')));
+
+function syncExclusionInputs() {
+    $('#exclusionInputs').html(leftOut.inputsHtml());
+}
+
+// The last column of the table: statutory items always apply; any other can be left out for this person, with a reason
+function leftOutCell(row) {
+    const $cell = $('<td>');
+    if (row.statutory) {
+        return $cell.append('<span class="text-muted small">Always applies</span>');
+    }
+    if (!row.canLeaveOut) {
+        return $cell;
+    }
+    const on = leftOut.isLeftOut(row.id);
+    const $toggle = $('<input type="checkbox" class="form-check-input left-out-toggle">')
+        .attr({ id: 'leftOut' + row.id, 'data-id': row.id }).prop('checked', on);
+    const $label = $('<label class="form-check-label ms-1">').attr('for', 'leftOut' + row.id).text('Leave out');
+    const $reason = $('<input type="text" class="form-control form-control-sm mt-1 left-out-reason" maxlength="255" placeholder="Reason (required)">')
+        .attr('aria-label', 'Reason for leaving out ' + row.name)
+        .val(leftOut.reason(row.id)).toggleClass('d-none', !on).prop('required', on);
+    return $cell.append($('<div class="form-check">').append($toggle, $label), $reason);
+}
+
 function initEntryType($scope) {
     $scope.find('.entry-type-select').select2({
         placeholder: 'Select entry type',
@@ -65,6 +91,12 @@ function refreshAllStaff() {
             allowances: allowancesTotal()
         }).done(function (res) {
             const fmt = n => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            // An item that no longer applies to all staff cannot stay left out: drop it, and say so
+            const dropped = leftOut.keepOnly((res.elements || []).map(e => e.id));
+            if (dropped.length) {
+                syncExclusionInputs();
+                toastr.info('An item that was left out for this person no longer applies to all staff, so it has been removed from the list.');
+            }
             const $body = $('#allStaffItems tbody').empty();
             const rowClass = { group: 'fw-semibold', total: 'fw-bold table-light' };
             PayrollAllStaffRows.build(res.elements).forEach(function (row) {
@@ -72,11 +104,12 @@ function refreshAllStaff() {
                     $('<td>').toggleClass('ps-4', row.kind === 'tier').text(row.name),
                     $('<td>').text(row.type),
                     $('<td>').text(row.how),
-                    $('<td class="text-end">').text(row.kind === 'group' ? '' : row.amount === null ? '-' : fmt(row.amount))
+                    $('<td class="text-end">').text(row.kind === 'group' ? '' : row.amount === null ? '-' : fmt(row.amount)),
+                    leftOutCell(row)
                 ));
             });
             if (!res.elements || !res.elements.length) {
-                $body.append('<tr><td colspan="4" class="text-muted">No items apply to all staff.</td></tr>');
+                $body.append('<tr><td colspan="5" class="text-muted">No items apply to all staff.</td></tr>');
             }
         }).fail(function () {
             toastr.error('Failed to load the items that apply to all staff.');
@@ -107,6 +140,7 @@ function rowTemplate(index) {
             <div class="mb-3 col-2 d-flex align-items-end">
                 <button type="button" class="btn btn-light btn-sm d-flex align-items-center remove-element-row"><span class="material-symbols-outlined me-2">remove</span> Remove</button>
             </div>
+            ${ContractElementTerms.fieldsHtml(index)}
         </div>`;
 }
 
@@ -143,6 +177,7 @@ $(document).on('change', '.element-select', function () {
     if (el) {
         const $row = $(this).closest('.element-row');
         $row.find('.entry-type-select').val(String(el.element_type)).trigger('change.select2');
+        ContractElementTerms.syncRow($row[0]);
         const $amount = $row.find('input[name$="[amount]"]');
         if ($amount.val() === '') {
             $amount.val(defaultFor(el));
@@ -153,11 +188,57 @@ $(document).on('change', '.element-select', function () {
 
 $(document).on('input change', '#basic_salary, .entry-type-select, input[name$="[amount]"]', refreshAllStaff);
 
+// How often / Which month / Part month: the month box only for "once only", and the part-month answer follows the entry type
+// until someone chooses it themselves
+$(document).on('change', '.frequency-select, .entry-type-select', function () {
+    ContractElementTerms.syncRow($(this).closest('.element-row')[0]);
+});
+$(document).on('change', '.prorate-select', function () {
+    ContractElementTerms.markTouched(this);
+});
+$(document).on('change', '.once-month-input', function () {
+    $(this).removeClass('is-invalid');
+});
+
+// Leaving a company-wide item out for this person
+$(document).on('change', '.left-out-toggle', function () {
+    const $reason = $(this).closest('td').find('.left-out-reason');
+    leftOut.set($(this).data('id'), this.checked, '');
+    $reason.val('').toggleClass('d-none', !this.checked).prop('required', this.checked);
+    if (this.checked) {
+        $reason.trigger('focus');
+    }
+    syncExclusionInputs();
+});
+$(document).on('input', '.left-out-reason', function () {
+    leftOut.setReason($(this).closest('td').find('.left-out-toggle').data('id'), $(this).val());
+    syncExclusionInputs();
+});
+
 // A row left without an element is dropped instead of failing the whole form
-$('#staffContractCreateForm').on('submit', function () {
+$('#staffContractCreateForm').on('submit', function (event) {
     $('#elementsRepeater .element-row').each(function () {
         if (!$(this).find('.element-select').val()) {
             $(this).remove();
         }
     });
+
+    // A once-only item has to fall in a month the contract runs, or the payroll run would never take it
+    const start = $('#date_start').val() || '';
+    const end = $('#date_end').prop('disabled') ? '' : ($('#date_end').val() || '');
+    let problem = '';
+    $('#elementsRepeater .once-month-input:not(:disabled)').each(function () {
+        const found = ContractElementTerms.onceMonthProblem($(this).val(), start, end);
+        $(this).toggleClass('is-invalid', found !== '');
+        if (found && !problem) {
+            problem = found;
+            $(this).trigger('focus');
+        }
+    });
+    if (problem) {
+        // Stops the spinner handler that follows from locking the button on a form that was not sent
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        toastr.error(problem);
+    }
 });

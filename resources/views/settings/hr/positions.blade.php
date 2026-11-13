@@ -8,6 +8,12 @@
                     <div class="card-header card-no-border d-flex align-items-center">
                         <h4 class="mb-0">Staff Positions</h4>
                         <div class="ms-auto d-flex gap-2">
+                            @permission('read_staff_positions')
+                            <a href="{{ route('settings.hr.employment_categories') }}" class="btn btn-light btn-sm d-flex align-items-center">
+                                <span class="material-symbols-outlined" style="font-size:18px;">badge</span>
+                                <span class="ms-1">Employment Categories</span>
+                            </a>
+                            @endpermission
                             @permission('create_staff_positions')
                             <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="addPositionBtn">
                                 <span class="material-symbols-outlined" style="font-size:18px;">add_circle</span>
@@ -28,6 +34,7 @@
                                         <th>Basic Salary</th>
                                         <th>Reports To</th>
                                         <th>Staff Count</th>
+                                        <th>Status</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -203,6 +210,20 @@
             var positionName = $(this).data('name');
             deletePosition(positionId, positionName);
         });
+
+        // Switch a position on or off: off leaves it out of the choices for new staff and contracts
+        $(document).on('change', '.toggle-position', function() {
+            var $box = $(this);
+            $.ajax({ url: '/ajax/hr/positions/' + $box.data('id') + '/toggle', method: 'POST', data: { _token: '{{ csrf_token() }}' }, dataType: 'json' })
+                .done(function(res) {
+                    toastr.success(res.message);
+                    positionsTable.ajax.reload(null, false);
+                })
+                .fail(function(xhr) {
+                    $box.prop('checked', !$box.is(':checked'));
+                    toastr.error((xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) || 'The position could not be changed.');
+                });
+        });
     });
 
     function slugify(text) {
@@ -259,6 +280,19 @@
                 {
                     data: 'staff_count',
                     defaultContent: '0'
+                },
+                {
+                    // On: offered for new staff and contracts. Off: left out of those, kept on the staff who hold it.
+                    data: 'is_active',
+                    render: function(data, type, row) {
+                        var on = data !== false;
+                        if (type !== 'display') { return on ? 1 : 0; }
+                        if (!row.can_update) {
+                            return '<span class="badge ' + (on ? 'badge-light-success' : 'badge-light-secondary') + '">' + (on ? 'Active' : 'Inactive') + '</span>';
+                        }
+                        return '<div class="form-check form-switch m-0 d-inline-block"><input class="form-check-input toggle-position" type="checkbox" role="switch" data-id="' + row.id + '"' + (on ? ' checked' : '') + ' aria-label="Offer ' + $('<span>').text(row.position_name).html() + ' for new staff"></div> '
+                            + '<span class="small ' + (on ? 'text-success' : 'text-muted') + '">' + (on ? 'On' : 'Off') + '</span>';
+                    }
                 },
                 {
                     data: null,

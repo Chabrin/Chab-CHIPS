@@ -67,6 +67,12 @@ class PayrollRunWorkflowTest extends TestCase
             $t->id();
             $t->string('department_name')->nullable();
         });
+        // The employee list also checks for staff holding several active contracts
+        Schema::create('sys_hr_employee_contracts', function (Blueprint $t) {
+            $t->id();
+            $t->integer('staff_id')->nullable();
+            $t->integer('current_status_id')->default(5);
+        });
         Schema::create('sys_helb_deductions', function (Blueprint $t) {
             $t->id();
             $t->integer('staff_id')->nullable();
@@ -378,6 +384,21 @@ class PayrollRunWorkflowTest extends TestCase
         $this->assertSame('No Bank Person', $employees[0]['name']);
         $this->assertSame(['No bank details'], $employees[0]['flags']);
         $this->assertSame([], $employees[1]['flags']);
+    }
+
+    public function test_the_employee_list_can_be_narrowed_to_one_alert(): void
+    {
+        $this->run_(PayrollRun::STATUS_DRAFT);
+        $this->actingAsHr();
+        $url = '/ajax/payroll/periods/' . self::PERIOD_ID . '/employees';
+
+        $response = $this->getJson($url . '?alert_filter=no_bank')->assertOk();
+
+        $this->assertSame(['No Bank Person'], array_column($response->json('employees'), 'name'));
+        $this->assertSame(['no_bank'], $response->json('employees.0.alerts'));
+        $this->assertSame(1, $response->json('alert_counts.no_bank'));
+        $this->assertSame([], $this->getJson($url . '?alert_filter=negative_net')->assertOk()->json('employees'));
+        $this->getJson($url . '?alert_filter=whatever')->assertStatus(422);
     }
 
     public function test_eft_file_is_marked_test_and_leaves_out_staff_without_bank_details(): void

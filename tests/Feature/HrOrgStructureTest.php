@@ -41,6 +41,7 @@ class HrOrgStructureTest extends TestCase
             $t->integer('reports_to_id')->nullable();
             $t->string('slug_name')->nullable();
             $t->integer('department_id')->nullable();
+            $t->boolean('is_active')->default(true);
         });
 
         DB::table('sys_set_departments')->insert([
@@ -52,6 +53,15 @@ class HrOrgStructureTest extends TestCase
             ['id' => 8, 'position_name' => 'Assistant Property Manager', 'department_id' => 1],
             ['id' => 9, 'position_name' => 'Zone Manager', 'department_id' => 1],
         ]);
+    }
+
+    private function userWhoCan(string ...$permissions): \App\Models\User
+    {
+        $user = \Mockery::mock(\App\Models\User::class)->makePartial();
+        $user->shouldReceive('isAbleTo')->andReturnUsing(fn ($permission) => in_array($permission, $permissions, true));
+        $user->id = 7;
+
+        return $user;
     }
 
     private function controller(): HrSettingsController
@@ -78,6 +88,7 @@ class HrOrgStructureTest extends TestCase
     public function test_changing_a_missing_position_or_department_is_a_404(): void
     {
         $this->assertSame(404, $this->controller()->positionsUpdateAjax($this->updateRequest(1, 'Anything'), 999)->getStatusCode());
+        $this->actingAs($this->userWhoCan('delete_staff_positions'));
         $this->assertSame(404, $this->controller()->positionsDestroyAjax(999)->getStatusCode());
         $this->assertSame(404, $this->controller()->departmentUpdate(Request::create('/', 'POST', ['department_name' => 'X']), 999)->getStatusCode());
     }

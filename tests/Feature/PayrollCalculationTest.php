@@ -46,6 +46,10 @@ class PayrollCalculationTest extends TestCase
             $t->string('element_key')->nullable();
             $t->string('element_type')->default('1');
             $t->integer('payslip_position')->nullable();
+            $t->string('recurrence')->default('recurring');
+            $t->string('applies_to')->default('specific');
+            $t->integer('formula_id')->nullable();
+            $t->decimal('amount', 15, 4)->default(0);
         });
         Schema::create('sys_hr_employee_contracts_279_repeat', function (Blueprint $t) {
             $t->id();
@@ -53,6 +57,8 @@ class PayrollCalculationTest extends TestCase
             $t->integer('element_id');
             $t->decimal('amount', 15, 2)->default(0);
         });
+        // How often each contract row applies, what a part month does to it, and the company-wide items left out for a person
+        (require database_path('migrations/2026_11_11_120000_add_terms_and_exclusions_for_contract_elements.php'))->up();
         Schema::create('um_tax_bands', function (Blueprint $t) {
             $t->id();
             $t->decimal('range_from', 15, 2);
@@ -118,10 +124,17 @@ class PayrollCalculationTest extends TestCase
 
         DB::table('sys_staff')->insert(['id' => self::STAFF_ID, 'disability' => 'no']);
         DB::table('um_tax_bands')->insert(['range_from' => 0, 'range_to' => null, 'tax_rate' => 10, 'is_last' => true]);
-        DB::table('sys_hr_payroll_elements')->insert([
+        // One insert per element: the columns differ between rows, and SQLite refuses a multi-row insert like that
+        foreach ([
             ['id' => 1, 'element_name' => 'HELB Loan', 'element_key' => 'helb_loans', 'element_type' => '1', 'payslip_position' => 50],
             ['id' => 2, 'element_name' => 'Sacco Loan', 'element_key' => null, 'element_type' => '1', 'payslip_position' => 60],
-        ]);
+            ['id' => 3, 'element_name' => 'House Allowance', 'element_key' => null, 'element_type' => '2', 'payslip_position' => 5],
+            ['id' => 4, 'element_name' => 'Welfare', 'element_key' => null, 'element_type' => '1', 'payslip_position' => 70, 'applies_to' => 'all', 'formula_id' => 1, 'amount' => 200],
+            ['id' => 5, 'element_name' => 'Transport', 'element_key' => null, 'element_type' => '2', 'payslip_position' => 6, 'applies_to' => 'all', 'formula_id' => 1, 'amount' => 3000],
+            ['id' => 6, 'element_name' => 'NSSF', 'element_key' => 'nssf', 'element_type' => '1', 'payslip_position' => 10, 'applies_to' => 'all'],
+        ] as $element) {
+            DB::table('sys_hr_payroll_elements')->insert($element);
+        }
         // The contract carries a HELB amount, used only when the staff member has no HELB loan record at all.
         DB::table('sys_hr_employee_contracts_279_repeat')->insert(['parent_id' => self::CONTRACT_ID, 'element_id' => 1, 'amount' => self::CONTRACT_HELB_AMOUNT]);
     }
@@ -169,6 +182,251 @@ class PayrollCalculationTest extends TestCase
         }
 
         return $id;
+    }
+
+    // ── how often an item applies, and what a part month does to it ─────────────────────────
+
+    private const NOVEMBER_START = '2026-11-01';
+    private const NOVEMBER_END = '2026-11-30';
+    private const OTHER_CONTRACT_ID = 11;
+
+    private function row(int $element, float $amount, array $terms = [], int $contract = self::CONTRACT_ID): void
+    {
+        DB::table('sys_hr_employee_contracts_279_repeat')->insert(['parent_id' => $contract, 'element_id' => $element, 'amount' => $amount] + $terms);
+    }
+
+    private function companyWide(int ...$elements): \Illuminate\Support\Collection
+    {
+        return \App\Models\PayrollElement::whereIn('id', $elements)->get();
+    }
+
+    /**
+     * November 2026 (30 days) for a contract that has run for $activeDays of them, on a 60,000 basic salary, with the given
+     * company-wide items.
+     */
+    private function november(int $activeDays, ?\Illuminate\Support\Collection $recurringAll = null, int $contract = self::CONTRACT_ID, string $periodStart = self::NOVEMBER_START, string $periodEnd = self::NOVEMBER_END, int $periodDays = 30): array
+    {
+        $method = new ReflectionMethod(PayrollController::class, 'calculatePayroll');
+        $method->setAccessible(true);
+
+        return $method->invoke(
+            new PayrollController(new NssfCalculator()),
+            'Test Person', 60000, self::STAFF_ID, 'S1', 1, 1, collect(), $periodStart, 216,
+            $contract, $activeDays, $periodDays, $periodEnd, null, null, $recurringAll
+        );
+    }
+
+    private function amount(array $result, string $name): ?float
+    {
+        $found = $this->entries($result, $name);
+
+        return $found ? (float) $found[0]['amount'] : null;
+    }
+
+    public function test_the_example_in_the_findings_a_30000_allowance_joining_on_the_16th_of_a_30_day_month(): void
+    {
+        // Joins on the 16th: the 16th to the 30th is 15 of the 30 days
+        $this->row(3, 30000, ['prorate' => true]);
+        $prorated = $this->november(15);
+        $this->assertSame(15000.0, $this->amount($prorated, 'House Allowance'), 'prorated: KES 15,000');
+
+        DB::table('sys_hr_employee_contracts_279_repeat')->where('element_id', 3)->update(['prorate' => false]);
+        $full = $this->november(15);
+        $this->assertSame(30000.0, $this->amount($full, 'House Allowance'), 'not prorated: KES 30,000');
+    }
+
+    public function test_the_allowance_choice_changes_gross_pay_by_exactly_the_difference(): void
+    {
+        $this->row(3, 30000, ['prorate' => true]);
+        $prorated = $this->november(15);
+        DB::table('sys_hr_employee_contracts_279_repeat')->where('element_id', 3)->update(['prorate' => false]);
+        $full = $this->november(15);
+
+        $this->assertEqualsWithDelta(15000.0, $full['gross_pay'] - $prorated['gross_pay'], 0.01);
+    }
+
+    public function test_a_deduction_can_be_reduced_by_the_days_worked_or_charged_in_full(): void
+    {
+        $this->row(2, 2000, ['prorate' => true]);
+        $this->assertSame(1000.0, $this->amount($this->november(15), 'Sacco Loan'), 'reduced: half the days, half the deduction');
+
+        DB::table('sys_hr_employee_contracts_279_repeat')->where('element_id', 2)->update(['prorate' => false]);
+        $this->assertSame(2000.0, $this->amount($this->november(15), 'Sacco Loan'), 'in full');
+    }
+
+    public function test_with_no_answer_an_allowance_is_still_reduced_and_a_deduction_still_charged_in_full(): void
+    {
+        // Rows saved before the choice existed carry no answer, and the run must treat them as it always did
+        $this->row(3, 30000);
+        $this->row(2, 2000);
+
+        $result = $this->november(15);
+
+        $this->assertSame(15000.0, $this->amount($result, 'House Allowance'));
+        $this->assertSame(2000.0, $this->amount($result, 'Sacco Loan'));
+    }
+
+    public function test_a_whole_month_is_the_full_amount_whatever_the_answer(): void
+    {
+        $this->row(3, 30000, ['prorate' => true]);
+        $this->row(2, 2000, ['prorate' => true]);
+
+        $result = $this->november(30);
+
+        $this->assertSame(30000.0, $this->amount($result, 'House Allowance'));
+        $this->assertSame(2000.0, $this->amount($result, 'Sacco Loan'));
+    }
+
+    public function test_the_month_someone_leaves_is_reduced_the_same_way(): void
+    {
+        $this->row(3, 30000, ['prorate' => true]);
+
+        // Leaves on the 10th: 10 of 30 days
+        $this->assertSame(10000.0, $this->amount($this->november(10), 'House Allowance'));
+    }
+
+    public function test_the_amounts_are_rounded_to_cents(): void
+    {
+        $this->row(3, 10000, ['prorate' => true]);
+
+        // 7 of 30 days
+        $this->assertSame(2333.33, $this->amount($this->november(7), 'House Allowance'));
+    }
+
+    // ── once only ─────────────────────────────────────────────────────────
+
+    public function test_a_once_only_item_appears_in_the_chosen_month_only(): void
+    {
+        $this->row(3, 5000, ['frequency' => 'once', 'once_month' => '2026-11-01', 'prorate' => false]);
+
+        $this->assertSame(5000.0, $this->amount($this->november(30), 'House Allowance'), 'November');
+        $this->assertNull($this->amount($this->november(31, null, self::CONTRACT_ID, '2026-12-01', '2026-12-31', 31), 'House Allowance'), 'December');
+        $this->assertNull($this->amount($this->november(31, null, self::CONTRACT_ID, '2026-10-01', '2026-10-31', 31), 'House Allowance'), 'October');
+        $this->assertNull($this->amount($this->november(30, null, self::CONTRACT_ID, '2027-11-01', '2027-11-30', 30), 'House Allowance'), 'the same month a year later');
+    }
+
+    public function test_an_every_month_item_appears_in_every_month(): void
+    {
+        $this->row(3, 5000, ['frequency' => 'monthly']);
+
+        foreach ([['2026-10-01', '2026-10-31', 31], ['2026-11-01', '2026-11-30', 30], ['2026-12-01', '2026-12-31', 31]] as [$from, $to, $days]) {
+            $this->assertSame(5000.0, $this->amount($this->november($days, null, self::CONTRACT_ID, $from, $to, $days), 'House Allowance'), $from);
+        }
+    }
+
+    public function test_a_once_only_deduction_is_taken_once_too(): void
+    {
+        $this->row(2, 1200, ['frequency' => 'once', 'once_month' => '2026-11-01', 'prorate' => false]);
+
+        $this->assertSame(1200.0, $this->amount($this->november(30), 'Sacco Loan'));
+        $this->assertNull($this->amount($this->november(31, null, self::CONTRACT_ID, '2026-12-01', '2026-12-31', 31), 'Sacco Loan'));
+    }
+
+    public function test_a_once_only_item_can_be_reduced_in_the_month_someone_joins(): void
+    {
+        $this->row(3, 30000, ['frequency' => 'once', 'once_month' => '2026-11-01', 'prorate' => true]);
+
+        $this->assertSame(15000.0, $this->amount($this->november(15), 'House Allowance'));
+    }
+
+    public function test_a_once_only_item_is_taken_by_the_pay_period_that_starts_in_its_month(): void
+    {
+        $this->row(3, 5000, ['frequency' => 'once', 'once_month' => '2026-11-01', 'prorate' => false]);
+
+        // A period from 16 October to 15 November starts in October, so it is not the November one
+        $this->assertNull($this->amount($this->november(31, null, self::CONTRACT_ID, '2026-10-16', '2026-11-15', 31), 'House Allowance'));
+        $this->assertSame(5000.0, $this->amount($this->november(30, null, self::CONTRACT_ID, '2026-11-16', '2026-12-15', 30), 'House Allowance'));
+    }
+
+    public function test_the_rows_of_another_contract_are_not_taken(): void
+    {
+        $this->row(3, 5000, [], self::OTHER_CONTRACT_ID);
+
+        $this->assertNull($this->amount($this->november(30), 'House Allowance'));
+    }
+
+    // ── company-wide items left out for one person ────────────────────────
+
+    public function test_a_company_wide_item_applies_to_everyone_unless_left_out(): void
+    {
+        $result = $this->november(30, $this->companyWide(4, 5));
+
+        $this->assertSame(200.0, $this->amount($result, 'Welfare'));
+        $this->assertSame(3000.0, $this->amount($result, 'Transport'));
+    }
+
+    public function test_leaving_one_item_out_removes_it_for_that_contract_only(): void
+    {
+        DB::table('contract_element_exclusions')->insert(['contract_id' => self::CONTRACT_ID, 'element_id' => 4, 'reason' => 'Opted out']);
+
+        $excluded = $this->november(30, $this->companyWide(4, 5));
+        $someoneElse = $this->november(30, $this->companyWide(4, 5), self::OTHER_CONTRACT_ID);
+
+        $this->assertNull($this->amount($excluded, 'Welfare'), 'left out for this person');
+        $this->assertSame(200.0, $this->amount($someoneElse, 'Welfare'), 'still applied to everyone else');
+    }
+
+    public function test_leaving_one_item_out_does_not_touch_the_other_company_wide_items(): void
+    {
+        DB::table('contract_element_exclusions')->insert(['contract_id' => self::CONTRACT_ID, 'element_id' => 4, 'reason' => 'Opted out']);
+
+        $this->assertSame(3000.0, $this->amount($this->november(30, $this->companyWide(4, 5)), 'Transport'));
+    }
+
+    public function test_an_item_left_out_leaves_net_pay_higher_by_its_amount(): void
+    {
+        $with = $this->november(30, $this->companyWide(4));
+        DB::table('contract_element_exclusions')->insert(['contract_id' => self::CONTRACT_ID, 'element_id' => 4, 'reason' => 'Opted out']);
+        $without = $this->november(30, $this->companyWide(4));
+
+        $this->assertEqualsWithDelta(200.0, $without['net_salary'] - $with['net_salary'], 0.01);
+    }
+
+    public function test_leaving_out_an_allowance_lowers_gross_pay_by_its_amount(): void
+    {
+        $with = $this->november(30, $this->companyWide(5));
+        DB::table('contract_element_exclusions')->insert(['contract_id' => self::CONTRACT_ID, 'element_id' => 5, 'reason' => 'Gets a company car']);
+        $without = $this->november(30, $this->companyWide(5));
+
+        $this->assertEqualsWithDelta(3000.0, $with['gross_pay'] - $without['gross_pay'], 0.01);
+    }
+
+    public function test_an_exclusion_does_not_stop_statutory_deductions(): void
+    {
+        // Even a row put straight into the table for a statutory item cannot take NSSF, SHA, Housing Levy or PAYE away
+        DB::table('contract_element_exclusions')->insert(['contract_id' => self::CONTRACT_ID, 'element_id' => 6, 'reason' => 'Should not work']);
+
+        $result = $this->november(30, $this->companyWide(4, 6));
+
+        $this->assertGreaterThan(0, $result['nssf']);
+        $this->assertGreaterThan(0, $result['nhif']);
+        $this->assertGreaterThan(0, $result['housing_levy']);
+        $this->assertGreaterThan(0, $result['paye']);
+    }
+
+    public function test_the_persons_own_amount_replaces_the_company_amount_and_the_exclusion_is_not_needed(): void
+    {
+        $this->row(4, 500);
+
+        $this->assertSame(500.0, $this->amount($this->november(30, $this->companyWide(4)), 'Welfare'));
+    }
+
+    public function test_a_once_only_own_amount_replaces_the_company_amount_in_its_month_only(): void
+    {
+        $this->row(4, 500, ['frequency' => 'once', 'once_month' => '2026-11-01', 'prorate' => false]);
+
+        $this->assertSame(500.0, $this->amount($this->november(30, $this->companyWide(4)), 'Welfare'), 'November: the person\'s own amount');
+        $this->assertSame(200.0, $this->amount($this->november(31, $this->companyWide(4), self::CONTRACT_ID, '2026-12-01', '2026-12-31', 31), 'Welfare'), 'December: the company amount as usual');
+    }
+
+    public function test_a_contract_with_nothing_left_out_is_paid_the_company_items_as_before(): void
+    {
+        $this->assertSame(0, DB::table('contract_element_exclusions')->count());
+
+        $result = $this->november(30, $this->companyWide(4, 5));
+
+        $this->assertSame(200.0, $this->amount($result, 'Welfare'));
+        $this->assertSame(3000.0, $this->amount($result, 'Transport'));
     }
 
     public function test_nssf_uses_the_rates_in_force_for_the_pay_period(): void

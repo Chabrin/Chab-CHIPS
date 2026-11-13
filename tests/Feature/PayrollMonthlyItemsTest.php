@@ -55,7 +55,10 @@ class PayrollMonthlyItemsTest extends TestCase
             $t->integer('department_id')->nullable();
             $t->integer('current_status_id')->default(1);
             $t->string('disability')->nullable();
+            $t->string('employment_type')->nullable();
         });
+        // Saving a contract asks the staff member's category whether the contract has an end date
+        (require database_path('migrations/2026_11_10_100000_create_employment_categories_table.php'))->up();
         Schema::create('sys_hr_employee_contracts', function (Blueprint $t) {
             $t->id();
             $t->dateTime('date_time')->nullable();
@@ -68,6 +71,7 @@ class PayrollMonthlyItemsTest extends TestCase
             $t->decimal('basic_salary', 15, 2)->default(0);
             $t->string('staff_number')->nullable();
         });
+        (require database_path('migrations/2026_11_10_100200_add_period_and_probation_to_contracts.php'))->up();
         // Saving a contract looks for the signed contract already uploaded with the staff record
         Schema::create('document_types', function (Blueprint $t) {
             $t->id();
@@ -88,6 +92,8 @@ class PayrollMonthlyItemsTest extends TestCase
             $t->integer('entry_type_id')->nullable();
             $t->decimal('amount', 15, 2)->default(0);
         });
+        // How often each row applies, what a part month does to it, and the company-wide items left out for a person
+        (require database_path('migrations/2026_11_11_120000_add_terms_and_exclusions_for_contract_elements.php'))->up();
         Schema::create('sys_hr_payroll_elements', function (Blueprint $t) {
             $t->id();
             $t->string('element_name');
@@ -332,6 +338,23 @@ class PayrollMonthlyItemsTest extends TestCase
         $this->assertSame([7], ContractChange::pluck('changed_by')->unique()->map(fn ($id) => (int) $id)->all());
     }
 
+    public function test_the_recurring_screen_says_how_often_each_item_applies_and_what_a_part_month_does(): void
+    {
+        $this->actingAsHr();
+        DB::table('sys_hr_employee_contracts_279_repeat')->insert([
+            ['parent_id' => self::ALICE_CONTRACT, 'element_id' => self::SACCO, 'entry_type_id' => 1, 'amount' => 1000],
+        ]);
+
+        // Nothing chosen: every month, and the run's old rule for a deduction (charged in full)
+        $this->getJson('/ajax/payroll/monthly/' . self::PERIOD . '/recurring')->assertOk()
+            ->assertJsonPath('rows.0.terms', "Every month \u{00B7} full amount in a part month");
+
+        DB::table('sys_hr_employee_contracts_279_repeat')->update(['frequency' => 'once', 'once_month' => '2026-12-01', 'prorate' => 1]);
+
+        $this->getJson('/ajax/payroll/monthly/' . self::PERIOD . '/recurring')->assertOk()
+            ->assertJsonPath('rows.0.terms', "Once only (Dec 2026) \u{00B7} reduced by the days worked in a part month");
+    }
+
     public function test_the_recurring_screen_refuses_one_time_and_all_staff_calculated_items(): void
     {
         $this->actingAsHr();
@@ -397,6 +420,116 @@ class PayrollMonthlyItemsTest extends TestCase
             $this->checkSection('element_changes')['rows']
         );
         $this->assertSame([['name' => 'Bob Brown', 'detail' => 'Starting salary 30,000.00']], $this->checkSection('new_contracts')['rows']);
+    }
+
+    // ── once-only items, and company-wide items left out for one person ──────
+
+    private function contractRow(int $contract, int $element, float $amount, array $terms = []): int
+    {
+        return DB::table('sys_hr_employee_contracts_279_repeat')->insertGetId(array_merge(
+            ['parent_id' => $contract, 'element_id' => $element, 'entry_type_id' => 1, 'amount' => $amount, 'frequency' => 'monthly', 'once_month' => null, 'prorate' => null],
+            $terms
+        ));
+    }
+
+    public function test_the_check_lists_the_once_only_items_this_run_will_take_and_no_others(): void
+    {
+        $this->actingAsHr();
+        // The period is October 2026
+        $this->contractRow(self::ALICE_CONTRACT, self::SACCO, 1200, ['frequency' => 'once', 'once_month' => '2026-10-01']);
+        $this->contractRow(self::BOB_CONTRACT, self::SACCO, 900, ['frequency' => 'once', 'once_month' => '2026-11-01']);
+        $this->contractRow(self::BOB_CONTRACT, self::WELFARE, 500); // every month: not listed
+
+        $section = $this->checkSection('once_only_this_period');
+
+        $this->assertSame([['name' => 'Alice Adams', 'detail' => 'Sacco Loan 1,200.00']], $section['rows']);
+        $this->assertSame('info', $section['level']);
+        $this->assertNull($this->checkSection('once_only_never'));
+    }
+
+    public function test_the_check_warns_about_a_once_only_item_the_run_can_never_take(): void
+    {
+        $this->actingAsHr();
+        // The contracts run January to December 2026
+        $this->contractRow(self::ALICE_CONTRACT, self::SACCO, 1200, ['frequency' => 'once', 'once_month' => '2027-03-01']);
+        $this->contractRow(self::BOB_CONTRACT, self::SACCO, 900, ['frequency' => 'once', 'once_month' => '2025-12-01']);
+        $this->contractRow(self::BOB_CONTRACT, self::WELFARE, 500, ['frequency' => 'once', 'once_month' => null]);
+
+        $section = $this->checkSection('once_only_never');
+
+        $this->assertSame('warning', $section['level']);
+        $this->assertSame(
+            [['name' => 'Alice Adams', 'detail' => 'Sacco Loan (Mar 2027)'], ['name' => 'Bob Brown', 'detail' => 'Sacco Loan (Dec 2025)'], ['name' => 'Bob Brown', 'detail' => 'Social Welfare (no month)']],
+            $section['rows']
+        );
+    }
+
+    public function test_the_first_and_last_months_of_a_contract_are_not_flagged(): void
+    {
+        $this->actingAsHr();
+        $this->contractRow(self::ALICE_CONTRACT, self::SACCO, 1, ['frequency' => 'once', 'once_month' => '2026-01-01']);
+        $this->contractRow(self::BOB_CONTRACT, self::SACCO, 1, ['frequency' => 'once', 'once_month' => '2026-12-01']);
+
+        $this->assertNull($this->checkSection('once_only_never'));
+    }
+
+    public function test_an_open_ended_contract_has_no_last_month_to_fall_outside(): void
+    {
+        $this->actingAsHr();
+        DB::table('sys_hr_employee_contracts')->where('id', self::ALICE_CONTRACT)->update(['date_end' => null]);
+        $this->contractRow(self::ALICE_CONTRACT, self::SACCO, 1, ['frequency' => 'once', 'once_month' => '2031-06-01']);
+
+        $this->assertNull($this->checkSection('once_only_never'));
+    }
+
+    public function test_the_check_lists_the_company_wide_items_left_out_with_their_reasons(): void
+    {
+        $this->actingAsHr();
+        DB::table('contract_element_exclusions')->insert([
+            ['contract_id' => self::BOB_CONTRACT, 'element_id' => self::WELFARE, 'reason' => 'Opted out in writing'],
+        ]);
+
+        $section = $this->checkSection('left_out_items');
+
+        $this->assertSame([['name' => 'Bob Brown', 'detail' => 'Social Welfare - Opted out in writing']], $section['rows']);
+        $this->assertSame('info', $section['level']);
+    }
+
+    public function test_an_item_left_out_on_a_contract_that_is_not_in_this_run_is_not_listed(): void
+    {
+        $this->actingAsHr();
+        DB::table('sys_hr_employee_contracts')->insert(['id' => 12, 'staff_id' => self::CAROL, 'date_start' => '2025-01-01 00:00:00', 'date_end' => '2025-12-31 00:00:00', 'basic_salary' => 1, 'staff_number' => 'S3']);
+        DB::table('contract_element_exclusions')->insert(['contract_id' => 12, 'element_id' => self::WELFARE, 'reason' => 'Old contract']);
+
+        $this->assertNull($this->checkSection('left_out_items'));
+    }
+
+    public function test_the_check_says_in_words_what_changed_in_the_terms_and_the_left_out_items(): void
+    {
+        $this->actingAsHr();
+        $bob = DB::table('sys_hr_employee_contracts')->where('id', self::BOB_CONTRACT)->first();
+        $make = fn (string $field, $old, $new, int $element) => ContractChange::create([
+            'contract_id' => $bob->id, 'staff_id' => $bob->staff_id, 'field' => $field, 'element_id' => $element,
+            'old_value' => $old, 'new_value' => $new, 'changed_by' => 7, 'created_at' => now(),
+        ]);
+        $make('element_terms', 'Monthly, full amount', 'Once Dec 2026, prorated', self::SACCO);
+        $make('item_excluded', null, 'Opted out', self::WELFARE);
+        $make('item_included', 'Opted out', null, self::WELFARE);
+
+        $this->assertSame([
+            ['name' => 'Bob Brown', 'detail' => 'Sacco Loan: terms changed from Monthly, full amount to Once Dec 2026, prorated'],
+            ['name' => 'Bob Brown', 'detail' => 'Social Welfare left out for this person (Opted out)'],
+            ['name' => 'Bob Brown', 'detail' => 'Social Welfare put back (was left out: Opted out)'],
+        ], $this->checkSection('element_changes')['rows']);
+    }
+
+    public function test_an_every_month_row_adds_nothing_to_the_check(): void
+    {
+        $this->actingAsHr();
+        DB::table('sys_staff')->where('id', self::CAROL)->update(['current_status_id' => 3]);
+        $this->contractRow(self::ALICE_CONTRACT, self::SACCO, 1000);
+
+        $this->assertSame([], $this->getJson('/ajax/payroll/monthly/' . self::PERIOD)->assertOk()->json('check.sections'));
     }
 
     public function test_an_item_for_someone_with_no_contract_is_reported_as_not_applied(): void

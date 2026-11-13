@@ -34,7 +34,7 @@
                         @endif
 
 
-                        <form action="{{ route('contract.update', ['id' => $contract->id]) }}" method="POST" id="staffContractCreateForm" enctype="multipart/form-data">
+                        <form action="{{ route('contract.update', ['id' => $contract->id]) }}" method="POST" id="staffContractCreateForm" enctype="multipart/form-data" data-file-slots>
                             @csrf
                             @method('PUT')
                         
@@ -57,10 +57,7 @@
                                     <label for="date_start" class="form-label"> Date Start<span style="color:red">*</span></label>
                                     <input type="date" class="form-control" name="date_start" id="date_start" required value="{{ \Carbon\Carbon::parse($contract->date_start)->format('Y-m-d') }}">
                                 </div>
-                                <div class="mb-3 col-6">
-                                    <label for="date_end" class="form-label"> Date End<span style="color:red">*</span></label>
-                                    <input type="date" class="form-control" name="date_end" id="date_end" required value="{{ \Carbon\Carbon::parse($contract->date_end)->format('Y-m-d') }}">
-                                </div>
+                                @include('staff.contracts.partials.period-fields', ['contract' => $contract, 'openEnded' => $openEnded ?? false])
                                 <div class="mb-3 col-12">
                                     <label for="basic_salary" class="form-label">Basic Salary</label>
                                     <input type="number" class="form-control" name="basic_salary" id="basic_salary" min="0" step="0.01" value="{{ $contract->basic_salary }}">
@@ -87,22 +84,7 @@
                                     @enderror
                                 </div>
                             </div>
-                        
-                            <div class="mt-4">
-                                <h3>Recurring for all staff</h3>
-                                <hr class="mb-3 mt-3">
-                                <p class="text-muted small mb-2">These apply to every staff member automatically when payroll runs, worked out from the pay on this contract. They can't be edited here.</p>
-                                <div class="table-responsive">
-                                    <table class="table table-sm mb-0" id="allStaffItems">
-                                        <thead>
-                                            <tr><th>Item</th><th>Type</th><th>How it is worked out</th><th class="text-end">Amount</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr><td colspan="4" class="text-muted">Enter a basic salary to see the amounts.</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                            @include('staff.contracts.partials.all-staff-table')
 
                             <div class="mt-4">
                                 <h3>Staff Specific Elements</h3>
@@ -149,6 +131,7 @@
                                             <div class="mb-3 col-2 d-flex align-items-end">
                                                 <button type="button" class="btn btn-danger remove-element-row" style="height:38px;">Remove</button>
                                             </div>
+                                            @include('staff.contracts.partials.terms-fields', ['index' => $i, 'row' => $element])
                                         </div>
                                     @endforeach
                                 </div>
@@ -162,8 +145,23 @@
     </div>
 </div>
 <script src="{{ asset('assets/js/payroll-all-staff-rows.js') }}?v={{ filemtime(public_path('assets/js/payroll-all-staff-rows.js')) }}"></script>
+<script src="{{ asset('assets/js/contract-element-terms.js') }}?v={{ filemtime(public_path('assets/js/contract-element-terms.js')) }}"></script>
+<script src="{{ asset('assets/js/contract-exclusions.js') }}?v={{ filemtime(public_path('assets/js/contract-exclusions.js')) }}"></script>
+<script src="{{ asset('assets/js/contract-period.js') }}?v={{ filemtime(public_path('assets/js/contract-period.js')) }}"></script>
+<script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
 <script>
     $(document).ready(function() {
+
+        // Staff in a category with no contract end date (permanent staff) are asked for probation only
+        var staffInfo = {};
+        $('#staff_id').on('change', function() {
+            var info = staffInfo[$(this).val()];
+            if (info) {
+                // A contract that already has an end date or period keeps its fields, whatever the category
+                var hasDates = $('#date_end').val() !== '' || $('#period_value').val() !== '';
+                window.ContractPeriod.setOpenEnded(info.has_end_date === false && !hasDates);
+            }
+        });
 
         // Choose a different file instead of the one already on record
         $('#signed_contract_replace').on('click', function() {
@@ -186,6 +184,7 @@
                 }));
                 if (response.staff && Array.isArray(response.staff)) {
                     response.staff.forEach(function(staff) {
+                        staffInfo[staff.id] = staff;
                         $staff_id.append($('<option>', {
                             value: staff.id,
                             text: staff.full_names

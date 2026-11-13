@@ -253,6 +253,8 @@ use Illuminate\Support\Facades\Crypt;
                                                     <div class="col-7"><small><strong>{{ $staff->department->department_name ?? '-' }}</strong></small></div>
                                                     <div class="col-5"><small class="text-muted">Position:</small></div>
                                                     <div class="col-7"><small><strong>{{ $staff->position->position_name ?? '-' }}</strong></small></div>
+                                                    <div class="col-5"><small class="text-muted">Category:</small></div>
+                                                    <div class="col-7"><small>{{ \App\Models\EmploymentCategory::nameFor($staff->employment_type) }}</small></div>
                                                     <div class="col-5"><small class="text-muted">Hire Date:</small></div>
                                                     <div class="col-7"><small>{{ $staff->hire_date ? $staff->hire_date->format('d M Y') : '-' }}</small></div>
                                                 </div>

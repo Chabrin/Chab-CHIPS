@@ -26,6 +26,7 @@ class StaffNextOfKinRelationshipTest extends TestCase
         DB::purge('sqlite');
         (require database_path('migrations/2026_10_30_120000_create_staff_onboarding_invitations_table.php'))->up();
         (require database_path('migrations/2026_11_03_000001_make_onboarding_employment_type_nullable.php'))->up();
+        (require database_path('migrations/2026_11_10_100000_create_employment_categories_table.php'))->up();
         Schema::create('sys_set_banks', function (Blueprint $table) { $table->id(); $table->string('bank_name'); });
         Schema::create('sys_staff', function (Blueprint $table) {
             $table->id();

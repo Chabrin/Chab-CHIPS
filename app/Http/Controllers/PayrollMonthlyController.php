@@ -213,6 +213,8 @@ class PayrollMonthlyController extends Controller
                 'element' => $row->payrollElement->element_name,
                 'type' => (string) $row->payrollElement->element_type,
                 'amount' => (float) $row->amount,
+                // How often it applies and what a part month does to it, as set on the contract
+                'terms' => $row->termsText(),
             ])
             ->sortBy([['staff', 'asc'], ['element', 'asc']])
             ->values();

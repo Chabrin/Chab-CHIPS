@@ -190,31 +190,46 @@ class Staff extends Model
 {
     return $this->hasMany(\App\Models\EmployeeDocument::class, 'employee_id');
 }
-public static function nextStaffNumber(string $employmentType = 'Permanent'): string
+/** The number in a staff number ("CT-007" is 7, "281" is 281). */
+public static function numberPart(?string $staffNumber): int
 {
-    $prefixMap = [
-        'Permanent' => '',
-        'Temporary' => 'T',
-        'Casual'    => 'C',
-        'Intern'    => 'I',
-    ];
+    return (int) preg_replace('/\D/', '', (string) $staffNumber);
+}
 
-    $prefix = $prefixMap[$employmentType] ?? '';
+/** A staff number as the category writes it: plain for categories with no prefix, otherwise PREFIX-001. */
+public static function formatStaffNumber(string $employmentType, int $number): string
+{
+    // The prefix is set per category under HR Settings > Employment Categories; a code with no category gets plain numbers
+    $prefix = EmploymentCategory::prefixFor($employmentType);
 
-    // Get the highest numeric part for this category
-    $max = static::query()
-        ->where('employment_type', $employmentType)
-        ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\\D', '', 'g'), '')::bigint) as max_no")
-        ->value('max_no');
+    return $prefix === '' ? (string) $number : sprintf('%s-%03d', $prefix, $number);
+}
 
-    $nextNo = ((int) $max) + 1;
-
-    // Permanent → plain number
-    if ($prefix === '') {
-        return (string) $nextNo;
+/** The highest number any staff member holds in this category (0 when there are none). Numbers held by drafts are not counted. */
+public static function highestStaffNumber(string $employmentType): int
+{
+    if (static::query()->getConnection()->getDriverName() === 'pgsql') {
+        $max = static::query()
+            ->where('employment_type', $employmentType)
+            ->selectRaw("MAX(NULLIF(regexp_replace(staff_number, '\\D', '', 'g'), '')::bigint) as max_no")
+            ->value('max_no');
+    } else {
+        // The same answer on other databases (the tests run on SQLite), which have no regexp_replace
+        $max = static::query()->where('employment_type', $employmentType)->pluck('staff_number')
+            ->map(fn ($number) => static::numberPart($number))->max();
     }
 
-    // Others → PREFIX-001 (3 digits with leading zeros)
-    return sprintf('%s-%03d', $prefix, $nextNo);
+    return (int) $max;
+}
+
+/**
+ * The next free staff number in the category: one more than the highest held by any staff member or by any part-finished record
+ * (draft), so a number held for a draft is not offered to anyone else.
+ */
+public static function nextStaffNumber(string $employmentType = 'Permanent'): string
+{
+    $highest = max(static::highestStaffNumber($employmentType), \App\Services\StaffNumbers::highestReserved($employmentType));
+
+    return static::formatStaffNumber($employmentType, $highest + 1);
 }
 }

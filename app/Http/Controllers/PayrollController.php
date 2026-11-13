@@ -14,6 +14,7 @@ use App\Models\PayrollPeriod;
 use App\Models\PayrollRun;
 use App\Models\PayrollPeriodItem;
 use App\Models\ContractElement;
+use App\Models\ContractElementExclusion;
 use App\Models\EmployeeContract;
 use App\Models\HelbDeduction;
 use App\Models\ProratedDeduction;
@@ -385,10 +386,13 @@ class PayrollController extends Controller
     /**
      * List staff positions. Plain lookup data also used by the HR template pages, so it is not payroll-gated.
      */
-    public function payrollElementsListStaffPositions()
+    public function payrollElementsListStaffPositions(Request $request)
     {
         try {
-            $positions = Position::select('id', 'position_name')->orderBy('position_name', 'asc')->get();
+            // ?active=1 leaves out positions that are switched off (the contract form offers only those)
+            $positions = Position::select('id', 'position_name')
+                ->when($request->boolean('active'), fn ($query) => $query->active())
+                ->orderBy('position_name', 'asc')->get();
             return response()->json(['staff_positions' => $positions]);
         } catch (\Exception $e) {
             try {
@@ -1203,6 +1207,9 @@ class PayrollController extends Controller
         $statutoryKeys = ['nssf', 'nhif', 'housing_levy', 'payee', 'helb_loans'];
         $onContract = []; // elements this person has their own contract amount for, so the all-staff amount is not added too
 
+        // Company-wide items left out for this person (with a reason), set on the contract. They never touch anyone else.
+        $excludedItems = $contractId ? ContractElementExclusion::where('contract_id', $contractId)->pluck('element_id')->all() : [];
+
         if ($contractId) {
             $contractElements = ContractElement::with('payrollElement')
                 ->where('parent_id', $contractId)
@@ -1223,19 +1230,25 @@ class PayrollController extends Controller
                 if ($pe->isOneTime()) {
                     continue;
                 }
+                // An item set to apply once only is taken in the month it names and in no other. In the other months it is
+                // not on the contract at all, so a company-wide item of the same name applies as usual.
+                if (!$el->appliesInPeriod($periodStartDate)) {
+                    continue;
+                }
                 $onContract[$pe->id] = true;
+                // What a part month (joining or leaving) does to the item is the contract row's own choice: reduced by the
+                // days worked, or the full amount. Left unchosen, an allowance is reduced and a deduction is charged in full.
+                $itemFactor = $el->prorates() ? $prorationFactor : 1.0;
                 if ($pe->element_key === 'helb_loans') {
                     // Used below only when the staff member has no HELB loan record at all
                     $contractHelbAmount += round((float) $el->amount, 2);
                 } elseif ($pe->element_type == '2') {
-                    // Allowance — earned by days worked, so it is prorated like basic salary
-                    $amount = round((float) $el->amount * $prorationFactor, 2);
+                    $amount = round((float) $el->amount * $itemFactor, 2);
                     $contractAllowances += $amount;
                     $allowanceEntries[]   = $this->makePayslipEntry($pe, $amount, '', '2');
                 } elseif ($pe->element_type == '1' && !in_array($pe->element_key, $statutoryKeys)) {
-                    // Non-statutory deduction (savings, Sacco loan, welfare) — a fixed monthly
-                    // commitment, charged in full whatever the days worked. Added post-tax.
-                    $extraDeductionEntries[] = $this->makePayslipEntry($pe, round((float) $el->amount, 2), '', '1');
+                    // Non-statutory deduction (savings, Sacco loan, welfare). Added post-tax.
+                    $extraDeductionEntries[] = $this->makePayslipEntry($pe, round((float) $el->amount * $itemFactor, 2), '', '1');
                 }
             }
         }
@@ -1258,7 +1271,7 @@ class PayrollController extends Controller
                 $extraDeductionEntries[] = $this->makePayslipEntry($pe, $amount, '', '1');
             }
         };
-        $allStaffElements = ($recurringAll ?? collect())->reject(fn ($pe) => isset($onContract[$pe->id]));
+        $allStaffElements = ($recurringAll ?? collect())->reject(fn ($pe) => isset($onContract[$pe->id]) || in_array($pe->id, $excludedItems, true));
 
         foreach ($allStaffElements->reject(fn ($pe) => (int) $pe->formula_id === 3) as $pe) {
             $addForAllStaff($pe, 0.0);

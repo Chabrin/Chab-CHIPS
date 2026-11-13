@@ -231,7 +231,7 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" data-employee-id="{{ $staff->id }}" enctype="multipart/form-data" novalidate>
+                        <form action="{{ route('staff.update', $staff->id) }}" method="POST" id="staffEditForm" data-employee-id="{{ $staff->id }}" enctype="multipart/form-data" data-file-slots novalidate>
                             @csrf
                             @method('PUT')
 
@@ -374,7 +374,7 @@
                                         </div>
                                         <div class="col-md-4 mb-3">
                                             <label for="email_address" class="form-label">Official Email <span class="text-danger">*</span></label>
-                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" value="{{ old('email_address', $staff->email_address) }}" @if($staff->email_address) readonly @endif data-required="true">
+                                            <input type="email" class="form-control @error('email_address') is-invalid @enderror" id="email_address" name="email_address" placeholder="{{ \App\Support\StaffContact::emailExample() }}" value="{{ old('email_address', $staff->email_address) }}" @if($staff->email_address) readonly @endif data-required="true">
                                             @error('email_address')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -500,7 +500,7 @@
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
                                             <label for="mobile_number" class="form-label">Mobile Number</label>
-                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ old('mobile_number', $staff->mobile_number) }}">
+                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ old('mobile_number', $staff->mobile_number) }}" placeholder="+254 7XX XXX XXX" data-mobile-format>
                                             @error('mobile_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -945,5 +945,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 });
 </script>
+<script src="{{ asset('assets/js/staff-contact-format.js') }}?v={{ filemtime(public_path('assets/js/staff-contact-format.js')) }}"></script>
+<script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
 @include('staff.partials.upload-duplicate-check')
 @endsection

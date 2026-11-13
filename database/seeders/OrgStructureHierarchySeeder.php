@@ -79,6 +79,25 @@ class OrgStructureHierarchySeeder extends Seeder
     }
 
     /**
+     * The names of the approved positions (document titles and the older names that count as the same position),
+     * for the clean-up of positions that are not in the document.
+     *
+     * @return string[]
+     */
+    public static function approvedPositionNames(): array
+    {
+        $names = [];
+        foreach ((new self())->positionPlan() as $spec) {
+            $names[] = $spec['title'];
+            foreach ($spec['aliases'] as $alias) {
+                $names[] = $alias;
+            }
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /**
      * Positions from the document, in document order. "aliases" are existing position names that count as
      * the same position; "reports_to" is the document title of the boss, or null when the document gives none.
      */

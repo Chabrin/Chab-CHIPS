@@ -19,12 +19,23 @@ use App\Services\ErrorDispatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PayrollReviewController extends Controller
 {
+    /**
+     * The alerts that point at employees in the run, and the flag each puts on their row. The row flags, the counts and the
+     * review page's alert filter all come from this one list, so what is flagged is always what the filter shows.
+     */
+    public const ROW_ALERTS = [
+        'negative_net' => 'Negative pay',
+        'no_bank' => 'No bank details',
+        'multiple_contracts' => 'Several contracts',
+    ];
+
     /**
      * Stop the request with a 403 unless the signed-in user holds the given payroll permission.
      */
@@ -49,7 +60,10 @@ class PayrollReviewController extends Controller
             'period' => $period,
             'run' => $run,
             'totals' => $this->runTotals($period->id),
-            'warnings' => array_merge(session()->pull('payroll_process_warnings.' . $period->id, []), $this->runWarnings($period->id)),
+            // Notes from processing (shown once), and the alerts worked out from the run, some of which can filter the grid
+            'warnings' => session()->pull('payroll_process_warnings.' . $period->id, []),
+            'alerts' => $this->runAlerts($period->id),
+            'alertLabels' => self::ROW_ALERTS,
             'userNames' => User::whereIn('id', array_filter([$run->processed_by, $run->submitted_by, $run->approved_by]))->pluck('name', 'id'),
             'canSubmit' => $canProcess && $isEditable,
             'canDiscard' => $canProcess && $isEditable,
@@ -60,12 +74,25 @@ class PayrollReviewController extends Controller
         ]);
     }
 
-    /** Per-employee payroll list for the review table. */
-    public function employees($periodId)
+    /**
+     * Per-employee payroll list for the review table. ?alert_filter=negative_net|no_bank|multiple_contracts keeps only the
+     * employees with that alert. alert_counts always covers the whole run, so the page can show how many are left to fix.
+     */
+    public function employees(Request $request, $periodId)
     {
         $this->requirePayrollPermission('read_payroll_processing');
 
-        return response()->json(['employees' => $this->employeeRows((int) $periodId)]);
+        $filter = $request->query('alert_filter');
+        if (filled($filter) && (!is_string($filter) || !array_key_exists($filter, self::ROW_ALERTS))) {
+            return response()->json(['error' => 'Unknown alert filter.'], 422);
+        }
+
+        $all = $this->employeeRows((int) $periodId);
+
+        return response()->json([
+            'employees' => filled($filter) ? $all->filter(fn ($row) => in_array($filter, $row['alerts'], true))->values() : $all,
+            'alert_counts' => $this->alertCounts($all),
+        ]);
     }
 
     /** HR sends a draft or returned run to the accountant. */
@@ -343,38 +370,82 @@ class PayrollReviewController extends Controller
             ->first();
     }
 
-    /** Issues the reviewer should see before the run is approved. */
-    private function runWarnings(int $periodId): array
+    /**
+     * Issues the reviewer should see before the run is approved. Each says what it is about: 'filter' names the grid filter that
+     * shows the employees concerned, 'staff' lists people who are not in the run at all, and 'link' points to where it is fixed.
+     */
+    private function runAlerts(int $periodId): array
     {
-        $warnings = [];
-        $summaries = PayrollSummary::with('staff.bank')->where('period_id', $periodId)->get();
-
-        $negative = $summaries->filter(fn ($summary) => (float) $summary->net_pay < 0)->count();
-        if ($negative) {
-            $warnings[] = "{$negative} employee(s) have negative net pay.";
+        $multiple = $this->multipleContractStaffIds();
+        $counts = array_fill_keys(array_keys(self::ROW_ALERTS), 0);
+        foreach (PayrollSummary::with('staff.bank')->where('period_id', $periodId)->get() as $summary) {
+            foreach ($this->rowAlertKeys($summary, $multiple) as $key) {
+                $counts[$key]++;
+            }
         }
 
-        $noBank = $summaries->filter(fn ($summary) => !$summary->staff || blank($summary->staff->account_number) || !$summary->staff->bank)->count();
-        if ($noBank) {
-            $warnings[] = "{$noBank} employee(s) have no bank details and cannot be included in the EFT file.";
+        $alerts = [];
+        if ($counts['negative_net']) {
+            $alerts[] = ['key' => 'negative_net', 'tone' => 'danger', 'count' => $counts['negative_net'], 'filter' => 'negative_net',
+                'message' => "{$counts['negative_net']} employee(s) have negative net pay."];
+        }
+        if ($counts['no_bank']) {
+            $alerts[] = ['key' => 'no_bank', 'tone' => 'danger', 'count' => $counts['no_bank'], 'filter' => 'no_bank',
+                'message' => "{$counts['no_bank']} employee(s) have no bank details and cannot be included in the EFT file."];
         }
 
         $contractStaffIds = EmployeeContract::active()->whereNotNull('staff_id')->pluck('staff_id');
-        $noContract = Staff::where('current_status_id', 1)->whereNotIn('id', $contractStaffIds)->count();
-        if ($noContract) {
-            $warnings[] = "{$noContract} active staff have no active contract and are not in this run.";
+        $withoutContract = Staff::where('current_status_id', 1)->whereNotIn('id', $contractStaffIds)->orderBy('full_names')->get(['id', 'staff_number', 'full_names']);
+        if ($withoutContract->isNotEmpty()) {
+            $alerts[] = ['key' => 'no_contract', 'tone' => 'warning', 'count' => $withoutContract->count(), 'filter' => null,
+                'message' => "{$withoutContract->count()} active staff have no active contract and are not in this run.",
+                'staff' => $withoutContract->take(100)->map(fn ($staff) => ['number' => $staff->staff_number, 'name' => $staff->full_names])->values()->all(),
+                'more' => max(0, $withoutContract->count() - 100)];
         }
 
-        $multipleContracts = $contractStaffIds->countBy()->filter(fn ($count) => $count > 1)->count();
-        if ($multipleContracts) {
-            $warnings[] = "{$multipleContracts} staff have more than one active contract. Only the latest contract was paid.";
+        if ($counts['multiple_contracts']) {
+            $alerts[] = ['key' => 'multiple_contracts', 'tone' => 'warning', 'count' => $counts['multiple_contracts'], 'filter' => 'multiple_contracts',
+                'message' => "{$counts['multiple_contracts']} staff have more than one active contract. Only the latest contract was paid."];
         }
 
         if ($this->taxBandsOverlap()) {
-            $warnings[] = 'Tax bands overlap or continue after the last band, so PAYE may be wrong. Check Tax Bands.';
+            $alerts[] = ['key' => 'tax_bands', 'tone' => 'danger', 'count' => 1, 'filter' => null,
+                'message' => 'Tax bands overlap or continue after the last band, so PAYE may be wrong. Check Tax Bands.',
+                'link' => ['label' => 'Open Tax Bands', 'url' => route('payroll.tax_bands')]];
         }
 
-        return $warnings;
+        return $alerts;
+    }
+
+    /** Which of the row alerts apply to one payroll summary. */
+    private function rowAlertKeys(PayrollSummary $summary, Collection $multipleContractStaff): array
+    {
+        $staff = $summary->staff;
+        $keys = [];
+
+        if ((float) $summary->net_pay < 0) {
+            $keys[] = 'negative_net';
+        }
+        if (!$staff || blank($staff->account_number) || !$staff->bank) {
+            $keys[] = 'no_bank';
+        }
+        if ($staff && $multipleContractStaff->contains($staff->id)) {
+            $keys[] = 'multiple_contracts';
+        }
+
+        return $keys;
+    }
+
+    /** Ids of the staff who hold more than one active contract. */
+    private function multipleContractStaffIds(): Collection
+    {
+        return EmployeeContract::active()->whereNotNull('staff_id')->pluck('staff_id')->countBy()->filter(fn ($count) => $count > 1)->keys();
+    }
+
+    /** How many of the given rows carry each row alert. */
+    private function alertCounts(Collection $rows): array
+    {
+        return collect(self::ROW_ALERTS)->map(fn ($label, $key) => $rows->filter(fn ($row) => in_array($key, $row['alerts'], true))->count())->all();
     }
 
     /**
@@ -397,7 +468,8 @@ class PayrollReviewController extends Controller
     }
 
     /**
-     * One row per employee in the run, sorted by name, with flags and the change from the previous approved payroll.
+     * One row per employee in the run, sorted by name, with alerts and the change from the previous approved payroll.
+     * edit_url opens the staff record, for people who may edit staff.
      */
     private function employeeRows(int $periodId): Collection
     {
@@ -405,22 +477,18 @@ class PayrollReviewController extends Controller
             ->where('period_id', $periodId)
             ->get();
         $previousNet = $this->previousNetPay($summaries->first()?->period);
+        $multiple = $this->multipleContractStaffIds();
+        $canEditStaff = (bool) Auth::user()?->isAbleTo('update_staff');
 
-        return $summaries->map(function (PayrollSummary $summary) use ($previousNet) {
+        return $summaries->map(function (PayrollSummary $summary) use ($previousNet, $multiple, $canEditStaff) {
             $staff = $summary->staff;
             $statutory = (float) $summary->tax_payable + (float) $summary->nssf + (float) $summary->nhif + (float) $summary->housing_levy;
             $previous = $previousNet->get($summary->staff_id);
-
-            $flags = [];
-            if ((float) $summary->net_pay < 0) {
-                $flags[] = 'Negative pay';
-            }
-            if (!$staff || blank($staff->account_number) || !$staff->bank) {
-                $flags[] = 'No bank details';
-            }
+            $alerts = $this->rowAlertKeys($summary, $multiple);
 
             return [
                 'id' => $summary->id,
+                'staff_id' => $staff?->id,
                 'staff_number' => $staff?->staff_number ?? $summary->staff_number_id ?? '-',
                 'name' => $staff?->full_names ?? 'Unknown',
                 'department' => $staff?->department?->department_name ?? '-',
@@ -434,7 +502,9 @@ class PayrollReviewController extends Controller
                 'total_deductions' => (float) $summary->total_deductions,
                 'net_pay' => (float) $summary->net_pay,
                 'change' => $previous === null ? null : round((float) $summary->net_pay - (float) $previous, 2),
-                'flags' => $flags,
+                'alerts' => $alerts,
+                'flags' => array_map(fn ($key) => self::ROW_ALERTS[$key], $alerts),
+                'edit_url' => $staff && $canEditStaff ? route('staff.edit', Crypt::encrypt($staff->id)) : null,
             ];
         })->sortBy('name')->values();
     }

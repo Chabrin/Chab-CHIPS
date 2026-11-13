@@ -17,7 +17,8 @@ trait RendersPagesWithPlainLayout
 {
     private string $plainLayoutFolder;
 
-    protected function usePlainLayout(): void
+    /** @param bool $withSections also output the page's styles and scripts sections, as the real layout does */
+    protected function usePlainLayout(bool $withSections = false): void
     {
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'database.connections.sqlite.prefix' => '', 'database.connections.sqlite.url' => null]);
         DB::purge('sqlite');
@@ -30,7 +31,7 @@ trait RendersPagesWithPlainLayout
 
         $this->plainLayoutFolder = sys_get_temp_dir() . '/plain-layout-' . uniqid();
         File::ensureDirectoryExists($this->plainLayoutFolder . '/layouts');
-        File::put($this->plainLayoutFolder . '/layouts/main.blade.php', "@yield('content')");
+        File::put($this->plainLayoutFolder . '/layouts/main.blade.php', $withSections ? "@yield('styles')@yield('content')@yield('scripts')" : "@yield('content')");
         View::getFinder()->prependLocation($this->plainLayoutFolder);
         View::share('errors', new ViewErrorBag());
     }

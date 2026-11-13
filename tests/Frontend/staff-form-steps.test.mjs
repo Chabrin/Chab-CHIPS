@@ -29,34 +29,41 @@ function field(overrides = {}) {
 }
 
 /** The Add Staff form: tabs personal > documents > user, each pane closing with the Next/Save pair. */
-function page(fieldsByPane = {}) {
+function page(fieldsByPane = {}, extra = {}) {
     observed.length = 0;
     const order = ['personal', 'documents', 'user'];
-    const items = {}, buttons = [], panes = [];
+    const items = {}, buttons = [], panes = [], marks = {};
     const shownTabs = [];
     for (const id of order) {
         items[id] = element({ style: { display: '' } });
-        buttons.push(element({ id: id + '-tab', closest: (selector) => (selector === 'li' ? items[id] : null) }));
+        marks[id] = element({ textContent: '', className: '', title: '', setAttribute(name, value) { this[name] = value; } });
+        buttons.push(element({ id: id + '-tab', closest: (selector) => (selector === 'li' ? items[id] : null), querySelector: (selector) => (selector === '.js-stage-mark' ? marks[id] : null) }));
         const next = element({ classes: [] });
         const save = element({ classes: ['d-none'], closest: () => null, disabled: false, style: { opacity: '' } });
         const note = element({ textContent: '' });
         const pane = element({
             id,
             fields: fieldsByPane[id] || [],
-            querySelector: (selector) => ({ '.js-next-step': next, '.js-save-step': save, '.js-step-note': note })[selector],
+            invalidMarks: false,
+            querySelector: (selector) => (selector === '.is-invalid' ? (pane.invalidMarks ? {} : null) : ({ '.js-next-step': next, '.js-save-step': save, '.js-step-note': note })[selector]),
             querySelectorAll: () => pane.fields,
         });
         next.closest = (selector) => (selector === '.js-next-step' ? next : selector === '.tab-pane' ? pane : null);
         panes.push(Object.assign(pane, { next, save, note }));
     }
     const nav = element({ querySelectorAll: () => buttons, scrolled: 0 });
-    const form = element({ querySelectorAll: (selector) => (selector === '.tab-pane' ? panes : selector === '.js-save-step' ? panes.map((pane) => pane.save) : []) });
+    const form = element({ dataset: { stages: extra.stages ? JSON.stringify(extra.stages) : '' }, querySelectorAll: (selector) => (selector === '.tab-pane' ? panes : selector === '.js-save-step' ? panes.map((pane) => pane.save) : []) });
+    if (typeof extra.stages === 'string') form.dataset.stages = extra.stages;
     const header = element({ disabled: false, style: { opacity: '' } });
-    const doc = { getElementById: (id) => ({ staffCreateForm: form, staffCreateTabs: nav, createButton: header })[id] || null };
-    api.init(doc, (id) => shownTabs.push(id));
+    const summary = element({ textContent: '' });
+    const fill = { style: { width: '' } };
+    const bar = element({ querySelector: () => fill, setAttribute(name, value) { this[name] = value; } });
+    const doc = { getElementById: (id) => ({ staffCreateForm: form, staffCreateTabs: nav, createButton: header, staffStageSummary: summary, staffStageBar: bar })[id] || null };
+    const controller = api.init(doc, (id) => shownTabs.push(id), extra.saveStep ? { saveStep: extra.saveStep } : undefined);
     const click = (target) => form.fire('click', { target });
     const pageChanged = () => observed.forEach((callback) => callback());
-    return { items, panes, nav, form, header, shownTabs, click, pageChanged, byId: (id) => panes.find((pane) => pane.id === id) };
+    const leave = (id) => nav.fire('hide.bs.tab', { target: { id: id + '-tab' } });
+    return { items, panes, nav, form, header, shownTabs, click, pageChanged, marks, summary, bar, fill, controller, leave, byId: (id) => panes.find((pane) => pane.id === id) };
 }
 
 const tabs = (hiddenIds = []) => ['personal-tab', 'documents-tab', 'user-tab'].map((id) => ({ id, hidden: hiddenIds.includes(id) }));
@@ -195,4 +202,168 @@ test('clicks that are not on a Next button do nothing', () => {
 
 test('a page without the Add Staff form is left alone', () => {
     assert.doesNotThrow(() => api.init({ getElementById: () => null }, () => {}));
+});
+
+// ── stages: each tab is a stage with a status, and Save & Next saves before it moves on ──
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('a stage shows a problem when fields on it are marked, otherwise what was recorded, otherwise not done', () => {
+    assert.equal(api.paneStatus(undefined, false), 'pending');
+    assert.equal(api.paneStatus('complete', false), 'complete');
+    assert.equal(api.paneStatus('problem', false), 'problem');
+    assert.equal(api.paneStatus('complete', true), 'problem');
+    assert.equal(api.paneStatus('nonsense', false), 'pending');
+});
+
+test('progress counts only the stages that are shown', () => {
+    const statusOf = (id) => ({ 'personal-tab': 'complete', 'documents-tab': 'pending', 'user-tab': 'complete' })[id];
+
+    assert.deepEqual({ ...api.progress(tabs(), statusOf) }, { done: 2, total: 3 });
+    assert.deepEqual({ ...api.progress(tabs(['user-tab']), statusOf) }, { done: 1, total: 2 });
+    assert.match(api.progressLabel({ done: 2, total: 6 }), /^2 of 6 stages complete\. .*Add contract/);
+    assert.match(api.progressLabel({ done: 1, total: 1 }), /^1 of 1 stage complete/);
+});
+
+test('every stage starts as not done, with the summary and bar to match', () => {
+    const { marks, summary, fill, bar } = page();
+
+    assert.deepEqual(['personal', 'documents', 'user'].map((id) => marks[id].textContent), ['radio_button_unchecked', 'radio_button_unchecked', 'radio_button_unchecked']);
+    assert.match(marks.personal.className, /stage-pending/);
+    assert.match(summary.textContent, /^0 of 3 stages complete/);
+    assert.equal(fill.style.width, '0%');
+    assert.equal(bar['aria-valuenow'], '0');
+});
+
+test('stages recorded in a draft come back marked, and the bar fills', () => {
+    const { marks, summary, fill } = page({}, { stages: { personal: 'complete', documents: 'problem' } });
+
+    assert.equal(marks.personal.textContent, 'check_circle');
+    assert.match(marks.personal.className, /stage-complete/);
+    assert.equal(marks.documents.textContent, 'error');
+    assert.match(marks.documents.className, /stage-problem/);
+    assert.equal(marks.user.textContent, 'radio_button_unchecked');
+    assert.match(summary.textContent, /^1 of 3 stages complete/);
+    assert.equal(fill.style.width, '33%');
+});
+
+test('stages saved with a damaged value are ignored rather than breaking the form', () => {
+    const { marks } = page({}, { stages: 'not json' });
+    assert.equal(marks.personal.textContent, 'radio_button_unchecked');
+});
+
+test('Next marks the stage complete, and a blocked Next marks it as a problem', () => {
+    const empty = field({ valid: false });
+    const { byId, click, marks } = page({ personal: [empty], documents: [field()] });
+
+    click(byId('personal').next);
+    assert.equal(marks.personal.textContent, 'error');
+
+    empty.valid = true;
+    click(byId('personal').next);
+    assert.equal(marks.personal.textContent, 'check_circle');
+});
+
+test('leaving a stage settles it: complete when filled in, not done when it is not', () => {
+    const empty = field({ valid: false });
+    const { leave, marks } = page({ personal: [empty], documents: [field()] });
+
+    leave('personal');
+    assert.equal(marks.personal.textContent, 'radio_button_unchecked');
+
+    empty.valid = true;
+    leave('personal');
+    assert.equal(marks.personal.textContent, 'check_circle');
+
+    // a stage with nothing required on it is complete once it has been looked at
+    leave('documents');
+    assert.equal(marks.documents.textContent, 'check_circle');
+});
+
+test('a stage left with a problem stays a problem until it is fixed', () => {
+    const empty = field({ valid: false });
+    const { byId, click, leave, marks } = page({ personal: [empty] });
+    click(byId('personal').next);
+
+    leave('personal');
+    assert.equal(marks.personal.textContent, 'error');
+
+    empty.valid = true;
+    leave('personal');
+    assert.equal(marks.personal.textContent, 'check_circle');
+});
+
+test('fields the server refused put a stage in problem until they are corrected', () => {
+    const { byId, marks, controller } = page({}, { stages: { personal: 'complete' } });
+
+    byId('personal').invalidMarks = true;
+    controller.refresh();
+    assert.equal(marks.personal.textContent, 'error');
+
+    byId('personal').invalidMarks = false;
+    controller.refresh();
+    assert.equal(marks.personal.textContent, 'check_circle');
+});
+
+test('editing a complete stage so it is no longer filled in makes it not done again', () => {
+    const name = field();
+    const { byId, form, marks } = page({ personal: [name] }, { stages: { personal: 'complete' } });
+    assert.equal(marks.personal.textContent, 'check_circle');
+
+    name.valid = false;
+    form.fire('input', { target: { closest: () => byId('personal') } });
+
+    assert.equal(marks.personal.textContent, 'radio_button_unchecked');
+});
+
+test('the draft gets every stage, with stages that are not shown as skipped', () => {
+    const { items, nav, controller } = page({}, { stages: { personal: 'complete' } });
+    items.user.style.display = 'none';
+    nav.fire('shown.bs.tab');
+
+    assert.deepEqual({ ...controller.statuses() }, { personal: 'complete', documents: 'pending', user: 'skipped' });
+});
+
+test('Save & Next saves the form as a draft first and opens the next tab named by it', async () => {
+    const saved = [];
+    const { byId, click, shownTabs } = page({ personal: [field()] }, { saveStep: (next) => { saved.push(next); return Promise.resolve(true); } });
+
+    click(byId('personal').next);
+    assert.deepEqual(shownTabs, [], 'it waits for the save');
+    await tick();
+
+    assert.deepEqual(saved, ['documents']);
+    assert.deepEqual(shownTabs, ['documents-tab']);
+    assert.equal(byId('personal').next.disabled, false);
+});
+
+test('Save & Next stays on the tab when the draft could not be saved', async () => {
+    const { byId, click, shownTabs, marks } = page({ personal: [field()] }, { saveStep: () => Promise.resolve(false) });
+
+    click(byId('personal').next);
+    await tick();
+
+    assert.deepEqual(shownTabs, []);
+    assert.equal(byId('personal').next.disabled, false, 'it can be tried again');
+    assert.equal(marks.personal.textContent, 'check_circle', 'what was filled in is still complete');
+});
+
+test('Save & Next stays on the tab when saving throws', async () => {
+    const { byId, click, shownTabs } = page({ personal: [field()] }, { saveStep: () => Promise.reject(new Error('offline')) });
+
+    click(byId('personal').next);
+    await tick();
+
+    assert.deepEqual(shownTabs, []);
+    assert.equal(byId('personal').next.disabled, false);
+});
+
+test('nothing is saved when the tab is not finished', async () => {
+    const saved = [];
+    const { byId, click } = page({ personal: [field({ valid: false })] }, { saveStep: (next) => { saved.push(next); return true; } });
+
+    click(byId('personal').next);
+    await tick();
+
+    assert.deepEqual(saved, []);
 });

@@ -19,7 +19,40 @@ const nssf = {
 };
 
 test('an item without a breakdown is one row', () => {
-    assert.deepEqual(build([paye]), [{ kind: 'item', name: 'PAYE', type: 'Deduction', how: paye.how, amount: 5845.3 }]);
+    assert.deepEqual(build([paye]), [{ kind: 'item', name: 'PAYE', type: 'Deduction', how: paye.how, amount: 5845.3, id: null, statutory: false, canLeaveOut: false }]);
+});
+
+const welfare = { id: 4, name: 'Welfare', type: '1', statutory: false, how: 'Fixed amount', amount: 200, breakdown: null };
+
+test('an item carries its id so it can be left out for one person', () => {
+    assert.deepEqual(build([welfare])[0], { kind: 'item', name: 'Welfare', type: 'Deduction', how: 'Fixed amount', amount: 200, id: 4, statutory: false, canLeaveOut: true });
+});
+
+test('a statutory item can never be left out', () => {
+    const rows = build([{ ...welfare, id: 9, name: 'SHA', statutory: true }]);
+
+    assert.equal(rows[0].statutory, true);
+    assert.equal(rows[0].canLeaveOut, false);
+});
+
+test('an item with no id cannot be left out, because there is nothing to name it by', () => {
+    assert.equal(build([{ ...welfare, id: undefined }])[0].canLeaveOut, false);
+    assert.equal(build([{ ...welfare, id: null }])[0].canLeaveOut, false);
+});
+
+test('the NSSF heading is statutory and its parts and total carry no id of their own', () => {
+    const rows = build([{ ...nssf, id: 7, statutory: true }]);
+
+    assert.equal(rows[0].statutory, true);
+    assert.equal(rows[0].canLeaveOut, false);
+    assert.equal(rows[0].id, 7);
+    assert.deepEqual(rows.slice(1).map((row) => 'id' in row || 'canLeaveOut' in row), [false, false, false]);
+});
+
+test('only an item that is not statutory is offered for leaving out', () => {
+    const rows = build([welfare, { ...welfare, id: 5, name: 'Transport', type: '2' }, { ...paye, id: 2, statutory: true }]);
+
+    assert.deepEqual(rows.map((row) => [row.name, row.canLeaveOut]), [['Welfare', true], ['Transport', true], ['PAYE', false]]);
 });
 
 test('NSSF opens into a heading, each tier and a total', () => {

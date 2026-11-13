@@ -4,15 +4,22 @@
     'use strict';
 
     // kind: item | group (heading, no amount) | tier (one part of a breakdown) | total
+    // An item or heading carries its id and whether the payroll run always applies it (statutory); only the others can be
+    // left out for one person (canLeaveOut). The parts and the total are never items of their own.
     function build(elements) {
         var rows = [];
         (elements || []).forEach(function (element) {
             var type = element.type === '2' ? 'Allowance' : 'Deduction';
+            var identity = {
+                id: element.id === undefined ? null : element.id,
+                statutory: element.statutory === true,
+                canLeaveOut: element.statutory !== true && element.id !== undefined && element.id !== null
+            };
             if (!element.breakdown || !element.breakdown.length) {
-                rows.push({ kind: 'item', name: element.name, type: type, how: element.how, amount: element.amount });
+                rows.push(Object.assign({ kind: 'item', name: element.name, type: type, how: element.how, amount: element.amount }, identity));
                 return;
             }
-            rows.push({ kind: 'group', name: element.name, type: type, how: element.how, amount: null });
+            rows.push(Object.assign({ kind: 'group', name: element.name, type: type, how: element.how, amount: null }, identity));
             element.breakdown.forEach(function (part) {
                 rows.push({ kind: 'tier', name: part.name, type: type, how: part.how, amount: part.amount });
             });

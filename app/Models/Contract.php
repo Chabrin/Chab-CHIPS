@@ -27,12 +27,17 @@ class Contract extends Model
         'created_by',
         'basic_salary',
         'staff_number',
+        'period_value',
+        'period_unit',
+        'probation_months',
+        'probation_end',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
         'date_start' => 'datetime',
         'date_end' => 'datetime',
+        'probation_end' => 'date',
     ];
 
     public function employee()

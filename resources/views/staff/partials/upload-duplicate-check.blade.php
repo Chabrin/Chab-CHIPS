@@ -44,11 +44,44 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function visibleBox(input) {
+        const styled = input.classList.contains('select2-hidden-accessible') && input.nextElementSibling;
+        return styled && styled.classList.contains('select2-container') ? styled : input;
+    }
+
     function reveal(input) {
         const pane = input.closest('.tab-pane');
         const tab = pane && document.getElementById(pane.id + '-tab');
-        if (tab && window.bootstrap) new bootstrap.Tab(tab).show();
-        input.focus();
+        const jump = () => {
+            const box = visibleBox(input);
+            box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            try { input.focus({ preventScroll: true }); } catch (error) { input.focus(); }
+        };
+        if (tab && window.bootstrap && !tab.classList.contains('active')) {
+            // The tab fades in, so the field cannot be scrolled to until it is showing
+            tab.addEventListener('shown.bs.tab', () => setTimeout(jump, 0), { once: true });
+            new bootstrap.Tab(tab).show();
+        } else {
+            jump();
+        }
+    }
+
+    // A red number on each tab that has fields needing attention, so a problem on another tab is not missed
+    function refreshTabBadges() {
+        form.querySelectorAll('.tab-pane').forEach(pane => {
+            const tab = document.getElementById(pane.id + '-tab');
+            if (!tab) return;
+            const problems = pane.querySelectorAll('.is-invalid').length;
+            let badge = tab.querySelector('.js-tab-errors');
+            if (!problems) { if (badge) badge.remove(); return; }
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'badge bg-danger ms-1 js-tab-errors';
+                tab.appendChild(badge);
+            }
+            badge.textContent = problems;
+            badge.title = problems + (problems === 1 ? ' field needs attention' : ' fields need attention');
+        });
     }
 
     function busy(value) {
@@ -69,12 +102,13 @@ document.addEventListener('DOMContentLoaded', function () {
             note = document.createElement('div');
             note.dataset.duplicateFeedback = fieldName(input);
             note.setAttribute('aria-live', 'polite');
-            input.insertAdjacentElement('afterend', note);
+            visibleBox(input).insertAdjacentElement('afterend', note);
         }
         note.textContent = message;
         note.className = 'small mt-1 ' + (invalid ? 'text-danger' : 'text-muted');
         input.setCustomValidity(invalid ? message : '');
         input.classList.toggle('is-invalid', invalid);
+        refreshTabBadges();
     }
 
     async function check() {
@@ -166,6 +200,7 @@ document.addEventListener('DOMContentLoaded', function () {
         event.target.classList.remove('is-invalid');
         const note = event.target.parentElement.querySelector('[data-duplicate-feedback="' + fieldName(event.target) + '"]');
         if (note) note.textContent = '';
+        refreshTabBadges();
     });
 
     // JSON validation errors keep the current document and File objects alive, unlike a redirect.
@@ -173,6 +208,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (saving || pending || states.size) { busy(false); return; }
         saving = true; busy(true);
         if (summary) summary.classList.add('d-none');
+        Array.from(form.elements).forEach(input => {
+            if (input.type !== 'file' && input.classList.contains('is-invalid')) feedback(input, '', false);
+        });
         try {
             const response = await fetch(form.action, {
                 method: 'POST', credentials: 'same-origin', body: new FormData(form),
@@ -180,6 +218,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : {};
             if (response.ok && data.redirect_url && !response.redirected) {
+                form.dataset.saved = '1';
                 window.location.assign(data.redirect_url); return;
             }
             const errors = data.errors || {};

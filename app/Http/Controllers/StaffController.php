@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\Zone;
 use App\Models\Staff;
 use App\Models\StaffOnboardingInvitation;
+use App\Models\StaffDraft;
 use App\Exports\StaffExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\DocumentType;
@@ -15,14 +16,22 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use App\Models\PayrollElement;
 use App\Services\NssfCalculator;
+use App\Services\StaffContactInput;
 use App\Services\EmployeeUploadGuard;
 use App\Services\EmployeeContractExpiry;
 use App\Services\EmployeeContractReport;
+use App\Services\ContractPeriod;
+use App\Services\StaffEmailSuggestion;
+use App\Services\StaffNumbers;
 use App\Models\User;
 use App\Models\Contract;
 use App\Models\ContractChange;
+use App\Models\ContractElement;
+use App\Models\ContractElementExclusion;
 use App\Models\Incident;
 use App\Models\Position;
+use App\Models\EmploymentCategory;
+use Illuminate\Validation\Rule;
 use App\Models\ZoneArea;
 use App\Models\Department;
 use App\Models\ActionTaken;
@@ -66,6 +75,8 @@ class StaffController extends Controller
         'kins_names' => 'next of kin name',
         'kins_relationship' => 'next of kin relationship',
         'login_email' => 'login email',
+        'email_address' => 'official email',
+        'mobile_number' => 'mobile number',
         'documents.national_id' => 'National ID / Passport copy',
         'documents.kra_pin' => 'KRA PIN certificate',
         'photo' => 'staff photo',
@@ -245,6 +256,97 @@ class StaffController extends Controller
     }
 
     /**
+     * A once-only item has to fall in a month the contract runs, or the run would never take it.
+     */
+    private function assertOnceMonthsInside(array $elementRows, string $start, ?string $end): void
+    {
+        $from = substr($start, 0, 7);
+        $to = $end ? substr($end, 0, 7) : null;
+        $names = PayrollElement::whereIn('id', array_column($elementRows, 'element_id'))->pluck('element_name', 'id');
+        $errors = [];
+
+        foreach ($elementRows as $row) {
+            if ($row['frequency'] !== ContractElement::ONCE) {
+                continue;
+            }
+            $month = substr((string) $row['once_month'], 0, 7);
+            $name = $names[$row['element_id']] ?? 'An item';
+            $label = \Carbon\Carbon::parse($month . '-01')->format('M Y');
+
+            if ($month < $from) {
+                $errors[] = "{$name}: the once-only month ({$label}) is before the contract starts (" . \Carbon\Carbon::parse($from . '-01')->format('M Y') . ').';
+            } elseif ($to !== null && $month > $to) {
+                $errors[] = "{$name}: the once-only month ({$label}) is after the contract ends (" . \Carbon\Carbon::parse($to . '-01')->format('M Y') . ').';
+            }
+        }
+
+        if ($errors) {
+            throw ValidationException::withMessages(['elements' => $errors]);
+        }
+    }
+
+    /**
+     * The company-wide items left out for this person, element id => reason, checked: each needs a reason, has to be an item
+     * the run applies to every staff member (never a statutory one, which always applies), and cannot also have its own
+     * amount on this contract.
+     *
+     * @return array<int, string>
+     */
+    private function contractExclusions(array $input, array $elementRows): array
+    {
+        $chosen = collect($input)->filter(fn ($entry) => !empty($entry['excluded']));
+        if ($chosen->isEmpty()) {
+            return [];
+        }
+
+        $elements = PayrollElement::approved()->whereIn('id', $chosen->keys()->all())->get()->keyBy('id');
+        $onContract = array_column($elementRows, 'element_id');
+        $errors = [];
+        $result = [];
+
+        foreach ($chosen as $elementId => $entry) {
+            $element = $elements->get((int) $elementId);
+            $reason = trim((string) ($entry['reason'] ?? ''));
+
+            if (!$element) {
+                $errors[] = 'One of the items left out no longer exists.';
+            } elseif ($element->isStatutory() || $element->isSystem()) {
+                $errors[] = "{$element->element_name} is required by the payroll run for every staff member, so it cannot be left out.";
+            } elseif (!$element->appliesToAll() || $element->isOneTime()) {
+                $errors[] = "{$element->element_name} is not a company-wide item, so there is nothing to leave out.";
+            } elseif ($reason === '') {
+                $errors[] = "Give the reason for leaving out {$element->element_name}.";
+            } elseif (in_array($element->id, $onContract, true)) {
+                $errors[] = "{$element->element_name} is left out and also has its own amount on this contract. Keep one of them.";
+            } else {
+                $result[$element->id] = $reason;
+            }
+        }
+
+        if ($errors) {
+            throw ValidationException::withMessages(['exclusions' => array_values(array_unique($errors))]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Make a contract's left-out items exactly these (element id => reason): new ones added, changed reasons updated, the
+     * rest removed. Only this contract is touched.
+     */
+    private function syncExclusions(Contract $contract, array $exclusions): void
+    {
+        ContractElementExclusion::where('contract_id', $contract->id)->whereNotIn('element_id', array_keys($exclusions))->delete();
+
+        foreach ($exclusions as $elementId => $reason) {
+            ContractElementExclusion::updateOrCreate(
+                ['contract_id' => $contract->id, 'element_id' => $elementId],
+                ['reason' => $reason, 'created_by' => Auth::id()]
+            );
+        }
+    }
+
+    /**
      * Check the elements submitted for a contract and turn them into rows to save. A contract holds only recurring
      * items: one-time items are entered on Monthly Payroll Items, and the items the payroll run calculates itself
      * (NSSF, SHA, Housing Levy, PAYE) and the basic and net salary elements are never kept on a contract. The entry
@@ -272,8 +374,20 @@ class StaffController extends Controller
                 $errors[] = "{$element->element_name} comes from the contract's basic salary, so it is not added as an element.";
             } elseif (isset($rows[$element->id])) {
                 $errors[] = "{$element->element_name} is added more than once.";
+            } elseif (($row['frequency'] ?? 'monthly') === 'once' && blank($row['once_month'] ?? null)) {
+                $errors[] = "{$element->element_name} is set to apply once only, so choose the month it applies in.";
             } else {
-                $rows[$element->id] = ['element_id' => $element->id, 'entry_type_id' => (int) $element->element_type, 'amount' => $row['amount']];
+                $once = ($row['frequency'] ?? 'monthly') === 'once';
+                $rows[$element->id] = [
+                    'element_id' => $element->id,
+                    'entry_type_id' => (int) $element->element_type,
+                    'amount' => $row['amount'],
+                    // How often it applies, and what a part month does to it. No answer for the part month keeps the run's
+                    // old rule for the kind of item (an allowance is reduced by the days worked, a deduction is not).
+                    'frequency' => $once ? ContractElement::ONCE : ContractElement::MONTHLY,
+                    'once_month' => $once ? $row['once_month'] . '-01' : null,
+                    'prorate' => isset($row['prorate']) && $row['prorate'] !== '' ? (bool) (int) $row['prorate'] : null,
+                ];
             }
         }
 
@@ -340,18 +454,35 @@ class StaffController extends Controller
     {
         $departments = Department::orderBy('department_name')->get();
         $banks = Bank::orderBy('bank_name')->get();
-        $positions = Position::orderBy('position_name')->get();
+        // Only positions that are switched on are offered for a new staff member
+        $positions = Position::active()->orderBy('position_name')->get();
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
         $roles = Role::orderBy('display_name')->get();
 
-        // Coming from an approved onboarding submission: prefill what the new staff member entered
+        // Reopening a draft saved earlier: what was typed comes back, and so do the files attached so far
+        $draft = null;
+        if ($request->filled('draft')) {
+            $draft = StaffDraft::visibleTo(auth()->id())->find((int) $request->query('draft'));
+            if (!$draft) {
+                return redirect()->route('staff.create')->with('error', 'That draft is no longer there. It was discarded, or it has become a staff member.');
+            }
+        }
+
+        // Coming from an approved onboarding submission: prefill what the new staff member entered. A draft that was
+        // started from one goes back to it, if it is still waiting to be finished.
         $onboarding = null;
         if ($request->filled('onboarding')) {
             try {
                 $onboarding = $this->reviewedOnboarding((int) $request->query('onboarding'));
             } catch (ValidationException $e) {
                 return redirect()->route('staff.onboarding.index')->with('error', $e->validator->errors()->first());
+            }
+        } elseif ($draft && filled($draft->fields()['onboarding_invitation_id'] ?? null)) {
+            try {
+                $onboarding = $this->reviewedOnboarding((int) $draft->fields()['onboarding_invitation_id']);
+            } catch (ValidationException $e) {
+                $onboarding = null;
             }
         }
         $prefill = [];
@@ -362,14 +493,49 @@ class StaffController extends Controller
             foreach (['employment_type', 'department_id', 'position_id', 'hire_date', 'zone_id', 'role_id'] as $field) {
                 if (filled($onboarding->$field)) $prefill[$field] = $onboarding->$field;
             }
-            $onboardingFiles = $onboarding->submittedFiles();
+            $onboardingFiles = array_map(fn ($file) => $file + ['source' => 'onboarding'], $onboarding->submittedFiles());
+        }
+        if ($draft) {
+            // What HR typed or attached since replaces what came from onboarding
+            $prefill = array_merge($prefill, array_diff_key($draft->fields(), ['onboarding_invitation_id' => 1]));
+            foreach ($draft->files() as $field => $file) {
+                $onboardingFiles[$field] = $file + ['source' => 'draft'];
+            }
         }
 
-        // Default to Permanent on initial load
-        $defaultCategory = $prefill['employment_type'] ?? 'Permanent';
-        $nextStaffNumber = Staff::nextStaffNumber($defaultCategory);
+        // Only categories that are switched on can be chosen for new staff; Permanent is the default when it is one of them
+        $categories = EmploymentCategory::active()->ordered()->get();
+        $defaultCategory = $prefill['employment_type'] ?? ($categories->firstWhere('code', 'Permanent') ?? $categories->first())?->code ?? 'Permanent';
+        // A draft already holds a number in its category; anyone else is shown the next one nobody holds
+        $nextStaffNumber = $draft && filled($draft->staff_number) && $draft->employment_type === $defaultCategory
+            ? $draft->staff_number
+            : Staff::nextStaffNumber($defaultCategory);
 
-        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles', 'nextStaffNumber', 'onboarding', 'prefill', 'onboardingFiles'));
+        return view('staff.create', compact('departments', 'banks', 'positions', 'zones', 'zoneAreas', 'roles', 'nextStaffNumber', 'onboarding', 'prefill', 'onboardingFiles', 'categories', 'defaultCategory', 'draft'));
+    }
+
+    /**
+     * Whether the signed-in user may open the contract form. It is the same test the access middleware applies to that address: a
+     * page with no menu entry is open to everyone, one with an entry needs the role to have been given it. Used to decide whether
+     * Save Staff can go straight on to the contract, since sending someone to a page they are refused would hide that the staff
+     * member was saved.
+     */
+    private function canOpenContractForm(): bool
+    {
+        // The staff member is already saved when this is asked, so a failure here only means "go to the profile instead"
+        try {
+            $submenu = DB::table('cb_sub_modules')->where('sub_module_url', '/hr/contracts/create')->first();
+            if (!$submenu) {
+                return true;
+            }
+
+            $roleId = DB::table('cb_role_user')->where('user_id', auth()->id())->value('role_id');
+
+            return $roleId
+                && DB::table('cb_sub_module_permissions')->where('role_id', $roleId)->where('sub_module_id', $submenu->id)->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /** An onboarding submission HR has approved but not yet turned into a staff record. */
@@ -387,14 +553,29 @@ class StaffController extends Controller
     /**
      * Get the next category-specific staff number via AJAX updated on 27th
      */
+    /**
+     * The official email to suggest for the names typed so far, with a notice when the plain one was already used.
+     */
+    public function suggestEmail(Request $request)
+    {
+        abort_unless(auth()->user()?->hasPermission('create_staff') || auth()->user()?->hasPermission('update_staff'), 403);
+        $request->validate(['full_names' => 'nullable|string|max:255']);
+
+        return response()->json(['success' => true] + app(StaffEmailSuggestion::class)->suggest($request->input('full_names')));
+    }
+
     public function getStaffNumber(Request $request)
     {
         $category = $request->input('category', 'Permanent');
-        $staffNumber = Staff::nextStaffNumber($category);
+        // A form opened from a draft keeps the number the draft holds while the category is the one it holds it in
+        $draft = $request->filled('draft_id') ? StaffDraft::visibleTo(auth()->id())->find((int) $request->input('draft_id')) : null;
+        $reserved = $draft && filled($draft->staff_number) && $draft->employment_type === $category;
+        $staffNumber = $reserved ? $draft->staff_number : Staff::nextStaffNumber($category);
 
         return response()->json([
             'success' => true,
-            'staff_number' => $staffNumber
+            'staff_number' => $staffNumber,
+            'reserved' => $reserved,
         ]);
     }
     
@@ -416,17 +597,26 @@ class StaffController extends Controller
             // Files the staff member already uploaded through an approved onboarding link stand in
             // for the required uploads; anything HR uploads here replaces the onboarding copy.
             $onboarding = $request->filled('onboarding_invitation_id') ? $this->reviewedOnboarding((int) $request->input('onboarding_invitation_id')) : null;
-            $submittedFiles = $onboarding ? $onboarding->submittedFiles() : [];
+            // Files attached to a draft stand in for the required uploads the same way
+            $draft = $request->filled('draft_id') ? StaffDraft::visibleTo(auth()->id())->find((int) $request->input('draft_id')) : null;
+            $submittedFiles = array_merge($onboarding ? $onboarding->submittedFiles() : [], $draft ? $draft->files() : []);
             $onboardingSignature = $this->hasSignatureInput($request) ? null : ($submittedFiles['signature'] ?? null);
             unset($submittedFiles['signature']);
             $carriedFiles = array_filter($submittedFiles, fn ($file, $field) => !$request->hasFile($field), ARRAY_FILTER_USE_BOTH);
             $requiredUpload = fn (string $field) => isset($carriedFiles[$field]) ? 'nullable' : 'required';
 
+            // Mobile number with its country code, emails in the company format
+            $contact = app(StaffContactInput::class)->prepare($request);
+
+            // Staff in a category that gets no system login (casual workers) need no login email or role
+            $withoutLogin = EmploymentCategory::codesWithoutLogin();
+            $loginRule = $withoutLogin ? 'required_unless:employment_type,' . implode(',', $withoutLogin) : 'required';
+
             $validated = $request->validate($this->signatureRules() + [
                 'full_names' => 'required|string|max:255',
-                'employment_type' => 'required|string|in:Permanent,Temporary,Casual,Intern', //edited on 27th
-                'mobile_number' => 'nullable|string|max:255',
-                'email_address' => 'required|email|max:255|unique:sys_staff,email_address',
+                'employment_type' => ['required', 'string', Rule::in(EmploymentCategory::activeCodes())],
+                'mobile_number' => array_merge(['nullable', 'string', 'max:255'], $contact['mobile_number'] ?? []),
+                'email_address' => array_merge(['required', 'email', 'max:255', 'unique:sys_staff,email_address'], $contact['email_address'] ?? []),
                 'national_id' => 'required|string|max:255|unique:sys_staff,national_id',
                 'gender' => 'required|string',
                 'birth_date' => 'required|date',
@@ -465,14 +655,14 @@ class StaffController extends Controller
                 'documents.cv'          => 'nullable|file|mimes:pdf,doc,docx|max:5120',
                 'documents.academic'    => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:5120',
                 'onboarding_invitation_id' => 'nullable|integer',
-                // Make login details required ONLY if not Casual
-                'login_email' => 'required_unless:employment_type,Casual|nullable|email|max:255',
-                'role_id' => 'required_unless:employment_type,Casual|nullable|integer|exists:cb_roles,id',
+                // Login details are needed unless the category's staff get no system login (casual workers)
+                'login_email' => array_merge([$loginRule, 'nullable', 'email', 'max:255'], $contact['login_email'] ?? []),
+                'role_id' => $loginRule . '|nullable|integer|exists:cb_roles,id',
                 'password' => 'nullable|string|min:8|max:255',
             ], self::UPLOAD_MESSAGES, self::STATUTORY_ATTRIBUTES);
 
             $this->validateStaffUploads($request, null, $carriedFiles, $onboarding?->id);
-            $isCasual = $validated['employment_type'] === 'Casual';
+            $skipsLogin = in_array($validated['employment_type'], $withoutLogin, true);
 
             $managedZoneIds = $validated['managed_zone_ids'] ?? [];
             $supervisedZoneIds = $validated['supervised_zone_ids'] ?? [];
@@ -485,7 +675,7 @@ class StaffController extends Controller
                 'role_id' => $validated['role_id'] ?? null,
                 'password' => $validated['password'] ?? null,
             ];
-            unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password'], $validated['onboarding_invitation_id'], $validated['signature_file'], $validated['signature_data']);
+            unset($validated['photo'], $validated['documents'], $validated['login_email'], $validated['role_id'], $validated['password'], $validated['onboarding_invitation_id'], $validated['draft_id'], $validated['signature_file'], $validated['signature_data']);
 
             $validated = $this->applyPositionDepartment($validated);
 
@@ -499,7 +689,7 @@ class StaffController extends Controller
 
             // Permanent and Temporary staff get a system login. A random password is generated when left blank.
             $generatedPassword = null;
-            if (!$isCasual) {
+            if (!$skipsLogin) {
                 if (empty($userValidated['password'])) {
                     $generatedPassword = Str::password(12);
                     $userValidated['password'] = $generatedPassword;
@@ -512,7 +702,8 @@ class StaffController extends Controller
                 }
             }
 
-            $staff = DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword, $isCasual, $onboarding, $carriedFiles, $onboardingSignature) {
+            // The number is chosen under the lock that also hands numbers to drafts, and the lock is kept until the staff member is saved
+            $staff = StaffNumbers::locked(fn () => DB::transaction(function () use ($request, $validated, $managedZoneIds, $supervisedZoneIds, $userValidated, $generatedPassword, $skipsLogin, $onboarding, $carriedFiles, $onboardingSignature, $draft) {
                 // Lock the submission so a double submit cannot create two staff records from it
                 if ($onboarding) $this->reviewedOnboarding($onboarding->id, true);
 
@@ -520,7 +711,8 @@ class StaffController extends Controller
                 $staff->fill($validated);
                 $staff->date_time = now();
                 // Pass employment_type to generate category-specific staff numbers (PER, TMP, CAS)
-                $staff->staff_number = Staff::nextStaffNumber($validated['employment_type']);
+                // The number held for the draft when there is one and nobody has taken it, otherwise the next free number
+                $staff->staff_number = StaffNumbers::numberForNewStaff($validated['employment_type'], $draft);
                 $staff->uid = uniqid('staff_', true);
                 $staff->current_status_id = 1;
                 $staff->save();
@@ -544,15 +736,18 @@ class StaffController extends Controller
                     $staff->signature = $signature;
                     $staff->save();
                 }
-                if ($onboarding) {
+                // Files that came with the onboarding submission or the draft are filed with the new record
+                if ($carriedFiles) {
                     $this->attachOnboardingFiles($staff, $carriedFiles);
+                }
+                if ($onboarding) {
                     $onboarding->update(['status' => 'approved', 'staff_id' => $staff->id, 'submission' => null]);
                 }
 
                 $this->syncZoneRoles($staff, $managedZoneIds, $supervisedZoneIds);
 
-                // ONLY create a system user if the staff member is NOT Casual
-                if (!$isCasual) {
+                // Only create a system user when the category gets a login
+                if (!$skipsLogin) {
                     $username = $this->buildUniqueUsername($userValidated['email'], $staff);
 
                     $user = User::create([
@@ -584,13 +779,32 @@ class StaffController extends Controller
                 }
 
                 return $staff;
-            });
+            }));
 
             if ($onboarding) {
                 Storage::disk('local')->deleteDirectory("staff_onboarding/{$onboarding->id}");
             }
+            // The staff member is saved, so what was typed in the draft and its files go. A small record stays, which is what the
+            // Staff onboarding page follows from here on (a form saved without any draft gets one too). The staff member already
+            // exists, so a problem keeping that record is logged and must not make the save look as if it failed.
+            try {
+                $tracker = $draft ?: new StaffDraft(['created_by' => auth()->id(), 'updated_by' => auth()->id()]);
+                $tracker->onboarding_invitation_id = $onboarding?->id ?? $tracker->onboarding_invitation_id;
+                $tracker->stages = StaffDraft::finishedStages($skipsLogin);
+                $tracker->finish($staff);
+            } catch (\Throwable $e) {
+                Log::warning('Staff onboarding record not kept after the staff member was saved: ' . $e->getMessage(), ['staff_id' => $staff->id]);
+            }
 
-            $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))->with('success', 'Staff member created successfully');
+            // The next step of onboarding is the contract: straight to the contract form with this person and their position chosen,
+            // when this user can open it. If they cannot (or leave without adding one) the onboarding page keeps showing it as waiting.
+            if ($this->canOpenContractForm()) {
+                $redirect = redirect()->route('contract.create', ['staff_id' => $staff->id, 'position_id' => $staff->position_id])
+                    ->with('success', 'Staff member created successfully. They have no contract yet, so add one now.');
+            } else {
+                $redirect = redirect()->route('staff.show', Crypt::encrypt($staff->id))
+                    ->with('success', 'Staff member created successfully. They have no contract yet, so a contract still needs to be added.');
+            }
             if ($generatedPassword) {
                 $redirect->with('generated_password', $generatedPassword);
             }
@@ -636,7 +850,7 @@ class StaffController extends Controller
         // Onboarding files being moved onto this record are checked the same way as fresh uploads
         foreach ($carriedFiles as $field => $file) {
             if (!Storage::disk('local')->exists($file['path'])) {
-                throw ValidationException::withMessages([$field => 'The file submitted through onboarding could not be found. Upload it here instead.']);
+                throw ValidationException::withMessages([$field => 'The file saved earlier could not be found. Upload it here instead.']);
             }
             $fingerprints[$field] = hash_file('sha256', Storage::disk('local')->path($file['path']));
         }
@@ -731,7 +945,7 @@ class StaffController extends Controller
             }
 
             $staff = Staff::findOrFail($contract->staff_id);
-            $document = $this->saveEmployeeDocument($staff, $typeId, 'Signed contract ' . date('d M Y', strtotime($contract->date_start)) . ' - ' . date('d M Y', strtotime($contract->date_end)), $file);
+            $document = $this->saveEmployeeDocument($staff, $typeId, 'Signed contract ' . date('d M Y', strtotime($contract->date_start)) . ' - ' . ($contract->date_end ? date('d M Y', strtotime($contract->date_end)) : 'open-ended'), $file);
             $document->update(['contract_id' => $contract->id]);
             $this->discardDocuments($previous);
 
@@ -875,7 +1089,8 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         $staff = Staff::with(['zonesManaged', 'zonesSupervised', 'employeeDocuments'])->findOrFail($id);
         $departments = Department::orderBy('department_name')->get();
         $banks = Bank::orderBy('bank_name')->get();
-        $positions = Position::orderBy('position_name')->get();
+        // Positions that are switched on, and the one this staff member already holds even if it has been switched off
+        $positions = Position::where(fn ($query) => $query->where('is_active', true)->orWhere('id', $staff->position_id))->orderBy('position_name')->get();
         $zones = Zone::orderBy('zone_name')->get();
         $zoneAreas = ZoneArea::orderBy('area_name')->get();
 
@@ -908,12 +1123,15 @@ private function syncStaffFiles(Request $request, Staff $staff): array
     Log::info("Updating staff member with ID: " . $id);
     try {
 
+        // Only a mobile number or email HR has changed is held to the company format, so older records can still be saved
+        $contact = app(StaffContactInput::class)->prepare($request, Staff::find($id));
+
         $validated = $request->validate($this->signatureRules() + [
             'remove_signature' => 'nullable|boolean',
             'staff_number' => 'required|string|max:255|unique:sys_staff,staff_number,' . $id,
             'full_names' => 'required|string|max:255',
-            'mobile_number' => 'nullable|string|max:255',
-            'email_address' => 'required|email|max:255|unique:sys_staff,email_address,' . $id,
+            'mobile_number' => array_merge(['nullable', 'string', 'max:255'], $contact['mobile_number'] ?? []),
+            'email_address' => array_merge(['required', 'email', 'max:255', 'unique:sys_staff,email_address,' . $id], $contact['email_address'] ?? []),
             'national_id' => 'required|string|max:255|unique:sys_staff,national_id,' . $id,
             'gender' => 'required|string',
             'birth_date' => 'required|date',
@@ -1100,8 +1318,13 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         [$visibleElements, $hiddenElements] = $contract->elements->partition(fn ($row) => $row->payrollElement?->canBeOnContract());
 
         $staffCopy = $contract->signedDocument ? null : $this->unattachedSignedContract((int) $contract->staff_id);
+        // Probation only, unless this contract already has an end date or period: that stays to be seen and edited
+        $openEnded = $this->isOpenEnded(Staff::find($contract->staff_id)) && $contract->date_end === null && $contract->period_value === null;
 
-        return view('staff.contracts.contracts_edit', compact('contract', 'visibleElements', 'hiddenElements', 'staffCopy'));
+        // Company-wide items already left out for this person, element id => the reason
+        $exclusions = ContractElementExclusion::where('contract_id', $contract->id)->pluck('reason', 'element_id')->all();
+
+        return view('staff.contracts.contracts_edit', compact('contract', 'visibleElements', 'hiddenElements', 'staffCopy', 'openEnded', 'exclusions'));
     }
 
    public function contractList()
@@ -1176,33 +1399,95 @@ private function syncStaffFiles(Request $request, Staff $staff): array
     }
 }
 
+    /**
+     * The rules for a contract's dates. A staff member in a category with no contract end date (permanent staff) has an
+     * open-ended contract, so no end date or period is asked for, though one that is entered is kept (some contracts of
+     * permanent staff do have an end date). Otherwise the end date is entered, or worked out from the contract period.
+     *
+     * @return array{0: bool, 1: array<string, string>} whether the contract is open-ended, and the rules
+     */
+    private function contractDateRules(Request $request): array
+    {
+        $openEnded = $this->isOpenEnded(Staff::find((int) $request->input('staff_id')));
+
+        return [$openEnded, [
+            'date_start' => 'required|date',
+            'date_end' => ($openEnded ? 'nullable' : 'required_without:period_value|nullable') . '|date|after_or_equal:date_start',
+            'period_value' => 'nullable|integer|min:1|max:3650',
+            'period_unit' => 'required_with:period_value|nullable|in:' . implode(',', ContractPeriod::UNITS),
+            'probation_months' => 'nullable|integer|min:1|max:60',
+        ]];
+    }
+
+    /**
+     * Whether this staff member's category has no contract end date (permanent staff have a probation period instead).
+     */
+    private function isOpenEnded(?Staff $staff): bool
+    {
+        return $staff !== null && in_array($staff->employment_type, EmploymentCategory::codesWithoutEndDate(), true);
+    }
+
+    /**
+     * The date columns a contract is saved with: the end date worked out from the period when there is one, otherwise the
+     * one entered, otherwise none (an open-ended contract), and the end of the probation period.
+     */
+    private function contractDates(array $validated, bool $openEnded): array
+    {
+        $usesPeriod = !empty($validated['period_value']);
+        $probationMonths = !empty($validated['probation_months']) ? (int) $validated['probation_months'] : null;
+
+        if ($usesPeriod) {
+            $end = ContractPeriod::endDate($validated['date_start'], (int) $validated['period_value'], $validated['period_unit'])->toDateString() . ' 00:00:00';
+        } elseif (!empty($validated['date_end'])) {
+            $end = $validated['date_end'] . ' 00:00:00';
+        } else {
+            $end = null;
+        }
+
+        return [
+            'date_start' => $validated['date_start'] . ' 00:00:00',
+            'date_end' => $end,
+            'period_value' => $usesPeriod ? (int) $validated['period_value'] : null,
+            'period_unit' => $usesPeriod ? $validated['period_unit'] : null,
+            'probation_months' => $probationMonths,
+            'probation_end' => $probationMonths ? ContractPeriod::probationEnd($validated['date_start'], $probationMonths)->toDateString() : null,
+        ];
+    }
+
     public function contractStore(Request $request)
     {
         try {
-            $validated = $request->validate([
+            [$openEnded, $dateRules] = $this->contractDateRules($request);
+            $validated = $request->validate($dateRules + [
                 'staff_id' => 'required|integer',
                 'staff_positions' => 'required|integer',
-                'date_start' => 'required|date',
-                'date_end' => 'required|date|after_or_equal:date_start',
                 'basic_salary' => 'required|numeric|min:0',
                 'elements' => 'nullable|array',
                 'elements.*.element' => 'required|integer',
                 'elements.*.entry_type' => 'nullable|in:1,2',
                 'elements.*.amount' => 'required|numeric|min:0',
+                'elements.*.frequency' => 'nullable|in:monthly,once',
+                'elements.*.once_month' => 'nullable|date_format:Y-m',
+                'elements.*.prorate' => 'nullable|in:0,1',
+                'exclusions' => 'nullable|array',
+                'exclusions.*.excluded' => 'nullable|boolean',
+                'exclusions.*.reason' => 'nullable|string|max:255',
                 'signed_contract' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
             $elementRows = $this->contractElementRows($validated['elements'] ?? []);
+            $dates = $this->contractDates($validated, $openEnded);
+            $this->assertOnceMonthsInside($elementRows, $dates['date_start'], $dates['date_end']);
+            $exclusions = $this->contractExclusions($validated['exclusions'] ?? [], $elementRows);
             $staff = Staff::find($validated['staff_id']);
 
             // All or nothing: a rejected PDF must not leave a half-saved contract behind to be entered again
-            $usedStaffCopy = DB::transaction(function () use ($validated, $staff, $elementRows, $request) {
+            $usedStaffCopy = DB::transaction(function () use ($validated, $staff, $elementRows, $exclusions, $request, $openEnded) {
                 // Create contract
                 $contract = new Contract();
                 $contract->staff_id = $validated['staff_id'];
                 $contract->position_id = $validated['staff_positions'];
-                $contract->date_start = $validated['date_start'] . ' 00:00:00';
-                $contract->date_end = $validated['date_end'] . ' 00:00:00';
+                $contract->fill($this->contractDates($validated, $openEnded));
                 $contract->basic_salary = $validated['basic_salary'];
                 $contract->current_status_id = 5; // Active
                 $contract->created_by = Auth::id();
@@ -1215,7 +1500,10 @@ private function syncStaffFiles(Request $request, Staff $staff): array
                     $contract->elements()->create($row);
                 }
 
+                $this->syncExclusions($contract, $exclusions);
+
                 ContractChange::contractCreated($contract, Auth::id());
+                ContractChange::exclusions($contract, [], $exclusions, Auth::id());
 
                 return $this->saveSignedContract($contract, $request->file('signed_contract'));
             });
@@ -1237,30 +1525,39 @@ private function syncStaffFiles(Request $request, Staff $staff): array
     public function contractUpdate(Request $request, $id)
     {
         try {
-            $validated = $request->validate([
+            [$openEnded, $dateRules] = $this->contractDateRules($request);
+            $validated = $request->validate($dateRules + [
                 'staff_id' => 'required|integer',
                 'staff_positions' => 'required|integer',
-                'date_start' => 'required|date',
-                'date_end' => 'required|date|after_or_equal:date_start',
                 'basic_salary' => 'required|numeric|min:0',
                 'elements' => 'nullable|array',
                 'elements.*.element' => 'required|integer',
                 'elements.*.entry_type' => 'nullable|in:1,2',
                 'elements.*.amount' => 'required|numeric|min:0',
+                'elements.*.frequency' => 'nullable|in:monthly,once',
+                'elements.*.once_month' => 'nullable|date_format:Y-m',
+                'elements.*.prorate' => 'nullable|in:0,1',
+                'exclusions' => 'nullable|array',
+                'exclusions.*.excluded' => 'nullable|boolean',
+                'exclusions.*.reason' => 'nullable|string|max:255',
                 'signed_contract' => 'nullable|file|mimes:pdf|max:5120',
             ]);
 
             $elementRows = $this->contractElementRows($validated['elements'] ?? []);
-            $contract = Contract::with('elements')->findOrFail($id);
+            $dates = $this->contractDates($validated, $openEnded);
+            $this->assertOnceMonthsInside($elementRows, $dates['date_start'], $dates['date_end']);
+            $exclusions = $this->contractExclusions($validated['exclusions'] ?? [], $elementRows);
+            $contract = Contract::with('elements.payrollElement')->findOrFail($id);
             $oldSalary = $contract->basic_salary;
             $oldElements = ContractChange::elementAmounts($contract->elements);
+            $oldTerms = ContractChange::elementTerms($contract->elements);
+            $oldExclusions = ContractElementExclusion::where('contract_id', $contract->id)->pluck('reason', 'element_id')->all();
             $staff = Staff::find($validated['staff_id']);
 
             // Update contract fields
             $contract->staff_id = $validated['staff_id'];
             $contract->position_id = $validated['staff_positions'];
-            $contract->date_start = $validated['date_start'] . ' 00:00:00';
-            $contract->date_end = $validated['date_end'] . ' 00:00:00';
+            $contract->fill($this->contractDates($validated, $openEnded));
             $contract->basic_salary = $validated['basic_salary'];
             $contract->current_status_id = 5; // Active
             $contract->created_by = Auth::id();
@@ -1269,15 +1566,18 @@ private function syncStaffFiles(Request $request, Staff $staff): array
             $contract->save();
 
             // Update contract elements: delete old, insert new
-            DB::transaction(function () use ($contract, $elementRows) {
+            DB::transaction(function () use ($contract, $elementRows, $exclusions) {
                 $contract->elements()->delete();
                 foreach ($elementRows as $row) {
                     $contract->elements()->create($row);
                 }
+                $this->syncExclusions($contract, $exclusions);
             });
 
             ContractChange::salary($contract, $oldSalary, $contract->basic_salary, Auth::id());
             ContractChange::elements($contract, $oldElements, array_map('floatval', array_column($elementRows, 'amount', 'element_id')), Auth::id());
+            ContractChange::terms($contract, $oldTerms, ContractChange::elementTerms($contract->elements()->with('payrollElement')->get()), Auth::id());
+            ContractChange::exclusions($contract, $oldExclusions, $exclusions, Auth::id());
 
             $usedStaffCopy = $this->saveSignedContract($contract, $request->file('signed_contract'));
 
@@ -2148,9 +2448,18 @@ private function syncStaffFiles(Request $request, Staff $staff): array
         try {
             $contract = Contract::findOrFail($contractId);
 
+            // The page sends only amounts, so how often and what a part month does to each item are carried over as they were
+            $kept = $contract->elements()->get()->keyBy('element_id');
             $submitted = collect($request->input('elements', []))
                 ->filter(fn ($element) => !empty($element['element_id']))
-                ->map(fn ($element) => ['element' => $element['element_id'], 'amount' => $element['amount'] ?? 0])
+                ->map(function ($element) use ($kept) {
+                    $row = ['element' => $element['element_id'], 'amount' => $element['amount'] ?? 0];
+                    if ($was = $kept->get((int) $element['element_id'])) {
+                        $row += ['frequency' => $was->frequency, 'once_month' => $was->once_month?->format('Y-m'), 'prorate' => $was->prorate === null ? null : (int) $was->prorate];
+                    }
+
+                    return $row;
+                })
                 ->all();
             $rows = $this->contractElementRows($submitted);
 

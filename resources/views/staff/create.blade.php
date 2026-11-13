@@ -6,8 +6,14 @@ $canCreateUsers = auth()->user()->hasPermission('create_users');
 $onboarding = $onboarding ?? null;
 $prefill = $prefill ?? [];
 $onboardingFiles = $onboardingFiles ?? [];
+$draft = $draft ?? null;
 $val = fn ($field, $default = null) => old($field, $prefill[$field] ?? $default);
-$fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash('sha256', $onboardingFiles[$field]['path'])]);
+// A file held for this form came with the onboarding submission or was saved with the draft
+$fromDraft = fn ($field) => ($onboardingFiles[$field]['source'] ?? 'onboarding') === 'draft';
+$fileUrl = fn ($field) => $fromDraft($field)
+    ? route('staff.drafts.file', [$draft->id, hash('sha256', $onboardingFiles[$field]['path'])])
+    : route('staff.onboarding.document', [$onboarding, hash('sha256', $onboardingFiles[$field]['path'])]);
+$carriedFrom = fn ($field) => $fromDraft($field) ? 'Saved with your draft' : 'Received from onboarding';
 @endphp
 <style>
     /* Match select2 to Bootstrap's .form-select styling — the stock select2 theme
@@ -64,6 +70,14 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
         text-overflow: ellipsis;
         margin-top: 3px;
     }
+    .select2-hidden-accessible.is-invalid + .select2-container .select2-selection { border-color: #dc3545; }
+    .nav-link .js-tab-errors { font-size: .7rem; vertical-align: middle; }
+    /* Each tab is an onboarding stage; its mark says whether it is complete, not done yet, or has a problem */
+    .nav-link .js-stage-mark { font-size: 16px; vertical-align: middle; margin-left: 4px; }
+    .nav-link .js-stage-mark.stage-complete { color: #198754; }
+    .nav-link .js-stage-mark.stage-problem { color: #dc3545; }
+    .nav-link .js-stage-mark.stage-pending { color: #9aa5b1; }
+    .staff-stage-summary .progress { height: 6px; }
     .select2-container--default .select2-selection--multiple .select2-selection__rendered {
         display: flex;
         flex-wrap: wrap;
@@ -83,6 +97,12 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                 <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
                                 <span>Save Staff</span>
                             </button> --}}
+                            @if (auth()->user()->hasPermission('create_staff'))
+                            <button type="button" class="btn btn-light btn-sm d-flex align-items-center" id="openDrafts" data-bs-toggle="modal" data-bs-target="#draftsModal">
+                                <span class="material-symbols-outlined">draft</span>
+                                <span class="ms-1">Drafts <span class="badge bg-secondary d-none" id="draftsCount"></span></span>
+                            </button>
+                            @endif
                             <a href="{{ route('staff.index') }}" class="btn btn-light btn-sm d-flex align-items-center">
                                 <span class="material-symbols-outlined">arrow_back</span>
                                 <span class="ms-1">Back to List</span>
@@ -108,15 +128,25 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                             Employment Category, Official Email, Employment Details and System User before saving.
                         </div>
                         @endif
+                        @if($draft)
+                        <div class="alert alert-info d-flex flex-wrap align-items-center gap-2" id="draftBanner">
+                            <span class="me-auto"><strong>Continuing a saved draft</strong>, last saved {{ $draft->updated_at->timezone(config('app.timezone'))->format('d M Y, H:i') }}.
+                                Everything you typed and the files you attached are here. Choose a file only to replace one.</span>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="discardThisDraft">Discard this draft</button>
+                        </div>
+                        @endif
                         @if(!$canCreateUsers)
                         <div class="alert alert-warning">You need the "create users" permission to add staff, because every staff member gets a system login.</div>
                         @endif
 
-                       <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" enctype="multipart/form-data">
+                       <form action="{{ route('staff.store') }}" method="POST" id="staffCreateForm" enctype="multipart/form-data" data-file-slots data-email-domain="{{ config('staff.email_domain') }}" novalidate
+                              data-draft-save-url="{{ route('staff.drafts.save') }}" data-drafts-url="{{ route('staff.drafts.index') }}" data-last-tab="{{ $draft?->last_tab }}" data-stages="{{ $draft ? json_encode($draft->stageStatuses()) : '' }}">
                             @csrf
                             @if($onboarding)
                             <input type="hidden" name="onboarding_invitation_id" value="{{ $onboarding->id }}">
                             @endif
+                            {{-- The draft this form was opened from or has been saved as; the final save removes it --}}
+                            <input type="hidden" name="draft_id" id="draft_id" value="{{ $draft?->id }}">
 
                             <!-- Nav Tabs -->
                             <ul class="nav nav-tabs" id="staffCreateTabs" role="tablist">
@@ -124,30 +154,35 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                     <button class="nav-link active" id="personal-tab" data-bs-toggle="tab" data-bs-target="#personal" type="button" role="tab" aria-controls="personal" aria-selected="true">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">person</span>
                                         Personal Information
+                                        <span class="material-symbols-outlined js-stage-mark stage-pending" aria-hidden="true" title="Not done yet">radio_button_unchecked</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="employment-tab" data-bs-toggle="tab" data-bs-target="#employment" type="button" role="tab" aria-controls="employment" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">work</span>
                                         Employment Details
+                                        <span class="material-symbols-outlined js-stage-mark stage-pending" aria-hidden="true" title="Not done yet">radio_button_unchecked</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="contact-tab" data-bs-toggle="tab" data-bs-target="#contact" type="button" role="tab" aria-controls="contact" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">contact_phone</span>
                                         Contact Information
+                                        <span class="material-symbols-outlined js-stage-mark stage-pending" aria-hidden="true" title="Not done yet">radio_button_unchecked</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="banking-tab" data-bs-toggle="tab" data-bs-target="#banking" type="button" role="tab" aria-controls="banking" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">account_balance</span>
                                         Banking & Statutory
+                                        <span class="material-symbols-outlined js-stage-mark stage-pending" aria-hidden="true" title="Not done yet">radio_button_unchecked</span>
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#documents" type="button" role="tab" aria-controls="documents" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">upload_file</span>
                                         Documents
+                                        <span class="material-symbols-outlined js-stage-mark stage-pending" aria-hidden="true" title="Not done yet">radio_button_unchecked</span>
                                     </button>
                                 </li>
                                 @if($canCreateUsers)
@@ -155,10 +190,18 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                     <button class="nav-link" id="user-tab" data-bs-toggle="tab" data-bs-target="#user" type="button" role="tab" aria-controls="user" aria-selected="false">
                                         <span class="material-symbols-outlined me-1" style="font-size:18px;">person_add</span>
                                         System User
+                                        <span class="material-symbols-outlined js-stage-mark stage-pending" aria-hidden="true" title="Not done yet">radio_button_unchecked</span>
                                     </button>
                                 </li>
                                 @endif
                             </ul>
+                            {{-- The tabs are the stages of onboarding; public/assets/js/staff-form-steps.js keeps this summary and the marks on the tabs up to date --}}
+                            <div class="staff-stage-summary mt-2">
+                                <div class="progress" role="progressbar" aria-label="Onboarding progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="staffStageBar">
+                                    <div class="progress-bar bg-success" style="width:0%"></div>
+                                </div>
+                                <small class="text-muted" id="staffStageSummary" aria-live="polite"></small>
+                            </div>
                             <!-- Tab Content -->
                             <div class="tab-content mt-3" id="staffCreateTabsContent">
                                 <!-- Personal Information Tab -->
@@ -168,10 +211,10 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             {{-- added on 27th --}}
                                         <label for="employment_type" class="form-label">Employment Category <span class="text-danger">*</span></label>
                                         <select class="form-select @error('employment_type') is-invalid @enderror" id="employment_type" name="employment_type" required>
-                                            <option value="Permanent" {{ $val('employment_type', 'Permanent') == 'Permanent' ? 'selected' : '' }}>Permanent</option>
-                                            <option value="Temporary" {{ $val('employment_type') == 'Temporary' ? 'selected' : '' }}>Temporary</option>
-                                            <option value="Casual" {{ $val('employment_type') == 'Casual' ? 'selected' : '' }}>Casual</option>
-                                            <option value="Intern" {{ $val('employment_type') == 'Intern' ? 'selected' : '' }}>Intern</option>
+                                            {{-- Only categories HR has switched on (HR Settings > Employment Categories) --}}
+                                            @foreach ($categories as $category)
+                                                <option value="{{ $category->code }}" data-login="{{ $category->gets_login ? 1 : 0 }}" data-end-date="{{ $category->has_end_date ? 1 : 0 }}" {{ $val('employment_type', $defaultCategory) == $category->code ? 'selected' : '' }}>{{ $category->name }}</option>
+                                            @endforeach
                                         </select>
                                         @error('employment_type')
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -182,7 +225,8 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             <input type="text" class="form-control @error('staff_number') is-invalid @enderror"
                                                 id="staff_number" name="staff_number"
                                                 value="{{ old('staff_number', $nextStaffNumber) }}" readonly required>
-                                            
+                                            {{-- Said once a draft holds the number: until the staff member is saved it can still change, if a draft before it is discarded --}}
+                                            <small class="text-muted d-block mt-1 js-staff-number-note {{ $draft && filled($draft->staff_number) ? '' : 'd-none' }}" id="staffNumberNote">Reserved for this draft. It may change if an earlier draft is discarded, so do not give it out until the staff member is saved.</small>
                                             @error('staff_number')
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -279,13 +323,15 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             <label for="personal_email_address" class="form-label">Official Email <span class="text-danger">*</span></label>
                                             <input type="email" 
                                                 class="form-control @error('email_address') is-invalid @enderror" 
-                                                id="personal_email_address" 
+                                                id="personal_email_address" placeholder="{{ \App\Support\StaffContact::emailExample() }}" 
                                                 name="email_address" 
-                                                value="{{ old('email_address') }}" 
+                                                value="{{ $val('email_address') }}" 
                                                 required>
                                             @error('email_address')
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
+                                            {{-- Says why the suggestion has a middle initial or number: the plain address was already taken --}}
+                                            <div class="alert alert-info py-1 px-2 mt-1 mb-0 small d-none" id="officialEmailNotice" role="status"></div>
                                         </div>
                                         <div class="row mb-4 align-items-center">
                                             <div class="col-auto">
@@ -296,7 +342,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                 <label class="form-label fw-semibold small mb-1">Staff Profile Photo</label>
                                                 <input type="file" name="photo" id="photo-input" class="form-control form-control-sm" accept="image/*">
                                                 <small class="text-muted">Square ratio (JPG, PNG). Check the current upload limit above.</small>
-                                                @if(isset($onboardingFiles['photo']))<small class="d-block text-success">Photo received from onboarding. Upload a new one only to replace it.</small>@endif
+                                                @if(isset($onboardingFiles['photo']))<small class="d-block text-success">Photo {{ $fromDraft('photo') ? 'saved with your draft' : 'received from onboarding' }}. Upload a new one only to replace it.</small>@endif
                                             </div>
                                         </div>
                                     </div>
@@ -367,7 +413,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                 <label for="managed_zone_ids" class="form-label">Zones Managed</label>
                                                 <select class="form-select @error('managed_zone_ids') is-invalid @enderror @error('managed_zone_ids.*') is-invalid @enderror" id="managed_zone_ids" name="managed_zone_ids[]" multiple>
                                                     @foreach($zones as $zone)
-                                                    <option value="{{ $zone->id }}" {{ collect(old('managed_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
+                                                    <option value="{{ $zone->id }}" {{ collect($val('managed_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
                                                         {{ $zone->zone_name }}
                                                     </option>
                                                     @endforeach
@@ -385,7 +431,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                 <label for="supervised_zone_ids" class="form-label">Zones Supervised</label>
                                                 <select class="form-select @error('supervised_zone_ids') is-invalid @enderror @error('supervised_zone_ids.*') is-invalid @enderror" id="supervised_zone_ids" name="supervised_zone_ids[]" multiple>
                                                     @foreach($zones as $zone)
-                                                    <option value="{{ $zone->id }}" {{ collect(old('supervised_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
+                                                    <option value="{{ $zone->id }}" {{ collect($val('supervised_zone_ids', []))->contains($zone->id) ? 'selected' : '' }}>
                                                         {{ $zone->zone_name }}
                                                     </option>
                                                     @endforeach
@@ -408,7 +454,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                     <div class="row">
                                         <div class="col-md-4 mb-3">
                                             <label for="mobile_number" class="form-label">Mobile Number</label>
-                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ $val('mobile_number') }}">
+                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ $val('mobile_number') }}" placeholder="+254 7XX XXX XXX" data-mobile-format>
                                             @error('mobile_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -419,8 +465,8 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                  The two are kept in sync by JS and both are editable. --}}
                                             <input type="email" 
                                                 class="form-control @error('email_address') is-invalid @enderror" 
-                                                id="contact_email_address" 
-                                                value="{{ old('email_address') }}">
+                                                id="contact_email_address" placeholder="{{ \App\Support\StaffContact::emailExample() }}" 
+                                                value="{{ $val('email_address') }}">
                                             @error('email_address')
                                                 <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -476,6 +522,13 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                 @endforeach
                                             </select>
                                             @error('kins_relationship')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                         <div class="col-md-4 mb-3">
+                                            <label for="mobile_number" class="form-label">Next of Kin Mobile Number</label>
+                                            <input type="text" class="form-control @error('mobile_number') is-invalid @enderror" id="mobile_number" name="mobile_number" value="{{ $val('mobile_number') }}" placeholder="+254 7XX XXX XXX" data-mobile-format>
+                                            @error('mobile_number')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
                                         </div>
@@ -553,7 +606,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                     National ID / Passport Copy <span class="text-danger">*</span>
                                                 </label>
                                                 <input type="file" name="documents[national_id]" class="form-control @error('documents.national_id') is-invalid @enderror" @unless(isset($onboardingFiles['documents.national_id'])) required @endunless accept=".pdf,.png,.jpg,.jpeg">
-                                                @if(isset($onboardingFiles['documents.national_id']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.national_id']['name'] }} <a href="{{ $fileUrl('documents.national_id') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
+                                                @if(isset($onboardingFiles['documents.national_id']))<small class="d-block text-success">{{ $carriedFrom('documents.national_id') }}: {{ $onboardingFiles['documents.national_id']['name'] }} <a href="{{ $fileUrl('documents.national_id') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Scanned front/back copy or passport bio-page</small>
                                             </div>
                                         </div>
@@ -565,7 +618,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                     KRA PIN Certificate <span class="text-danger">*</span>
                                                 </label>
                                                 <input type="file" name="documents[kra_pin]" class="form-control @error('documents.kra_pin') is-invalid @enderror" @unless(isset($onboardingFiles['documents.kra_pin'])) required @endunless accept=".pdf,.png,.jpg,.jpeg">
-                                                @if(isset($onboardingFiles['documents.kra_pin']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.kra_pin']['name'] }} <a href="{{ $fileUrl('documents.kra_pin') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
+                                                @if(isset($onboardingFiles['documents.kra_pin']))<small class="d-block text-success">{{ $carriedFrom('documents.kra_pin') }}: {{ $onboardingFiles['documents.kra_pin']['name'] }} <a href="{{ $fileUrl('documents.kra_pin') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">KRA PIN registration certificate</small>
                                             </div>
                                         </div>
@@ -577,7 +630,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                     Signed Employment Contract
                                                 </label>
                                                 <input type="file" name="documents[contract]" class="form-control" accept=".pdf">
-                                                @if(isset($onboardingFiles['documents.contract']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.contract']['name'] }} <a href="{{ $fileUrl('documents.contract') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
+                                                @if(isset($onboardingFiles['documents.contract']))<small class="d-block text-success">{{ $carriedFrom('documents.contract') }}: {{ $onboardingFiles['documents.contract']['name'] }} <a href="{{ $fileUrl('documents.contract') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Physical/counter-signed contract in PDF format</small>
                                             </div>
                                         </div>
@@ -588,7 +641,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                     Curriculum Vitae (CV / Resume)
                                                 </label>
                                                 <input type="file" name="documents[cv]" class="form-control" accept=".pdf,.doc,.docx">
-                                                @if(isset($onboardingFiles['documents.cv']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.cv']['name'] }} <a href="{{ $fileUrl('documents.cv') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
+                                                @if(isset($onboardingFiles['documents.cv']))<small class="d-block text-success">{{ $carriedFrom('documents.cv') }}: {{ $onboardingFiles['documents.cv']['name'] }} <a href="{{ $fileUrl('documents.cv') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Updated staff resume or CV (PDF or Word). Check the current upload limit above.</small>
                                             </div>
                                         </div>
@@ -599,7 +652,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                                     Academic & Professional Certificates
                                                 </label>
                                                 <input type="file" name="documents[academic]" class="form-control" accept=".pdf,.png,.jpg,.jpeg">
-                                                @if(isset($onboardingFiles['documents.academic']))<small class="d-block text-success">Received from onboarding: {{ $onboardingFiles['documents.academic']['name'] }} <a href="{{ $fileUrl('documents.academic') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
+                                                @if(isset($onboardingFiles['documents.academic']))<small class="d-block text-success">{{ $carriedFrom('documents.academic') }}: {{ $onboardingFiles['documents.academic']['name'] }} <a href="{{ $fileUrl('documents.academic') }}" target="_blank" rel="noopener">Preview</a>. Upload a file only to replace it.</small>@endif
                                                 <small class="text-muted">Degrees, diplomas, transcripts, or certifications</small>
                                             </div>
                                         </div>
@@ -608,7 +661,7 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                             <label class="form-label fw-semibold small mb-1">Staff Signature</label>
                                             @include('staff.partials.signature-input', [
                                                 'currentSignatureUrl' => isset($onboardingFiles['signature']) ? $fileUrl('signature') : null,
-                                                'currentSignatureNote' => 'Received from onboarding. Draw or upload only to replace it.',
+                                                'currentSignatureNote' => ($fromDraft('signature') ? 'Saved with your draft' : 'Received from onboarding') . '. Draw or upload only to replace it.',
                                             ])
                                         </div>
                                     </div>
@@ -623,9 +676,9 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
                                         <div class="col-md-6 mb-3">
                                             <label for="login_email" class="form-label">Login Email <span class="text-danger">*</span></label>
                                             <input type="email" class="form-control @error('login_email') is-invalid @enderror"
-                                                id="login_email" name="login_email"
-                                                value="{{ old('login_email', old('email_address')) }}" required>
-                                            <small class="text-muted">Defaults to the Official Email, but you can change it.</small>
+                                                id="login_email" name="login_email" placeholder="{{ \App\Support\StaffContact::emailExample() }}"
+                                                value="{{ $val('login_email', $val('email_address')) }}" required>
+                                            <small class="text-muted">Defaults to the Official Email, but you can change it. Format: {{ \App\Support\StaffContact::emailExample() }}</small>
                                             @error('login_email')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                             @enderror
@@ -769,6 +822,46 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
             }
         });
 
+        // Suggest the official email from the full names (firstname.surname@company domain) until HR types one of their own
+        var emailTyped = $('#personal_email_address').val() !== '';
+        var suggestingEmail = false;
+        $officialEmails.on('input', function() {
+            if (!suggestingEmail) emailTyped = true;
+        });
+        function setSuggestedEmail(email) {
+            suggestingEmail = true;
+            $('#personal_email_address').val(email).trigger('input');
+            suggestingEmail = false;
+        }
+        // The browser suggests firstname.surname at once; the server then checks who already has it and adds a middle initial
+        var suggestionTimer = null;
+        var suggestionRequest = 0;
+        function refineSuggestion() {
+            clearTimeout(suggestionTimer);
+            suggestionTimer = setTimeout(function() {
+                if (emailTyped) return;
+                var request = ++suggestionRequest;
+                $.getJSON("{{ route('staff.suggest-email') }}", { full_names: $('#full_names').val() }).done(function(response) {
+                    // An older answer, or HR has typed their own address meanwhile
+                    if (request !== suggestionRequest || emailTyped) return;
+                    setSuggestedEmail(response.email || '');
+                    $('#officialEmailNotice').text(response.notice || '').toggleClass('d-none', !response.notice);
+                });
+            }, 400);
+        }
+        function suggestOfficialEmail() {
+            if (emailTyped) return;
+            setSuggestedEmail(StaffContactFormat.suggestEmail($('#full_names').val(), $('#staffCreateForm').data('email-domain')));
+            $('#officialEmailNotice').addClass('d-none');
+            refineSuggestion();
+        }
+        $('#full_names').on('input', suggestOfficialEmail);
+        suggestOfficialEmail();
+        // Once HR types their own address the notice is no longer about it
+        $officialEmails.on('input', function() {
+            if (emailTyped) $('#officialEmailNotice').addClass('d-none');
+        });
+
         // Handle form submission
         $('#staffCreateForm').on('submit', function(event) {
             event.preventDefault();
@@ -884,7 +977,9 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
     function handleEmploymentTypeChanges() {
         if (!employmentTypeSelect) return;
         let category = employmentTypeSelect.value;
-        let isCasual = category === 'Casual';
+        // Staff in some categories (casual workers) get no system login; HR sets that per category
+        const chosen = employmentTypeSelect.selectedOptions[0];
+        let isCasual = !!chosen && chosen.dataset.login === '0';
 
         // 1. Handle System User Tab Visibility for Casual Staff
         if (isCasual) {
@@ -909,11 +1004,15 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
 
         // 2. Fetch Category-Specific Staff Number via AJAX
         if (staffNumberInput) {
-            fetch(`{{ route('staff.get-staff-number') }}?category=${encodeURIComponent(category)}`)
+            // An open draft keeps the number it holds while the category is the one it holds it in
+            const draftId = (document.getElementById('draft_id') || {}).value || '';
+            fetch(`{{ route('staff.get-staff-number') }}?category=${encodeURIComponent(category)}` + (draftId ? `&draft_id=${encodeURIComponent(draftId)}` : ''), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         staffNumberInput.value = data.staff_number;
+                        const note = document.getElementById('staffNumberNote');
+                        if (note) note.classList.toggle('d-none', !data.reserved);
                     }
                 })
                 .catch(error => console.error('Error fetching dynamic staff number:', error));
@@ -927,6 +1026,26 @@ $fileUrl = fn ($field) => route('staff.onboarding.document', [$onboarding, hash(
     }
 });
 </script>
+<script src="{{ asset('assets/js/staff-contact-format.js') }}?v={{ filemtime(public_path('assets/js/staff-contact-format.js')) }}"></script>
 <script src="{{ asset('assets/js/staff-form-steps.js') }}?v={{ filemtime(public_path('assets/js/staff-form-steps.js')) }}"></script>
+<script src="{{ asset('assets/js/file-slot.js') }}?v={{ filemtime(public_path('assets/js/file-slot.js')) }}"></script>
+<script src="{{ asset('assets/js/staff-drafts.js') }}?v={{ filemtime(public_path('assets/js/staff-drafts.js')) }}"></script>
+@if (auth()->user()->hasPermission('create_staff'))
+<div class="modal fade" id="draftsModal" tabindex="-1" aria-labelledby="draftsModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="draftsModalTitle">Drafts</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="draftsList"><p class="text-muted mb-0">Loading...</p></div>
+            <div class="modal-footer">
+                <small class="text-muted me-auto">Drafts are kept on the server, so you can open them from any computer. Everyone who can add staff can see and continue them. <a href="{{ route('staff.onboarding.index') }}">See all onboardings</a></small>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 @include('staff.partials.upload-duplicate-check')
 @endsection

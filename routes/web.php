@@ -114,6 +114,15 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/ajax/hr/positions', [HrSettingsController::class, 'positionsStoreAjax'])->name('ajax.hr.positions.store');
     Route::post('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsUpdateAjax'])->name('ajax.hr.positions.update')->whereNumber('id');
     Route::delete('/ajax/hr/positions/{id}', [HrSettingsController::class, 'positionsDestroyAjax'])->name('ajax.hr.positions.destroy')->whereNumber('id');
+    Route::post('/ajax/hr/positions/{id}/toggle', [HrSettingsController::class, 'positionsToggleAjax'])->name('ajax.hr.positions.toggle')->whereNumber('id');
+
+    // HR Settings - Employment Categories (reached from Staff Positions; follows its permissions)
+    Route::get('/hr/staff/employment-categories', [App\Http\Controllers\EmploymentCategoriesController::class, 'index'])->name('settings.hr.employment_categories');
+    Route::get('/ajax/hr/employment-categories/list', [App\Http\Controllers\EmploymentCategoriesController::class, 'list'])->name('ajax.hr.employment_categories.list');
+    Route::post('/ajax/hr/employment-categories', [App\Http\Controllers\EmploymentCategoriesController::class, 'store'])->name('ajax.hr.employment_categories.store');
+    Route::post('/ajax/hr/employment-categories/{id}', [App\Http\Controllers\EmploymentCategoriesController::class, 'update'])->name('ajax.hr.employment_categories.update')->whereNumber('id');
+    Route::post('/ajax/hr/employment-categories/{id}/toggle', [App\Http\Controllers\EmploymentCategoriesController::class, 'toggle'])->name('ajax.hr.employment_categories.toggle')->whereNumber('id');
+    Route::delete('/ajax/hr/employment-categories/{id}', [App\Http\Controllers\EmploymentCategoriesController::class, 'destroy'])->name('ajax.hr.employment_categories.destroy')->whereNumber('id');
 
     // Payroll Settings - Tax Bands
     Route::get('/payroll/tax-bands', [PayrollController::class, 'taxBandsIndex'])->name('payroll.tax_bands');
@@ -152,6 +161,12 @@ Route::middleware(['auth', 'onelogin', 'acess_checker'])->group(function () {
     Route::post('/hr/employees/onboarding/{invitation}/approve', [App\Http\Controllers\StaffOnboardingController::class, 'approve'])->name('staff.onboarding.approve');
     Route::delete('/hr/employees/onboarding/{invitation}', [App\Http\Controllers\StaffOnboardingController::class, 'revoke'])->name('staff.onboarding.revoke');
     Route::get('/hr/employees/export', [StaffController::class, 'export'])->name('staff.export');
+    Route::get('/hr/employees/suggest-email', [StaffController::class, 'suggestEmail'])->name('staff.suggest-email');
+    // Save as Draft on the Add Staff form (a part-finished record kept on the server)
+    Route::get('/hr/employees/drafts', [App\Http\Controllers\StaffDraftsController::class, 'index'])->name('staff.drafts.index');
+    Route::post('/hr/employees/drafts', [App\Http\Controllers\StaffDraftsController::class, 'save'])->name('staff.drafts.save');
+    Route::get('/hr/employees/drafts/{draft}/files/{hash}', [App\Http\Controllers\StaffDraftsController::class, 'file'])->whereNumber('draft')->where('hash', '[a-f0-9]{64}')->name('staff.drafts.file');
+    Route::delete('/hr/employees/drafts/{draft}', [App\Http\Controllers\StaffDraftsController::class, 'destroy'])->whereNumber('draft')->name('staff.drafts.destroy');
     Route::get('hr/employee/attendance/export', [StaffController::class, 'attendanceExport'])->name('attendance.export');
     Route::get('/hr/employees/{id}', [StaffController::class, 'show'])->name('staff.show');
     Route::get('/hr/employees/{id}/edit', [StaffController::class, 'edit'])->name('staff.edit');
@@ -586,12 +601,12 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/reports/accounts/landlord-disbursement/export', [AccountsReportsController::class, 'exportLandlordDisbursement'])->name('reports.accounts.landlord-disbursement.export');
     Route::post('/reports/accounts/returns-status/export',        [AccountsReportsController::class, 'exportReturnsStatus'])->name('reports.accounts.returns-status.export');
 
-    // HR Settings - Shift Rates
-    Route::get('/hrsettings/shif/rates', [HrSettingsController::class, 'shifRatesIndex'])->name('settings.hr.shif.rates');
-    Route::get('/ajax/hr/shif/rates/list', [HrSettingsController::class, 'shifRatesList'])->name('ajax.shifRates.list');
-    Route::post('/ajax/hr/shif/rates', [HrSettingsController::class, 'shifRatesStore'])->name('ajax.shifRates.store');
-    Route::post('/ajax/hr/shif/rates/{id}', [HrSettingsController::class, 'shifRatesUpdate'])->name('ajax.shifRates.update');
-    Route::delete('/ajax/hr/shif/rates/{id}', [HrSettingsController::class, 'shifRatesDelete'])->name('ajax.shifRates.delete');
+    // HR Settings - SHA Rates
+    Route::get('/hrsettings/sha/rates', [HrSettingsController::class, 'shifRatesIndex'])->name('settings.hr.shif.rates');
+    Route::get('/ajax/hr/sha/rates/list', [HrSettingsController::class, 'shifRatesList'])->name('ajax.shifRates.list');
+    Route::post('/ajax/hr/sha/rates', [HrSettingsController::class, 'shifRatesStore'])->name('ajax.shifRates.store');
+    Route::post('/ajax/hr/sha/rates/{id}', [HrSettingsController::class, 'shifRatesUpdate'])->name('ajax.shifRates.update');
+    Route::delete('/ajax/hr/sha/rates/{id}', [HrSettingsController::class, 'shifRatesDelete'])->name('ajax.shifRates.delete');
 
 
     // HR Settings - NSSF Rates
@@ -688,6 +703,54 @@ Route::middleware('throttle:5,1')->group(function () {
 
 
     ####### Leave Management Section End ########
+
+    ####### Performance Review (HR) Start ########
+    // Pages. My Review, Team Reviews, All Reviews, Review Cycles, KPIs and Supervisors are menu pages (sub-modules); the review
+    // form is opened from the lists. Menu access is given to roles; what a person may open is decided in the controllers.
+    Route::get('/hr/performance/my-review', [\App\Http\Controllers\PerformanceReviewController::class, 'my'])->name('performance.my');
+    Route::get('/hr/performance/team-reviews', [\App\Http\Controllers\PerformanceReviewController::class, 'team'])->name('performance.team');
+    Route::get('/hr/performance/all-reviews', [\App\Http\Controllers\PerformanceReviewController::class, 'all'])->name('performance.all');
+    Route::get('/hr/performance/reviews/{id}', [\App\Http\Controllers\PerformanceReviewController::class, 'show'])->whereNumber('id')->name('performance.review');
+    Route::get('/hr/performance/cycles', [\App\Http\Controllers\PerformanceCycleController::class, 'index'])->name('performance.cycles');
+    Route::get('/hr/performance/kpis', [\App\Http\Controllers\PerformanceKpiController::class, 'index'])->name('performance.kpis');
+    Route::get('/hr/performance/supervisors', [\App\Http\Controllers\PerformanceSupervisorController::class, 'index'])->name('performance.supervisors');
+
+    // Reviews
+    Route::get('/ajax/hr/performance/reviews/list/{mode}', [\App\Http\Controllers\PerformanceReviewController::class, 'list'])->whereIn('mode', ['my', 'team', 'all'])->name('ajax.performance.reviews.list');
+    Route::get('/ajax/hr/performance/reviews/{id}', [\App\Http\Controllers\PerformanceReviewController::class, 'data'])->whereNumber('id')->name('ajax.performance.reviews.data');
+    Route::post('/ajax/hr/performance/reviews/{id}/self', [\App\Http\Controllers\PerformanceReviewController::class, 'saveSelf'])->whereNumber('id')->name('ajax.performance.reviews.self');
+    Route::post('/ajax/hr/performance/reviews/{id}/self-on-behalf', [\App\Http\Controllers\PerformanceReviewController::class, 'saveSelfOnBehalf'])->whereNumber('id')->name('ajax.performance.reviews.self_on_behalf');
+    Route::post('/ajax/hr/performance/reviews/{id}/skip-self', [\App\Http\Controllers\PerformanceReviewController::class, 'skipSelf'])->whereNumber('id')->name('ajax.performance.reviews.skip_self');
+    Route::post('/ajax/hr/performance/reviews/{id}/supervisor', [\App\Http\Controllers\PerformanceReviewController::class, 'saveSupervisor'])->whereNumber('id')->name('ajax.performance.reviews.supervisor');
+    Route::post('/ajax/hr/performance/reviews/{id}/hr', [\App\Http\Controllers\PerformanceReviewController::class, 'saveHr'])->whereNumber('id')->name('ajax.performance.reviews.hr');
+    Route::post('/ajax/hr/performance/reviews/{id}/return', [\App\Http\Controllers\PerformanceReviewController::class, 'returnToSupervisor'])->whereNumber('id')->name('ajax.performance.reviews.return');
+    Route::post('/ajax/hr/performance/reviews/{id}/reassign', [\App\Http\Controllers\PerformanceReviewController::class, 'reassign'])->whereNumber('id')->name('ajax.performance.reviews.reassign');
+    Route::post('/ajax/hr/performance/reviews/{id}/correct', [\App\Http\Controllers\PerformanceReviewController::class, 'correct'])->whereNumber('id')->name('ajax.performance.reviews.correct');
+
+    // KPIs
+    Route::get('/ajax/hr/performance/positions', [\App\Http\Controllers\PerformanceKpiController::class, 'positions'])->name('ajax.performance.positions');
+    Route::get('/ajax/hr/performance/kpis', [\App\Http\Controllers\PerformanceKpiController::class, 'list'])->name('ajax.performance.kpis.list');
+    Route::post('/ajax/hr/performance/kpis', [\App\Http\Controllers\PerformanceKpiController::class, 'store'])->name('ajax.performance.kpis.store');
+    Route::post('/ajax/hr/performance/kpis/copy', [\App\Http\Controllers\PerformanceKpiController::class, 'copy'])->name('ajax.performance.kpis.copy');
+    Route::post('/ajax/hr/performance/kpis/{id}', [\App\Http\Controllers\PerformanceKpiController::class, 'update'])->whereNumber('id')->name('ajax.performance.kpis.update');
+    Route::post('/ajax/hr/performance/kpis/{id}/toggle', [\App\Http\Controllers\PerformanceKpiController::class, 'toggle'])->whereNumber('id')->name('ajax.performance.kpis.toggle');
+    Route::delete('/ajax/hr/performance/kpis/{id}', [\App\Http\Controllers\PerformanceKpiController::class, 'destroy'])->whereNumber('id')->name('ajax.performance.kpis.destroy');
+
+    // Cycles
+    Route::get('/ajax/hr/performance/cycles/list', [\App\Http\Controllers\PerformanceCycleController::class, 'list'])->name('ajax.performance.cycles.list');
+    Route::post('/ajax/hr/performance/cycles', [\App\Http\Controllers\PerformanceCycleController::class, 'store'])->name('ajax.performance.cycles.store');
+    Route::post('/ajax/hr/performance/cycles/{id}', [\App\Http\Controllers\PerformanceCycleController::class, 'update'])->whereNumber('id')->name('ajax.performance.cycles.update');
+    Route::delete('/ajax/hr/performance/cycles/{id}', [\App\Http\Controllers\PerformanceCycleController::class, 'destroy'])->whereNumber('id')->name('ajax.performance.cycles.destroy');
+    Route::get('/ajax/hr/performance/cycles/{id}/preview', [\App\Http\Controllers\PerformanceCycleController::class, 'preview'])->whereNumber('id')->name('ajax.performance.cycles.preview');
+    Route::post('/ajax/hr/performance/cycles/{id}/publish', [\App\Http\Controllers\PerformanceCycleController::class, 'publish'])->whereNumber('id')->name('ajax.performance.cycles.publish');
+    Route::post('/ajax/hr/performance/cycles/{id}/add-missing', [\App\Http\Controllers\PerformanceCycleController::class, 'addMissing'])->whereNumber('id')->name('ajax.performance.cycles.add_missing');
+    Route::post('/ajax/hr/performance/cycles/{id}/close', [\App\Http\Controllers\PerformanceCycleController::class, 'close'])->whereNumber('id')->name('ajax.performance.cycles.close');
+
+    // Supervisors
+    Route::get('/ajax/hr/performance/supervisors/list', [\App\Http\Controllers\PerformanceSupervisorController::class, 'list'])->name('ajax.performance.supervisors.list');
+    Route::post('/ajax/hr/performance/supervisors/assign', [\App\Http\Controllers\PerformanceSupervisorController::class, 'assign'])->name('ajax.performance.supervisors.assign');
+    ####### Performance Review (HR) End ########
+
 
     Route::get('/maker-checker/confirmations', [WorkflowApprovalController::class, 'index'])->name('workflow.approvals.confirmations');
     Route::get('/ajax/workflow/approvals/list', [WorkflowApprovalController::class, 'approvalsList'])->name('ajax.workflow.approvals.list');

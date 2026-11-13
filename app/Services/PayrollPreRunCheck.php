@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ContractChange;
 use App\Models\ContractElement;
+use App\Models\ContractElementExclusion;
 use App\Models\EmployeeContract;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodItem;
@@ -90,12 +91,29 @@ class PayrollPreRunCheck
                 ->map(fn ($change) => ['name' => $change->staff->full_names, 'detail' => number_format((float) $change->old_value, 2) . ' to ' . number_format((float) $change->new_value, 2)]));
 
         $add('element_changes', 'Changes to recurring items', 'info', 'Changed since ' . $since['label'] . '.',
-            $changes->whereIn('field', [ContractChange::ELEMENT_ADDED, ContractChange::ELEMENT_REMOVED, ContractChange::ELEMENT_CHANGED])
-                ->map(fn ($change) => ['name' => $change->staff->full_names, 'detail' => $this->describeElementChange($change)]));
+            $changes->whereIn('field', [
+                ContractChange::ELEMENT_ADDED, ContractChange::ELEMENT_REMOVED, ContractChange::ELEMENT_CHANGED,
+                ContractChange::ELEMENT_TERMS, ContractChange::ITEM_EXCLUDED, ContractChange::ITEM_INCLUDED,
+            ])->map(fn ($change) => ['name' => $change->staff->full_names, 'detail' => $this->describeElementChange($change)]));
 
         $add('ignored_rows', 'Items on contracts that the run ignores', 'warning',
             'One-time items and a Basic Salary row never repeat from a contract. Enter one-time items on this page instead.',
             $this->ignoredRows($inRun)->map(fn ($row) => ['name' => $row['element'], 'detail' => $row['staff']]));
+
+        $termRows = $this->contractTermRows($inRun);
+        $add('once_only_this_period', 'Once-only items taken in this run', 'info',
+            'Each is taken in this period only and will not appear in the next one.',
+            $termRows->filter(fn ($entry) => $entry['row']->isOnce() && $entry['row']->appliesInPeriod($start))
+                ->map(fn ($entry) => ['name' => $entry['staff'], 'detail' => $entry['row']->payrollElement->element_name . ' ' . number_format((float) $entry['row']->amount, 2)]));
+
+        $add('once_only_never', 'Once-only items the run will never take', 'warning',
+            'The month chosen is outside the contract, or no month was chosen. Change it on the contract.',
+            $termRows->filter(fn ($entry) => $entry['row']->isOnce() && !$this->onceMonthInsideContract($entry['row'], $entry['contract']))
+                ->map(fn ($entry) => ['name' => $entry['staff'], 'detail' => $entry['row']->payrollElement->element_name . ' (' . ($entry['row']->once_month?->format('M Y') ?? 'no month') . ')']));
+
+        $add('left_out_items', 'Company-wide items left out for one person', 'info',
+            'Set on the contract with a reason. Everyone else still has these items.',
+            $this->leftOutItems($inRun)->map(fn ($entry) => ['name' => $entry['staff'], 'detail' => $entry['item'] . ' - ' . $entry['reason']]));
 
         $items = PayrollPeriodItem::with(['element', 'staff'])->where('period_id', $period->id)->get();
         $add('unapplied_items', 'One-time items that will not be applied', 'warning',
@@ -172,6 +190,70 @@ class PayrollPreRunCheck
     }
 
     /**
+     * The recurring rows on the contracts being paid, each with its contract and the staff member's name.
+     *
+     * @return Collection<int, array{row: ContractElement, contract: EmployeeContract, staff: string}>
+     */
+    private function contractTermRows(Collection $contracts): Collection
+    {
+        if ($contracts->isEmpty()) {
+            return collect();
+        }
+
+        $byId = $contracts->keyBy('id');
+
+        return ContractElement::with('payrollElement')->whereIn('parent_id', $byId->keys())->get()
+            ->filter(fn ($row) => $row->payrollElement?->canBeOnContract())
+            ->map(fn ($row) => [
+                'row' => $row,
+                'contract' => $byId[$row->parent_id],
+                'staff' => $byId[$row->parent_id]->staff?->full_names ?? 'Unknown staff',
+            ])
+            ->sortBy('staff')
+            ->values();
+    }
+
+    /**
+     * Whether a once-only row names a month the contract runs. Contract dates can change after the row was saved, which would
+     * leave the month outside the contract and the item never taken.
+     */
+    private function onceMonthInsideContract(ContractElement $row, EmployeeContract $contract): bool
+    {
+        if ($row->once_month === null) {
+            return false;
+        }
+
+        $month = $row->once_month->format('Y-m');
+        $from = $contract->date_start?->format('Y-m');
+        $to = $contract->date_end?->format('Y-m');
+
+        return ($from === null || $month >= $from) && ($to === null || $month <= $to);
+    }
+
+    /**
+     * The company-wide items left out for the people being paid, with the reason given.
+     *
+     * @return Collection<int, array{staff: string, item: string, reason: string}>
+     */
+    private function leftOutItems(Collection $contracts): Collection
+    {
+        if ($contracts->isEmpty()) {
+            return collect();
+        }
+
+        $byId = $contracts->keyBy('id');
+
+        return ContractElementExclusion::with('element')->whereIn('contract_id', $byId->keys())->get()
+            ->map(fn ($left) => [
+                'staff' => $byId[$left->contract_id]->staff?->full_names ?? 'Unknown staff',
+                'item' => $left->element?->element_name ?? 'Item',
+                'reason' => (string) $left->reason,
+            ])
+            ->sortBy('staff')
+            ->values();
+    }
+
+    /**
      * Current contracts for a period, newest first, the same way the run picks them.
      */
     private function contractsInRun(string $start, string $end): Collection
@@ -240,6 +322,9 @@ class PayrollPreRunCheck
         return match ($change->field) {
             ContractChange::ELEMENT_ADDED => "{$name} added at " . number_format((float) $change->new_value, 2),
             ContractChange::ELEMENT_REMOVED => "{$name} removed (was " . number_format((float) $change->old_value, 2) . ')',
+            ContractChange::ELEMENT_TERMS => "{$name}: terms changed from {$change->old_value} to {$change->new_value}",
+            ContractChange::ITEM_EXCLUDED => "{$name} left out for this person ({$change->new_value})",
+            ContractChange::ITEM_INCLUDED => "{$name} put back (was left out: {$change->old_value})",
             default => "{$name}: " . number_format((float) $change->old_value, 2) . ' to ' . number_format((float) $change->new_value, 2),
         };
     }

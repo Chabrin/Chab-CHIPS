@@ -26,12 +26,50 @@ class Position extends Model
         'salary_account_id',
         'current_status_id',
         'reports_to_id',
+        'is_active',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
         'basic_salary' => 'decimal:2',
+        'is_active' => 'boolean',
     ];
+
+    /**
+     * Positions that are switched on, so can be chosen for new staff and contracts.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Where this position is used, in words, for the message when it cannot be deleted. Empty when nothing uses it.
+     * Staff and the records kept about them (contracts, payroll, leave, discipline) are what a position is deleted from,
+     * so they all count.
+     *
+     * @return string[]
+     */
+    public function usageNotes(): array
+    {
+        $notes = [];
+        $add = function (int $count, string $one, string $many) use (&$notes) {
+            if ($count > 0) {
+                $notes[] = $count === 1 ? $one : str_replace(':n', (string) $count, $many);
+            }
+        };
+
+        $add(Staff::where('position_id', $this->id)->count(), '1 staff member holds it', ':n staff members hold it');
+        $add(static::where('reports_to_id', $this->id)->count(), '1 other position reports to it', ':n other positions report to it');
+        $add(Contract::where('position_id', $this->id)->count(), 'it is on 1 contract', 'it is on :n contracts');
+        $add(PayrollSummary::where('position_id', $this->id)->count(), 'it is on 1 payroll record', 'it is on :n payroll records');
+        $add(LeaveRequest::where('position_id', $this->id)->count(), 'it is on 1 leave request', 'it is on :n leave requests');
+        $add(DisciplineCase::where('position_id', $this->id)->count(), 'it is on 1 discipline case', 'it is on :n discipline cases');
+        $add(PayrollElementPosition::where('staff_positions_id', $this->id)->count(), 'a payroll element is set up for it', 'payroll elements are set up for it (:n)');
+        $add(StaffOnboardingInvitation::where('position_id', $this->id)->count(), 'a staff onboarding names it', ':n staff onboardings name it');
+
+        return $notes;
+    }
 
     // Relationship to supervisor position
     public function reportsTo()

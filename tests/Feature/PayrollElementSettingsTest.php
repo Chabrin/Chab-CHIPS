@@ -78,6 +78,8 @@ class PayrollElementSettingsTest extends TestCase
             $t->integer('entry_type_id')->nullable();
             $t->decimal('amount', 15, 2)->default(0);
         });
+        // How often each row applies, what a part month does to it, and the company-wide items left out for a person
+        (require database_path('migrations/2026_11_11_120000_add_terms_and_exclusions_for_contract_elements.php'))->up();
         Schema::create('um_tax_bands', function (Blueprint $t) {
             $t->id();
             $t->decimal('range_from', 15, 2);
