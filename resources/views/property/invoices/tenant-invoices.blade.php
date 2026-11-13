@@ -65,6 +65,49 @@
         z-index: 10;
         background: white;
     }
+
+    /* ── Statement shown on the page (same look as the landlord statement) ───────────── */
+    .stmt-sheet { background: #fff; border: 1px solid #e3e8ef; border-radius: 8px; padding: 20px 22px; }
+    .stmt-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stmt-name { font-size: 1.2rem; font-weight: 700; color: #0b1b63; letter-spacing: .2px; }
+    .stmt-meta { margin-top: 4px; font-size: .82rem; color: #5b6475; }
+    .stmt-meta span + span::before { content: '\00b7'; margin: 0 8px; color: #b0b7c3; }
+    .stmt-period { font-size: .95rem; font-weight: 600; color: #12b5c0; white-space: nowrap; }
+    .stmt-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .stmt-tile { background: #f3f6fb; border: 1px solid #dfe5ef; border-left: 3px solid #12b5c0; border-radius: 6px; padding: 10px 14px; }
+    .stmt-tile-label { font-size: .68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #12b5c0; }
+    .stmt-tile-value { font-size: 1.15rem; font-weight: 700; color: #0b1b63; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .stmt-tile-closing { background: #0b1b63; border-color: #0b1b63; border-left-color: #12b5c0; }
+    .stmt-tile-closing .stmt-tile-value { color: #fff; font-size: 1.35rem; }
+    .stmt-tile-note { font-size: .72rem; color: #b9c3e6; margin-top: 1px; min-height: 1em; }
+    .stmt-sheet .dr { color: #a8232c; }
+    .stmt-sheet .cr { color: #137a46; }
+    .stmt-sheet .neg { color: #a8232c; }
+    .stmt-search { display: flex; align-items: center; gap: 8px; max-width: 340px; margin: 0 0 10px auto; padding: 0 12px; background: #f3f6fb; border: 1px solid #dfe5ef; border-radius: 6px; }
+    .stmt-search .material-symbols-outlined { font-size: 18px; color: #8a93a4; }
+    .stmt-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; padding: 7px 0; font-size: .84rem; color: #0b1b63; }
+    .stmt-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .84rem; }
+    .stmt-table thead th { position: sticky; top: var(--header-height, 54px); z-index: 3; background: #0b1b63; color: #fff; font-size: .7rem; letter-spacing: .6px; text-transform: uppercase; padding: 9px 10px; text-align: left; white-space: nowrap; }
+    .stmt-table th.r, .stmt-table td.r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .stmt-table td { padding: 8px 10px; border-bottom: 1px solid #e9edf4; vertical-align: top; }
+    .stmt-table tbody tr:nth-child(even) td { background: #f8fafd; }
+    .stmt-table tbody tr:hover td { background: #eef4fb; }
+    .stmt-table .nowrap { white-space: nowrap; }
+    .stmt-table .ref { color: #5b6475; font-size: .78rem; white-space: nowrap; }
+    .stmt-table td.empty { text-align: center; color: #8a93a4; padding: 28px; background: #fff !important; }
+    .stmt-table tfoot td { font-weight: 700; padding: 9px 10px; border-bottom: 0; }
+    .stmt-table tfoot tr.totals td { background: #eef1f8; border-top: 2px solid #0b1b63; }
+    .stmt-table tfoot tr.final td { background: #0b1b63; color: #fff; }
+    .stmt-empty { text-align: center; color: #6b7a90; padding: 56px 12px; background: #fff; border: 1px dashed #d5dce8; border-radius: 8px; }
+    .stmt-empty .material-symbols-outlined { font-size: 56px; color: #b8c2d3; }
+    #statement_wrap { scroll-margin-top: calc(var(--header-height, 54px) + 12px); }
+    @media (max-width: 767px) {
+        .stmt-sheet { padding: 16px 14px; }
+        .stmt-tiles { grid-template-columns: 1fr; }
+        .stmt-search { max-width: none; }
+        .stmt-table-wrap { overflow-x: auto; }
+        .stmt-table thead th { position: static; }
+    }
 </style>
 @endsection
 
@@ -240,15 +283,25 @@
                                 </div>
                             </div>
                             <div class="row mb-3">
-                                <div class="col-md-4">
+                                <div class="col-md-3 mb-2">
+                                    <label for="period_preset" class="form-label">Period</label>
+                                    <select class="form-select" id="period_preset">
+                                        <option value="3m">Last 3 months</option>
+                                        <option value="6m">Last 6 months</option>
+                                        <option value="12m">Last 12 months</option>
+                                        <option value="year">This year</option>
+                                        <option value="custom">Custom range</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 mb-2">
                                     <label for="date_from" class="form-label">Date From <span class="text-danger" id="date_from_required">*</span></label>
                                     <input type="date" class="form-control" id="date_from" name="date_from" required>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3 mb-2">
                                     <label for="date_to" class="form-label">Date To <span class="text-danger">*</span></label>
                                     <input type="date" class="form-control" id="date_to" name="date_to" required>
                                 </div>
-                                <div class="col-md-4 d-flex align-items-end gap-2">
+                                <div class="col-md-3 mb-2 d-flex align-items-end gap-2">
                                     <button type="button" class="btn btn-primary btn-sm d-flex align-items-center" id="search_btn">
                                         <span class="material-symbols-outlined" id="search_icon">search</span>
                                         <span class="spinner-border spinner-border-sm" role="status" id="search_spinner" style="display: none;"></span>
@@ -257,6 +310,75 @@
                                 </div>
                             </div>
                         </form>
+                    </div>
+                </div>
+
+                <!-- Statement, shown on the page -->
+                <div id="statement_wrap">
+                    <div id="sheet_toolbar" class="d-none justify-content-end flex-wrap gap-2 mb-2">
+                        <button type="button" class="btn btn-sm d-flex align-items-center" id="download_pdf_btn" style="background-color:#3598db;color:#fff;">
+                            <span class="material-symbols-outlined" id="pdf_icon" style="font-size:17px;">picture_as_pdf</span>
+                            <span class="spinner-border spinner-border-sm" id="pdf_spinner" role="status" style="display: none; width: 16px; height: 16px;"></span>
+                            <span class="ms-1">PDF</span>
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm d-flex align-items-center" id="download_excel_btn">
+                            <span class="material-symbols-outlined" id="excel_icon" style="font-size:17px;">download</span>
+                            <span class="spinner-border spinner-border-sm" id="excel_spinner" role="status" style="display: none; width: 16px; height: 16px;"></span>
+                            <span class="ms-1">Excel</span>
+                        </button>
+                    </div>
+
+                    <div class="stmt-empty" id="sheet_empty">
+                        <span class="material-symbols-outlined">description</span>
+                        <p class="mt-2 mb-0">Choose a tenant and period, then View Statement.</p>
+                    </div>
+
+                    <div class="stmt-sheet d-none" id="sheet_content">
+                        <div class="stmt-head">
+                            <div>
+                                <div class="stmt-name" id="stmt_tenant_name"></div>
+                                <div class="stmt-meta" id="stmt_meta"></div>
+                            </div>
+                            <div class="stmt-period" id="stmt_period"></div>
+                        </div>
+
+                        <div class="stmt-tiles">
+                            <div class="stmt-tile">
+                                <div class="stmt-tile-label">Total debits</div>
+                                <div class="stmt-tile-value dr" id="stmt_total_debit">&mdash;</div>
+                            </div>
+                            <div class="stmt-tile">
+                                <div class="stmt-tile-label">Total credits</div>
+                                <div class="stmt-tile-value cr" id="stmt_total_credit">&mdash;</div>
+                            </div>
+                            <div class="stmt-tile stmt-tile-closing">
+                                <div class="stmt-tile-label">Closing balance</div>
+                                <div class="stmt-tile-value" id="stmt_total_amount">&mdash;</div>
+                                <div class="stmt-tile-note" id="stmt_closing_note"></div>
+                            </div>
+                        </div>
+
+                        <div class="stmt-search">
+                            <span class="material-symbols-outlined">search</span>
+                            <input type="text" id="statement_search" placeholder="Search transactions..." autocomplete="off">
+                        </div>
+
+                        <div class="stmt-table-wrap">
+                            <table class="stmt-table" id="statement_table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Reference</th>
+                                        <th>Narration</th>
+                                        <th class="r">Debit</th>
+                                        <th class="r">Credit</th>
+                                        <th class="r">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="statement_tbody"></tbody>
+                                <tfoot id="statement_tfoot"></tfoot>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -341,86 +463,6 @@
     </div>
 </div>
 
-<!-- Statement Modal -->
-<div class="modal fade" id="statementModal" tabindex="-1" aria-labelledby="statementModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-            <!-- Thin Header with Actions -->
-            <div class="modal-header py-2 px-3 bg-white border-bottom">
-                <div class="d-flex align-items-center gap-2 w-100">
-                    <span class="material-symbols-outlined text-dark">description</span>
-                    <h6 class="mb-0 flex-grow-1 text-dark">Tenant Statement</h6>
-                    <button type="button" class="btn btn-sm d-flex align-items-center" id="download_excel_btn" style="padding: 2px 8px; background-color: #3598db !important; color: white !important; border-color: #3598db !important;">
-                        <span class="material-symbols-outlined" id="excel_icon" style="font-size: 18px;">download</span>
-                        <span class="spinner-border spinner-border-sm" id="excel_spinner" role="status" style="display: none; font-size: 12px; width: 16px; height: 16px;"></span>
-                        <span class="ms-1" style="font-size: 0.75rem;">Excel</span>
-                    </button>
-                    <button type="button" class="btn btn-sm d-flex align-items-center" id="download_pdf_btn" style="padding: 2px 8px; background-color: #3598db !important; color: white !important; border-color: #3598db !important;">
-                        <span class="material-symbols-outlined" id="pdf_icon" style="font-size: 18px;">picture_as_pdf</span>
-                        <span class="spinner-border spinner-border-sm" id="pdf_spinner" role="status" style="display: none; font-size: 12px; width: 16px; height: 16px;"></span>
-                        <span class="ms-1" style="font-size: 0.75rem;">PDF</span>
-                    </button>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="padding: 4px; font-size: 0.875rem;"></button>
-                </div>
-            </div>
-
-            <!-- Modal Body with Search and Table -->
-            <div class="modal-body p-0" style="background-color: #f8f9fa;">
-                <!-- Search Bar -->
-                <div class="p-3 bg-white border-bottom">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-0">
-                            <span class="material-symbols-outlined" style="font-size: 18px;">search</span>
-                        </span>
-                        <input type="text" class="form-control border-0 bg-light" id="statement_search" placeholder="Search transactions...">
-                    </div>
-                </div>
-
-                <!-- Statement Info Banner -->
-                <div class="px-3 py-2 bg-white border-bottom">
-                    <div class="row">
-                        <div class="col-6">
-                            <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                <strong>Tenant:</strong> <span id="stmt_tenant_name"></span>
-                            </small>
-                        </div>
-                        <div class="col-6 text-end">
-                            <small class="d-block" style="font-size: 0.75rem;">
-                                <strong>Total:</strong> <span id="stmt_total_amount" class="fw-bold text-dark"></span>
-                            </small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Scrollable Table -->
-                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
-                    <table class="table table-hover table-sm table-borderless mb-0" id="statement_table" style="font-size: 0.82rem; line-height: 1.2;">
-                        <thead class="sticky-top" style="background-color: #e9ecef; border-bottom: 2px solid #dee2e6; font-size: 0.82rem;">
-                            <tr>
-                                <th class="py-1 px-2" style="white-space:nowrap;">Date</th>
-                                <th class="py-1 px-2" style="white-space:nowrap;">Reference</th>
-                                <th class="py-1 px-2">Narration</th>
-                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Dr</th>
-                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Cr</th>
-                                <th class="py-1 px-2 text-end" style="white-space:nowrap;">Balance</th>
-                            </tr>
-                        </thead>
-                        <tbody id="statement_tbody" class="bg-white">
-                            <tr>
-                                <td colspan="6" class="text-center py-5">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <p class="mt-2 text-muted mb-0" style="font-size: 0.875rem;">Loading statement...</p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 @endsection
 
 @section('scripts')
@@ -898,15 +940,64 @@
             $('#statement_total').text(total.toFixed(2));
         }
 
+        // ── Period presets (same options as the landlord statement); Date From / Date To start on the last 3 months ──
+        const pad = n => String(n).padStart(2, '0');
+        const toIso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+
+        // N months back (day clamped to the month end), plus one day
+        function monthsBack(n) {
+            const today = new Date();
+            const t = new Date(today.getFullYear(), today.getMonth() - n, 1);
+            t.setDate(Math.min(today.getDate(), new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()) + 1);
+            return t;
+        }
+
+        function presetRange(key) {
+            const today = new Date();
+            if (key === '3m') return [toIso(monthsBack(3)), toIso(today)];
+            if (key === '6m') return [toIso(monthsBack(6)), toIso(today)];
+            if (key === '12m') return [toIso(monthsBack(12)), toIso(today)];
+            if (key === 'year') return [today.getFullYear() + '-01-01', toIso(today)];
+            return null;
+        }
+
+        // Show the preset the two dates match, or Custom range when they match none
+        function syncPreset() {
+            if ($('input[name="date_type"]:checked').val() === 'end') return;
+            const from = $('#date_from').val(), to = $('#date_to').val();
+            const hit = ['3m', '6m', '12m', 'year'].find(k => { const r = presetRange(k); return r[0] === from && r[1] === to; });
+            $('#period_preset').val(hit || 'custom');
+        }
+
+        function applyPreset(key) {
+            const r = presetRange(key);
+            if (r) {
+                $('#date_from').val(r[0]);
+                $('#date_to').val(r[1]);
+            }
+        }
+
+        $('#period_preset').on('change', function() {
+            applyPreset($(this).val());
+        });
+        $('#date_from, #date_to').on('change', syncPreset);
+
+        applyPreset('3m');
+        syncPreset();
+
         // Date type change handler - using radio buttons
         $('input[name="date_type"]').on('change', function() {
             const dateType = $(this).val();
             if (dateType === 'end') {
                 $('#date_from').prop('disabled', true).prop('required', false).val('');
                 $('#date_from_required').hide();
+                $('#period_preset').prop('disabled', true);
             } else {
                 $('#date_from').prop('disabled', false).prop('required', true);
                 $('#date_from_required').show();
+                $('#period_preset').prop('disabled', false);
+                applyPreset('3m');
+                syncPreset();
             }
         });
 
@@ -942,29 +1033,87 @@
                 return;
             }
 
-            $('#statementModal').modal('show');
-            $('#stmt_tenant_name').text($('#selected_tenant_name').text());
+            const periodText = dateType === 'end' ? 'Up to ' + stmtDay(dateTo) : stmtDay(dateFrom) + ' \u2013 ' + stmtDay(dateTo);
+            $('#sheet_empty').addClass('d-none');
+            $('#sheet_content').removeClass('d-none');
+            $('#sheet_toolbar').removeClass('d-none').addClass('d-flex');
+            fillStatementHead($('#selected_tenant_name').text(), periodText);
 
             let propertyId = '';
             if (mode === 'property') propertyId = $('#property_id').val();
             else if (mode === 'landlord') propertyId = $('#landlord_property_select').val() || '';
 
             loadStatement(tenantId, dateFrom, dateTo, dateType, propertyId);
+
+            const wrap = document.getElementById('statement_wrap');
+            if (wrap && wrap.scrollIntoView) wrap.scrollIntoView({behavior: 'smooth', block: 'start'});
         });
 
+        // The statement sheet: same look as the landlord statement (.stmt-* rules above)
+        const stmtEsc = s => $('<div>').text(s == null ? '' : String(s)).html();
+        const stmtMoney = v => Number(v || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const stmtDay = ymd => {
+            const p = String(ymd).split('-');
+            return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+        };
+
+        // Fill the header block and blank the tiles while the rows load
+        function fillStatementHead(tenantName, periodText) {
+            $('#stmt_tenant_name').text(tenantName);
+            $('#stmt_period').text(periodText);
+
+            const meta = $('#stmt_meta').empty();
+            [['Phone', '#selected_tenant_mobile'], ['Email', '#selected_tenant_email'], ['ID no.', '#selected_tenant_id']].forEach(function(m) {
+                const v = $(m[1]).text().trim();
+                if (v && v !== '-' && v !== 'N/A') {
+                    meta.append($('<span>').text(m[0] + ' ' + v));
+                }
+            });
+
+            $('#stmt_total_debit, #stmt_total_amount').text('—');
+            $('#stmt_total_credit').text('—');
+            $('#stmt_closing_note').text('');
+            $('#statement_tfoot').empty();
+            $('#statement_search').val('');
+        }
+
+        function statementMessageRow(icon, text, extraClass) {
+            return `
+                <tr>
+                    <td colspan="6" class="empty ${extraClass || ''}">
+                        <span class="material-symbols-outlined d-block mb-1" style="font-size: 40px; opacity: 0.35;">${icon}</span>
+                        ${text}
+                    </td>
+                </tr>
+            `;
+        }
+
+        let statementRequest = null;
+
         function loadStatement(tenantId, dateFrom, dateTo, dateType, propertyId) {
+            // What Excel and PDF export: always the statement now on the page, even when it came back empty
+            window.statementData = {
+                tenant_id: tenantId,
+                property_id: propertyId,
+                date_from: dateFrom,
+                date_to: dateTo,
+                date_type: dateType
+            };
+
+            if (statementRequest) statementRequest.abort();
+
             $('#statement_tbody').html(`
                 <tr>
-                    <td colspan="6" class="text-center py-5">
+                    <td colspan="6" class="empty">
                         <div class="spinner-border spinner-border-sm text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
-                        <p class="mt-2 text-muted mb-0" style="font-size: 0.875rem;">Loading statement...</p>
+                        <p class="mt-2 mb-0">Loading statement...</p>
                     </td>
                 </tr>
             `);
 
-            $.ajax({
+            statementRequest = $.ajax({
                 url: '/ajax/invoices/tenant/search',
                 type: 'POST',
                 data: {
@@ -978,58 +1127,60 @@
                 success: function(response) {
                     if (response.success && response.statement && response.statement.length > 0) {
                         let html = '';
+                        let totalDebit = 0;
+                        let totalCredit = 0;
 
                         response.statement.forEach(function(entry) {
+                            totalDebit += Number(entry.debit) || 0;
+                            totalCredit += Number(entry.credit) || 0;
+
                             html += `
                                 <tr>
-                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.date_formatted}</td>
-                                    <td class="py-1 px-2" style="white-space:nowrap;">${entry.reference}</td>
-                                    <td class="py-1 px-2" style="word-wrap:break-word;white-space:normal;">${entry.narration}</td>
-                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.debit_formatted}</td>
-                                    <td class="py-1 px-2 text-end" style="white-space:nowrap;">${entry.credit_formatted}</td>
-                                    <td class="py-1 px-2 text-end fw-semibold" style="white-space:nowrap;">${entry.balance_formatted}</td>
+                                    <td class="nowrap">${stmtEsc(entry.date_formatted)}</td>
+                                    <td class="ref">${entry.reference === '-' ? '' : stmtEsc(entry.reference)}</td>
+                                    <td>${stmtEsc(entry.narration)}</td>
+                                    <td class="r dr">${entry.debit_formatted === '-' ? '' : stmtEsc(entry.debit_formatted)}</td>
+                                    <td class="r cr">${entry.credit_formatted === '-' ? '' : stmtEsc(entry.credit_formatted)}</td>
+                                    <td class="r ${entry.balance < 0 ? 'neg' : ''}">${stmtEsc(entry.balance_formatted)}</td>
                                 </tr>
                             `;
                         });
 
                         $('#statement_tbody').html(html);
 
-                        // Get final balance from last entry
-                        if (response.statement.length > 0) {
-                            const lastEntry = response.statement[response.statement.length - 1];
-                            $('#stmt_total_amount').text(lastEntry.balance_formatted);
-                        }
+                        // Closing balance is the last entry's running balance
+                        const lastEntry = response.statement[response.statement.length - 1];
+                        const closingNote = lastEntry.balance < 0 ? 'Owed by tenant' : (lastEntry.balance > 0 ? 'In credit' : 'Nil balance');
 
-                        // Store data for export
-                        window.statementData = {
-                            tenant_id: tenantId,
-                            property_id: propertyId,
-                            date_from: dateFrom,
-                            date_to: dateTo,
-                            date_type: dateType
-                        };
-                    } else {
-                        $('#statement_tbody').html(`
-                            <tr>
-                                <td colspan="6" class="text-center py-5 text-muted">
-                                    <span class="material-symbols-outlined d-block mb-2" style="font-size: 48px; opacity: 0.3;">receipt_long</span>
-                                    No transactions found for the selected period
-                                </td>
+                        $('#stmt_total_debit').text(stmtMoney(totalDebit));
+                        $('#stmt_total_credit').text(stmtMoney(totalCredit));
+                        $('#stmt_total_amount').text(lastEntry.balance_formatted);
+                        $('#stmt_closing_note').text(closingNote);
+
+                        $('#statement_tfoot').html(`
+                            <tr class="totals">
+                                <td colspan="3">Period totals</td>
+                                <td class="r dr">${stmtMoney(totalDebit)}</td>
+                                <td class="r cr">${stmtMoney(totalCredit)}</td>
+                                <td class="r"></td>
+                            </tr>
+                            <tr class="final">
+                                <td colspan="5">Closing balance &mdash; ${closingNote}</td>
+                                <td class="r">${stmtEsc(lastEntry.balance_formatted)}</td>
                             </tr>
                         `);
-                        $('#stmt_total_amount').text('Ksh 0.00');
+
+                    } else {
+                        $('#statement_tbody').html(statementMessageRow('receipt_long', 'No transactions found for the selected period'));
+                        $('#stmt_total_debit, #stmt_total_credit').text('0.00');
+                        $('#stmt_total_amount').text('0.00');
+                        $('#stmt_closing_note').text('Nil balance');
                     }
                 },
-                error: function(xhr) {
+                error: function(xhr, status) {
+                    if (status === 'abort') return;
                     toastr.error('Failed to load statement');
-                    $('#statement_tbody').html(`
-                        <tr>
-                            <td colspan="6" class="text-center py-5 text-danger">
-                                <span class="material-symbols-outlined d-block mb-2" style="font-size: 48px; opacity: 0.3;">error</span>
-                                Error loading statement
-                            </td>
-                        </tr>
-                    `);
+                    $('#statement_tbody').html(statementMessageRow('error', 'Error loading statement', 'text-danger'));
                 }
             });
         }
