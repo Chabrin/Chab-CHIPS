@@ -36,11 +36,16 @@ class Recovery extends Model
         'returns_batch_id',
         'return_type_id',
         'posted_to_landlord_at',
+        'actioned_by',
+        'actioned_at',
+        'rejection_reason',
+        'proof_reference',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
         'posted_to_landlord_at' => 'datetime',
+        'actioned_at' => 'datetime',
     ];
 
     public function property()

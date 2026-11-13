@@ -155,6 +155,14 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
+                                    <label for="proof_reference" class="form-label">Proof (receipt / acknowledgement no.)</label>
+                                    <input type="text" class="form-control @error('proof_reference') is-invalid @enderror" id="proof_reference" name="proof_reference" maxlength="100" value="{{ old('proof_reference') }}" placeholder="Landlord's receipt or acknowledgement">
+                                    @error('proof_reference')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-3 mb-3">
                                     <label for="commissionable" class="form-label">Commissionable <span class="text-danger">*</span></label>
                                     <select class="form-select @error('commisionable') is-invalid @enderror" id="commissionable" name="commisionable" required>
                                         <option value="No" {{ old('commisionable') == 'No' ? 'selected' : 'selected' }}>No</option>
@@ -320,14 +328,11 @@
             resetDropdown('#unit_id', 'Please select property first');
             resetDropdown('#tenant_id', 'Please select unit first');
             resetDropdown('#lease_id', 'Please select unit first');
-            resetDropdown('#offset_invoice', 'Please select');
+            resetDropdown('#offset_invoice', 'Please select unit first');
             
             if (clientId) {
                 // Load properties for selected client
                 loadProperties(clientId);
-                
-                // Load outstanding invoices for selected client
-                loadInvoices(clientId);
             }
         });
 
@@ -355,9 +360,10 @@
             });
         }
 
-        function loadInvoices(clientId) {
+        // Open tenant invoices of the selected unit
+        function loadInvoices(unitId) {
             $.ajax({
-                url: `/client/${clientId}/invoices`,
+                url: `/property/recoveries/lookup/unit/${unitId}/invoices`,
                 method: 'GET',
                 dataType: 'json',
                 data: { status: 'outstanding' },
@@ -455,10 +461,14 @@
             
             resetDropdown('#tenant_id', 'Please select');
             resetDropdown('#lease_id', 'Please select');
+            resetDropdown('#offset_invoice', 'Please select');
             
             if (unitId) {
                 // Load tenant for selected unit
                 loadTenant(unitId);
+
+                // Load the unit's open invoices
+                loadInvoices(unitId);
                 
                 // Load leases for selected unit
                 loadLeases(unitId);
@@ -517,33 +527,12 @@
             $(selector).empty().append(`<option value="">${placeholder}</option>`);
         }
 
-        // Lease selection handler - auto-populate related fields (optional enhancement)
-        $('#lease_id').on('change', function() {
-            let leaseId = $(this).val();
-            if (leaseId) {
-                $.ajax({
-                    url: `/lease/${leaseId}/details`,
-                    method: 'GET',
-                    dataType: 'json',
-                    success: function(lease) {
-                        // Auto-populate SLA if available
-                        if (lease.sla_id && $('#sla_id option[value="' + lease.sla_id + '"]').length > 0) {
-                            $('#sla_id').val(lease.sla_id);
-                        }
-                    },
-                    error: function(xhr) {
-                        console.error('Error loading lease details:', xhr);
-                    }
-                });
-            }
-        });
-
         // Offset Invoice selection - auto-populate amount
         $('#offset_invoice').on('change', function() {
             let invoiceId = $(this).val();
             if (invoiceId) {
                 $.ajax({
-                    url: `/invoice/${invoiceId}/details`,
+                    url: `/property/recoveries/lookup/invoice/${invoiceId}`,
                     method: 'GET',
                     dataType: 'json',
                     success: function(invoice) {
@@ -574,7 +563,7 @@
             
             if (invoiceId && amount > 0) {
                 $.ajax({
-                    url: `/invoice/${invoiceId}/validate-recovery`,
+                    url: `/property/recoveries/lookup/invoice/${invoiceId}/validate`,
                     method: 'POST',
                     dataType: 'json',
                     data: {
@@ -601,8 +590,17 @@
         });
 
         // Type change handler - adjust form based on recovery type
+        const paidOwnerTypeId = {{ $paidOwnerTypeId ?? 'null' }};
         $('#type').on('change', function() {
             let typeId = $(this).val();
+            if (paidOwnerTypeId && typeId == paidOwnerTypeId) {
+                // A paid-owner recovery names the tenant, unit and invoice that was paid, and earns commission as the rent does
+                $('#commissionable').val('Yes').trigger('change');
+                $('#unit_id, #offset_invoice').prop('required', true);
+                $('#narration').attr('placeholder', 'Tenant paid the owner directly for...');
+            } else {
+                $('#unit_id, #offset_invoice').prop('required', false);
+            }
             let typeText = $('#type option:selected').text();
             
             // Adjust narration placeholder based on type

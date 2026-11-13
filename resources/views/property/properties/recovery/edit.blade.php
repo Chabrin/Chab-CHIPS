@@ -169,6 +169,14 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
+                                    <label for="proof_reference" class="form-label">Proof (receipt / acknowledgement no.)</label>
+                                    <input type="text" class="form-control @error('proof_reference') is-invalid @enderror" id="proof_reference" name="proof_reference" maxlength="100" value="{{ old('proof_reference', $recovery->proof_reference) }}" placeholder="Landlord's receipt or acknowledgement">
+                                    @error('proof_reference')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-3 mb-3">
                                     <label for="commisionable" class="form-label">Commissionable <span class="text-danger">*</span></label>
                                     <select class="form-select @error('commisionable') is-invalid @enderror" id="commisionable" name="commisionable" required>
                                         <option value="No" {{ old('commisionable', $recovery->commisionable) == 'No' ? 'selected' : '' }}>No</option>
@@ -247,7 +255,6 @@
                         // If client is selected, load properties
                         if (existingData.clientId) {
                             loadProperties(existingData.clientId);
-                            loadInvoices(existingData.clientId);
                         }
                     }
                     $('#client_id').trigger('change.select2');
@@ -269,11 +276,10 @@
             resetDropdown('#unit_id', 'Please select property first');
             resetDropdown('#tenant_id', 'Please select unit first');
             resetDropdown('#lease_id', 'Please select unit first');
-            resetDropdown('#offset_invoice_id', 'Please select');
+            resetDropdown('#offset_invoice_id', 'Please select unit first');
             
             if (clientId) {
                 loadProperties(clientId);
-                loadInvoices(clientId);
             }
         });
 
@@ -307,9 +313,10 @@
             });
         }
 
-        function loadInvoices(clientId) {
+        // Open tenant invoices of the selected unit
+        function loadInvoices(unitId) {
             $.ajax({
-                url: `/client/${clientId}/invoices`,
+                url: `/property/recoveries/lookup/unit/${unitId}/invoices`,
                 method: 'GET',
                 dataType: 'json',
                 data: { status: 'outstanding' },
@@ -389,6 +396,7 @@
                         if (existingData.unitId) {
                             loadTenant(existingData.unitId);
                             loadLeases(existingData.unitId);
+                            loadInvoices(existingData.unitId);
                         }
                     } else {
                         $('#unit_id').append('<option value="">No units found</option>');
@@ -408,10 +416,12 @@
             
             resetDropdown('#tenant_id', 'Please select');
             resetDropdown('#lease_id', 'Please select');
+            resetDropdown('#offset_invoice_id', 'Please select');
             
             if (unitId) {
                 loadTenant(unitId);
                 loadLeases(unitId);
+                loadInvoices(unitId);
             }
         });
 

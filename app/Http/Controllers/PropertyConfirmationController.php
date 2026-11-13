@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\PaidOwnerService;
 use Illuminate\Http\Request;
 use App\Models\ConfirmationLog;
 use App\Models\DebtorInvoice;
@@ -16,6 +17,15 @@ class PropertyConfirmationController extends Controller
 {
     use HasWorkflowStatuses;
     use TenantExitSettlementCalculatorTrait;
+
+    protected PaidOwnerService $paidOwner;
+
+    /**
+     * Inject the paid-owner service, which decides which recoveries are confirmed elsewhere.
+     */
+    public function __construct(PaidOwnerService $paidOwner) {
+        $this->paidOwner = $paidOwner;
+    }
 
     public function index()
     {
@@ -496,7 +506,10 @@ class PropertyConfirmationController extends Controller
                 break;
 
             case 'Recoveries':
-                $base = \App\Models\Recovery::where('current_status_id', 1); // Pending
+                // Paid-owner recoveries are confirmed on the Recovery page, where confirming also pays the tenant's invoice
+                // down and debits the client ledger; a plain approve here would only flip the status.
+                $base = \App\Models\Recovery::where('current_status_id', 1) // Pending
+                    ->where('type_id', '!=', (int) $this->paidOwner->typeId());
                 if ($search !== '') {
                     $base->where(function ($q) use ($search) {
                         $q->where('ref_number', 'ILIKE', "%{$search}%")
@@ -773,6 +786,9 @@ class PropertyConfirmationController extends Controller
 
                 case 'Recoveries':
                     $record = \App\Models\Recovery::findOrFail($id);
+                    if ($this->paidOwner->isPaidOwner($record)) {
+                        return response()->json(['success' => false, 'error' => 'A paid-owner recovery is confirmed or rejected on the Recovery page.'], 422);
+                    }
                     $previousStatus = $record->current_status_id;
                     $record->current_status_id = 5; // Approved
                     $newStatus = 5;
@@ -1291,6 +1307,9 @@ class PropertyConfirmationController extends Controller
 
                 case 'Recoveries':
                     $record = \App\Models\Recovery::findOrFail($id);
+                    if ($this->paidOwner->isPaidOwner($record)) {
+                        return response()->json(['success' => false, 'error' => 'A paid-owner recovery is confirmed or rejected on the Recovery page.'], 422);
+                    }
                     $previousStatus = $record->current_status_id;
                     $record->current_status_id = 41; // Rejected
                     $newStatus = 41;
@@ -1393,7 +1412,7 @@ class PropertyConfirmationController extends Controller
                     break;
 
                 case 'Recoveries':
-                    \App\Models\Recovery::whereIn('id', $ids)->update(['current_status_id' => 5]);
+                    \App\Models\Recovery::whereIn('id', $ids)->where('type_id', '!=', (int) $this->paidOwner->typeId())->update(['current_status_id' => 5]);
                     break;
 
                 case 'Lease Agreements':
@@ -1485,7 +1504,7 @@ class PropertyConfirmationController extends Controller
                     break;
 
                 case 'Recoveries':
-                    \App\Models\Recovery::whereIn('id', $ids)->update(['current_status_id' => 41]);
+                    \App\Models\Recovery::whereIn('id', $ids)->where('type_id', '!=', (int) $this->paidOwner->typeId())->update(['current_status_id' => 41]);
                     break;
 
                 case 'Lease Agreements':

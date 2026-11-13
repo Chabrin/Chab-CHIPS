@@ -1352,6 +1352,14 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/property/recovery/{encryptedId}', [RecoveryController::class, 'show'])->name('property.recoveries.show');
     Route::get('/property/recovery/{encryptedId}/edit', [RecoveryController::class, 'edit'])->name('property.recoveries.edit');
     Route::put('/property/recovery/{encryptedId}', [RecoveryController::class, 'update'])->name('property.recoveries.update');
+    // Paid Owner: the form's look-ups, and confirming or rejecting a paid-owner recovery
+    Route::get('/property/recoveries/lookup/unit/{unitId}/invoices', [RecoveryController::class, 'unitInvoices'])->name('ajax.property.recoveries.unit-invoices');
+    Route::get('/property/recoveries/lookup/invoice/{invoiceId}', [RecoveryController::class, 'invoiceDetails'])->name('ajax.property.recoveries.invoice');
+    Route::post('/property/recoveries/lookup/invoice/{invoiceId}/validate', [RecoveryController::class, 'validateAmount'])->name('ajax.property.recoveries.invoice.validate');
+    Route::get('/property/recoveries/confirmer', [RecoveryController::class, 'confirmerSetting'])->name('ajax.property.recoveries.confirmer');
+    Route::post('/property/recoveries/confirmer', [RecoveryController::class, 'saveConfirmer'])->name('ajax.property.recoveries.confirmer.save');
+    Route::post('/property/recovery/{encryptedId}/confirm', [RecoveryController::class, 'confirm'])->name('property.recoveries.confirm');
+    Route::post('/property/recovery/{encryptedId}/reject', [RecoveryController::class, 'reject'])->name('property.recoveries.reject');
 
     // Recovery → Landlord Account posting (manual bulk action, decoupled from automatic returns processing)
     Route::get('/property/recoveries/landlord-posting', [App\Http\Controllers\RecoveryLandlordPostingController::class, 'index'])->name('property.recoveries.landlord-posting.index');
