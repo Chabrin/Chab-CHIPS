@@ -6,17 +6,23 @@
             <div class="col-sm-12">
                 <div class="card">
                     <div class="card-header card-no-border d-flex align-items-center">
-                        <h4 class="mb-0">Recovery Details</h4>
+                        <h4 class="mb-0">Recovery Details <span class="text-muted">- {{ $recovery->ref_number }}</span></h4>
                         <div class="ms-auto d-flex gap-2">
-                            @if($isPaidOwner && $refusal === null)
-                            <button type="button" id="po-confirm-btn" class="btn btn-success btn-sm d-flex align-items-center">
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
-                                <span>Confirm</span>
-                            </button>
-                            <button type="button" id="po-reject-btn" class="btn btn-danger btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#po-reject-modal">
-                                <span class="material-symbols-outlined me-1" style="font-size:18px;">cancel</span>
-                                <span>Reject</span>
-                            </button>
+                            @if($isPaidOwner && (int) $recovery->current_status_id === 1)
+                            {{-- Always shown while the recovery is Pending; greyed out, with the reason on hover, when this user cannot act --}}
+                            @php($canAct = $refusal === null)
+                            <span @if(!$canAct) title="{{ $refusal }}" @endif>
+                                <button type="button" id="po-confirm-btn" class="btn btn-success btn-sm d-flex align-items-center" @if(!$canAct) disabled style="pointer-events:none;" @endif>
+                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">check_circle</span>
+                                    <span>Confirm</span>
+                                </button>
+                            </span>
+                            <span @if(!$canAct) title="{{ $refusal }}" @endif>
+                                <button type="button" id="po-reject-btn" class="btn btn-danger btn-sm d-flex align-items-center" @if($canAct) data-bs-toggle="modal" data-bs-target="#po-reject-modal" @else disabled style="pointer-events:none;" @endif>
+                                    <span class="material-symbols-outlined me-1" style="font-size:18px;">cancel</span>
+                                    <span>Reject</span>
+                                </button>
+                            </span>
                             @endif
                             @if((int) $recovery->current_status_id === 1)
                             <a href="{{ route('property.recoveries.edit', Crypt::encrypt($recovery->id)) }}" class="btn btn-warning btn-sm d-flex align-items-center">
@@ -83,6 +89,21 @@
                             <div class="col-md-3 mb-3">
                                 <label class="form-label text-muted">Who confirms</label>
                                 <p class="fw-bold">{{ $confirmer }}</p>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label text-muted">Proof document</label>
+                                <p class="mb-0">
+                                    @if($recovery->proof_path && $canViewProof)
+                                        <button type="button" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center" id="po-proof-btn" data-bs-toggle="modal" data-bs-target="#po-proof-modal">
+                                            <span class="material-symbols-outlined me-1" style="font-size:18px;">description</span>
+                                            <span>View document</span>
+                                        </button>
+                                    @elseif($recovery->proof_path)
+                                        <span class="text-muted">No access to the document</span>
+                                    @else
+                                        <span class="text-danger">None attached</span>
+                                    @endif
+                                </p>
                             </div>
                             @if($actionedBy)
                             <div class="col-md-3 mb-3">
@@ -168,29 +189,6 @@
                                     @endif
                                 </p>
                             </div>
-                            <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Return Type</label>
-                                <p class="fw-bold">{{ $recovery->return_type_id ?? '-' }}</p>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Created By</label>
-                                <p class="fw-bold">{{ $recovery->createdBy->name ?? '-' }}</p>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <label class="form-label text-muted">Date Created</label>
-                                <p class="fw-bold">{{ $recovery->date_time ? \Carbon\Carbon::parse($recovery->date_time)->format('d-m-Y H:i') : '-' }}</p>
-                            </div>
-                        </div>
-
-                        <!-- Narration -->
-                        <div class="row mb-4">
-                            <div class="col-md-12">
-                                <h5 class="border-bottom pb-2 mb-3">Narration</h5>
-                            </div>
-                            <div class="col-md-12 mb-3">
-                                <div class="p-3 bg-light rounded">
-                                    {{ $recovery->narration ?? 'No narration provided' }}
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -199,6 +197,51 @@
         </div>
     </div>
 </div>
+@if($recovery->proof_path && $canViewProof)
+<style>
+    .po-proof-dialog { max-width: 1000px; }
+    /* The app's left menu is 253px wide and sits above the backdrop: place the window inside the page area, not the whole screen */
+    @media (min-width: 1200px) {
+        .po-proof-dialog {
+            width: 1000px;
+            max-width: calc(100vw - 253px - 2rem);
+            margin-left: calc(253px + max(1rem, (100vw - 253px - 1000px) / 2));
+            margin-right: 1rem;
+        }
+    }
+</style>
+<div class="modal fade" id="po-proof-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable po-proof-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h6 class="modal-title mb-0">Proof document</h6>
+                    <small class="text-muted">{{ $recovery->proof_name }} - attached by {{ $proofBy ?? '-' }}{{ $recovery->proof_uploaded_at ? ' on ' . $recovery->proof_uploaded_at->format('d-m-Y H:i') : '' }}</small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe id="po-proof-frame" title="Proof document" data-src="{{ route('property.recoveries.proof', Crypt::encrypt($recovery->id)) }}" style="width:100%;height:75vh;border:0;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-outline-secondary btn-sm" href="{{ route('property.recoveries.proof', Crypt::encrypt($recovery->id)) }}?download=1">Download</a>
+                <a class="btn btn-outline-primary btn-sm" target="_blank" href="{{ route('property.recoveries.proof', Crypt::encrypt($recovery->id)) }}">Open in a new tab</a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    // The PDF is fetched only when the modal opens, and dropped when it closes
+    (function () {
+        var modal = document.getElementById('po-proof-modal');
+        var frame = document.getElementById('po-proof-frame');
+        modal.addEventListener('show.bs.modal', function () { frame.setAttribute('src', frame.getAttribute('data-src')); });
+        modal.addEventListener('hidden.bs.modal', function () { frame.setAttribute('src', 'about:blank'); });
+    })();
+</script>
+@endif
+
 @if($isPaidOwner && $refusal === null)
 <div class="modal fade" id="po-reject-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">

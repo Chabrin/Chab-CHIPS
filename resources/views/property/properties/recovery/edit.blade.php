@@ -32,7 +32,7 @@
                         </div>
                         @endif
 
-                        <form action="{{ route('property.recoveries.update', Crypt::encrypt($recovery->id)) }}" method="POST" id="recoveryForm">
+                        <form action="{{ route('property.recoveries.update', Crypt::encrypt($recovery->id)) }}" method="POST" id="recoveryForm" enctype="multipart/form-data">
                             @csrf
                             @method('PUT')
 
@@ -56,12 +56,8 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="ref_number" class="form-label">Ref Number <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control @error('ref_number') is-invalid @enderror" 
-                                           id="ref_number" name="ref_number" value="{{ old('ref_number', $recovery->ref_number) }}" required>
-                                    @error('ref_number')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
+                                    <label for="ref_number" class="form-label">Ref Number</label>
+                                    <input type="text" class="form-control" id="ref_number" value="{{ $recovery->ref_number }}" readonly disabled>
                                 </div>
 
                                 <div class="col-md-3 mb-3">
@@ -101,7 +97,9 @@
                                 <div class="col-md-3 mb-3">
                                     <label for="client_id" class="form-label">Client <span class="text-danger">*</span></label>
                                     <select class="form-select @error('client_id') is-invalid @enderror" id="client_id" name="client_id" required>
-                                        <option value="">Loading clients...</option>
+                                        @if($recovery->client)
+                                            <option value="{{ $recovery->client_id }}" selected>{{ trim(($recovery->client->reference_number ?? '') . ' - ' . ($recovery->client->names ?? ''), ' -') }}</option>
+                                        @endif
                                     </select>
                                     @error('client_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -169,7 +167,19 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="proof_reference" class="form-label">Proof (receipt / acknowledgement no.)</label>
+                                    <label for="proof_file" class="form-label">Proof document (PDF)</label>
+                                    @if($recovery->proof_path)
+                                        <div class="small mb-1">Current: <a href="{{ route('property.recoveries.proof', Crypt::encrypt($recovery->id)) }}" target="_blank">{{ $recovery->proof_name }}</a> (choose a file to replace it)</div>
+                                    @endif
+                                    <input type="file" class="form-control @error('proof_file') is-invalid @enderror" id="proof_file" name="proof_file" accept="application/pdf,.pdf">
+                                    <small class="text-muted">PDF, up to 10 MB.</small>
+                                    @error('proof_file')
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-3 mb-3">
+                                    <label for="proof_reference" class="form-label">Proof reference (receipt / acknowledgement no.)</label>
                                     <input type="text" class="form-control @error('proof_reference') is-invalid @enderror" id="proof_reference" name="proof_reference" maxlength="100" value="{{ old('proof_reference', $recovery->proof_reference) }}" placeholder="Landlord's receipt or acknowledgement">
                                     @error('proof_reference')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -187,19 +197,6 @@
                                     @enderror
                                 </div>
 
-                                <div class="col-md-3 mb-3">
-                                    <label for="return_type_id" class="form-label">Return Type</label>
-                                    <select class="form-select @error('return_type_id') is-invalid @enderror" id="return_type_id" name="return_type_id">
-                                        <option value="">Please select</option>
-                                        <option value="Main return" {{ old('return_type_id', $recovery->return_type_id) == 'Main return' ? 'selected' : '' }}>Main return</option>
-                                        <option value="Sub return" {{ old('return_type_id', $recovery->return_type_id) == 'Sub return' ? 'selected' : '' }}>Sub return</option>
-                                        <option value="Commission return" {{ old('return_type_id', $recovery->return_type_id) == 'Commission return' ? 'selected' : '' }}>Commission return</option>
-                                        <option value="Other" {{ old('return_type_id', $recovery->return_type_id) == 'Other' ? 'selected' : '' }}>Other</option>
-                                    </select>
-                                    @error('return_type_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
                             </div>
                         </form>
                     </div>
@@ -213,12 +210,27 @@
 <script>
     $(document).ready(function() {
         // Initialize Select2 for all select elements
-        $('#client_id, #property_id, #sla_id, #unit_id, #tenant_id, #lease_id, #offset_invoice_id, #type_id, #commisionable, #return_type_id').select2({
+        $('#property_id, #sla_id, #unit_id, #tenant_id, #lease_id, #offset_invoice_id, #type_id, #commisionable').select2({
             placeholder: 'Please select',
             allowClear: true,
             width: '100%'
         });
         
+        // Clients are searched on the server (1,200+ landlords), the saved client is already in the list
+        $('#client_id').select2({
+            placeholder: 'Type a name, reference or mobile to search',
+            allowClear: true,
+            width: '100%',
+            minimumInputLength: 0,
+            ajax: {
+                url: '{{ route('ajax.property.recoveries.clients') }}',
+                dataType: 'json',
+                delay: 250,
+                data: function(params) { return { q: params.term || '', page: params.page || 1 }; },
+                processResults: function(data) { return data; }
+            }
+        });
+
         // Form submission with spinner
         $('#recoveryForm').on('submit', function(e) {
             $('#submitSpinner').removeClass('d-none');
@@ -236,35 +248,9 @@
             invoiceId: {{ $recovery->offset_invoice_id ?? 'null' }}
         };
 
-        // Load all clients on page load
-        loadClients();
-
-        function loadClients() {
-            $.ajax({
-                url: '/ajax/clients/list',
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#client_id').empty().append('<option value="">Please select</option>');
-                    let clients = response.data || response.clients || [];
-                    if (clients.length > 0) {
-                        clients.forEach(function(client) {
-                            let selected = client.id == existingData.clientId ? 'selected' : '';
-                            $('#client_id').append(`<option value="${client.id}" ${selected}>${client.names}</option>`);
-                        });
-                        // If client is selected, load properties
-                        if (existingData.clientId) {
-                            loadProperties(existingData.clientId);
-                        }
-                    }
-                    $('#client_id').trigger('change.select2');
-                },
-                error: function(xhr) {
-                    console.error('Error loading clients:', xhr);
-                    $('#client_id').empty().append('<option value="">Error loading clients</option>');
-                    $('#client_id').trigger('change.select2');
-                }
-            });
+        // The saved client is already selected: load its properties
+        if (existingData.clientId) {
+            loadProperties(existingData.clientId);
         }
 
         // Client selection handler
@@ -314,12 +300,12 @@
         }
 
         // Open tenant invoices of the selected unit
-        function loadInvoices(unitId) {
+        function loadInvoices(unitId, tenantId) {
             $.ajax({
                 url: `/property/recoveries/lookup/unit/${unitId}/invoices`,
                 method: 'GET',
                 dataType: 'json',
-                data: { status: 'outstanding' },
+                data: tenantId ? { tenant_id: tenantId } : {},
                 success: function(response) {
                     $('#offset_invoice_id').empty().append('<option value="">Please select</option>');
                     if (response.invoices && response.invoices.length > 0) {
@@ -367,6 +353,10 @@
                             let selected = sla.id == existingData.slaId ? 'selected' : '';
                             $('#sla_id').append(`<option value="${sla.id}" ${selected}>${sla.reference_number}</option>`);
                         });
+                        // Every property has an SLA: keep the saved one, otherwise pick the latest for the user
+                        if (!slas.some(function(sla) { return sla.id == existingData.slaId; })) {
+                            $('#sla_id').val(slas[0].id);
+                        }
                     } else {
                         $('#sla_id').append('<option value="">No SLAs found</option>');
                     }
@@ -394,9 +384,8 @@
                         });
                         // If unit is selected, load tenant and leases
                         if (existingData.unitId) {
-                            loadTenant(existingData.unitId);
-                            loadLeases(existingData.unitId);
-                            loadInvoices(existingData.unitId);
+                            // keep the saved tenant and lease
+                            loadUnitParties(existingData.unitId, { tenantId: existingData.tenantId, leaseId: existingData.leaseId });
                         }
                     } else {
                         $('#unit_id').append('<option value="">No units found</option>');
@@ -419,60 +408,12 @@
             resetDropdown('#offset_invoice_id', 'Please select');
             
             if (unitId) {
-                loadTenant(unitId);
-                loadLeases(unitId);
-                loadInvoices(unitId);
+                // Fill in the unit's current tenant and lease, and load that tenant's open invoices
+                loadUnitParties(unitId);
             }
         });
 
-        function loadTenant(unitId) {
-            $.ajax({
-                url: `/unit/${unitId}/tenant`,
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#tenant_id').empty().append('<option value="">Please select</option>');
-                    if (response.tenant) {
-                        let selected = response.tenant.id == existingData.tenantId ? 'selected' : '';
-                        $('#tenant_id').append(`<option value="${response.tenant.id}" ${selected}>${response.tenant.reference_number} - ${response.tenant.names}</option>`);
-                    } else {
-                        $('#tenant_id').append('<option value="">No tenant found for this unit</option>');
-                    }
-                    $('#tenant_id').trigger('change.select2');
-                },
-                error: function(xhr) {
-                    console.error('Error loading tenant:', xhr);
-                    $('#tenant_id').empty().append('<option value="">Error loading tenant</option>');
-                    $('#tenant_id').trigger('change.select2');
-                }
-            });
-        }
-
-        function loadLeases(unitId) {
-            $.ajax({
-                url: `/unit/${unitId}/leases`,
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#lease_id').empty().append('<option value="">Please select</option>');
-                    if (response.leases && response.leases.length > 0) {
-                        response.leases.forEach(function(lease) {
-                            let status = lease.current_status_id == 5 ? 'Active' : 'Inactive';
-                            let selected = lease.id == existingData.leaseId ? 'selected' : '';
-                            $('#lease_id').append(`<option value="${lease.id}" ${selected}>${lease.reference_number} - ${status}</option>`);
-                        });
-                    } else {
-                        $('#lease_id').append('<option value="">No leases found for this unit</option>');
-                    }
-                    $('#lease_id').trigger('change.select2');
-                },
-                error: function(xhr) {
-                    console.error('Error loading leases:', xhr);
-                    $('#lease_id').empty().append('<option value="">Error loading leases</option>');
-                    $('#lease_id').trigger('change.select2');
-                }
-            });
-        }
+@include('property.properties.recovery.partials.unit-parties-js')
 
         function resetDropdown(selector, placeholder) {
             $(selector).empty().append(`<option value="">${placeholder}</option>`);

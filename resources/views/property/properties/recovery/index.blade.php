@@ -223,6 +223,7 @@
             var roleId = $('#confirmer-role').val();
             var message = $('#confirmer-message');
             if (!roleId) { message.text('Choose a role.').removeClass('d-none text-success').addClass('text-danger'); return; }
+            message.text('Saving...').removeClass('d-none text-danger text-success').addClass('text-muted');
             var button = $(this).prop('disabled', true);
             $.ajax({
                 url: '{{ route('ajax.property.recoveries.confirmer.save') }}',
@@ -230,12 +231,19 @@
                 data: { role_id: roleId, _token: '{{ csrf_token() }}' },
                 dataType: 'json'
             }).done(function(res) {
-                message.text(res.message).removeClass('d-none text-danger').addClass('text-success');
-                loadConfirmer();
+                // Saved: close the window and say so (the next time it opens it reads the setting afresh)
+                message.addClass('d-none');
+                var modalElement = document.getElementById('confirmer-modal');
+                if (window.bootstrap && bootstrap.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+                } else {
+                    $(modalElement).modal('hide');
+                }
+                toastr.success(res.message || 'Saved.');
                 table.ajax.reload(null, false);
             }).fail(function(xhr) {
                 var text = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save.';
-                message.text(text).removeClass('d-none text-success').addClass('text-danger');
+                message.text(text).removeClass('d-none text-success text-muted').addClass('text-danger');
             }).always(function() { button.prop('disabled', false); });
         });
 

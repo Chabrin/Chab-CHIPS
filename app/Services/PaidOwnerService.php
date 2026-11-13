@@ -5,8 +5,11 @@ namespace App\Services;
 use App\Exceptions\ClientAccountException;
 use App\Models\GlAccountSetup;
 use App\Models\Recovery;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use LogicException;
 
 /**
  * Paid Owner: a tenant paid the landlord directly, so the money never reached the company. A field officer records it
@@ -36,6 +39,9 @@ class PaidOwnerService
     const REJECTED = 41;
     const INVOICE_PARTIAL = 8;
     const INVOICE_CLEARED = 9;
+    const PROOF_DIRECTORY = 'recovery_proofs';
+    const REFERENCE_PREFIX = 'REC';
+    const REFERENCE_LOCK_KEY = 7340012; // next to the voucher sequence's key, a different lock
 
     protected GlJournalPoster $gl;
 
@@ -44,6 +50,39 @@ class PaidOwnerService
      */
     public function __construct(GlJournalPoster $gl) {
         $this->gl = $gl;
+    }
+
+    /**
+     * The next recovery reference, REC-<year>-<number> with the number padded to five digits and restarting each year
+     * (REC-2026-00001). It is the highest number already saved for that year plus one, taken while holding a database
+     * lock, so two people saving at the same moment cannot get the same one. It must be called inside an open
+     * transaction, and the recovery must be saved in that same transaction: the lock is held until it ends.
+     *
+     * @param int|null $year defaults to the current year
+     */
+    public function nextReference(?int $year = null): string {
+        if (DB::transactionLevel() === 0) {
+            throw new LogicException('nextReference() must be called inside a database transaction.');
+        }
+
+        // Postgres only (production and dev). The SQLite test database has a single connection, so there is nothing to wait for.
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select('SELECT pg_advisory_xact_lock(?)', [self::REFERENCE_LOCK_KEY]);
+        }
+
+        $year = $year ?: now()->year;
+        $prefix = self::REFERENCE_PREFIX . '-' . $year . '-';
+
+        // The longest then the highest: five digits sort alike as text, but 100000 must come after 99999
+        $last = DB::table('sys_pm_recoveries')
+            ->where('ref_number', 'like', $prefix . '%')
+            ->orderByRaw('LENGTH(ref_number) DESC')
+            ->orderByDesc('ref_number')
+            ->value('ref_number');
+
+        $number = $last && preg_match('/^' . preg_quote($prefix, '/') . '(\d+)$/', $last, $match) ? ((int) $match[1]) + 1 : 1;
+
+        return $prefix . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -206,6 +245,77 @@ class PaidOwnerService
     }
 
     /**
+     * A paid-owner recovery needs its proof document (a PDF): one must be attached now or already be on the record.
+     * Throws a ClientAccountException whose message is safe to show. Other recovery types do not need one.
+     *
+     * @param array $data the form data, with type_id
+     * @param Recovery|null $existing the recovery being edited, null when it is new
+     * @param UploadedFile|null $file the file sent with the form
+     */
+    public function assertProofGiven(array $data, ?Recovery $existing, ?UploadedFile $file): void {
+        $typeId = $this->typeId();
+
+        if ($typeId === null || (int) ($data['type_id'] ?? 0) !== $typeId) {
+            return;
+        }
+
+        if (!$file && !($existing && $existing->proof_path)) {
+            throw new ClientAccountException('Attach the proof document (a PDF of the landlord\'s signed acknowledgement or receipt).');
+        }
+    }
+
+    /**
+     * Attach (or replace) the proof document of a recovery that is still Pending. The file goes on the private local
+     * disk, the old file is removed, and who attached it and when is recorded on the recovery. Once a recovery is
+     * confirmed or rejected its document is fixed.
+     *
+     * @param Recovery $recovery
+     * @param UploadedFile $file the PDF
+     * @param int $userId
+     * @return string the stored path
+     */
+    public function attachProof(Recovery $recovery, UploadedFile $file, int $userId): string {
+        if ((int) $recovery->current_status_id !== self::PENDING) {
+            throw new ClientAccountException('The document can only be changed while the recovery is still Pending.');
+        }
+
+        $oldPath = $recovery->proof_path;
+        $path = $file->store(self::PROOF_DIRECTORY . '/' . $recovery->id, 'local');
+
+        // If the record cannot be updated, the file just stored must not be left behind with nothing pointing at it
+        try {
+            $recovery->update([
+                'proof_path' => $path,
+                'proof_name' => mb_substr($file->getClientOriginalName(), 0, 255),
+                'proof_uploaded_by' => $userId,
+                'proof_uploaded_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Storage::disk('local')->delete($path);
+
+            throw $e;
+        }
+
+        if ($oldPath && $oldPath !== $path && Storage::disk('local')->exists($oldPath)) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Whether a user may open a recovery's proof document: whoever may read recoveries, the person who recorded it, and
+     * whoever holds the confirmer seat.
+     *
+     * @param Recovery $recovery
+     * @param int $userId
+     * @param bool $canRead whether the user holds read_recoveries
+     */
+    public function canViewProof(Recovery $recovery, int $userId, bool $canRead): bool {
+        return $canRead || (int) $recovery->created_by === $userId || $this->canConfirm($userId);
+    }
+
+    /**
      * Why a user may not confirm or reject a recovery, or null when they may.
      *
      * @param Recovery $recovery
@@ -320,6 +430,10 @@ class PaidOwnerService
 
             if ($message = $this->refusal($locked, $userId)) {
                 throw new ClientAccountException($message);
+            }
+
+            if (!$locked->proof_path) {
+                throw new ClientAccountException('This paid-owner recovery has no proof document. It must be attached before it can be confirmed.');
             }
 
             $invoice = DB::table('sys_pm_debtors_invoices')->where('id', $locked->offset_invoice_id)->lockForUpdate()->first();

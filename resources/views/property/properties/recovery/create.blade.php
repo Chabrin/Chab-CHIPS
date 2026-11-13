@@ -56,15 +56,6 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="ref_number" class="form-label">Ref Number <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control @error('ref_number') is-invalid @enderror" 
-                                           id="ref_number" name="ref_number" required>
-                                    @error('ref_number')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-                                <div class="col-md-3 mb-3">
                                     <label for="recovery_date" class="form-label">Recovery Date <span class="text-danger">*</span></label>
                                     <input type="date" class="form-control @error('recovery_date') is-invalid @enderror" 
                                            id="recovery_date" name="recovery_date"  required>
@@ -86,7 +77,9 @@
                                 <div class="col-md-3 mb-3">
                                     <label for="client_id" class="form-label">Client <span class="text-danger">*</span></label>
                                     <select class="form-select @error('client_id') is-invalid @enderror" id="client_id" name="client_id" required>
-                                        <option value="">Loading clients...</option>
+                                        @if($oldClient)
+                                            <option value="{{ $oldClient->id }}" selected>{{ trim(($oldClient->reference_number ?? '') . ' - ' . ($oldClient->names ?? ''), ' -') }}</option>
+                                        @endif
                                     </select>
                                     @error('client_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -155,7 +148,16 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="proof_reference" class="form-label">Proof (receipt / acknowledgement no.)</label>
+                                    <label for="proof_file" class="form-label">Proof document (PDF) <span class="text-danger d-none" id="proof-file-star">*</span></label>
+                                    <input type="file" class="form-control @error('proof_file') is-invalid @enderror" id="proof_file" name="proof_file" accept="application/pdf,.pdf">
+                                    <small class="text-muted">The landlord's signed acknowledgement or receipt. PDF, up to 10 MB.</small>
+                                    @error('proof_file')
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-md-3 mb-3">
+                                    <label for="proof_reference" class="form-label">Proof reference (receipt / acknowledgement no.)</label>
                                     <input type="text" class="form-control @error('proof_reference') is-invalid @enderror" id="proof_reference" name="proof_reference" maxlength="100" value="{{ old('proof_reference') }}" placeholder="Landlord's receipt or acknowledgement">
                                     @error('proof_reference')
                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -174,17 +176,6 @@
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="account_id" class="form-label">Account</label>
-                                    <select class="form-select @error('account_id') is-invalid @enderror" id="account_id" name="account_id">
-                                        <option value="">Please select</option>
-                                       
-                                    </select>
-                                    @error('account_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-                                <div class="col-md-3 mb-3">
                                     <label for="amount" class="form-label">Amount <span class="text-danger">*</span></label>
                                     <input type="number" step="0.01" class="form-control @error('amount') is-invalid @enderror" 
                                            id="amount" name="amount" 
@@ -194,19 +185,6 @@
                                     @enderror
                                 </div>
 
-                                <div class="col-md-3 mb-3">
-                                    <label for="return_type" class="form-label">Return Type</label>
-                                    <select class="form-select @error('return_type_id') is-invalid @enderror" id="return_type" name="return_type_id">
-                                        <option value="">Please select</option>
-                                        <option value="Main return" {{ old('return_type_id') == 'Main return' ? 'selected' : 'selected' }}>Main return</option>
-                                        <option value="Sub return" {{ old('return_type_id') == 'Sub return' ? 'selected' : '' }}>Sub return</option>
-                                        <option value="Commission return" {{ old('return_type_id') == 'Commission return' ? 'selected' : '' }}>Commission return</option>
-                                        <option value="Other" {{ old('return_type_id') == 'Other' ? 'selected' : '' }}>Other</option>
-                                    </select>
-                                    @error('return_type_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
                             </div>
 
                         </form>
@@ -220,9 +198,17 @@
     $(document).ready(function() {
         // Initialize Select2 for all select elements
         $('#client_id').select2({
-            placeholder: 'Please select',
+            placeholder: 'Type a name, reference or mobile to search',
             allowClear: true,
-            width: '100%'
+            width: '100%',
+            minimumInputLength: 0,
+            ajax: {
+                url: '{{ route('ajax.property.recoveries.clients') }}',
+                dataType: 'json',
+                delay: 250,
+                data: function(params) { return { q: params.term || '', page: params.page || 1 }; },
+                processResults: function(data) { return data; }
+            }
         });
         
         $('#property_id').select2({
@@ -273,50 +259,12 @@
             width: '100%'
         });
         
-        $('#return_type').select2({
-            placeholder: 'Please select',
-            allowClear: true,
-            width: '100%'
-        });
         
         // Form submission with spinner
         $('#recoveryForm').on('submit', function(e) {
             $('#submitSpinner').removeClass('d-none');
             $('#saveButton').prop('disabled', true);
         });
-
-        // Auto-generate reference number if empty
-        if ($('#ref_number').val() === '') {
-            let timestamp = Date.now();
-            $('#ref_number').val(timestamp.toString());
-        }
-
-        // Load all clients on page load
-        loadClients();
-
-        function loadClients() {
-            $.ajax({
-                url: '/ajax/clients/list',
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#client_id').empty().append('<option value="">Please select</option>');
-                    // Handle both response.data and response.clients formats
-                    let clients = response.data || response.clients || [];
-                    if (clients.length > 0) {
-                        clients.forEach(function(client) {
-                            $('#client_id').append(`<option value="${client.id}">${client.names}</option>`);
-                        });
-                    }
-                    $('#client_id').trigger('change.select2');
-                },
-                error: function(xhr) {
-                    console.error('Error loading clients:', xhr);
-                    $('#client_id').empty().append('<option value="">Error loading clients</option>');
-                    $('#client_id').trigger('change.select2');
-                }
-            });
-        }
 
         // Client selection handler - load properties and invoices
         $('#client_id').on('change', function() {
@@ -361,12 +309,12 @@
         }
 
         // Open tenant invoices of the selected unit
-        function loadInvoices(unitId) {
+        function loadInvoices(unitId, tenantId) {
             $.ajax({
                 url: `/property/recoveries/lookup/unit/${unitId}/invoices`,
                 method: 'GET',
                 dataType: 'json',
-                data: { status: 'outstanding' },
+                data: tenantId ? { tenant_id: tenantId } : {},
                 success: function(response) {
                     $('#offset_invoice').empty().append('<option value="">Please select</option>');
                     if (response.invoices && response.invoices.length > 0) {
@@ -418,6 +366,8 @@
                         slas.forEach(function(sla) {
                             $('#sla_id').append(`<option value="${sla.id}">${sla.reference_number}</option>`);
                         });
+                        // Every property has an SLA: pick the latest for the user
+                        $('#sla_id').val(slas[0].id);
                     } else {
                         $('#sla_id').append('<option value="">No SLAs found</option>');
                     }
@@ -464,63 +414,12 @@
             resetDropdown('#offset_invoice', 'Please select');
             
             if (unitId) {
-                // Load tenant for selected unit
-                loadTenant(unitId);
-
-                // Load the unit's open invoices
-                loadInvoices(unitId);
-                
-                // Load leases for selected unit
-                loadLeases(unitId);
+                // Fill in the unit's current tenant and lease, and load that tenant's open invoices
+                loadUnitParties(unitId);
             }
         });
 
-        function loadTenant(unitId) {
-            $.ajax({
-                url: `/unit/${unitId}/tenant`,
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#tenant_id').empty().append('<option value="">Please select</option>');
-                    if (response.tenant) {
-                        $('#tenant_id').append(`<option value="${response.tenant.id}" selected>${response.tenant.reference_number} - ${response.tenant.names}</option>`);
-                    } else {
-                        $('#tenant_id').append('<option value="">No tenant found for this unit</option>');
-                    }
-                    $('#tenant_id').trigger('change.select2');
-                },
-                error: function(xhr) {
-                    console.error('Error loading tenant:', xhr);
-                    $('#tenant_id').empty().append('<option value="">Error loading tenant</option>');
-                    $('#tenant_id').trigger('change.select2');
-                }
-            });
-        }
-
-        function loadLeases(unitId) {
-            $.ajax({
-                url: `/unit/${unitId}/leases`,
-                method: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    $('#lease_id').empty().append('<option value="">Please select</option>');
-                    if (response.leases && response.leases.length > 0) {
-                        response.leases.forEach(function(lease) {
-                            let status = lease.current_status_id == 5 ? 'Active' : 'Inactive';
-                            $('#lease_id').append(`<option value="${lease.id}">${lease.reference_number} - ${status}</option>`);
-                        });
-                    } else {
-                        $('#lease_id').append('<option value="">No leases found for this unit</option>');
-                    }
-                    $('#lease_id').trigger('change.select2');
-                },
-                error: function(xhr) {
-                    console.error('Error loading leases:', xhr);
-                    $('#lease_id').empty().append('<option value="">Error loading leases</option>');
-                    $('#lease_id').trigger('change.select2');
-                }
-            });
-        }
+@include('property.properties.recovery.partials.unit-parties-js')
 
         // Helper function to reset dropdown
         function resetDropdown(selector, placeholder) {
@@ -582,12 +481,6 @@
             }
         });
 
-        // Commissionable change handler
-        $('#commissionable').on('change', function() {
-            if ($(this).val() === 'Yes') {
-                $('#return_type').prop('required', true);
-            }
-        });
 
         // Type change handler - adjust form based on recovery type
         const paidOwnerTypeId = {{ $paidOwnerTypeId ?? 'null' }};
@@ -596,10 +489,12 @@
             if (paidOwnerTypeId && typeId == paidOwnerTypeId) {
                 // A paid-owner recovery names the tenant, unit and invoice that was paid, and earns commission as the rent does
                 $('#commissionable').val('Yes').trigger('change');
-                $('#unit_id, #offset_invoice').prop('required', true);
+                $('#unit_id, #offset_invoice, #proof_file').prop('required', true);
+                $('#proof-file-star').removeClass('d-none');
                 $('#narration').attr('placeholder', 'Tenant paid the owner directly for...');
             } else {
-                $('#unit_id, #offset_invoice').prop('required', false);
+                $('#unit_id, #offset_invoice, #proof_file').prop('required', false);
+                $('#proof-file-star').addClass('d-none');
             }
             let typeText = $('#type option:selected').text();
             

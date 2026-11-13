@@ -40,12 +40,17 @@ class Recovery extends Model
         'actioned_at',
         'rejection_reason',
         'proof_reference',
+        'proof_path',
+        'proof_name',
+        'proof_uploaded_by',
+        'proof_uploaded_at',
     ];
 
     protected $casts = [
         'date_time' => 'datetime',
         'posted_to_landlord_at' => 'datetime',
         'actioned_at' => 'datetime',
+        'proof_uploaded_at' => 'datetime',
     ];
 
     public function property()
