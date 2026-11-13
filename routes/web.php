@@ -1010,6 +1010,22 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::get('/ajax/tenant/{tenantId}/invoices', [App\Http\Controllers\TenantPaymentsController::class, 'getTenantInvoices'])->name('ajax.tenant.invoices');
     Route::delete('/ajax/tenant/payments/allocations/{allocationId}', [App\Http\Controllers\TenantPaymentsController::class, 'deleteAllocation'])->name('ajax.tenant.payments.allocation.delete');
 
+    // Bank Statements: upload a bank's statement file, a confirming role confirms it, matching runs on the queue
+    Route::get('/tenant/bank-statements', [App\Http\Controllers\BankStatementController::class, 'index'])->name('tenant.bank-statements.index');
+    Route::get('/ajax/tenant/bank-statements/data', [App\Http\Controllers\BankStatementController::class, 'data'])->name('ajax.tenant.bank-statements.data');
+    Route::post('/ajax/tenant/bank-statements/upload', [App\Http\Controllers\BankStatementController::class, 'upload'])->name('ajax.tenant.bank-statements.upload');
+    Route::get('/ajax/tenant/bank-statements/confirmers', [App\Http\Controllers\BankStatementController::class, 'confirmers'])->name('ajax.tenant.bank-statements.confirmers');
+    Route::post('/ajax/tenant/bank-statements/confirmers', [App\Http\Controllers\BankStatementController::class, 'saveConfirmers'])->name('ajax.tenant.bank-statements.confirmers.save');
+    Route::get('/ajax/tenant/bank-statements/{id}/lines', [App\Http\Controllers\BankStatementController::class, 'lines'])->name('ajax.tenant.bank-statements.lines')->whereNumber('id');
+    Route::post('/ajax/tenant/bank-statements/{id}/confirm', [App\Http\Controllers\BankStatementController::class, 'confirm'])->name('ajax.tenant.bank-statements.confirm')->whereNumber('id');
+    Route::post('/ajax/tenant/bank-statements/{id}/retry', [App\Http\Controllers\BankStatementController::class, 'retry'])->name('ajax.tenant.bank-statements.retry')->whereNumber('id');
+    Route::delete('/ajax/tenant/bank-statements/{id}', [App\Http\Controllers\BankStatementController::class, 'destroy'])->name('ajax.tenant.bank-statements.destroy')->whereNumber('id');
+    Route::get('/tenant/bank-statements/{bank}/lines/{line}/match', [App\Http\Controllers\BankStatementMatchController::class, 'show'])->name('tenant.bank-statements.match')->whereNumber('line')->where('bank', '[a-z]+');
+    Route::get('/ajax/tenant/bank-statements/match/clients', [App\Http\Controllers\BankStatementMatchController::class, 'clients'])->name('ajax.tenant.bank-statements.match.clients');
+    Route::get('/ajax/tenant/bank-statements/match/properties', [App\Http\Controllers\BankStatementMatchController::class, 'properties'])->name('ajax.tenant.bank-statements.match.properties');
+    Route::get('/ajax/tenant/bank-statements/match/leases', [App\Http\Controllers\BankStatementMatchController::class, 'leases'])->name('ajax.tenant.bank-statements.match.leases');
+    Route::post('/ajax/tenant/bank-statements/{bank}/lines/{line}/match', [App\Http\Controllers\BankStatementMatchController::class, 'store'])->name('ajax.tenant.bank-statements.match.store')->whereNumber('line')->where('bank', '[a-z]+');
+
     // Tenant Payment Allocation Page (specific routes BEFORE parameterized routes)
     Route::get('/payment/allocations', [App\Http\Controllers\PaymentsAllocationController::class, 'showPaymentAllocations'])->name('payment.allocations.page');
 

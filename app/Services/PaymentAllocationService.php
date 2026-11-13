@@ -129,6 +129,28 @@ class PaymentAllocationService
     }
 
     /**
+     * 1-B2. Allocate exactly one payment, by id, to the tenant's unsettled invoices (arrears first, bills before rent).
+     * Unlike processPayments() it opens no transaction of its own: the caller owns it, so a payment created a moment ago
+     * and its allocation, ledger credit and GL journal are all saved together or all rolled back. A payment already fully
+     * allocated gives all zeros.
+     *
+     * @param int $paymentId
+     * @return array{allocations:int, cleared:int, partial:int, returns_updated:int}
+     */
+    public function allocatePaymentById(int $paymentId): array {
+        $payment = DB::table('sys_pm_tenants_payments as p')
+            ->select(['p.*', DB::raw('p.amount - COALESCE((SELECT SUM(a.amount_allocated) FROM sys_pm_tenants_payments_invoices a WHERE a.payment_id = p.id), 0) as unallocated_amount')])
+            ->where('p.id', $paymentId)
+            ->first();
+
+        if (!$payment) {
+            throw new RuntimeException("Payment {$paymentId} does not exist");
+        }
+
+        return $this->processPayment($payment);
+    }
+
+    /**
      * 1-C. Manual single-pair allocation — operator correction or override.
      * Forces the specific payment → invoice pair regardless of sort order.
      */
@@ -506,7 +528,7 @@ class PaymentAllocationService
             'type'              => 'payment_allocation',
             'amount'            => $allocatedAmount,
             'commission_amount' => $commissionAmount,
-            'payment_method'    => $payment->payment_method ?? null,
+            'payment_method'    => $payment->payment_method ?? $this->statementBankOf($payment),
             'date'              => $payment->payment_date
                 ? Carbon::parse($payment->payment_date)->toDateString()
                 : now()->toDateString(),
@@ -516,6 +538,21 @@ class PaymentAllocationService
             'trans_details'     => "{$invoice->id}:{$payment->id}:" . ($payment->reference ?? ''),
             'narration'         => 'Allocation — ' . ($invoice->reference_number ?? "Invoice #{$invoice->id}"),
         ]);
+    }
+
+    /**
+     * The bank a payment came in through when it was created from an uploaded bank statement (equity or coop), so the GL
+     * journal credits that bank's account. Null for every other payment, which keeps the default bank account.
+     *
+     * @param object $payment the payment row
+     */
+    private function statementBankOf(object $payment): ?string
+    {
+        if (empty($payment->extract_id)) {
+            return null;
+        }
+
+        return DB::table('cb_bank_statement_uploads')->where('id', $payment->extract_id)->value('bank');
     }
 
     // ─────────────────────────────────────────────────────────────────────────
